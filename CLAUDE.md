@@ -25,6 +25,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Play: `playtest.py` starts FalloutNV.exe; Play here writes `FOLab Test.esp` (marker + start-enabled quest + one
   hand-compiled script, bytes checked against the game's own scripts; a new quest ID each time). Never call
   `/api/play` in tests: it starts the user's real game.
+- xNVSE: `nvse.py` downloads only from github.com/xNVSE/NVSE releases into `downloads/`, installs its .dll/.exe
+  beside FalloutNV.exe (its config in Data\NVSE), records what it put in for Take out. The game starts through
+  nvse_loader.exe when present (setting `launch_via`), else steam://rungameid/22380; never FalloutNV.exe directly
+  (Steam's load error 5:0000065434).
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the
   user's own mods. Never test `install` against the real game: use a fake Data folder and `LOCALAPPDATA`.
 - New Vegas rules kept in the writer: game refs are never deleted (disabled + sunk to z -30000); form IDs in

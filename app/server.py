@@ -17,6 +17,7 @@ import espwrite
 import gamedata
 import install
 import nif
+import nvse
 import playtest
 import project
 import actors
@@ -256,6 +257,8 @@ def search(q, kind='', limit=300):
 def state():
     s = {'game': GD.data_dir, 'interiors': len(GD.interiors), 'project': PR.state() if PR else None,
          'projects': project.list_projects(), 'kinds': PLACEABLE}
+    s['nvse'] = nvse.status(GD.data_dir)
+    s['launch_via'] = load_settings().get('launch_via', 'nvse')
     if PR:
         s['installed'] = install.status(GD.data_dir, PR.plugin)
         built = os.path.join(project.BUILD_DIR, PR.plugin)
@@ -347,7 +350,7 @@ def play(body):
         out['test_install'] = install.install(GD.data_dir, path)      # (after the mod: newest, so it loads last)
     else:
         playtest.take_out_test(GD.data_dir)
-    out['exe'] = playtest.launch(GD.data_dir)
+    out['via'] = playtest.launch(GD.data_dir, load_settings().get('launch_via', 'nvse'))
     out['state'] = state()
     return out
 
@@ -395,6 +398,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(ref(q['cell'], q['key']))
             if u.path == '/api/door':
                 return self.send(door(q['key']))
+            if u.path == '/api/nvse/latest':
+                return self.send(nvse.latest())
             if u.path == '/api/plugins':
                 return self.send(adopt.candidates(GD.data_dir))
             if u.path == '/api/types':
@@ -430,6 +435,18 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get('Content-Length') or 0)
             body = json.loads(self.rfile.read(n) or b'{}')
             with _lock:
+                if u.path == '/api/nvse/download':
+                    rel = nvse.latest()
+                    return self.send({'version': nvse.download(rel), 'state': state()})
+                if u.path == '/api/nvse/install':
+                    not_while_playing()
+                    return self.send({'install': nvse.install(GD.data_dir, body['version']), 'state': state()})
+                if u.path == '/api/nvse/uninstall':
+                    not_while_playing()
+                    return self.send({'removed': nvse.uninstall(GD.data_dir), 'state': state()})
+                if u.path == '/api/launch_via':
+                    save_settings(launch_via='nvse' if body.get('via') == 'nvse' else 'steam')
+                    return self.send(state())
                 if u.path == '/api/project/new':
                     return self.send(open_project(body['name'], create=True))
                 if u.path == '/api/project/open':

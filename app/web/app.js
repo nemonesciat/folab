@@ -372,8 +372,8 @@ async function play(at){
   try {
     const d = await post('/api/play', at || {});
     setState(d.state);
-    toast(at ? 'Steam is starting New Vegas: press Play in its launcher, then Continue or load a save. You\'ll arrive here a moment after it loads.'
-             : 'Steam is starting New Vegas with your mod: press Play in its launcher.');
+    const how = d.via === 'nvse' ? 'New Vegas is starting (with xNVSE)' : 'Steam is starting New Vegas: press Play in its launcher';
+    toast(at ? how + '. Continue or load a save: you\'ll arrive here a moment after it loads.' : how + ', with your mod.');
   } catch (e){ fail(e); }
 }
 function playHere(point){
@@ -430,6 +430,18 @@ function page(name){
 for (const p of PAGES) $('#nav-' + p).onclick = () => page(p);
 $('#modpill').onclick = () => page('mod');
 
+function nvseCard(s){
+  const n = s.nvse || {}, via = s.launch_via;
+  return `<div class="card"><h3>Script extender (xNVSE)</h3>
+    <p>${n.installed ? `Installed${n.version ? ' (' + esc(n.version) + (n.by_folab ? ', by FOLab' : '') + ')' : ''}.` : 'Not installed.'}
+       Most New Vegas mods need it; FOLab can start the game through it.</p>
+    <p>${n.installed ? '' : (n.downloaded || []).length ? `<button class="btn primary" id="m-nvse-install">Install xNVSE ${esc(n.downloaded.slice(-1)[0])}</button> ` : ''}
+       <button class="btn" id="m-nvse-get">Download the newest from xNVSE's GitHub</button>
+       ${n.by_folab ? '<button class="btn" id="m-nvse-out">Take it out of the game</button>' : ''}</p>
+    <p><label><input type="radio" name="via" value="nvse" ${via === 'nvse' ? 'checked' : ''} ${n.loader ? '' : 'disabled'}> Start the game through xNVSE (no launcher window)</label><br>
+       <label><input type="radio" name="via" value="steam" ${via !== 'nvse' || !n.loader ? 'checked' : ''}> Start it through Steam (the game's launcher opens: Play)</label></p></div>`;
+}
+
 function drawModPage(){
   const s = A.state, p = s.project, i = s.installed || {};
   const others = (s.projects || []).filter(x => !p || x.name !== p.name);
@@ -450,6 +462,7 @@ function drawModPage(){
       <p>${p.opened ? 'Opened from an existing plugin: saving keeps everything in it and lays your changes over it.' : 'A new mod of your own.'}</p>
       <p>Masters: ${(p.masters || []).map(m => `<code>${esc(m)}</code>`).join(' ') || 'none yet'}</p>
       <p><label><input type="checkbox" id="m-esm" ${p.esm ? 'checked' : ''}> Save as a master (other mods can build on it; the game loads it before plugins)</label></p></div>` : ''}
+    ${nvseCard(s)}
     <div class="card"><h3>Open a plugin as your mod</h3>
       <p>Mods in the game's Data folder. FOLab works on a copy; <b>Put in game</b> writes it back over the original (the old one goes to backups first).</p>
       <div id="m-plugins"><div class="note">Looking…</div></div></div>
@@ -464,6 +477,25 @@ function drawModPage(){
   on('#m-save', save); on('#m-install', install); on('#m-new', () => newMod($('#m-name').value));
   on('#m-uninstall', async () => { try { const d = await post('/api/uninstall'); setState(d.state); toast('Taken out of the game.'); } catch (e){ fail(e); } });
   $('#page-mod').querySelectorAll('[data-open]').forEach(r => r.onclick = () => { openMod(r.dataset.open); page('world'); });
+  const on2 = (id, f) => { const el = $(id); if (el) el.onclick = f; };
+  on2('#m-nvse-get', async () => {
+    try {
+      const r = await api('/api/nvse/latest');
+      if (!confirm(`Download ${r.asset} (${(r.size / 1048576).toFixed(1)} MB, xNVSE ${r.version}) from github.com/xNVSE/NVSE?`)) return;
+      toast('Downloading xNVSE ' + r.version + '…');
+      const d = await post('/api/nvse/download'); setState(d.state); toast('Downloaded xNVSE ' + d.version + ': Install puts it in the game.');
+    } catch (e){ fail(e); }
+  });
+  on2('#m-nvse-install', async () => {
+    const v = A.state.nvse.downloaded.slice(-1)[0];
+    if (!confirm(`Put xNVSE ${v} in the game folder? (Its .dll and .exe files go beside FalloutNV.exe; anything replaced is kept in backups.)`)) return;
+    try { const d = await post('/api/nvse/install', {version: v}); setState(d.state); toast('xNVSE ' + v + ' is in the game.'); } catch (e){ fail(e); }
+  });
+  on2('#m-nvse-out', async () => {
+    if (!confirm('Take xNVSE out of the game folder? (A copy goes to backups.)')) return;
+    try { const d = await post('/api/nvse/uninstall'); setState(d.state); toast('xNVSE taken out.'); } catch (e){ fail(e); }
+  });
+  $('#page-mod').querySelectorAll('input[name="via"]').forEach(r => r.onchange = async () => { try { setState(await post('/api/launch_via', {via: r.value})); } catch (e){ fail(e); } });
   const esm = $('#m-esm');
   if (esm) esm.onchange = async () => { try { setState(await post('/api/project/esm', {on: esm.checked})); toast(esm.checked ? 'Will save as a master' : 'Will save as a plugin'); } catch (e){ fail(e); } };
   api('/api/plugins').then(list => {

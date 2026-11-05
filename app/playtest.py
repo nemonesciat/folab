@@ -48,15 +48,20 @@ def game_running():
     return 'falloutnv.exe' in out.lower()
 
 
-def launch(data_dir):
-    """Start the game the way Steam's Play button does. (Starting FalloutNV.exe directly fails with Steam's
-    "Application load error 5:0000065434": the Steam copy must be started by Steam.) Steam shows the game's
-    launcher first; its Play starts the game."""
+def launch(data_dir, via='nvse'):
+    """Start the game: through xNVSE's nvse_loader.exe when it's there (no launcher window; how xNVSE says to start
+    it), else the way Steam's Play button does (the game's launcher opens first). Never FalloutNV.exe directly: the
+    Steam copy then fails with Steam's "Application load error 5:0000065434"."""
     exe = game_exe(data_dir)
     if not os.path.isfile(exe):
         raise FileNotFoundError('FalloutNV.exe not found beside the Data folder (%s)' % exe)
+    loader = os.path.join(os.path.dirname(exe), 'nvse_loader.exe')
+    if via == 'nvse' and os.path.isfile(loader):
+        flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+        subprocess.Popen([loader], cwd=os.path.dirname(exe), creationflags=flags, close_fds=True)
+        return 'nvse'
     os.startfile('steam://rungameid/22380')
-    return 'steam://rungameid/22380'
+    return 'steam'
 
 
 def compiled_script():
