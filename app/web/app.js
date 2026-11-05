@@ -655,6 +655,8 @@ async function start(){
   let want = new URLSearchParams(location.search).get('cell');
   try { want = want || localStorage.getItem('folab-cell'); } catch (e) {}
   const first = A.places.find(c => c.id === want || c.edid.toLowerCase() === (want || '').toLowerCase()) || A.places.find(c => c.edid === '2EOVault21');
+  $('#loading').classList.add('gone'); setTimeout(() => $('#loading').remove(), 500);
+  if (typeof helpFirstRun === 'function') helpFirstRun();
   if (first) openPlace(first.id);
 }
 start();

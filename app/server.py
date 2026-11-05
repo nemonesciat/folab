@@ -5,6 +5,8 @@
 Game files are only read. Projects live in FOLab's projects folder; Save writes the plugin to FOLab's build folder,
 and Install (the user's choice) copies it into the game."""
 import json
+import platform
+import traceback
 import os
 import struct
 import sys
@@ -39,13 +41,14 @@ import re
 import refinfo
 import scatter
 import tes4
+from version import VERSION
 
 PORT = 8771
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 SETTINGS = os.path.join(project.HOME, 'folab_settings.json')
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css',
          '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain',
-         '.woff2': 'font/woff2'}
+         '.woff2': 'font/woff2', '.md': 'text/markdown; charset=utf-8'}
 # What the Place panel offers, with the names it shows
 PLACEABLE = {'STAT': 'Statics', 'MSTT': 'Movable statics', 'FURN': 'Furniture', 'CONT': 'Containers',
              'DOOR': 'Doors', 'LIGH': 'Lights', 'MISC': 'Items', 'ACTI': 'Activators', 'TACT': 'Talking activators',
@@ -889,6 +892,62 @@ def search(q, kind='', limit=300):
 
 # --- the project ---
 
+# ---------- errors, About, problem reports ----------
+
+LOG = os.path.join(project.HOME, 'logs', 'folab.log')
+_errors = []                            # the last few errors, for a problem report
+
+
+def log_error(where, e):
+    """An error answered to the page: kept for Report a problem, and written to logs/folab.log (the stack too)."""
+    if isinstance(e, ValueError) and not isinstance(e, (UnicodeError, json.JSONDecodeError)):
+        _errors.append('%s %s: %s' % (time.strftime('%H:%M:%S'), where, e))      # (a message for the user, not a fault)
+    else:
+        _errors.append('%s %s: %s: %s' % (time.strftime('%H:%M:%S'), where, type(e).__name__, e))
+        try:
+            os.makedirs(os.path.dirname(LOG), exist_ok=True)
+            if os.path.isfile(LOG) and os.path.getsize(LOG) > 2_000_000:
+                os.replace(LOG, LOG + '.old')
+            with open(LOG, 'a', encoding='utf-8') as f:
+                f.write('%s %s\n%s\n' % (time.strftime('%Y-%m-%d %H:%M:%S'), where, traceback.format_exc()))
+        except OSError:
+            pass
+    del _errors[:-20]
+
+
+def about():
+    return {'version': VERSION, 'python': platform.python_version(), 'system': platform.platform(),
+            'game': GD.data_dir if GD else None, 'plugins': [os.path.basename(p.path) for p in GD.plugins] if GD else [],
+            'home': project.HOME}
+
+
+def report():
+    """Everything useful for looking into a problem, as text to paste."""
+    a = about()
+    lines = ['FOLab %s · Python %s · %s' % (a['version'], a['python'], a['system']),
+             'Game: %s' % a['game'], 'Loaded: %s' % ', '.join(a['plugins'])]
+    try:
+        n = nvse.status(GD.data_dir)
+        lines.append('xNVSE: %s' % (n.get('version') or ('installed' if n.get('installed') else 'not installed')))
+        lines.append('NVSE plugins: %s' % ', '.join(nvse.plugins(GD.data_dir)['dlls']))
+    except Exception as e:
+        lines.append('xNVSE: (%s)' % e)
+    if PR:
+        st = PR.state()
+        lines.append('Mod: %s (%s) · %d changes · opened from a plugin: %s · last change: %s' % (
+            PR.name, PR.plugin, st['changes'], bool(PR.source), st['undo']))
+        lines.append('Masters: %s' % ', '.join(masters()))
+    lines.append('Game running: %s' % playtest.game_running())
+    lines.append('')
+    lines.append('Last errors:' if _errors else 'No errors this session.')
+    lines += ['  ' + e for e in _errors]
+    if os.path.isfile(LOG):
+        with open(LOG, encoding='utf-8', errors='replace') as f:
+            tail = f.read()[-3000:]
+        lines += ['', 'From logs/folab.log (the end):', tail]
+    return '\n'.join(l for l in lines if l is not None)
+
+
 def state():
     s = {'game': GD.data_dir, 'interiors': len(GD.interiors), 'project': PR.state() if PR else None,
          'projects': project.list_projects(), 'kinds': PLACEABLE}
@@ -1156,6 +1215,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not p.startswith(WEB):
                     return self.send(b'no', 'text/plain', 403)
                 return self.file(p)
+            if u.path == '/api/about':
+                return self.send(about())
+            if u.path == '/api/report':
+                return self.send(report().encode('utf-8'), 'text/plain; charset=utf-8')
+            if u.path == '/api/doc':
+                name = os.path.basename(q['name'])
+                return self.file(os.path.join(WEB, 'docs', name + '.md'))
             if u.path == '/api/state':
                 return self.send(state())
             if u.path == '/api/interiors':
@@ -1236,6 +1302,7 @@ class Handler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send(b'not found', 'text/plain', 404)
         except Exception as e:
+            log_error('GET ' + u.path, e)
             self.send({'error': str(e)}, code=500)
 
     def do_POST(self):
@@ -1322,6 +1389,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'install': install.uninstall(GD.data_dir, PR.plugin), 'state': state()})
             self.send(b'not found', 'text/plain', 404)
         except Exception as e:
+            log_error('POST ' + u.path, e)
             self.send({'error': str(e)}, code=500)
 
     def file(self, p):

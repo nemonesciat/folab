@@ -182,6 +182,16 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 .gb-row{display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted)}.gb-row input[type=range]{flex:1}
 .gb-tex{color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gb-list{max-height:220px;border:1px solid var(--line);border-radius:6px}
+#helpmenu{position:absolute;right:12px;top:58px;z-index:30;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;min-width:280px;display:none;box-shadow:0 8px 24px #0008;padding:4px 0}
+#helpmenu .sep{border-top:1px solid var(--line);margin:4px 0}
+.helpbody{overflow-y:auto;padding:4px 18px 16px;color:var(--text);line-height:1.55}
+.helpbody h3{font:600 15px Cinzel,serif;color:var(--gold);margin:16px 0 4px}.helpbody h4{color:var(--gold2);margin:12px 0 4px}
+.helpbody p,.helpbody li{color:var(--muted)}.helpbody b{color:var(--text)}.helpbody code{background:var(--bg2);padding:0 4px;border-radius:4px}
+.helpbody table{border-collapse:collapse;margin:6px 0;width:100%}.helpbody td,.helpbody th{border-bottom:1px solid var(--line);padding:4px 8px 4px 0;text-align:left;vertical-align:top;font-size:13px}
+.helpbody th{color:var(--gold2);font-weight:500}.helpbody a{color:var(--gold)}
+#loading{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity .4s}
+#loading div{display:flex;flex-direction:column;align-items:center;gap:10px}#loading b{font:600 30px Cinzel,serif;color:var(--gold);letter-spacing:.2em}
+#loading span{color:var(--muted)}#loading.gone{opacity:0;pointer-events:none}
 #toast.err{border-color:var(--red);color:#f3b2a5}
 </style>
 </head>
@@ -209,6 +219,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
     <button class="btn" id="b-install" title="Save, then put the plugin in the game and switch it on">Put in game</button>
     <button class="btn" id="b-play" title="Save, put your mod in the game and start New Vegas (then Continue or load a save)">▶ Open in game</button>
     <button class="btn primary" id="b-playhere" title="Start New Vegas and, once a save loads, arrive where the view is looking (right-click a spot to pick it exactly)">▶ Play here</button>
+    <button class="btn" id="b-help" title="Guides, the controls, Report a problem, About">Help ▾</button>
+    <div id="helpmenu"></div>
   </div>
 </header>
 <main id="page-world">
@@ -298,6 +310,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <div id="page-mod"></div>
 <div id="page-game"></div>
 <div id="toast"></div>
+<div id="loading"><div><b>FOLAB</b><span>Opening the game's places…</span></div></div>
 <script src="/web/vendor/three.min.js"></script>
 <script src="/web/vendor/DDSLoader.js"></script>
 <script src="/web/vendor/TransformControls.js"></script>
@@ -309,6 +322,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/farland.js"></script>
 <script src="/web/viewtools.js"></script>
 <script src="/web/landshape.js"></script>
+<script src="/web/help.js"></script>
 <script src="/web/ctxmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>
