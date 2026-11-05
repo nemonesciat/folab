@@ -98,6 +98,10 @@ def interiors():
         k = GD.key(c)
         out.append({'id': k, 'edid': tes4.zstr(f.get('EDID', b'')), 'name': tes4.zstr(f.get('FULL', b'')),
                     'refs': len(GD.cell_refs.get(c, ())), 'plugin': GD.names[c >> 24], 'mine': k in changed})
+    for k, r in (PR.records.items() if PR else ()):
+        if k.startswith('+') and r['type'] == 'CELL':
+            out.append({'id': k, 'edid': recordio.field(r, 'EDID'), 'name': recordio.field(r, 'FULL'),
+                        'refs': len((PR.cells.get(k) or {}).get('refs', {})), 'plugin': 'your mod', 'mine': True, 'own': True})
     out.sort(key=lambda x: x['edid'].lower())
     return out
 
@@ -162,10 +166,10 @@ def thing(key, bkey, p, s, state):
 def cell_things(ckey):
     """Every drawable thing in a cell as the mod leaves it: the game's refs with the project's changes laid over,
     and the project's own new ones."""
-    c = GD.from_key(ckey)
+    c = None if ckey.startswith('+') else GD.from_key(ckey)
     mine = (PR.cells.get(ckey) or {}).get('refs', {}) if PR else {}
     out = []
-    for r in GD.refs(c):
+    for r in GD.refs(c) if c is not None else ():
         if r['base'] not in GD.forms or not r['pos']:
             continue
         btype, _e, _n, model = GD.describe(r['base'])
@@ -182,17 +186,75 @@ def cell_things(ckey):
                 if ch.get('base'):
                     base = ch['base']
         t = thing(k, base, p, s, state)
-        if r['leads']:
+        if r['leads'] or (ch or {}).get('tel'):
             t['door'] = True
         out.append(t)
     for k, ch in mine.items():
         if k.startswith('+'):
-            out.append(thing(k, ch['base'], ch['p'], ch.get('s', 1.0), 'new'))
+            t = thing(k, ch['base'], ch['p'], ch.get('s', 1.0), 'new')
+            if ch.get('tel'):
+                t['door'] = True
+            out.append(t)
     return out
 
 
+def place_name(ckey):
+    """(editor ID, name) of a place, the mod's own included"""
+    rec = PR.records.get(ckey) if PR else None
+    if rec:
+        return recordio.field(rec, 'EDID'), recordio.field(rec, 'FULL')
+    f = GD.fields(GD.from_key(ckey))
+    return tes4.zstr(f.get('EDID', b'')), tes4.zstr(f.get('FULL', b''))
+
+
+def ref_cell_key(rkey):
+    """Which place a ref is in, the mod's own refs and places included."""
+    for ck, c in (PR.cells.items() if PR else ()):
+        if rkey in c['refs'] and (rkey.startswith('+') or not c['refs'][rkey].get('removed')):
+            if rkey.startswith('+'):
+                return ck
+    if rkey.startswith('+'):
+        return None
+    c = GD.ref_cell.get(GD.from_key(rkey))
+    return GD.key(c) if c is not None else None
+
+
+def new_place(body):
+    """A place of the mod's own: a copy of a place's record (its lighting, music, sound), empty or with copies of
+    everything in it; and, in an empty one, a marker where the console's coc arrives."""
+    src = body['from']
+    rec = json.loads(json.dumps(BR.record(src)['record']))
+    rec['type'], rec['src'] = 'CELL', rec.get('src', '')
+    # (an editor ID nothing else has: the console's coc finds places by it)
+    taken = set(BR.edids or {}) | {GD.edid(c).lower() for c in GD.interiors} | \
+        {recordio.field(r, 'EDID').lower() for r in PR.records.values()}
+    edid, n = body['edid'], 1
+    while edid.lower() in taken:
+        n += 1
+        edid = '%s%d' % (body['edid'], n)
+    recordio.set_field(rec, 'EDID', edid, label='Editor ID')
+    recordio.set_field(rec, 'FULL', body['name'], label='Name')
+    ops = [{'op': 'record_new', 'record': rec}]
+    if body.get('copy'):
+        for t in cell_things(src):
+            if t['state'] != 'removed':
+                ops.append({'op': 'add', 'cell': '$new', 'base': t['bkey'], 'p': t['p'], 's': t['s']})
+    else:
+        coc = next((GD.key(f) for f, (i, r) in GD.forms.items() if r.tag == 'STAT' and GD.edid(f) == 'COCMarkerHeading'), None)
+        if coc:
+            ops.append({'op': 'add', 'cell': '$new', 'base': coc, 'p': [0, 0, 0, 0, 0, 0], 's': 1})
+    return edit('New place ' + body['name'], ops)
+
+
+def link_doors(a, b):
+    """Two doors leading to each other: a = {'cell', 'ref', 'arrive': [x, y, z, rx, ry, rz]} (where you arrive at a,
+    coming through b), the same for b."""
+    return edit('Link doors', [{'op': 'tel', 'cell': a['cell'], 'ref': a['ref'], 'tel': {'door': b['ref'], 'p': b['arrive']}},
+                               {'op': 'tel', 'cell': b['cell'], 'ref': b['ref'], 'tel': {'door': a['ref'], 'p': a['arrive']}}])
+
+
 def cell(ckey):
-    return {'id': ckey, 'edid': GD.edid(GD.from_key(ckey)), 'things': cell_things(ckey)}
+    return {'id': ckey, 'edid': place_name(ckey)[0], 'things': cell_things(ckey)}
 
 
 def ref(ckey, rkey):
@@ -203,12 +265,22 @@ def ref(ckey, rkey):
     frm = 'your mod' if t['bkey'].startswith('+') else GD.names[GD.source(GD.from_key(t['bkey']))[0]]
     out = {'thing': t, 'base': {'key': t['bkey'], 'type': t['type'], 'edid': t['base'], 'name': t['name'],
                                 'model': t['model'], 'from': frm}}
-    if not rkey.startswith('+'):
-        out['ref'] = refinfo.ref_info(GD, GD.from_key(rkey))
+    out['ref'] = refinfo.ref_info(GD, GD.from_key(rkey)) if not rkey.startswith('+') else {}
+    d = door(rkey)
+    if d:
+        out['ref']['door'] = d
     return out
 
 
 def door(rkey):
+    """Where a door leads, as the mod leaves it: its own link first, else the game's."""
+    for ck, c in (PR.cells.items() if PR else ()):
+        tel = (c['refs'].get(rkey) or {}).get('tel')
+        if tel:
+            dest = ref_cell_key(tel['door'])
+            e, n = place_name(dest) if dest else ('', '')
+            return {'door': tel['door'], 'p': tel['p'], 'cell': dest, 'cell_edid': e, 'cell_name': n,
+                    'interior': True, 'mine': True}
     if rkey.startswith('+'):
         return None
     return refinfo.door_target(GD, GD.from_key(rkey))
@@ -311,7 +383,7 @@ def edit(label, ops):
         raise ValueError('no mod open')
     made = PR.apply(label, ops)
     out = {'state': state(), 'made': made}
-    cells = {o['cell'] for o in ops if 'cell' in o}
+    cells = {o['cell'] for o in ops if 'cell' in o and o['cell'] != '$new'}
     if len(cells) == 1:
         out['things'] = [t for t in cell_things(cells.pop()) if t['key'] in made or t['key'] in {o.get('ref') for o in ops}]
     return out
@@ -465,6 +537,16 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path in ('/api/undo', '/api/redo'):
                     label = PR.undo() if u.path == '/api/undo' else PR.redo()
                     return self.send({'label': label, 'state': state()})
+                if u.path == '/api/place/new':
+                    return self.send(new_place(body))
+                if u.path == '/api/doors/link':
+                    return self.send(link_doors(body['a'], body['b']))
+                if u.path == '/api/doors/unlink':
+                    other = door(body['ref'])
+                    ops = [{'op': 'tel', 'cell': body['cell'], 'ref': body['ref'], 'tel': None}]
+                    if other and other.get('mine') and other.get('cell'):
+                        ops.append({'op': 'tel', 'cell': other['cell'], 'ref': other['door'], 'tel': None})
+                    return self.send(edit('Unlink door', ops))
                 if u.path == '/api/record/save':
                     rec = body['record']
                     return self.send(edit('Edit ' + (recordio.field(rec, 'EDID') or body['key']), [{'op': 'record', 'key': body['key'], 'record': rec}]))

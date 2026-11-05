@@ -74,11 +74,68 @@ async function undoRedo(which){
 
 // ---------- places ----------
 async function loadPlaces(){ A.places = await api('/api/interiors'); drawPlaces(); }
+
+// ---------- a place of your own ----------
+function newPlaceDialog(){
+  if (!A.state.project) return toast('Start a mod first.', true);
+  const cur = A.places.find(p => p.id === A.cellId);
+  const box = document.createElement('div');
+  box.className = 'owin'; box.style.cssText = 'left:50%;top:22%;transform:translateX(-50%);width:440px';
+  box.innerHTML = `<div class="owtitle"><b>New place</b><button class="owx">✕</button></div>
+    <div style="padding:10px 14px">
+      <p class="note" style="padding:0">A place of your own in your mod. Link it to the world with a door afterwards.</p>
+      <div class="fields" style="grid-template-columns:90px 1fr;padding:6px 0">
+        <label>Name</label><input id="np-name" value="My Room">
+        <label>Editor ID</label><input id="np-edid" value="MyRoom">
+      </div>
+      <p><label><input type="radio" name="np-mode" value="empty" checked> Empty${cur ? ` (lit like ${esc(cur.name || cur.edid)})` : ''}</label><br>
+         <label><input type="radio" name="np-mode" value="copy" ${cur ? '' : 'disabled'}> A copy of ${cur ? esc(cur.name || cur.edid) + ', everything in it' : 'the place open now'}</label></p>
+    </div>
+    <div class="owfoot"><button class="btn primary" id="np-go">Make it</button><button class="btn" id="np-cancel">Cancel</button></div>`;
+  document.body.appendChild(box);
+  const close = () => box.remove();
+  box.querySelector('.owx').onclick = close; box.querySelector('#np-cancel').onclick = close;
+  const name = box.querySelector('#np-name'), edid = box.querySelector('#np-edid');
+  name.oninput = () => { edid.value = name.value.replace(/[^A-Za-z0-9]/g, '') || 'MyRoom'; };
+  name.focus(); name.select();
+  box.querySelector('#np-go').onclick = async () => {
+    if (!A.cellId) return toast('Open any place first: the new one takes its lighting.', true);
+    const copy = box.querySelector('input[name="np-mode"]:checked').value === 'copy';
+    try {
+      const d = await post('/api/place/new', {from: A.cellId, name: name.value.trim() || 'My Room', edid: edid.value.trim() || 'MyRoom', copy});
+      close(); setState(d.state); await loadPlaces(); await openPlace(d.made[0]);
+      toast(copy ? 'A copy of the place, all yours' : 'An empty place: place things on the grid, then link a door to it');
+    } catch (e){ fail(e); }
+  };
+}
+
+// ---------- linking doors: this one, then the other (in any place) ----------
+function linkStart(t){
+  const g = W.byKey.get(t.key); if (!g) return;
+  A.linking = {cell: A.cellId, ref: t.key, arrive: arrivalFor(g), name: t.base, place: A.cellEdid};
+  const h = $('#hint'); h.textContent = `Linking ${t.base}: now click the door it leads to (open its place from Places if it's elsewhere) · Esc stops`; h.style.display = 'block';
+}
+function linkEnd(){ A.linking = null; $('#hint').style.display = 'none'; }
+async function linkFinish(t){
+  const a = A.linking, g = W.byKey.get(t.key);
+  if (!g || t.key === a.ref) return;
+  const b = {cell: A.cellId, ref: t.key, arrive: arrivalFor(g)};
+  linkEnd();
+  try {
+    const d = await post('/api/doors/link', {a: {cell: a.cell, ref: a.ref, arrive: a.arrive}, b});
+    setState(d.state); await resync(); await loadPlaces();
+    toast(`${a.name} (${a.place}) and ${t.base} (${A.cellEdid}) now lead to each other`);
+  } catch (e){ fail(e); }
+}
+async function unlinkDoor(t){
+  try { const d = await post('/api/doors/unlink', {cell: A.cellId, ref: t.key}); setState(d.state); await resync(); toast('Unlinked'); }
+  catch (e){ fail(e); }
+}
 function drawPlaces(){
   const f = $('#f-places').value.toLowerCase(), list = $('#places');
   const rows = A.places.filter(c => !f || (c.edid + ' ' + c.name).toLowerCase().includes(f));
   rows.sort((a, b) => (b.mine - a.mine) || a.edid.localeCompare(b.edid));
-  list.innerHTML = rows.map(c => `<div class="row${c.id === A.cellId ? ' on' : ''}" data-id="${esc(c.id)}"><div>${c.mine ? '<span class="dot moved" title="Your mod changes this place"></span>' : ''}${esc(c.name || c.edid)}<small>${esc(c.edid)} · ${esc(c.plugin)}</small></div><span class="n">${c.refs}</span></div>`).join('');
+  list.innerHTML = rows.map(c => `<div class="row${c.id === A.cellId ? ' on' : ''}" data-id="${esc(c.id)}"><div>${c.own ? '<span class="dot new" title="A place of your own"></span>' : c.mine ? '<span class="dot moved" title="Your mod changes this place"></span>' : ''}${esc(c.name || c.edid)}<small>${esc(c.edid)} · ${esc(c.plugin)}</small></div><span class="n">${c.refs}</span></div>`).join('');
 }
 $('#places').addEventListener('click', e => { const r = e.target.closest('.row'); if (r) openPlace(r.dataset.id); });
 $('#f-places').addEventListener('input', drawPlaces);
@@ -226,6 +283,7 @@ $('#selected').addEventListener('click', e => {
 });
 
 W.onSelect = list => {
+  if (A.linking && list.length === 1 && list[0].type === 'DOOR') return linkFinish(list[0]);
   A.sel = list.map(t => t.key);
   drawSelected(list);
   if (list.length) tab('right', 'selected');
@@ -413,7 +471,7 @@ addEventListener('keydown', e => {
   else if (ctrl && k === 'a'){ e.preventDefault(); select(visibleGroups().map(g => g.userData.thing.key)); }
   else if (e.key === 'Delete'){ delSel(); }
   else if (e.key === 'End'){ dropSel(); }
-  else if (e.key === 'Escape'){ if (cmClose() || owClose()) return; if (A.swapping) swapEnd(); else if (W.placing) stopPlacing(); else select([]); }
+  else if (e.key === 'Escape'){ if (cmClose() || owClose()) return; if (A.linking) linkEnd(); else if (A.swapping) swapEnd(); else if (W.placing) stopPlacing(); else select([]); }
   else if (ctrl || e.altKey) return;
   else if (k === 'g' || k === '1') setTool('translate');
   else if (k === 'r' || k === '2') setTool('rotate');
@@ -532,6 +590,7 @@ async function start(){
   try { if (localStorage.getItem('folab-light') === '0'){ $('#t-light').checked = false; setGameLight(false); } } catch (e) {}
   await refreshState();
   for (const [k, v] of Object.entries(A.state.kinds)) $('#f-kind').insertAdjacentHTML('beforeend', `<option value="${k}">${esc(v)}</option>`);
+  $('#b-newplace').onclick = newPlaceDialog;
   drawRecent();
   const recent = A.state.projects || [];
   $('#w-recent').innerHTML = recent.length ? '<p>Or open one:</p>' + recent.map(x => `<div class="row" data-open="${esc(x.name)}">${esc(x.name)}</div>`).join('') : '';

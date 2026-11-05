@@ -18,6 +18,8 @@ function cmEntries(key, point){
   const add = (group, label, run, opt) => E.push(Object.assign({group, label, run}, opt || {}));
   if (key){
     if (one && one.door) add('This door', 'Go where it leads', () => goThroughDoor(one));
+    if (one && one.type === 'DOOR') add('This door', one.door ? 'Link it to another door instead…' : 'Link it to another door…', () => linkStart(one));
+    if (one && one.door && one.state) add('This door', 'Unlink it', () => unlinkDoor(one));
     if (one){ add('Look and open', 'Open its window', () => owOpen(one.key)); add('Look and open', 'Open its record', () => openRecord(one.bkey)); }
     add('Look and open', 'Look at it', focusSel);
     add('Edit', n > 1 ? `Copy ${n}` : 'Copy', copySel);
@@ -36,6 +38,7 @@ function cmEntries(key, point){
     add('View', 'Hide everything else', () => { const keep = new Set(A.sel); hideKeys(W.group.children.map(g => g.userData.thing.key).filter(k => !keep.has(k))); });
   } else if (A.clip) add('Edit', 'Paste here', () => { W.mouse = CM.at; paste(); });
   add('This place', 'Play here', () => playHere(point));
+  add('This place', 'New place of your own…', newPlaceDialog);
   add('This place', 'Select everything you can see', () => select(visibleGroups().map(g => g.userData.thing.key)));
   add('This place', 'Put my mod in the game and go here…', install);
   add('This place', 'Copy the console line to come here', () => { navigator.clipboard.writeText('coc ' + A.cellEdid); toast('Copied: coc ' + A.cellEdid); });

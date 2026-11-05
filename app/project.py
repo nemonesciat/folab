@@ -3,7 +3,9 @@
     cells: {cell key: {'refs': {ref key: change}}}
       cell key / game ref key: 'FalloutNV.esm:10FDEB' (file and object ID, whatever the load order)
       new ref key: '+000800' (its object ID in this plugin)
+      cell key '+ID': a place of the mod's own (its CELL record in records under the same key)
       change: {'base': key, 'p': [x, y, z, rx, ry, rz], 's': scale} for a new ref;
+              'tel': {'door': ref key, 'p': [x, y, z, rx, ry, rz]} on a door: where it leads (made persistent);
               {'p': [...], 's': scale, 'base': key} for a changed game ref (each part optional: moved, rescaled,
               swapped for another thing); {'removed': True} for a removed one
 
@@ -101,7 +103,7 @@ class Project:
         """Make several changes as one undo step. ops: [{'op': 'add'|'move'|'remove', ...}]. Returns the keys
         given to new refs, in order."""
         self._step(label)
-        made = []
+        made, new_record = [], None
         for o in ops:
             if o['op'] == 'record':                  # a record as the mod has it (a game one changed, or its own)
                 self.records[o['key']] = o['record']
@@ -111,12 +113,26 @@ class Project:
                 self.next_id += 1
                 self.records[key] = o['record']
                 made.append(key)
+                new_record = key
                 continue
             if o['op'] == 'record_revert':           # a game record back as the game has it; one of the mod's own, gone
                 self.records.pop(o['key'], None)
                 continue
+            if o.get('cell') == '$new':                # (the place a record_new earlier in these ops just made)
+                o = dict(o, cell=new_record)
             refs = self._refs(o['cell'])
-            if o['op'] == 'add':
+            if o['op'] == 'tel':                     # a door's link: where it leads, or (None) nowhere new
+                r = refs.setdefault(o['ref'], {})
+                if o.get('tel'):
+                    r['tel'] = o['tel']
+                    r['persistent'] = True
+                else:
+                    r.pop('tel', None)
+                    if not o['ref'].startswith('+'):
+                        r.pop('persistent', None)
+                if not r:
+                    refs.pop(o['ref'], None)
+            elif o['op'] == 'add':
                 key = '+%06X' % self.next_id
                 self.next_id += 1
                 refs[key] = {'base': o['base'], 'p': [float(v) for v in o['p']], 's': float(o.get('s', 1.0))}

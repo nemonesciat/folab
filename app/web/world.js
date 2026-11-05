@@ -171,8 +171,14 @@ function visibleGroups(except){
 }
 
 function hitThing(e, except){
-  const hit = ray(e).intersectObjects(visibleGroups(except), true)[0];
-  if (!hit) return null;
+  const r = ray(e), hit = r.intersectObjects(visibleGroups(except), true)[0];
+  if (!hit){
+    // nothing there: the floor plane of the place (its lowest floor, or 0 in an empty one)
+    const at = new T.Vector3();
+    if (r.ray.intersectPlane(new T.Plane(new T.Vector3(0, 0, 1), -(W.floorZ || 0)), at) && at.distanceTo(W.cam.position) < 20000)
+      return {group: null, point: at, normal: new T.Vector3(0, 0, 1), floor: true};
+    return null;
+  }
   let o = hit.object; while (o && !o.userData.thing) o = o.parent;
   return {group: o || null, point: hit.point, normal: hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : null};
 }
@@ -383,6 +389,14 @@ async function openCell(c, onProgress, at){
   W.byKey = new Map();
   W.hidden = new Set();
   W.cell = c;
+  const zs = c.things.filter(t => !t.marker).map(t => t.p[2]);
+  W.floorZ = zs.length ? Math.min(...zs) : 0;
+  if (W.grid) W.scene.remove(W.grid);
+  // (a grid on the floor where there's little to stand on: a new, empty place)
+  if (c.things.filter(t => !t.marker).length < 8){
+    W.grid = new T.GridHelper(4096, 32, 0x8a6a35, 0x463c2e); W.grid.rotation.x = Math.PI / 2; W.grid.position.z = W.floorZ;
+    W.scene.add(W.grid);
+  } else W.grid = null;
   standAt(at || arrival(c));
   let done = 0;
   await Promise.all(c.things.map(t => addThing(t, token).then(() => { done++; if (onProgress && token === W.token) onProgress(done, c.things.length); })));
@@ -400,7 +414,7 @@ function arrival(c){
   return {p: solid.reduce((b, t) => d(t) < d(b) ? t : b).p};
 }
 function standAt(at){
-  if (!at) return;
+  if (!at){ W.cam.position.set(-600, -600, 400); W.yaw = Math.PI / 4; W.pitch = -0.4; return; }
   W.cam.position.set(at.p[0], at.p[1], at.p[2] + 120);
   W.yaw = Math.PI / 2 - (at.facing ? at.p[5] : 0); W.pitch = -0.1;
 }
@@ -510,6 +524,28 @@ function pointUnder(e){
   if (h) return h.point;
   const r = new T.Raycaster(W.cam.position, dir()), hit = r.intersectObjects(visibleGroups(), true)[0];
   return hit ? hit.point : W.cam.position.clone().addScaledVector(dir(), 300);
+}
+
+// ---------- doors: where you arrive ----------
+// The game puts a door's arrival point in front of it on the room's side (every door that leads somewhere, a few
+// steps out, facing into the room). Tried both ways out of the door's thin side: the one with floor below and nothing
+// in the way, and the more open of the two when both are.
+function arrivalFor(g){
+  g.updateMatrixWorld(true);
+  const b = new T.Box3().setFromObject(g), c = b.getCenter(new T.Vector3()), size = b.getSize(new T.Vector3());
+  const n = size.x < size.y ? new T.Vector3(1, 0, 0) : new T.Vector3(0, 1, 0);
+  const others = visibleGroups(g), mid = new T.Vector3(c.x, c.y, b.min.z + 60);
+  let best = null;
+  for (const sign of [1, -1]){
+    const d = n.clone().multiplyScalar(sign), spot = mid.clone().addScaledVector(d, 80);
+    const blocked = new T.Raycaster(mid, d, 0, 80).intersectObjects(others, true)[0];
+    const floor = new T.Raycaster(spot, new T.Vector3(0, 0, -1), 0, 200).intersectObjects(others, true)[0];
+    const open = (new T.Raycaster(mid, d, 0, 600).intersectObjects(others, true)[0] || {distance: 600}).distance;
+    const score = (blocked ? 0 : 2) + (floor ? 2 : 0) + open / 600;
+    if (!best || score > best.score) best = {score, d, z: floor ? floor.point.z : b.min.z, spot};
+  }
+  const heading = Math.atan2(best.d.x, best.d.y);                 // the game's: 0 is north, turning clockwise
+  return [best.spot.x, best.spot.y, best.z, 0, 0, Math.round(heading * 10000) / 10000].map(v => Math.round(v * 10000) / 10000);
 }
 
 // ---------- placing new things ----------

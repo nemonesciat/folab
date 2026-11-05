@@ -101,9 +101,12 @@ class Writer:
             return
         used = {0}
         for ckey, c in self.pr.cells.items():
-            cell = gd.from_key(ckey)
-            used.add(gd.source(cell)[0])
+            cell = None if ckey.startswith('+') else gd.from_key(ckey)
+            if cell is not None:
+                used.add(gd.source(cell)[0])
             for rkey, r in c['refs'].items():
+                if r.get('tel') and not r['tel']['door'].startswith('+'):
+                    used.add(gd.from_key(r['tel']['door']) >> 24)
                 if not rkey.startswith('+'):
                     used.add(gd.from_key(rkey) >> 24)
                     used.add(gd.cell_refs[cell][gd.from_key(rkey)][0])
@@ -132,8 +135,15 @@ class Writer:
         i, rec = self.gd.source(cell)
         return self.remap_fields(i, 'CELL', list(tes4.iter_subrecords(self.gd.plugins[i].data(rec)))), rec.flags & ~tes4.COMPRESSED
 
+    def tel(self, r):
+        """A door's XTEL as the game writes it: the door it leads to, where you arrive (position, turn), flags."""
+        t = r['tel']
+        return struct.pack('<I6fI', self.link(t['door']), *[float(v) for v in t['p']], 0)
+
     def new_ref(self, rkey, r):
         subs = [('NAME', struct.pack('<I', self.link(r['base'])))]
+        if r.get('tel'):
+            subs.append(('XTEL', self.tel(r)))
         if r.get('s', 1.0) != 1.0:
             subs.append(('XSCL', struct.pack('<f', r['s'])))
         subs.append(('DATA', struct.pack('<6f', *r['p'])))
@@ -153,6 +163,11 @@ class Writer:
                 v = list(struct.unpack_from('<6f', old))
                 p = v[:2] + [SUNK_Z] + v[3:]
         out = []
+        if 'tel' in r:                                  # (a door the mod links: its XTEL replaced, or put in before DATA)
+            subs = [(t, d) for t, d in subs if t != 'XTEL']
+            at = next((n for n, (t, _d) in enumerate(subs) if t == 'DATA'), len(subs))
+            subs = subs[:at] + [('XTEL', self.tel(r))] + subs[at:]
+            flags |= tes4.PERSISTENT
         for t, d in subs:
             if t == 'XSCL' and s is not None:
                 continue
@@ -190,12 +205,12 @@ class Writer:
 
         # places: the cell's record, then its refs
         cells = {k for k, c in self.pr.cells.items() if c['refs']}
-        cells |= {k for k, r in self.pr.records.items() if r['type'] == 'CELL' and not k.startswith('+')}
+        cells |= {k for k, r in self.pr.records.items() if r['type'] == 'CELL'}
         for ckey in sorted(cells):
-            cell = gd.from_key(ckey)
+            cell = None if ckey.startswith('+') else gd.from_key(ckey)
             lid = self.link(ckey)
-            node, kids = self._cell_node(tree, found, cell, lid, order)
             mine = self.pr.records.get(ckey)
+            node, kids = self._cell_node(tree, found, cell, lid, order, mine)
             if mine:
                 node.set_data(join(recordio.to_bytes(mine, self.link)), mine['flags'])
             for rkey, r in sorted((self.pr.cells.get(ckey) or {'refs': {}})['refs'].items()):
@@ -214,13 +229,20 @@ class Writer:
                     continue
                 if have:
                     subs = list(tes4.iter_subrecords(have[0].data()))
+                    was = have[0].flags
                     subs, flags = self.changed_ref(subs, have[0].flags & ~tes4.COMPRESSED, r)
                     have[0].set_data(join(subs), flags)
+                    if flags & tes4.PERSISTENT and not was & tes4.PERSISTENT and have[1] is not None:
+                        # (a door linked now: teleport doors live in the cell's persistent group, as the game's do)
+                        have[1].kids.remove(have[0])
+                        group = self._ref_group(kids, lid, True)
+                        group.kids.append(have[0])
+                        found[rlid] = (have[0], group)
                 else:
                     i, rec = gd.cell_refs[cell][fid]
                     subs = self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(gd.plugins[i].data(rec))))
                     subs, flags = self.changed_ref(subs, rec.flags & ~tes4.COMPRESSED, r)
-                    group = self._ref_group(kids, lid, bool(rec.flags & tes4.PERSISTENT))
+                    group = self._ref_group(kids, lid, bool(flags & tes4.PERSISTENT))
                     node2 = plugintree.Rec.new(rec.tag, flags, rlid, join(subs), FORM_VERSION)
                     group.kids.append(node2)
                     found[rlid] = (node2, group)
@@ -247,7 +269,7 @@ class Writer:
             tree.header.set_data(new_head, flags)
         return tree.bytes()
 
-    def _cell_node(self, tree, found, cell, lid, order):
+    def _cell_node(self, tree, found, cell, lid, order, mine=None):
         """The cell's record in the tree and its children group, both made (as the game files keep them) when the
         plugin doesn't have the cell yet."""
         have = found.get(lid)
@@ -260,7 +282,10 @@ class Writer:
             kids = plugintree.Group(lid, tes4.G_CELL_CHILDREN)
             parent.kids.insert(at + 1, kids)
             return node, kids
-        subs, flags = self.game_cell(cell)
+        if cell is None:                                # (a place of the mod's own: its record is all there is)
+            subs, flags = recordio.to_bytes(mine, self.link), mine['flags']
+        else:
+            subs, flags = self.game_cell(cell)
         node = plugintree.Rec.new('CELL', flags, lid, join(subs), FORM_VERSION)
         top = tree.top('CELL', order)
         obj = lid & 0xFFFFFF
