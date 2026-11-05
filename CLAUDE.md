@@ -50,6 +50,11 @@ the model for style, UI and approach. Python, standard library first, code in `a
   `maptiles.py` (16 x 16 cells, 16 px a cell; texture colours from `dds.py`), the game's own kept on disk in
   cache/maps/<game files' hash> and drawn ahead in the background; tiles with the mod's land drawn fresh.
   `/api/goto` (Ctrl+K): places, every world's map markers, 'x, y' cells, 'x y z' spots.
+- Water: `project.water` {outside CELL key: height or None (the world's level, XCLW = FLT_MAX)}; the writer sets
+  XCLW and the has-water flag on the cell's record. Lakes and rivers in `landshape.py` give each cell one level.
+- New worldspace (`/api/world/new`, `worldgen.py`): the mod is saved with every game file as a master, the world
+  added to that plugin, then the plugin opened as the mod (undo starts afresh) so the world is game data to edit.
+- Auto-paint (`autopaint.py`): textures by slope band learnt from the game's land nearby; land shaping uses it.
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.

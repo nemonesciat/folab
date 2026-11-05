@@ -165,7 +165,8 @@ function move(dt){
   const k = W.keys;
   let speed = (k.shift ? 2400 : 700) * dt;
   if (W.sprint && k[W.sprint]) speed *= 4;
-  const f = new T.Vector3(Math.cos(W.yaw), Math.sin(W.yaw), 0), r = new T.Vector3(Math.sin(W.yaw), -Math.cos(W.yaw), 0);
+  // (W and S go the way the view looks, up and down too, as the Workshop flies; A and D slide level)
+  const f = dir(), r = new T.Vector3(Math.sin(W.yaw), -Math.cos(W.yaw), 0);
   const p = W.cam.position;
   if (k.w) p.addScaledVector(f, speed); if (k.s) p.addScaledVector(f, -speed);
   if (k.d) p.addScaledVector(r, speed); if (k.a) p.addScaledVector(r, -speed);

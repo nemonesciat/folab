@@ -103,6 +103,8 @@ class Writer:
             self.mindex = {m.lower(): k for k, m in enumerate(self.masters)}
             return
         used = {0}
+        if getattr(self, 'force_all', False):
+            used |= set(range(len(gd.plugins)))     # (every game file: a new world may use any of them later)
         for ckey, c in self.pr.cells.items():
             cell = None if ckey.startswith('+') else gd.from_key(ckey)
             if cell is not None:

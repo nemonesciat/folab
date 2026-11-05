@@ -14,7 +14,7 @@ async function outsideTab(){
 function drawOutside(){
   const f = ($('#f-outside').value || '').toLowerCase(), list = $('#outside');
   if (!OUT.info){
-    list.innerHTML = OUT.worlds.filter(w => !f || (w.edid + ' ' + w.name).toLowerCase().includes(f)).map(w =>
+    list.innerHTML = '<div class="row" data-newworld="1"><div>＋ New worldspace…<small>land of your own to shape and build on</small></div></div>' + OUT.worlds.filter(w => !f || (w.edid + ' ' + w.name).toLowerCase().includes(f)).map(w =>
       `<div class="row" data-world="${esc(w.id)}"><div>${esc(w.name || w.edid)}<small>${esc(w.edid)} · ${esc(w.plugin)}</small></div><span class="n">${w.cells}</span></div>`).join('');
     return;
   }
@@ -26,6 +26,7 @@ function drawOutside(){
 }
 $('#outside').addEventListener('click', async e => {
   const r = e.target.closest('.row'); if (!r) return;
+  if (r.dataset.newworld) return newWorldDialog();
   if (r.dataset.world){
     OUT.info = await api('/api/world?id=' + encodeURIComponent(r.dataset.world));
     $('#f-outside').value = ''; drawOutside();
@@ -52,7 +53,7 @@ function leaveOutside(){
   W.outdoors = false; assignLights();
   $('#t-ground').style.display = 'none'; $('#ls-btn').style.display = 'none';
   if (typeof lsClose === 'function') lsClose();
-  W.cam.far = 60000; W.cam.updateProjectionMatrix();
+  W.cam.near = 4; W.cam.far = 60000; W.cam.updateProjectionMatrix();
 }
 
 function goOutside(info, at){
@@ -75,7 +76,8 @@ function goOutside(info, at){
   // (the distant hills reach about 40 cells: the haze thickens out to there)
   W.scene.fog = new T.Fog(SKY, CELL * 3, CELL * 40);
   W.outdoors = true; assignLights();                         // (the desert sun)
-  W.cam.far = CELL * 44; W.cam.updateProjectionMatrix();
+  // (outside the view reaches 40 cells: a nearest distance of 24 keeps the depth fine enough to tell water 32 under the ground)
+  W.cam.near = 24; W.cam.far = CELL * 44; W.cam.updateProjectionMatrix();
   // stand above the spot (the ground's height isn't known yet: the camera settles onto it once the cell is in)
   W.cam.position.set(at.p[0], at.p[1], (at.p[2] || 0) + 200);
   W.yaw = Math.PI / 2 - (at.facing ? at.p[5] || 0 : 0); W.pitch = -0.15;
@@ -293,7 +295,8 @@ function landRebuild(c){
 
 
 // ---------- water: one level a cell, as the game has it; drawn where it stands above the ground ----------
-const WATER_MAT = new T.MeshLambertMaterial({color: 0x3f6670, transparent: true, opacity: 0.78, depthWrite: false});
+const WATER_MAT = new T.MeshLambertMaterial({color: 0x3f6670, transparent: true, opacity: 0.78, depthWrite: false,
+                                             polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 8});   // (the ground wins a tie)
 const WATER_GEO = new T.PlaneGeometry(CELL, CELL).translate(CELL / 2, CELL / 2, 0);
 function waterRebuild(c){
   if (c.water){ W.scene.remove(c.water); c.water = null; }
@@ -303,4 +306,49 @@ function waterRebuild(c){
   c.water.position.set(c.x * CELL, c.y * CELL, h);
   c.water.renderOrder = 2;
   W.scene.add(c.water);
+}
+
+// ---------- a new worldspace of your own ----------
+async function newWorldDialog(){
+  if (!A.state.project) return toast('Start a mod first.', true);
+  if (!OUT.worlds.length) OUT.worlds = await api('/api/worlds');
+  const tex = await api('/api/landtex');
+  const box = document.createElement('div');
+  box.className = 'owin'; box.style.cssText = 'left:50%;top:14%;transform:translateX(-50%);width:480px';
+  box.innerHTML = `<div class="owtitle"><b>New worldspace</b><button class="owx">✕</button></div>
+    <div style="padding:10px 14px">
+      <p class="note" style="padding:0">Land of your own: a square of flat ground to shape, paint and build on with every tool outside.</p>
+      <div class="fields" style="grid-template-columns:130px 1fr;padding:6px 0">
+        <label>Name</label><input id="nw-name" value="My Land">
+        <label>Editor ID</label><input id="nw-edid" value="MyLandWorld">
+        <label>Size</label><select id="nw-size">${[4, 8, 16, 32].map(n => `<option value="${n}" ${n === 8 ? 'selected' : ''}>${n} × ${n} cells (${(n * 4096 * 0.01428).toFixed(0)} m across)</option>`).join('')}</select>
+        <label>Ground height</label><input id="nw-h" type="number" value="4000">
+        <label>Ground</label><select id="nw-tex">${tex.map(t => `<option value="${esc(t.key)}" ${t.edid === 'DirtBarrenWastes01' ? 'selected' : ''}>${esc(t.edid)}</option>`).join('')}</select>
+        <label>Weather and water like</label><select id="nw-tpl">${OUT.worlds.map(w => `<option value="${esc(w.id)}" ${w.edid === 'WastelandNV' ? 'selected' : ''}>${esc(w.name || w.edid)}</option>`).join('')}</select>
+      </div>
+      <p class="note" style="padding:0">FOLab saves your mod and opens it again with the new land in it: your mod stays as it is, but Undo starts afresh from here.
+        Reach it in game with a door, or the console: <code>coc</code> to a cell of it, or <code>cow &lt;editor ID&gt; 0 0</code>.</p>
+    </div>
+    <div class="owfoot"><button class="btn primary" id="nw-go">Make it</button><button class="btn" id="nw-cancel">Cancel</button></div>`;
+  document.body.appendChild(box);
+  const close = () => box.remove();
+  box.querySelector('.owx').onclick = close; box.querySelector('#nw-cancel').onclick = close;
+  const name = box.querySelector('#nw-name'), edid = box.querySelector('#nw-edid');
+  name.oninput = () => { edid.value = (name.value.replace(/[^A-Za-z0-9]/g, '') || 'MyLand') + 'World'; };
+  name.focus(); name.select();
+  box.querySelector('#nw-go').onclick = async () => {
+    const btn = box.querySelector('#nw-go'); btn.disabled = true; btn.textContent = 'Making it…';
+    try {
+      const d = await post('/api/world/new', {name: name.value.trim(), edid: edid.value.trim(), size: +box.querySelector('#nw-size').value,
+                                             height: +box.querySelector('#nw-h').value, ltex: box.querySelector('#nw-tex').value,
+                                             template: box.querySelector('#nw-tpl').value});
+      close(); setState(d); if (typeof BW !== 'undefined') BW.types = [];
+      await loadPlaces();
+      OUT.worlds = await api('/api/worlds');
+      const info = await api('/api/world?id=' + encodeURIComponent(d.world));
+      OUT.info = info; tab('left', 'outside'); drawOutside();
+      goOutside(info, {p: [...info.middle, 0]});
+      toast(`${info.name || info.edid}: yours to shape. Open the map (M) and Shape land, or the Ground brush.`);
+    } catch (e){ fail(e); btn.disabled = false; btn.textContent = 'Make it'; }
+  };
 }

@@ -29,6 +29,9 @@ import base64
 import hashlib
 import autopaint
 import heightmap
+import plugintree
+import shutil
+import worldgen
 import landshape
 import land
 import maptiles
@@ -919,6 +922,53 @@ def load_game(pr):
     print('loaded %d plugins (%.1fs)' % (len(GD.plugins), time.time() - t), flush=True)
 
 
+def new_world(body):
+    """A new worldspace in the mod: the mod saved (naming every game file as a master, so the new land can use any of
+    their things), the world added to that plugin (worldgen.py), and the plugin then opened as the mod, so the world
+    is part of the game FOLab shows and every tool works on it. The mod's undo history starts afresh."""
+    global PR
+    if not PR:
+        raise ValueError('Start a mod first.')
+    not_while_playing()
+    edid = re.sub(r'[^A-Za-z0-9_]', '', body.get('edid') or '')
+    if not edid:
+        raise ValueError('Give it an editor ID: letters and digits, no spaces.')
+    if BR and BR.edids and edid.lower() in BR.edids:
+        raise ValueError('The game already has something called %s.' % edid)
+    tpl = GD.from_key(body['template']) if body.get('template') else next(w for w in GD.worlds() if GD.edid(w) == 'WastelandNV')
+    size = max(1, min(64, int(body.get('size', 8))))
+    ltex = body.get('ltex') or next((GD.key(f) for f, (i, r) in GD.forms.items() if r.tag == 'LTEX' and GD.edid(f) == 'DirtBarrenWastes01'), None)
+    if not ltex:
+        raise ValueError('Pick a ground texture.')
+    path = PR.plugin_path()
+    w = espwrite.Writer(GD, PR)
+    w.force_all = not PR.source
+    data = w.build()
+    with open(path, 'wb') as f:
+        f.write(data)
+    tree = plugintree.Plugin.read(path)
+    wid, nid = worldgen.add_world(GD, tree, w, PR.next_id, {'edid': edid, 'name': body.get('name') or '', 'template': tpl,
+                                                            'size': size, 'height': float(body.get('height', 4000)), 'ltex': ltex})
+    worldgen.fix_header(tree, w.own(nid))
+    with open(path + '.tmp', 'wb') as f:
+        f.write(tree.bytes())
+    os.replace(path + '.tmp', path)
+    # the mod is now that plugin, opened
+    folder = PR.name + ' source'
+    os.makedirs(os.path.join(project.PROJECTS_DIR, folder), exist_ok=True)
+    shutil.copy2(path, os.path.join(project.PROJECTS_DIR, folder, PR.plugin))
+    d = PR.to_dict()
+    d.update(cells={}, records={}, land={}, water={}, next_id=nid, source=folder + '/' + PR.plugin)
+    with open(PR.path, 'w', encoding='utf-8') as f:
+        json.dump(d, f, indent=1)
+    name = PR.name
+    PR = None
+    out = open_project(name)
+    me = len(GD.plugins) - 1
+    out['world'] = GD.key((me << 24) | (wid & 0xFFFFFF))
+    return out
+
+
 def open_project(name, create=False):
     global PR
     pr = project.Project.create(name) if create else project.Project.open(name)
@@ -1219,6 +1269,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(open_project(name))
                 if not PR:
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
+                if u.path == '/api/world/new':
+                    return self.send(new_world(body))
                 if u.path == '/api/shape/cells':
                     return self.send(shape_cells(body))
                 if u.path == '/api/shape/preview':
