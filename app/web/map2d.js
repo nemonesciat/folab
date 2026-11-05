@@ -102,7 +102,7 @@ function mapDraw(){
     for (let tx = Math.floor(x0 / MAP_TILE); tx <= Math.floor(x1 / MAP_TILE); tx++)
       for (let ty = Math.floor(y0 / MAP_TILE); ty <= Math.floor(y1 / MAP_TILE); ty++){
         if (b && ((tx + 1) * 16 <= b[0] || tx * 16 > b[2] || (ty + 1) * 16 <= b[1] || ty * 16 > b[3])) continue;
-        const img = mapTile(tx, ty);
+        const img = (typeof lsTile === 'function' && lsTile(tx, ty)) || mapTile(tx, ty);   // (a land plan's preview over it)
         const [sx, sy] = mapScreen(tx * MAP_TILE, (ty + 1) * MAP_TILE), s = MAP_TILE * M.z;
         if (img){ g.imageSmoothingEnabled = s < 512; g.drawImage(img, sx, sy, s + 0.5, s + 0.5); }
       }
@@ -121,6 +121,7 @@ function mapDraw(){
       }
     }
   }
+  if (typeof lsDraw === 'function') lsDraw(g);
   if (cs3dThings()) mapThings(g);
   if (A.outside && OUT.info) mapMarkers(g);
   // where the 3D camera is, and which way it looks
@@ -203,6 +204,7 @@ function mapHit(sx, sy){
 }
 function mapDown(e){
   M.c.focus();
+  if (typeof lsMouse === 'function' && lsMouse('down', e)) return;
   try { M.c.setPointerCapture(e.pointerId); } catch (err) {}
   const gr = e.button === 0 ? mapHit(e.offsetX, e.offsetY) : null;
   M.drag = {b: e.button, x0: e.offsetX, y0: e.offsetY, x: e.offsetX, y: e.offsetY, moved: 0, shift: e.shiftKey, hit: gr,
@@ -212,6 +214,7 @@ function mapDown(e){
 }
 function mapMove(e){
   M.mouse = [e.offsetX, e.offsetY];
+  if (typeof lsMouse === 'function' && lsMouse('move', e)) return;
   const d = M.drag;
   if (!d){ M.dirty = true; return; }
   const dx = e.offsetX - d.x, dy = e.offsetY - d.y;
@@ -234,6 +237,7 @@ function mapMove(e){
   }
 }
 function mapUp(e){
+  if (typeof lsMouse === 'function' && lsMouse('up', e)){ M.drag = null; return; }
   const d = M.drag; M.drag = null; M.dirty = true;
   if (!d) return;
   if (d.box){
@@ -269,6 +273,7 @@ function mapUp(e){
 }
 // double-click: look at that spot in 3D, from where you stand looking at it
 function mapDbl(e){
+  if (typeof lsMouse === 'function' && lsMouse('dbl', e)) return;
   const [wx, wy] = mapWorld(e.offsetX, e.offsetY);
   const z = A.outside && typeof gbHeight === 'function' ? gbHeight(wx, wy) : null;
   const back = 700;

@@ -28,6 +28,7 @@ import recordio
 import base64
 import hashlib
 import heightmap
+import landshape
 import land
 import maptiles
 import re
@@ -379,15 +380,9 @@ def heightmap_export(q):
     return heightmap.export(lambda cx, cy: _heights(w, cx, cy), q['world'], x, y, n, m)
 
 
-def heightmap_import(body):
-    """A height map back into the ground: every cell it covers, and (follow) the things standing on the ground moved
-    up and down with it, as one Undo."""
-    w = GD.from_key(body['world'])
-    png = base64.b64decode(body['data'])
-    new = heightmap.apply(png, lambda cx, cy: _heights(w, cx, cy, own_only=True), body.get('x'), body.get('y'),
-                          body.get('w'), body.get('h'), body.get('low'), body.get('high'))
-    if not new:
-        raise ValueError('The picture covers no ground FOLab can change here.')
+def ground_ops(w, new, follow=True):
+    """Edit ops putting new heights {(cx, cy): 33*33} into the ground (each cell's textures and colours kept) and,
+    with follow, moving the things standing on it up and down with it."""
     ops = []
     for (cx, cy), hs in sorted(new.items()):
         c = GD.grid(w)[(cx, cy)]
@@ -396,7 +391,7 @@ def heightmap_import(body):
         L = dict(PR.land[ck]) if ck in PR.land else land.decode(GD, GD.land[c], _land_tex)
         L['h'] = hs
         ops.append({'op': 'land', 'cell': ck, 'land': L})
-        if body.get('follow', True):
+        if follow:
             for t in cell_things(ck):
                 if t['state'] == 'removed':
                     continue
@@ -408,6 +403,139 @@ def heightmap_import(body):
                     p = list(t['p'])
                     p[2] = round(p[2] + b - a, 2)
                     ops.append({'op': 'move', 'cell': ck, 'ref': t['key'], 'p': p})
+    return ops
+
+
+# ---------- land shaping (landshape.py) ----------
+
+_settled = {}
+_previews = {}
+BUILT = ('STAT', 'SCOL', 'DOOR', 'FURN', 'ACTI', 'TERM', 'CONT')
+
+
+def settled(w, cx, cy):
+    """A town or a place with many buildings: a door, or 30 built pieces (rocks and plants aside)."""
+    k = (w, cx, cy)
+    if k not in _settled:
+        c = GD.grid(w).get((cx, cy))
+        n, doors = 0, 0
+        for r in GD.refs(c) if c is not None else ():
+            if r['base'] not in GD.forms:
+                continue
+            btype, edid, _n, model = GD.describe(r['base'])
+            if btype == 'DOOR':
+                doors += 1
+            elif btype in BUILT and model and not scatter.kind(btype, edid, model) and 'landscape' not in model.lower():
+                n += 1
+        _settled[k] = doors > 0 or n >= 30
+    return _settled[k]
+
+
+def shape_cells(body):
+    """The cells a plan changes: those its shapes reach and those marked by hand, less those unmarked by hand and
+    (unless asked) settled ones; and the settled ones it left out."""
+    w = GD.from_key(body['world'])
+    reached = set()
+    for sh in body['plan'].get('shapes', []):
+        if sh.get('on', True) and sh.get('pts'):
+            reached |= landshape.cells_reached(sh)
+    reached |= {tuple(m) for m in body.get('marks', [])}
+    reached -= {tuple(m) for m in body.get('unmarks', [])}
+    grid = GD.grid(w)
+    ok, skipped = [], []
+    for k in sorted(reached):
+        c = grid.get(k)
+        if c is None or c not in GD.land:
+            continue
+        if not body.get('settled') and settled(w, *k) and list(k) not in body.get('marks', []):
+            skipped.append(list(k))
+        else:
+            ok.append(list(k))
+    return {'marked': ok, 'settled': skipped}
+
+
+def shape_heights(body):
+    w = GD.from_key(body['world'])
+    plan, marked = body['plan'], [tuple(m) for m in body['marked']]
+    start = (lambda cx, cy: _game_heights(w, cx, cy)) if plan.get('from_game', True) else (lambda cx, cy: _heights(w, cx, cy))
+    boxes = []
+    if plan.get('hold', True):
+        near = {(cx + dx, cy + dy) for cx, cy in marked for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+        grid = GD.grid(w)
+        for k in near:
+            c = grid.get(k)
+            if c is None:
+                continue
+            for t in cell_things(GD.key(c)):
+                if t['state'] == 'removed' or t['type'] not in BUILT or t['bkey'].startswith('+') or t.get('marker'):
+                    continue
+                btype, edid, _n, model = GD.describe(GD.from_key(t['bkey']))
+                if scatter.kind(btype, edid, model) or 'landscape' in model.lower():
+                    continue
+                b = landshape.footprint(GD, {'base': GD.from_key(t['bkey']), 'pos': t['p'][:3], 'rot': t['p'][3:], 'scale': t['s']})
+                if b and (b[2] - b[0]) * (b[3] - b[1]) > 64 * 64:
+                    boxes.append(b)
+    return landshape.shape(plan, start, marked, boxes), w
+
+
+def _game_heights(w, cx, cy):
+    e = GD.land_at(w, cx, cy)
+    return land.heights_of(dict(tes4.iter_subrecords(GD.plugins[e[0]].data(e[1])))['VHGT']) if e else None
+
+
+def shape_preview(body):
+    """The plan's land worked out and kept under a key, with the map tiles it touches: drawn by /api/shape/tile."""
+    new, w = shape_heights(body)
+    mine = dict(PR.land) if PR else {}
+    for (cx, cy), hs in new.items():
+        c = GD.grid(w)[(cx, cy)]
+        ck = GD.key(c)
+        L = dict(mine[ck]) if ck in mine else land.decode(GD, GD.land[c], _land_tex)
+        L['h'] = hs
+        mine[ck] = L
+    key = hashlib.md5(json.dumps([body['world'], body['plan'], body['marked']], sort_keys=True).encode()).hexdigest()[:16]
+    _previews.clear()
+    _previews[key] = (w, mine, {})
+    tiles = sorted({(cx // maptiles.TILE, cy // maptiles.TILE) for cx, cy in new})
+    return {'key': key, 'tiles': tiles, 'cells': len(new)}
+
+
+def shape_tile(key, tx, ty):
+    w, mine, done = _previews[key]
+    if (tx, ty) not in done:
+        global _painter
+        if _painter is None or _painter.gd is not GD:
+            _painter = maptiles.Painter(GD)
+        grid = GD.grid(w)
+        here = {}
+        for i in range(maptiles.TILE):
+            for j in range(maptiles.TILE):
+                c = grid.get((tx * maptiles.TILE + i, ty * maptiles.TILE + j))
+                if c is not None and GD.key(c) in mine:
+                    here[GD.key(c)] = mine[GD.key(c)]
+        done[(tx, ty)] = _painter.tile(w, tx, ty, here)
+    return done[(tx, ty)]
+
+
+def shape_apply(body):
+    new, w = shape_heights(body)
+    if not new:
+        raise ValueError('No marked cells with ground to shape.')
+    out = edit('Shape the land (%d cells)' % len(new), ground_ops(w, new, body.get('follow', True)))
+    out['cells'] = len(new)
+    return out
+
+
+def heightmap_import(body):
+    """A height map back into the ground: every cell it covers, and (follow) the things standing on the ground moved
+    up and down with it, as one Undo."""
+    w = GD.from_key(body['world'])
+    png = base64.b64decode(body['data'])
+    new = heightmap.apply(png, lambda cx, cy: _heights(w, cx, cy, own_only=True), body.get('x'), body.get('y'),
+                          body.get('w'), body.get('h'), body.get('low'), body.get('high'))
+    if not new:
+        raise ValueError('The picture covers no ground FOLab can change here.')
+    ops = ground_ops(w, new, body.get('follow', True))
     out = edit('Import a height map', ops)
     out['cells'] = len(new)
     return out
@@ -969,6 +1097,8 @@ class Handler(BaseHTTPRequestHandler):
                     place_name(q['world'])[0] or 'world', q['x'], q['y'], q['w'], q['h']))
                 self.end_headers()
                 return self.wfile.write(data)
+            if u.path == '/api/shape/tile':
+                return self.send(shape_tile(q['key'], int(q['tx']), int(q['ty'])), 'image/png')
             if u.path == '/api/goto':
                 return self.send(goto(q.get('q', ''), q.get('world') or None))
             if u.path == '/api/scatter':
@@ -1028,6 +1158,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(open_project(name))
                 if not PR:
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
+                if u.path == '/api/shape/cells':
+                    return self.send(shape_cells(body))
+                if u.path == '/api/shape/preview':
+                    return self.send(shape_preview(body))
+                if u.path == '/api/shape/apply':
+                    return self.send(shape_apply(body))
                 if u.path == '/api/heightmap/import':
                     return self.send(heightmap_import(body))
                 if u.path == '/api/edit':

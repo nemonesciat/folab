@@ -50,7 +50,8 @@ function leaveOutside(){
   OUT.cells.clear(); OUT.queue = [];
   W.scene.fog = null; W.scene.background = new T.Color(0x0e0c0a);
   W.outdoors = false; assignLights();
-  $('#t-ground').style.display = 'none';
+  $('#t-ground').style.display = 'none'; $('#ls-btn').style.display = 'none';
+  if (typeof lsClose === 'function') lsClose();
   W.cam.far = 60000; W.cam.updateProjectionMatrix();
 }
 
@@ -68,7 +69,7 @@ function goOutside(info, at){
   OUT.since = performance.now();
   if (typeof M !== 'undefined'){ M.tiles.clear(); M.want = []; M.dirty = true; }
   W.lands = new Set();
-  $('#t-ground').style.display = '';
+  $('#t-ground').style.display = ''; $('#ls-btn').style.display = '';
   A.cellId = null; A.things = []; A.outside = info;
   W.scene.background = new T.Color(SKY);
   // (the distant hills reach about 40 cells: the haze thickens out to there)
