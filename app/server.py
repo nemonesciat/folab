@@ -198,6 +198,45 @@ def cell_things(ckey):
     return out
 
 
+PREFABS_DIR = os.path.join(project.HOME, 'prefabs')
+
+
+def prefabs():
+    out = []
+    if os.path.isdir(PREFABS_DIR):
+        for fn in sorted(os.listdir(PREFABS_DIR)):
+            if fn.endswith('.json'):
+                with open(os.path.join(PREFABS_DIR, fn), encoding='utf-8') as f:
+                    d = json.load(f)
+                out.append({'name': d['name'], 'count': len(d['items']), 'from': d.get('from', '')})
+    return out
+
+
+def prefab(name):
+    """A prefab's things, each with what the view needs to draw it (bases of the mod's own are kept by key and only
+    draw while that mod is open)."""
+    with open(os.path.join(PREFABS_DIR, project.safe_name(name) + '.json'), encoding='utf-8') as f:
+        d = json.load(f)
+    items = []
+    for it in d['items']:
+        try:
+            btype, edid, nm, model = base_info(it['base'])
+        except Exception:
+            continue
+        items.append(dict(it, type=btype, edid=edid, model=GD.model_path(btype, model) if model else ''))
+    return {'name': d['name'], 'items': items}
+
+
+def prefab_save(body):
+    """Things kept as a prefab: each one's base, place relative to the group's middle (and its lowest point), turn
+    and size. Kept beside FOLab's projects, for any mod."""
+    os.makedirs(PREFABS_DIR, exist_ok=True)
+    name = project.safe_name(body['name'])
+    with open(os.path.join(PREFABS_DIR, name + '.json'), 'w', encoding='utf-8') as f:
+        json.dump({'name': name, 'from': body.get('from', ''), 'items': body['items']}, f, indent=1)
+    return {'name': name, 'prefabs': prefabs()}
+
+
 def place_name(ckey):
     """(editor ID, name) of a place, the mod's own included"""
     rec = PR.records.get(ckey) if PR else None
@@ -478,6 +517,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(nvse.latest())
             if u.path == '/api/plugins':
                 return self.send(adopt.candidates(GD.data_dir))
+            if u.path == '/api/prefabs':
+                return self.send(prefabs())
+            if u.path == '/api/prefab':
+                return self.send(prefab(q['name']))
             if u.path == '/api/types':
                 return self.send(BR.types())
             if u.path == '/api/records':
@@ -537,6 +580,8 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path in ('/api/undo', '/api/redo'):
                     label = PR.undo() if u.path == '/api/undo' else PR.redo()
                     return self.send({'label': label, 'state': state()})
+                if u.path == '/api/prefab/save':
+                    return self.send(prefab_save(body))
                 if u.path == '/api/place/new':
                     return self.send(new_place(body))
                 if u.path == '/api/doors/link':

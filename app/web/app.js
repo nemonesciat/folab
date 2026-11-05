@@ -192,7 +192,8 @@ function drawSelected(list){
     box.innerHTML = `<div class="h">${list.length} selected</div>
       <div class="kv">${Object.entries(kinds).map(([k, n]) => `${n} ${esc(k)}`).join(' · ')}</div>
       <div class="acts"><button class="btn" data-a="drop">⤓ Drop down</button><button class="btn" data-a="dup">⧉ Duplicate</button>
-      <button class="btn" data-a="del">✕ Remove</button><button class="btn" data-a="focus">Focus</button><button class="btn" data-a="hide">Hide</button></div>`;
+      <button class="btn" data-a="del">✕ Remove</button><button class="btn" data-a="focus">Focus</button><button class="btn" data-a="hide">Hide</button>
+      <button class="btn" data-a="prefab">Save as a prefab</button></div>`;
     return;
   }
   const t = list[0];
@@ -278,7 +279,7 @@ $('#selected').addEventListener('change', e => {
 });
 $('#selected').addEventListener('click', e => {
   const a = e.target.dataset.a; if (!a) return;
-  ({drop: dropSel, dup: dupSel, del: delSel, focus: focusSel, hide: hideSel, restore: revertSel, revert: revertSel,
+  ({drop: dropSel, dup: dupSel, del: delSel, focus: focusSel, hide: hideSel, restore: revertSel, revert: revertSel, prefab: savePrefab,
     record: () => { const t = selThings()[0]; if (t) openRecord(t.bkey); }})[a]();
 });
 
@@ -367,6 +368,34 @@ function remember(item){
   drawRecent();
 }
 function placeRow(it){ return `<div class="row" draggable="true" data-key="${esc(it.key)}" title="${esc(it.model)} · click, then click where it goes, or drag it into the view"><div>${esc(it.edid)}<small>${esc(it.name || '')}</small></div><span class="n">${esc(it.type)}</span></div>`; }
+// ---------- prefabs: a group kept, to place anywhere ----------
+async function drawPrefabs(){
+  const list = await api('/api/prefabs');
+  $('#prefabs-h').style.display = list.length ? '' : 'none';
+  $('#prefabs').innerHTML = list.map(p => `<div class="row" data-prefab="${esc(p.name)}" title="Click, then click where it goes"><div>${esc(p.name)}<small>${p.count} thing${p.count === 1 ? '' : 's'}${p.from ? ' · from ' + esc(p.from) : ''}</small></div><span class="n">prefab</span></div>`).join('');
+}
+$('#prefabs').addEventListener('click', async e => {
+  const r = e.target.closest('[data-prefab]'); if (!r) return;
+  if (!A.cellId) return toast('Open a place first.', true);
+  const d = await api('/api/prefab?name=' + encodeURIComponent(r.dataset.prefab));
+  document.querySelectorAll('#tab-place .row').forEach(x => x.classList.toggle('on', x === r));
+  startPlacing({prefab: d.name, items: d.items});
+  W.ren.domElement.focus();
+  const h = $('#hint'); h.textContent = `Click where ${d.name} goes · Esc or right-click stops`; h.style.display = 'block';
+});
+async function savePrefab(){
+  const list = selThings();
+  if (!list.length) return toast('Select the things to keep as a prefab first.', true);
+  const name = prompt(`Keep these ${list.length} thing${list.length === 1 ? '' : 's'} as a prefab called:`, list.length === 1 ? list[0].base : 'My prefab');
+  if (!name) return;
+  // their places from the group's middle, standing on its lowest point
+  const cx = list.reduce((s, t) => s + t.p[0], 0) / list.length, cy = list.reduce((s, t) => s + t.p[1], 0) / list.length;
+  const lo = Math.min(...W.sel.map(g => new THREE.Box3().setFromObject(g).min.z).filter(isFinite), ...list.map(t => t.p[2]));
+  const items = list.map(t => ({base: t.bkey, s: t.s || 1, p: [t.p[0] - cx, t.p[1] - cy, t.p[2] - lo, t.p[3], t.p[4], t.p[5]].map(v => Math.round(v * 100) / 100)}));
+  try { await post('/api/prefab/save', {name, items, from: A.cellEdid}); await drawPrefabs(); tab('right', 'place'); toast(`Kept as the prefab ${name}: it's in Place`); }
+  catch (e){ fail(e); }
+}
+
 function drawRecent(){ $('#recent-h').style.display = A.recent.length ? '' : 'none'; $('#recent').innerHTML = A.recent.map(placeRow).join(''); }
 let found = [], searchTimer;
 async function searchPlace(){
@@ -397,6 +426,10 @@ for (const id of ['#found', '#recent']){
 }
 W.onPlace = (item, p) => {
   if (!item){ $('#hint').style.display = 'none'; document.querySelectorAll('#tab-place .row.on').forEach(x => x.classList.remove('on')); return; }
+  if (item.items){                                    // a prefab: every thing in it, as one step
+    return edit('Place ' + item.prefab, item.items.map(it => ({op: 'add', cell: A.cellId, base: it.base, s: it.s || 1,
+      p: [p[0] + it.p[0], p[1] + it.p[1], p[2] + it.p[2], it.p[3], it.p[4], it.p[5]].map(v => Math.round(v * 100) / 100)})), true);
+  }
   remember(item);
   edit('Place ' + item.edid, [{op: 'add', cell: A.cellId, base: item.key, p, s: 1}]);
 };
@@ -415,6 +448,7 @@ function snapNow(){ setSnap(+$('#t-grid').value, +$('#t-angle').value); try { lo
 $('#t-grid').onchange = $('#t-angle').onchange = snapNow;
 $('#t-drop').onclick = dropSel; $('#t-dup').onclick = dupSel; $('#t-del').onclick = delSel;
 $('#t-markers').onchange = e => { setShow('markers', e.target.checked); drawObjects(); };
+$('#t-snap').onchange = e => { W.snapPieces = e.target.checked; try { localStorage.setItem('folab-snappieces', e.target.checked ? '1' : '0'); } catch (err) {} };
 $('#t-removed').onchange = e => { setShow('removed', e.target.checked); drawObjects(); };
 $('#t-light').onchange = e => { setGameLight(e.target.checked); try { localStorage.setItem('folab-light', e.target.checked ? '1' : '0'); } catch (err) {} };
 function lightsRefresh(){ resync(); }
@@ -587,11 +621,13 @@ async function start(){
   worldInit($('#view'));
   try { const [g, a] = (localStorage.getItem('folab-snap') || '128,15').split(','); $('#t-grid').value = g; $('#t-angle').value = a; } catch (e) {}
   snapNow();
+  try { W.snapPieces = localStorage.getItem('folab-snappieces') !== '0'; $('#t-snap').checked = W.snapPieces; } catch (e) { W.snapPieces = true; }
   try { if (localStorage.getItem('folab-light') === '0'){ $('#t-light').checked = false; setGameLight(false); } } catch (e) {}
   await refreshState();
   for (const [k, v] of Object.entries(A.state.kinds)) $('#f-kind').insertAdjacentHTML('beforeend', `<option value="${k}">${esc(v)}</option>`);
   $('#b-newplace').onclick = newPlaceDialog;
   drawRecent();
+  drawPrefabs();
   const recent = A.state.projects || [];
   $('#w-recent').innerHTML = recent.length ? '<p>Or open one:</p>' + recent.map(x => `<div class="row" data-open="${esc(x.name)}">${esc(x.name)}</div>`).join('') : '';
   $('#w-recent').onclick = e => { const r = e.target.closest('[data-open]'); if (r) openMod(r.dataset.open); };

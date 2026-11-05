@@ -22,6 +22,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   loaded on top of the game; its masters are kept as they are and can't grow yet), `install.py` (copies into
   Data + plugins.txt, backups in `backups/`).
 - Editor: `server.py` (port 8771) + `web/index.html`, `web/app.js` (panels, edits), `web/world.js` (3D view).
+- Building: places of the mod's own are '+ID' keys in both `records` (their CELL) and `cells`; door links are a
+  ref change `tel` (XTEL, made persistent; arrival points picked in world.js `arrivalFor`). Snap pieces: kit
+  pieces (same mesh folder, same turn) join on 128-unit steps, else box edges (`snapOffset`). Prefabs are JSON in
+  `prefabs/` (bases by key, places from the group's middle and lowest point).
 - Play: `playtest.py` starts FalloutNV.exe; Play here writes `FOLab Test.esp` (marker + start-enabled quest + one
   hand-compiled script, bytes checked against the game's own scripts; a new quest ID each time). Never call
   `/api/play` in tests: it starts the user's real game.

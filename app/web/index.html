@@ -184,6 +184,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <button class="btn" id="t-drop" title="Set the selected thing down on what's below it (End)">⤓ Drop down</button>
       <button class="btn" id="t-dup" title="Duplicate (Ctrl+D)">⧉ Duplicate</button>
       <button class="btn" id="t-del" title="Remove (Delete)">✕ Remove</button>
+      <span class="grp"><label title="While moving, pieces slide into place against the pieces round them: edge to edge, sides level, standing on top"><input type="checkbox" id="t-snap" checked> Snap pieces</label></span>
       <span class="grp"><label><input type="checkbox" id="t-markers"> Markers</label></span>
       <span class="grp"><label><input type="checkbox" id="t-removed"> Removed</label></span>
       <span class="grp"><label title="Light each place with its own lights, as in game"><input type="checkbox" id="t-light" checked> Game light</label></span>
@@ -213,6 +214,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <input class="find" id="f-place" placeholder="Search things to place: chair, desk, lamp…">
       <select id="f-kind" style="margin:0 12px 6px"><option value="">Everything</option></select>
       <div class="note" id="place-note">Click a thing, then click where it goes. Esc stops.</div>
+      <div class="h" id="prefabs-h" style="display:none">Prefabs</div>
+      <div id="prefabs"></div>
       <div class="h" id="recent-h" style="display:none">Recently used</div>
       <div id="recent"></div>
       <div class="h">Found</div>

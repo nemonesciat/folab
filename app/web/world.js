@@ -464,11 +464,80 @@ function select(keys){
 
 function gizmoStart(){
   W.pivot.updateMatrixWorld(true);
+  snapPrepare();
   W.dragFrom = {pivot: W.pivot.matrixWorld.clone(), each: W.sel.map(g => { g.updateMatrixWorld(true); return g.matrixWorld.clone(); })};
+}
+
+// ---------- snapping pieces together ----------
+// While something is dragged, it slides the last few units into place against the pieces round it: edge to edge,
+// sides lined up, standing on top or level at the bottom (the boxes the meshes fill, as they turn). The nearest of
+// those within SNAP units wins on each axis.
+const SNAP = 24;
+// a piece's kit: its mesh's folder below meshes\ (Dungeons\Vault\HallSmall, Architecture\Strip\..., ...)
+function kitOf(model){ const parts = (model || '').toLowerCase().split('\\'); parts.pop(); return parts.slice(1, 3).join('\\'); }
+function snapPrepare(){
+  W.snapBoxes = null;
+  if (!W.snapPieces || W.mode !== 'translate' || !W.sel.length) return;
+  const sel = new T.Box3(); for (const g of W.sel){ g.updateMatrixWorld(true); sel.union(new T.Box3().setFromObject(g)); }
+  if (sel.isEmpty()) return;
+  const near = sel.clone().expandByScalar(1024), mine = new Set(W.sel);
+  W.snapBoxes = []; W.snapKin = [];
+  const turn = g => ((g.rotation.z % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2);
+  const myTurn = turn(W.sel[0]), myKit = W.sel[0].userData.thing.type === 'STAT' ? kitOf(W.sel[0].userData.thing.model) : null;
+  for (const g of visibleGroups()){
+    if (mine.has(g) || g.userData.thing.marker || g.userData.thing.actor) continue;
+    const b = new T.Box3().setFromObject(g);
+    if (!b.isEmpty() && b.intersectsBox(near)){
+      W.snapBoxes.push(b);
+      // (a piece of the same kit, turned the same way: its mesh in the same folder, and kit-piece size; kit pieces join
+      // on a 128-unit step from each other. Furniture and clutter stand anywhere, so they don't count)
+      const t = g.userData.thing, sz = b.getSize(new T.Vector3());
+      if (t.type === 'STAT' && kitOf(t.model) === myKit && Math.max(sz.x, sz.y) >= KIT_STEP && Math.abs(turn(g) - myTurn) < 0.01)
+        W.snapKin.push(g.position.clone());
+    }
+  }
+}
+const KIT_STEP = 128;
+function snapOffset(sel){
+  const best = {x: null, y: null, z: null};
+  const consider = (axis, d) => { if (Math.abs(d) <= SNAP && (best[axis] === null || Math.abs(d) < Math.abs(best[axis]))) best[axis] = d; };
+  // first: a whole kit step from a piece turned the same way (where kit pieces join), on each axis
+  const p = (W.sel.length > 1 ? W.pivot : W.sel[0]).position;
+  for (const k of W.snapKin || []){
+    for (const axis of ['x', 'y']){
+      const d = p[axis] - k[axis], step = Math.round(d / KIT_STEP) * KIT_STEP;
+      consider(axis, step - d);
+    }
+    if (Math.abs(p.z - k.z) <= SNAP) consider('z', k.z - p.z);
+  }
+  if (best.x !== null || best.y !== null) return best;
+  const lap = (b, a1, a2) => b.min[a1] < sel.max[a1] + SNAP && b.max[a1] > sel.min[a1] - SNAP && b.min[a2] < sel.max[a2] + SNAP && b.max[a2] > sel.min[a2] - SNAP;
+  for (const b of W.snapBoxes){
+    for (const [axis, o1, o2] of [['x', 'y', 'z'], ['y', 'x', 'z'], ['z', 'x', 'y']]){
+      if (!lap(b, o1, o2)) continue;                 // (only pieces beside it on that axis)
+      consider(axis, b.max[axis] - sel.min[axis]);    // against its far side
+      consider(axis, b.min[axis] - sel.max[axis]);    // against its near side
+      consider(axis, b.min[axis] - sel.min[axis]);    // sides level
+      consider(axis, b.max[axis] - sel.max[axis]);
+    }
+  }
+  return best;
+}
+function snapApply(){
+  if (!W.snapBoxes || !W.snapBoxes.length || !W.dragging) return;
+  const sel = new T.Box3(); for (const g of W.sel){ g.updateMatrixWorld(true); sel.union(new T.Box3().setFromObject(g)); }
+  const o = snapOffset(sel), d = new T.Vector3(o.x || 0, o.y || 0, o.z || 0);
+  if (!d.lengthSq()) return;
+  const target = W.sel.length > 1 ? W.pivot : W.sel[0];
+  target.position.add(d);
+  if (W.sel.length > 1){ W.pivot.updateMatrixWorld(true); }
+  W.snapped = true;
 }
 
 // several selected: each follows the handles, turning round their middle
 function gizmoFollow(){
+  if (W.sel.length === 1 && W.snapBoxes) snapApply();
+  if (W.sel.length > 1 && W.snapBoxes && W.dragFrom) snapApply();
   if (W.sel.length > 1 && W.dragFrom){
     W.pivot.updateMatrixWorld(true);
     const delta = W.pivot.matrixWorld.clone().multiply(new T.Matrix4().copy(W.dragFrom.pivot).invert()), s = new T.Vector3();
@@ -549,17 +618,29 @@ function arrivalFor(g){
 }
 
 // ---------- placing new things ----------
+// (item: one thing to place; or a prefab, {prefab: name, items: [{base, p (from the group's middle), s, model, type}]})
 async function startPlacing(item){
   W.placing = item;
   select([]);
-  const {parts, scale} = await thingParts(item);
-  if (W.placing !== item) return;
   if (W.ghost) W.scene.remove(W.ghost);
   const g = new T.Group();
-  for (const [geo, mat] of parts) g.add(new T.Mesh(geo, mat));
+  if (item.items){
+    for (const it of item.items){
+      const {parts, scale} = await thingParts({...it, bkey: it.base, key: it.base});
+      const sub = new T.Group();
+      for (const [geo, mat] of parts) sub.add(new T.Mesh(geo, mat));
+      sub.position.set(it.p[0], it.p[1], it.p[2]); sub.rotation.set(-it.p[3], -it.p[4], -it.p[5], 'XYZ'); sub.scale.setScalar((it.s || 1) * scale);
+      g.add(sub);
+    }
+    W.ghostLift = 0;                                // (a prefab keeps its lowest point at its origin)
+  } else {
+    const {parts, scale} = await thingParts(item);
+    for (const [geo, mat] of parts) g.add(new T.Mesh(geo, mat));
+    g.scale.setScalar(scale);
+    W.ghostLift = await modelLift(item.model, item);
+  }
+  if (W.placing !== item) return;
   g.traverse(m => { if (m.isMesh) m.raycast = () => {}; });
-  g.scale.setScalar(scale);
-  W.ghostLift = await modelLift(item.model, item);
   g.visible = false;
   W.ghost = g; W.scene.add(g);
 }

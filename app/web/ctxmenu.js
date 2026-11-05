@@ -25,6 +25,7 @@ function cmEntries(key, point){
     add('Edit', n > 1 ? `Copy ${n}` : 'Copy', copySel);
     if (A.clip) add('Edit', 'Paste here', () => { W.mouse = CM.at; paste(); });
     add('Edit', 'Duplicate', dupSel);
+    add('Edit', n > 1 ? `Save these ${n} as a prefab…` : 'Save as a prefab…', savePrefab);
     if (sel.some(t => t.state === 'moved' || t.state === 'removed')) add('Edit', 'Put back as the game has it', revertSel);
     if (sel.every(t => t.state === 'removed')) add('Edit', 'Restore', revertSel);
     else add('Edit', n > 1 ? `Remove ${n}` : 'Remove', delSel);
