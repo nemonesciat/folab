@@ -65,25 +65,30 @@ def launch(data_dir, via='nvse'):
     return 'steam'
 
 
-def compiled_script(message=b''):
+def compiled_script(message=b'', move=True, give=()):
     """The bytecode of the script in this module's docstring (ref 1 = the player, ref 2 = the marker); with a message,
-    ShowWarning shows it on screen as you're moved."""
+    ShowWarning shows it on screen as you're moved. give: [(script ref number, count)], each a player.AddItem: the
+    form as that ref, the count a literal (the same bytes as the game's own Hull20GaAddScript and others)."""
     cond = b' s\x01\x00 0 =='                                        # done == 0
     set_ = struct.pack('<HH', 0x15, 7) + b's\x01\x00' + struct.pack('<H', 2) + b' 1'   # set done to 1
     # ShowWarning "text": 1 parameter, the text, then how many values fill into it (none)
     warn = struct.pack('<HHHH', 0x11B9, 6 + len(message), 1, len(message)) + message + b'\0\0' if message else b''
-    moveto = struct.pack('<HHHHH', 0x1C, 1, 0x109E, 5, 1) + b'r\x02\x00'               # player.MoveTo marker
-    inside = 3 if message else 2
+    moveto = struct.pack('<HHHHH', 0x1C, 1, 0x109E, 5, 1) + b'r\x02\x00' if move else b''   # player.MoveTo marker
+    adds = b''.join(struct.pack('<HHHHH', 0x1C, 1, 0x1002, 10, 2) + b'r' + struct.pack('<H', r) + b'n' +
+                    struct.pack('<i', c) for r, c in give)                # player.AddItem <form> <count>
+    inside = 1 + bool(message) + bool(move) + len(give)
     if_ = struct.pack('<HHHH', 0x16, 4 + len(cond), inside, len(cond)) + cond  # if (skip what's inside when false)
     endif, end = struct.pack('<HH', 0x19, 0), struct.pack('<HH', 0x11, 0)
-    body = if_ + set_ + warn + moveto + endif + end
+    body = if_ + set_ + warn + moveto + adds + endif + end
     begin = struct.pack('<HHHI', 0x10, 6, 0, len(body))                 # begin GameMode
     return struct.pack('<HH', 0x1D, 0) + begin + body                     # (scn)
 
 
-def source(message):
+def source(message, move=True, give=()):
+    """give: [(editor ID, count)]"""
     return ('scn FOLabTestScript\r\n\r\nshort done\r\n\r\nbegin GameMode\r\n\tif done == 0\r\n\t\tset done to 1\r\n'
-            '\t\tShowWarning "%s"\r\n\t\tplayer.MoveTo FOLabTestMarker\r\n\tendif\r\nend\r\n' % message)
+            '\t\tShowWarning "%s"\r\n' % message + ('\t\tplayer.MoveTo FOLabTestMarker\r\n' if move else '') +
+            ''.join('\t\tplayer.AddItem %s %d\r\n' % g for g in give) + '\tendif\r\nend\r\n')
 
 
 def _settings_counter():
@@ -101,11 +106,15 @@ def _settings_counter():
     return n
 
 
-def write_test_plugin(gd, cell, p, path, place=''):
+def write_test_plugin(gd, cell, p, path, place='', give=(), mod=None):
     """FOLab Test.esp: an XMarkerHeading at p = [x, y, z, rz] in cell, and the quest and script that move the player
-    there once. Its masters are every file the game loads before it (so every form ID reads the same in it)."""
+    there once. Its masters are every file the game loads before it (so every form ID reads the same in it).
+    With no cell nothing moves you. give: [(form key, count, editor ID)], put in your inventory once; a key of the
+    mod's own ('+ID') needs mod, its plugin's file name (in the game before this one)."""
     n = _settings_counter()
     masters = [os.path.basename(pl.path) for pl in gd.plugins]
+    if mod and mod.lower() not in [m.lower() for m in masters]:
+        masters.append(mod)
     own = len(masters) << 24
     base = 0x800 + n * 4                       # (new IDs every time: a save that ran an earlier one runs this one too)
     marker_id, script_id, quest_id = own | base, own | (base + 1), own | (base + 2)
@@ -125,17 +134,31 @@ def write_test_plugin(gd, cell, p, path, place=''):
     tree = plugintree.Plugin.empty(b'')
     order = gd.plugins[0].top_groups()
     # the script and its quest
-    msg = ('FOLab: Play here%s' % (' (' + place + ')' if place else '')).encode('cp1252', 'replace')[:120]
-    scda = compiled_script(msg)
-    schr = struct.pack('<IIIIHH', 0, 2, len(scda), 1, SCRIPT_QUEST, 1)
+    if cell:
+        msg = 'FOLab: Play here%s' % (' (' + place + ')' if place else '')
+    else:
+        msg = 'FOLab: added %s' % ', '.join('%d %s' % (c, e) if c > 1 else e for _k, c, e in give)
+    msg = msg.encode('cp1252', 'replace')[:120]
+    mod_i = next((k for k, m in enumerate(masters) if mod and m.lower() == mod.lower()), None)
+
+    def item_id(key):
+        if key.startswith('+'):
+            return (mod_i << 24) | int(key[1:], 16)
+        return w.local(gd.from_key(key))
+    scda = compiled_script(msg, move=bool(cell), give=[(2 + bool(cell) + k, g[1]) for k, g in enumerate(give)])
+    refs = [PLAYER_REF] + ([marker_id] if cell else []) + [item_id(k) for k, _c, _e in give]
+    schr = struct.pack('<IIIIHH', 0, len(refs), len(scda), 1, SCRIPT_QUEST, 1)
     slsd = struct.pack('<I12sB7s', 1, b'\0' * 12, 1, b'\0' * 7)          # local 1: done (a short)
+    text = source(msg.decode('cp1252'), bool(cell), [(e, c) for _k, c, e in give])
     script = espwrite.join([('EDID', b'FOLabTestScript%d\0' % n), ('SCHR', schr), ('SCDA', scda),
-                            ('SCTX', source(msg.decode('cp1252')).encode('cp1252')), ('SLSD', slsd), ('SCVR', b'done\0'),
-                            ('SCRO', struct.pack('<I', PLAYER_REF)), ('SCRO', struct.pack('<I', marker_id))])
+                            ('SCTX', text.encode('cp1252', 'replace')), ('SLSD', slsd), ('SCVR', b'done\0')] +
+                           [('SCRO', struct.pack('<I', r)) for r in refs])
     tree.top('SCPT', order).kids.append(plugintree.Rec.new('SCPT', 0, script_id, script))
     quest = espwrite.join([('EDID', b'FOLabTestQuest%d\0' % n), ('SCRI', struct.pack('<I', script_id)),
                            ('FULL', b'FOLab test\0'), ('DATA', struct.pack('<BBHf', QUEST_START_ENABLED, 0, 0, 0.5))])
     tree.top('QUST', order).kids.append(plugintree.Rec.new('QUST', 0, quest_id, quest))
+    if not cell:
+        return _finish(tree, masters, own, base, path, 'FOLabTestQuest%d' % n)
     # the marker, in the place (a copy of its CELL record carries it, as every plugin that adds to a cell must)
     lid = w.local(cell)
     found = {}
@@ -143,15 +166,19 @@ def write_test_plugin(gd, cell, p, path, place=''):
     ref = espwrite.join([('EDID', b'FOLabTestMarker\0'), ('NAME', struct.pack('<I', marker_base)),
                          ('DATA', struct.pack('<6f', p[0], p[1], p[2], 0.0, 0.0, p[3]))])
     w._ref_group(kids, lid, True).kids.append(plugintree.Rec.new('REFR', tes4.PERSISTENT, marker_id, ref))
+    return _finish(tree, masters, own, base, path, 'FOLabTestQuest%d' % n)
+
+
+def _finish(tree, masters, own, base, path, quest):
     hedr = struct.pack('<fiI', espwrite.HEDR_VERSION, tree.count(), own | (base + 3))
-    head = [('HEDR', hedr), ('CNAM', b'FOLab\0'), ('SNAM', b'FOLab Play here: moves you to a spot once a save loads. Safe to remove.\0')]
+    head = [('HEDR', hedr), ('CNAM', b'FOLab\0'), ('SNAM', b'FOLab test: Play here and Give it to me. Safe to remove.\0')]
     for m in masters:
         head += [('MAST', m.encode('cp1252') + b'\0'), ('DATA', b'\0' * 8)]
     tree.header.set_data(espwrite.join(head), 0)
     with open(path + '.tmp', 'wb') as f:
         f.write(tree.bytes())
     os.replace(path + '.tmp', path)
-    return {'quest': 'FOLabTestQuest%d' % n}
+    return {'quest': quest}
 
 
 AUTOLOAD = os.path.join('NVSE', 'plugins', 'scripts', 'gr_folab_load.txt')

@@ -522,6 +522,34 @@ def start_game():
     return via
 
 
+def give(body):
+    """Give it to me in game: save and put the mod in, then FOLab Test.esp, whose quest adds the item to your inventory
+    once your newest save loads (JIP loads it at the menu), and start the game."""
+    not_while_playing()
+    key, count = body['key'], max(1, min(int(body.get('count', 1)), 100000))
+    out = {}
+    if PR:
+        saved = save()
+        out['install'] = install.install(GD.data_dir, saved['path'])
+    elif key.startswith('+'):
+        raise ValueError('Open the mod this item is in first.')
+    rec = BR.record(key)['record']
+    edid = recordio.field(rec, 'EDID') or key
+    path = os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN)
+    os.makedirs(project.BUILD_DIR, exist_ok=True)
+    out['test'] = playtest.write_test_plugin(GD, None, None, path, give=[(key, count, edid)],
+                                             mod=PR.plugin if PR else None)
+    out['test_install'] = install.install(GD.data_dir, path)
+    out['autoload'] = playtest.set_autoload(GD.data_dir, True)
+    out['via'] = start_game()
+    name = recordio.field(rec, 'FULL') or edid
+    out['message'] = ('Starting New Vegas: %s%s will be in your inventory once %s loads.' %
+                      ('%d × ' % count if count > 1 else '', name,
+                       '"%s"' % out['autoload'] if out['autoload'] else 'a save'))
+    out['state'] = state()
+    return out
+
+
 def save():
     path = PR.plugin_path()
     n = espwrite.write(GD, PR, path)
@@ -622,6 +650,8 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path == '/api/launch_via':
                     save_settings(launch_via='nvse' if body.get('via') == 'nvse' else 'steam')
                     return self.send(state())
+                if u.path == '/api/give':
+                    return self.send(give(body))
                 if u.path == '/api/project/new':
                     return self.send(open_project(body['name'], create=True))
                 if u.path == '/api/project/open':

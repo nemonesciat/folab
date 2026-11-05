@@ -33,6 +33,8 @@ the model for style, UI and approach. Python, standard library first, code in `a
   beside FalloutNV.exe (its config in Data\NVSE), records what it put in for Take out. The game starts through
   nvse_loader.exe when present (setting `launch_via`), else steam://rungameid/22380; never FalloutNV.exe directly
   (Steam's load error 5:0000065434).
+- Create page (`web/create.js`): items in plain fields over the same records Browse edits; "Give it to me in game"
+  (`/api/give`) reuses FOLab Test.esp: its quest runs player.AddItem once (bytes as the game's Hull20GaAddScript).
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.

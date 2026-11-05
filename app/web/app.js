@@ -525,7 +525,7 @@ function tab(side, name){
 $('#left .tabs').onclick = e => { if (e.target.closest('button')) tab('left', e.target.closest('button').dataset.tab); };
 $('#right .tabs').onclick = e => { if (e.target.closest('button')) tab('right', e.target.closest('button').dataset.tab); };
 
-const PAGES = ['browse', 'world', 'mod', 'game'];
+const PAGES = ['create', 'browse', 'world', 'mod', 'game'];
 function page(name){
   for (const p of PAGES){
     const nav = $('#nav-' + p), el = $('#page-' + p);
@@ -534,6 +534,7 @@ function page(name){
   }
   if (name === 'mod') drawModPage();
   if (name === 'game') drawGamePage();
+  if (name === 'create') crInit();
   if (typeof onPage === 'function') onPage(name);
 }
 for (const p of PAGES) $('#nav-' + p).onclick = () => page(p);
