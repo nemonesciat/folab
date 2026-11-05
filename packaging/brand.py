@@ -77,23 +77,41 @@ def mark_svg():
 ICON_BG, ICON_RIM, ICON_GEAR, ICON_WRENCH = (27, 24, 19), (70, 60, 46), (210, 168, 90), (236, 228, 210)
 
 
+ICON_GOLD, ICON_LIGHT = (210, 168, 90), (240, 205, 135)
+MARK_FIT = (0.86, 18, 36)          # (the mark's 256 x 204 laid in the 256 x 256 icon: scale, left, top)
+
+
+def _fit(polys):
+    s, ox, oy = MARK_FIT
+    return [[(ox + x * s, oy + y * s) for x, y in poly] for poly in polys]
+
+
 def icon_layers():
-    """The icon, 256 x 256: [(colour, polygons)] painted in order."""
-    corner = 44
+    """The icon, 256 x 256, in the logo's style: the outline gear tucked behind the wrench-F, gold on a dark square.
+    [(kind, colour, polygons, width)] painted in order: 'fill', or 'stroke' (a band width wide along the outlines)."""
+    corner = 40
     sq = []
     for cxx, cyy, a0 in ((256 - corner, corner, -90), (256 - corner, 256 - corner, 0), (corner, 256 - corner, 90), (corner, corner, 180)):
         for k in range(9):
             a = math.radians(a0 + 90 * k / 8)
             sq.append((cxx + corner * math.cos(a), cyy + corner * math.sin(a)))
-    inner = [((x - 128) * 0.94 + 128, (y - 128) * 0.94 + 128) for x, y in sq]
-    return [(ICON_RIM, [sq]), (ICON_BG, [inner]),
-            (ICON_GEAR, gear(150, 118, 92, 74, 12, 32)),
-            (ICON_WRENCH, wrench(34, 30, 1.0))]
+    inner = [((x - 128) * 0.95 + 128, (y - 128) * 0.95 + 128) for x, y in sq]
+    sc = MARK_FIT[0]
+    g, w = _fit(gear(150, 104, 88, 70, 10, 30)), _fit(wrench(8, 4))
+    return [('fill', ICON_RIM, [sq], 0), ('fill', ICON_BG, [inner], 0),
+            ('stroke', ICON_GOLD, g, 13 * sc),
+            ('stroke', ICON_BG, w, 11 * sc), ('fill', ICON_LIGHT, w, 0)]
 
 
 def icon_svg():
-    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">%s</svg>' %
-            ''.join('<path fill="rgb(%d,%d,%d)" fill-rule="evenodd" d="%s"/>' % (c + (path_d(p),)) for c, p in icon_layers()))
+    out = []
+    for kind, c, polys, width in icon_layers():
+        rgb = 'rgb(%d,%d,%d)' % c
+        if kind == 'fill':
+            out.append('<path fill="%s" fill-rule="evenodd" d="%s"/>' % (rgb, path_d(polys)))
+        else:
+            out.append('<path fill="none" stroke="%s" stroke-width="%.1f" stroke-linejoin="round" d="%s"/>' % (rgb, width, path_d(polys)))
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">%s</svg>' % ''.join(out)
 
 
 # ---------- pixels ----------
@@ -111,8 +129,25 @@ def inside(x, y, polys):
     return n
 
 
+def near_edge(x, y, segs, half):
+    for ax, ay, bx, by, L2 in segs:
+        if (x < min(ax, bx) - half or x > max(ax, bx) + half or y < min(ay, by) - half or y > max(ay, by) + half):
+            continue
+        t = 0.0 if not L2 else max(0.0, min(1.0, ((x - ax) * (bx - ax) + (y - ay) * (by - ay)) / L2))
+        dx, dy = x - ax - t * (bx - ax), y - ay - t * (by - ay)
+        if dx * dx + dy * dy <= half * half:
+            return True
+    return False
+
+
 def render(size):
-    layers = icon_layers()
+    layers = []
+    for kind, c, polys, width in icon_layers():
+        segs = [(a[0], a[1], b[0], b[1], (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2)
+                for poly in polys for a, b in zip(poly, poly[1:] + poly[:1])]
+        box = (min(x for p in polys for x, _y in p) - width, min(y for p in polys for _x, y in p) - width,
+               max(x for p in polys for x, _y in p) + width, max(y for p in polys for _x, y in p) + width)
+        layers.append((kind, c, polys, width / 2, segs, box))
     k = 256.0 / size
     ss = 4 if size <= 64 else 2
     px = bytearray(size * size * 4)
@@ -123,8 +158,10 @@ def render(size):
                 for sx in range(ss):
                     X, Y = (x + (sx + 0.5) / ss) * k, (y + (sy + 0.5) / ss) * k
                     col = None
-                    for c, polys in layers:
-                        if inside(X, Y, polys):
+                    for kind, c, polys, half, segs, box in layers:
+                        if not (box[0] <= X <= box[2] and box[1] <= Y <= box[3]):
+                            continue
+                        if (inside(X, Y, polys) if kind == 'fill' else near_edge(X, Y, segs, half)):
                             col = c
                     if col:
                         r += col[0]; g += col[1]; b += col[2]; a += 1

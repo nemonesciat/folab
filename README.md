@@ -34,7 +34,7 @@ desktop). FOLab reads the game (about ten seconds) and opens in its own window, 
 again, see its log, or quit. Closing its window closes FOLab. Your mods and settings are kept in that folder.
 
 From the source: double-click **Start FOLab.bat**; FOLab opens in your browser at http://127.0.0.1:8771/ (keep the black
-window open while you work). To make the portable download yourself: `py -3 packaginguild.py`.
+window open while you work). To make the portable download yourself: `py -3 packaging\build.py`.
 
 The first time, a Getting started guide opens. Help (top right) has the rest.
 
