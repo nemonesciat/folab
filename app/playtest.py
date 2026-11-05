@@ -160,6 +160,8 @@ def write_test_plugin(gd, cell, p, path, place='', give=(), mod=None):
     if not cell:
         return _finish(tree, masters, own, base, path, 'FOLabTestQuest%d' % n)
     # the marker, in the place (a copy of its CELL record carries it, as every plugin that adds to a cell must)
+    # (outside, a persistent thing lives in its world's persistent cell, as the game's own do)
+    cell = gd.world_persistent.get(gd.ext_cells[cell], cell) if cell in gd.ext_cells else cell
     lid = w.local(cell)
     found = {}
     _node, kids = w._cell_node(tree, found, cell, lid, order)

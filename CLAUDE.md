@@ -38,7 +38,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Outside: `gamedata.py` indexes exterior cells (`ext_cells`, `grid(world)`), LAND (`land`, `land_at`, parent
   worlds' land), and the world's persistent refs by square (`persistent_in`, added to `refs(cell)`). `land.py`
   decodes LAND; `web/outside.js` streams 7x7 squares of ground (5x5 of things) round the camera via
-  `/api/outside?xy=` batches. Looking only: `edit()` refuses outside cells until the writer handles WRLD groups.
+  `/api/outside?xy=` batches. Editing outside: `edit()` files each change under its grid cell (`outside_cell`:
+  a new thing by the square it stands in); the writer puts a copy of the WRLD (no OFST) with its children group,
+  grid cells in block (y//32, x//32) / sub-block (y//8, x//8) groups, and persistent refs in the world's
+  persistent cell (also Play here's marker).
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.

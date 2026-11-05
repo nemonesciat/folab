@@ -189,12 +189,14 @@ def cell_things(ckey):
                 if ch.get('base'):
                     base = ch['base']
         t = thing(k, base, p, s, state)
+        t['cell'] = ckey
         if r['leads'] or (ch or {}).get('tel'):
             t['door'] = True
         out.append(t)
     for k, ch in mine.items():
         if k.startswith('+'):
             t = thing(k, ch['base'], ch['p'], ch.get('s', 1.0), 'new')
+            t['cell'] = ckey
             if ch.get('tel'):
                 t['door'] = True
             out.append(t)
@@ -282,6 +284,31 @@ def outside(wkey, x, y):
     if c is not None:
         out['things'] = cell_things(GD.key(c))
     return out
+
+
+def outside_cell(o, world):
+    """Outside, the grid cell a change belongs to, whatever cell the view sent: a new thing's is the square it stands
+    in; a game thing's is the cell holding it (one the world keeps loaded goes by the square it stood in); one of the
+    mod's own stays where it was added."""
+    grid = GD.grid(world)
+    sq = lambda p: grid.get((int(p[0] // 4096), int(p[1] // 4096)))
+    if o.get('op') == 'add' and o.get('p'):
+        c = sq(o['p'])
+        return GD.key(c) if c is not None else None
+    r = o.get('ref')
+    if not r:
+        return None
+    if r.startswith('+'):
+        return next((ck for ck, c in (PR.cells.items() if PR else ()) if r in c['refs']), None)
+    fid = GD.from_key(r)
+    home = GD.ref_cell.get(fid)
+    if home in GD.ext_cells:
+        return GD.key(home)
+    if home is not None and home == GD.world_persistent.get(world):
+        f = GD.ref_fields(GD.cell_refs[home][fid])[1]
+        c = sq(struct.unpack_from('<2f', f['DATA'])) if 'DATA' in f else None
+        return GD.key(c) if c is not None else None
+    return None
 
 
 def place_name(ckey):
@@ -470,12 +497,13 @@ def edit(label, ops):
     for o in ops:
         c = o.get('cell')
         if c and not c.startswith('+') and c != '$new' and GD.from_key(c) in GD.ext_cells:
-            raise ValueError('Outside places can be looked at for now: changing them comes next.')
+            o['cell'] = outside_cell(o, GD.ext_cells[GD.from_key(c)]) or c
     made = PR.apply(label, ops)
     out = {'state': state(), 'made': made}
     cells = {o['cell'] for o in ops if 'cell' in o and o['cell'] != '$new'}
-    if len(cells) == 1:
-        out['things'] = [t for t in cell_things(cells.pop()) if t['key'] in made or t['key'] in {o.get('ref') for o in ops}]
+    keys = set(made) | {o.get('ref') for o in ops}
+    if cells and len(cells) <= 9:
+        out['things'] = [t for c in cells for t in cell_things(c) if t['key'] in keys]
     return out
 
 

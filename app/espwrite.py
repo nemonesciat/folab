@@ -27,6 +27,8 @@ FORMID_FIELDS = {
     'CELL': {'XCLR': 'all', 'XCIM': [0], 'XEZN': [0], 'XCCM': [0], 'XCWT': [0], 'XOWN': [0], 'XCAS': [0],
              'XCMO': [0], 'LTMP': [0]},
 }
+FORMID_FIELDS['WRLD'] = {'XEZN': [0], 'WNAM': [0], 'CNAM': [0], 'NAM2': [0], 'NAM3': [0], 'INAM': [0], 'ZNAM': [0],
+                         'IMPS': [4, 8]}
 FORMID_FIELDS['ACHR'] = FORMID_FIELDS['ACRE'] = FORMID_FIELDS['REFR']
 
 
@@ -104,12 +106,16 @@ class Writer:
             cell = None if ckey.startswith('+') else gd.from_key(ckey)
             if cell is not None:
                 used.add(gd.source(cell)[0])
+                if cell in gd.ext_cells:
+                    used.add(gd.source(gd.ext_cells[cell])[0])
             for rkey, r in c['refs'].items():
                 if r.get('tel') and not r['tel']['door'].startswith('+'):
                     used.add(gd.from_key(r['tel']['door']) >> 24)
                 if not rkey.startswith('+'):
-                    used.add(gd.from_key(rkey) >> 24)
-                    used.add(gd.cell_refs[cell][gd.from_key(rkey)][0])
+                    fid = gd.from_key(rkey)
+                    used.add(fid >> 24)
+                    used.add(gd.cell_refs[gd.ref_cell.get(fid, cell)][fid][0])
+                    used.add(gd.source(gd.ref_cell.get(fid, cell))[0])
                 if r.get('base') and not r['base'].startswith('+'):
                     used.add(gd.from_key(r['base']) >> 24)
         for key, rec in self.pr.records.items():
@@ -206,16 +212,34 @@ class Writer:
         # places: the cell's record, then its refs
         cells = {k for k, c in self.pr.cells.items() if c['refs']}
         cells |= {k for k, r in self.pr.records.items() if r['type'] == 'CELL'}
+        nodes = {}
+
+        def cell_kids(c):
+            # (a cell's children group, the cell's record put in the first time; outside, the world's too)
+            if c not in nodes:
+                nodes[c] = self._cell_node(tree, found, c, self.local(c), order)
+            return nodes[c][1]
         for ckey in sorted(cells):
             cell = None if ckey.startswith('+') else gd.from_key(ckey)
             lid = self.link(ckey)
             mine = self.pr.records.get(ckey)
-            node, kids = self._cell_node(tree, found, cell, lid, order, mine)
-            if mine:
-                node.set_data(join(recordio.to_bytes(mine, self.link)), mine['flags'])
+            outside = cell in gd.ext_cells
+            if not outside:
+                node, kids = self._cell_node(tree, found, cell, lid, order, mine)
+                nodes[cell] = (node, kids)
+                if mine:
+                    node.set_data(join(recordio.to_bytes(mine, self.link)), mine['flags'])
+            # outside, what stays loaded (persistent) lives in the world's persistent cell
+            keep = gd.world_persistent.get(gd.ext_cells[cell]) if outside else None
+
+            def home(fid, persistent):
+                c = gd.ref_cell.get(fid, cell) if fid is not None else cell
+                return keep if outside and persistent and keep is not None else c
             for rkey, r in sorted((self.pr.cells.get(ckey) or {'refs': {}})['refs'].items()):
                 if rkey.startswith('+'):
-                    group = self._ref_group(kids, lid, bool(r.get('persistent')))
+                    hc = home(None, bool(r.get('persistent')))
+                    kids = cell_kids(hc) if outside else nodes[cell][1]
+                    group = self._ref_group(kids, self.local(hc) if outside else lid, bool(r.get('persistent')))
                     ref = self.new_ref(rkey, r)
                     group.kids.append(ref)
                     found[ref.formid] = (ref, group)
@@ -223,6 +247,9 @@ class Writer:
                 fid = gd.from_key(rkey)
                 rlid = self.local(fid)
                 have = found.get(rlid)
+                hc = home(fid, False)
+                kids = cell_kids(hc) if outside else nodes[cell][1]
+                hlid = self.local(hc) if outside else lid
                 if have and r.get('removed') and rlid >> 24 == len(self.masters):
                     have[1].kids.remove(have[0])  # (the mod's own ref, removed: gone)
                     del found[rlid]
@@ -235,14 +262,20 @@ class Writer:
                     if flags & tes4.PERSISTENT and not was & tes4.PERSISTENT and have[1] is not None:
                         # (a door linked now: teleport doors live in the cell's persistent group, as the game's do)
                         have[1].kids.remove(have[0])
-                        group = self._ref_group(kids, lid, True)
+                        if outside:
+                            hc = home(fid, True)
+                            kids, hlid = cell_kids(hc), self.local(hc)
+                        group = self._ref_group(kids, hlid, True)
                         group.kids.append(have[0])
                         found[rlid] = (have[0], group)
                 else:
-                    i, rec = gd.cell_refs[cell][fid]
+                    i, rec = gd.cell_refs[gd.ref_cell.get(fid, cell)][fid]
                     subs = self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(gd.plugins[i].data(rec))))
                     subs, flags = self.changed_ref(subs, rec.flags & ~tes4.COMPRESSED, r)
-                    group = self._ref_group(kids, lid, bool(flags & tes4.PERSISTENT))
+                    if outside and flags & tes4.PERSISTENT:
+                        hc = home(fid, True)
+                        kids, hlid = cell_kids(hc), self.local(hc)
+                    group = self._ref_group(kids, hlid, bool(flags & tes4.PERSISTENT))
                     node2 = plugintree.Rec.new(rec.tag, flags, rlid, join(subs), FORM_VERSION)
                     group.kids.append(node2)
                     found[rlid] = (node2, group)
@@ -287,6 +320,11 @@ class Writer:
         else:
             subs, flags = self.game_cell(cell)
         node = plugintree.Rec.new('CELL', flags, lid, join(subs), FORM_VERSION)
+        world = self.gd.ext_cells.get(cell)
+        if world is None and cell is not None:
+            world = next((w for w, c in self.gd.world_persistent.items() if c == cell), None)
+        if world is not None:
+            return self._ext_cell_node(tree, found, cell, world, node, lid, order)
         top = tree.top('CELL', order)
         obj = lid & 0xFFFFFF
         block = self._group(top, obj % 10, tes4.G_INT_BLOCK)
@@ -294,6 +332,46 @@ class Writer:
         kids = plugintree.Group(lid, tes4.G_CELL_CHILDREN)
         subblock.kids += [node, kids]
         found[lid] = (node, subblock)
+        return node, kids
+
+    def _world_children(self, tree, found, world, order):
+        """The world's record (a copy of the game's, as every plugin with outside cells carries) and its children."""
+        wlid = self.local(world)
+        have = found.get(wlid)
+        if have and have[1] is not None:
+            node, parent = have
+        else:
+            i, rec = self.gd.source(world)
+            subs = self.remap_fields(i, 'WRLD', list(tes4.iter_subrecords(self.gd.plugins[i].data(rec))))
+            subs = [(t, d) for t, d in subs if t != 'OFST']   # (where its cells sit in the game's own file: not ours)
+            node = plugintree.Rec.new('WRLD', rec.flags & ~tes4.COMPRESSED, wlid, join(subs), FORM_VERSION)
+            parent = tree.top('WRLD', order)
+            parent.kids.append(node)
+            found[wlid] = (node, parent)
+        at = parent.kids.index(node)
+        nxt = parent.kids[at + 1] if at + 1 < len(parent.kids) else None
+        if isinstance(nxt, plugintree.Group) and nxt.gtype == tes4.G_WORLD_CHILDREN:
+            return nxt
+        kids = plugintree.Group(wlid, tes4.G_WORLD_CHILDREN)
+        parent.kids.insert(at + 1, kids)
+        return kids
+
+    def _ext_cell_node(self, tree, found, cell, world, node, lid, order):
+        """An outside cell in its world: the persistent cell first in the world's group, a grid cell in its block
+        (label: y // 32, x // 32) and sub-block (y // 8, x // 8), as the game files them."""
+        wkids = self._world_children(tree, found, world, order)
+        kids = plugintree.Group(lid, tes4.G_CELL_CHILDREN)
+        xy = self.gd.cell_grid(cell) if cell in self.gd.ext_cells else None
+        if xy is None:
+            wkids.kids[0:0] = [node, kids]
+            found[lid] = (node, wkids)
+            return node, kids
+        x, y = xy
+        label = lambda a, b: struct.unpack('<I', struct.pack('<hh', a, b))[0]
+        block = self._group(wkids, label(y // 32, x // 32), tes4.G_EXT_BLOCK)
+        sub = self._group(block, label(y // 8, x // 8), tes4.G_EXT_SUBBLOCK)
+        sub.kids += [node, kids]
+        found[lid] = (node, sub)
         return node, kids
 
     @staticmethod

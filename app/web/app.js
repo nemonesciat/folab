@@ -157,6 +157,7 @@ async function openPlace(id, at){
 }
 
 async function resync(){
+  if (A.outside) return outsideResync();
   if (!A.cellId) return;
   const c = await api('/api/cell?id=' + encodeURIComponent(A.cellId));
   A.things = c.things;
@@ -303,6 +304,7 @@ async function edit(label, ops, selectNew){
     for (const t of d.things || []){
       const i = (A.things || []).findIndex(x => x.key === t.key);
       if (i >= 0) A.things[i] = t; else (A.things = A.things || []).push(t);
+      if (A.outside) outsideAdopt(t);
       await updateThing(t);
     }
     for (const o of ops) if (o.op === 'remove' && o.ref.startsWith('+')){ dropThing(o.ref); A.things = A.things.filter(t => t.key !== o.ref); }
@@ -488,7 +490,6 @@ async function play(at){
   } catch (e){ fail(e); }
 }
 function playHere(point){
-  if (A.outside) return toast('Play here works inside places for now; outside comes with editing outside.', true);
   if (!A.cellId) return toast('Open a place first.', true);
   const p = point || W.cam.position;
   // facing the way the view looks (the game's heading: 0 is north, turning clockwise)

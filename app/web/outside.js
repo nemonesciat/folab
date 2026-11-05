@@ -217,3 +217,40 @@ function landMesh(d, x, y){
   grp.userData.land = true;
   return grp;
 }
+
+// ---------- after an undo, a redo or a refused change: every cell on show again as the server has it ----------
+async function outsideResync(){
+  const shown = [...OUT.cells.values()].filter(c => c.data && c.data.cell);
+  if (!shown.length) return;
+  const token = OUT.token;
+  const got = [];
+  for (let i = 0; i < shown.length; i += 9){
+    const part = shown.slice(i, i + 9);
+    got.push(...await api(`/api/outside?world=${encodeURIComponent(OUT.world)}&xy=${part.map(c => c.x + ',' + c.y).join(';')}`));
+  }
+  if (token !== OUT.token) return;
+  shown.forEach((c, n) => {
+    const fresh = got[n].things, keys = new Set(fresh.map(t => t.key));
+    c.data.things = fresh;
+    if (!c.shown) return;
+    for (const k of c.keys) if (!keys.has(k)) dropThing(k);
+    c.keys = [];
+    for (const t of fresh){
+      c.keys.push(t.key);
+      const g = W.byKey.get(t.key);
+      if (!g || JSON.stringify(g.userData.thing) !== JSON.stringify(t)) updateThing(t);
+    }
+  });
+  A.things = [].concat(...[...OUT.cells.values()].filter(x => x.shown).map(x => x.data.things));
+  drawObjects(); drawSelected(selThings());
+}
+
+// a thing an edit sent back: kept with its cell, so it goes when the cell does
+function outsideAdopt(t){
+  for (const c of OUT.cells.values()){
+    if (!c.data || c.data.cell !== t.cell) continue;
+    const i = c.data.things.findIndex(x => x.key === t.key);
+    if (i >= 0) c.data.things[i] = t; else c.data.things.push(t);
+    if (!c.keys.includes(t.key)) c.keys.push(t.key);
+  }
+}
