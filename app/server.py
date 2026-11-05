@@ -25,6 +25,7 @@ import actors
 import adopt
 import browse
 import recordio
+import land
 import refinfo
 import tes4
 
@@ -48,6 +49,7 @@ PR = None
 BR = None
 CATALOGUE = []                          # [key, type, edid, name, model] of every placeable game object
 _meshes = {}
+_land_tex = {}                          # LTEX -> its picture (land.py)
 _actors = {}                            # base key -> parts (actors.py)
 _lock = threading.RLock()
 
@@ -238,6 +240,50 @@ def prefab_save(body):
     return {'name': name, 'prefabs': prefabs()}
 
 
+def worlds():
+    """Worldspaces with ground to walk on, the big ones first."""
+    out = []
+    for w in GD.worlds():
+        n = len(GD.grid(w))
+        if not n:
+            continue
+        f = GD.fields(w)
+        out.append({'id': GD.key(w), 'edid': tes4.zstr(f.get('EDID', b'')), 'name': tes4.zstr(f.get('FULL', b'')),
+                    'cells': n, 'plugin': GD.names[w >> 24]})
+    out.sort(key=lambda x: (-x['cells'], x['edid'].lower()))
+    return out
+
+
+def world(wkey):
+    """A worldspace's map markers (the places on the Pip-Boy map), to jump to; else the middle of its cells."""
+    w = GD.from_key(wkey)
+    marks = []
+    for rfid, entry in GD.cell_refs.get(GD.world_persistent.get(w), {}).items():
+        i, f = GD.ref_fields(entry)
+        if 'XMRK' in f and 'DATA' in f:
+            p = list(struct.unpack_from('<6f', f['DATA']))
+            marks.append({'name': tes4.zstr(f.get('FULL', b'')) or GD.edid(rfid) or GD.key(rfid), 'p': p})
+    marks.sort(key=lambda m: m['name'].lower())
+    g = GD.grid(w)
+    xs, ys = [k[0] for k in g], [k[1] for k in g]
+    mid = [(min(xs) + max(xs) + 1) / 2 * 4096, (min(ys) + max(ys) + 1) / 2 * 4096] if g else [0, 0]
+    f = GD.fields(w)
+    return {'id': wkey, 'edid': tes4.zstr(f.get('EDID', b'')), 'name': tes4.zstr(f.get('FULL', b'')),
+            'markers': marks, 'middle': mid}
+
+
+def outside(wkey, x, y):
+    """One grid square of a worldspace: its cell (if it has one), its ground, and the things in it."""
+    w = GD.from_key(wkey)
+    c = GD.grid(w).get((x, y))
+    entry = GD.land_at(w, x, y)
+    out = {'x': x, 'y': y, 'cell': GD.key(c) if c is not None else None,
+           'land': land.decode(GD, entry, _land_tex) if entry else None, 'things': []}
+    if c is not None:
+        out['things'] = cell_things(GD.key(c))
+    return out
+
+
 def place_name(ckey):
     """(editor ID, name) of a place, the mod's own included"""
     rec = PR.records.get(ckey) if PR else None
@@ -421,6 +467,10 @@ def masters():
 def edit(label, ops):
     if not PR:
         raise ValueError('no mod open')
+    for o in ops:
+        c = o.get('cell')
+        if c and not c.startswith('+') and c != '$new' and GD.from_key(c) in GD.ext_cells:
+            raise ValueError('Outside places can be looked at for now: changing them comes next.')
     made = PR.apply(label, ops)
     out = {'state': state(), 'made': made}
     cells = {o['cell'] for o in ops if 'cell' in o and o['cell'] != '$new'}
@@ -620,6 +670,14 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/actor':
                 with _lock:
                     return self.send(actor_parts(q['key']))
+            if u.path == '/api/worlds':
+                return self.send(worlds())
+            if u.path == '/api/world':
+                return self.send(world(q['id']))
+            if u.path == '/api/outside':
+                # (several squares at once, 'x,y;x,y': a browser has only a few connections, and meshes want them too)
+                with _lock:
+                    return self.send([outside(q['world'], *map(int, xy.split(','))) for xy in q['xy'].split(';')[:16]])
             if u.path == '/api/meshes':
                 words = q.get('q', '').lower().replace('/', '\\').split()
                 hits = [m for m in GD.mesh_list() if all(w in m for w in words)]

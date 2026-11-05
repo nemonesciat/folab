@@ -35,6 +35,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   (Steam's load error 5:0000065434).
 - Create page (`web/create.js`): items in plain fields over the same records Browse edits; "Give it to me in game"
   (`/api/give`) reuses FOLab Test.esp: its quest runs player.AddItem once (bytes as the game's Hull20GaAddScript).
+- Outside: `gamedata.py` indexes exterior cells (`ext_cells`, `grid(world)`), LAND (`land`, `land_at`, parent
+  worlds' land), and the world's persistent refs by square (`persistent_in`, added to `refs(cell)`). `land.py`
+  decodes LAND; `web/outside.js` streams 7x7 squares of ground (5x5 of things) round the camera via
+  `/api/outside?xy=` batches. Looking only: `edit()` refuses outside cells until the writer handles WRLD groups.
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.

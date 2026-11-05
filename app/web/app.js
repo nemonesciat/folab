@@ -141,6 +141,8 @@ $('#places').addEventListener('click', e => { const r = e.target.closest('.row')
 $('#f-places').addEventListener('input', drawPlaces);
 
 async function openPlace(id, at){
+  if (typeof leaveOutside === 'function') leaveOutside();
+  A.outside = null;
   A.cellId = id;
   try { localStorage.setItem('folab-cell', id); } catch (e) {}
   drawPlaces();
@@ -286,6 +288,7 @@ $('#selected').addEventListener('click', e => {
 W.onSelect = list => {
   if (A.linking && list.length === 1 && list[0].type === 'DOOR') return linkFinish(list[0]);
   A.sel = list.map(t => t.key);
+  if (A.outside && list.length && list[0].cell) A.cellId = list[0].cell;   // (outside, a thing's own cell)
   drawSelected(list);
   if (list.length) tab('right', 'selected');
   document.querySelectorAll('#objects .row').forEach(r => r.classList.toggle('on', A.sel.includes(r.dataset.key)));
@@ -485,6 +488,7 @@ async function play(at){
   } catch (e){ fail(e); }
 }
 function playHere(point){
+  if (A.outside) return toast('Play here works inside places for now; outside comes with editing outside.', true);
   if (!A.cellId) return toast('Open a place first.', true);
   const p = point || W.cam.position;
   // facing the way the view looks (the game's heading: 0 is north, turning clockwise)
@@ -522,7 +526,11 @@ function tab(side, name){
   root.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   root.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'tab-' + name));
 }
-$('#left .tabs').onclick = e => { if (e.target.closest('button')) tab('left', e.target.closest('button').dataset.tab); };
+$('#left .tabs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  tab('left', b.dataset.tab);
+  if (b.dataset.tab === 'outside') outsideTab();
+};
 $('#right .tabs').onclick = e => { if (e.target.closest('button')) tab('right', e.target.closest('button').dataset.tab); };
 
 const PAGES = ['create', 'browse', 'world', 'mod', 'game'];

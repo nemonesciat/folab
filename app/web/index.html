@@ -197,11 +197,15 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 </header>
 <main id="page-world">
   <div class="side" id="left">
-    <div class="tabs"><button data-tab="places" class="on">Places</button><button data-tab="objects">Objects <span id="objn" class="n"></span></button></div>
+    <div class="tabs"><button data-tab="places" class="on">Places</button><button data-tab="outside" title="Worldspaces: the Mojave and the DLC lands">Outside</button><button data-tab="objects">Objects <span id="objn" class="n"></span></button></div>
     <div class="pane on" id="tab-places">
       <div style="display:flex;gap:6px;margin:10px 12px 6px"><input class="find" id="f-places" placeholder="Find a place…" style="margin:0;flex:1;min-width:0">
         <button class="btn" id="b-newplace" title="A place of your own: empty, or a copy of the one open now">＋ New</button></div>
       <div class="list" id="places"></div>
+    </div>
+    <div class="pane" id="tab-outside">
+      <input class="find" id="f-outside" placeholder="Find a worldspace or a place on its map…">
+      <div class="list" id="outside"></div>
     </div>
     <div class="pane" id="tab-objects">
       <input class="find" id="f-objects" placeholder="Filter…">
@@ -275,6 +279,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/vendor/TransformControls.js"></script>
 <script src="/web/world.js"></script>
 <script src="/web/app.js"></script>
+<script src="/web/outside.js"></script>
 <script src="/web/ctxmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>

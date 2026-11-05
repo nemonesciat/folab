@@ -62,6 +62,11 @@ class GameData:
         self.cell_refs = {}     # global CELL form ID -> {global ref form ID: (plugin index, Record)}
         self.ref_cell = {}      # global ref form ID -> global CELL form ID
         self.interiors = set()
+        self.ext_cells = {}         # global exterior CELL form ID -> its WRLD
+        self.world_persistent = {}  # WRLD -> its persistent CELL
+        self.land = {}              # CELL -> (plugin index, LAND Record)
+        self._grids = {}            # WRLD -> {(x, y): CELL}, filled when asked
+        self._persist_grid = {}     # WRLD -> {(x, y): [ref form ID]}, its persistent refs by where they stand
         for i, p in enumerate(self.plugins):
             self._index(i, p)
         self._archives = None
@@ -90,9 +95,22 @@ class GameData:
         for rec, path in p.walk():
             fid = g(rec.formid)
             self.forms[fid] = (i, rec)
-            if rec.tag == 'CELL' and path and path[0][1] == 0x4C4C4543 and len(path) >= 2 \
-                    and path[1][0] == tes4.G_INT_BLOCK:       # top group 'CELL' (label as int) holds interiors
-                self.interiors.add(fid)
+            if rec.tag == 'CELL':
+                if path and path[0][1] == 0x4C4C4543 and len(path) >= 2 and path[1][0] == tes4.G_INT_BLOCK:
+                    self.interiors.add(fid)                   # top group 'CELL' (label as int) holds interiors
+                else:
+                    world = next((lab for gt, lab, _o in path if gt == tes4.G_WORLD_CHILDREN), None)
+                    if world is not None:
+                        # a grid cell sits in an exterior block; the one straight in the world's group is its
+                        # persistent cell, holding everything the world keeps loaded
+                        if any(gt == tes4.G_EXT_BLOCK for gt, _l, _o in path):
+                            self.ext_cells[fid] = g(world)
+                        else:
+                            self.world_persistent[g(world)] = fid
+            elif rec.tag == 'LAND':
+                cell = next((lab for gt, lab, _o in reversed(path) if gt in (tes4.G_CELL_TEMPORARY, tes4.G_CELL_CHILDREN)), None)
+                if cell is not None:
+                    self.land[g(cell)] = (i, rec)
             elif rec.tag in REF_TYPES:
                 for gtype, label, _off in reversed(path):
                     if gtype in (tes4.G_CELL_PERSISTENT, tes4.G_CELL_TEMPORARY, tes4.G_CELL_VWD):
@@ -129,10 +147,70 @@ class GameData:
         """A base form's MODL as a path under Data: trees are SpeedTree files under trees\\, the rest meshes."""
         return ('trees\\' if btype == 'TREE' else 'meshes\\') + model.lstrip('\\/')
 
+    # --- outside: worldspaces and their grid of cells ---
+
+    CELL_SIZE = 4096
+
+    def worlds(self):
+        return sorted(f for f, (i, r) in self.forms.items() if r.tag == 'WRLD')
+
+    def grid(self, world):
+        """{(x, y): CELL} for a worldspace's exterior cells."""
+        if world not in self._grids:
+            out = {}
+            for c, w in self.ext_cells.items():
+                if w == world:
+                    xclc = self.fields(c).get('XCLC')
+                    if xclc and len(xclc) >= 8:
+                        out[struct.unpack_from('<ii', xclc)] = c
+            self._grids[world] = out
+        return self._grids[world]
+
+    def cell_grid(self, cell):
+        xclc = self.fields(cell).get('XCLC')
+        return struct.unpack_from('<ii', xclc) if xclc and len(xclc) >= 8 else None
+
+    def parent_world(self, world, flag):
+        """The world this one takes something from (flag: 1 land, 2 LOD, 4 map, 8 water...), or None."""
+        f = self.fields(world)
+        if 'WNAM' not in f:
+            return None
+        use = struct.unpack_from('<H', f['PNAM'])[0] if 'PNAM' in f and len(f['PNAM']) >= 2 else 0
+        i = self.forms[world][0]
+        return self.to_global(i, struct.unpack_from('<I', f['WNAM'])[0]) if use & flag else None
+
+    def land_at(self, world, x, y):
+        """(plugin index, LAND Record) for a grid square, from the world's parent when it borrows its land."""
+        c = self.grid(world).get((x, y))
+        if c is not None and c in self.land:
+            return self.land[c]
+        parent = self.parent_world(world, 1)
+        return self.land_at(parent, x, y) if parent is not None and parent != world else None
+
+    def persistent_in(self, world, x, y):
+        """The refs a world keeps always loaded that stand in grid square (x, y)."""
+        if world not in self._persist_grid:
+            out = {}
+            pc = self.world_persistent.get(world)
+            for rfid, entry in self.cell_refs.get(pc, {}).items():
+                i, f = self.ref_fields(entry)
+                if 'DATA' in f and len(f['DATA']) >= 12:
+                    px, py = struct.unpack_from('<2f', f['DATA'])
+                    out.setdefault((int(px // self.CELL_SIZE), int(py // self.CELL_SIZE)), []).append(rfid)
+            self._persist_grid[world] = out
+        return self._persist_grid[world].get((x, y), [])
+
     def refs(self, cell):
-        """Every placed thing in a cell (navmeshes apart): dicts with the ref, its base form, position, rotation (radians) and scale."""
+        """Every placed thing in a cell (navmeshes apart): dicts with the ref, its base form, position, rotation (radians) and scale.
+        An exterior cell includes the world's always-loaded things standing in it."""
         out = []
-        for rfid, entry in sorted(self.cell_refs.get(cell, {}).items()):
+        entries = dict(self.cell_refs.get(cell, {}))
+        if cell in self.ext_cells:
+            xy = self.cell_grid(cell)
+            pc = self.world_persistent.get(self.ext_cells[cell])
+            for rfid in self.persistent_in(self.ext_cells[cell], *xy) if xy else ():
+                entries[rfid] = self.cell_refs[pc][rfid]
+        for rfid, entry in sorted(entries.items()):
             i, f = self.ref_fields(entry)
             if entry[1].flags & tes4.DELETED or entry[1].tag == 'NAVM':
                 continue

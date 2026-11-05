@@ -327,6 +327,8 @@ function assignLights(){
     l.distance = L.radius * 1.2; l.decay = 1.2; l.intensity = 1.6;
   });
   // with the game's light on, the room is lit mostly by its own lights
+  // (outside, the sun lights everything)
+  if (W.outdoors){ W.hemi.intensity = 0.62; W.sun.intensity = 0.85; W.lamp.intensity = 0; return; }
   W.hemi.intensity = on ? 0.35 : 0.85; W.sun.intensity = on ? 0.15 : 0.45; W.lamp.intensity = on ? 0.15 : 0.6;
 }
 function setGameLight(on){ W.gameLight = on; assignLights(); }
