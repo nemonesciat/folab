@@ -96,28 +96,95 @@ async function vtBack(){
   } finally { vtGoingBack = false; }
 }
 
-// ---------- the minimap: the place round you from above, in the view's corner ----------
+// ---------- the minimap: the place round you from above, in a frame of its own ----------
+// Drag it by its title bar anywhere over the view; let go near a corner and it docks there. ◱ makes it bigger or smaller,
+// + and − zoom, ✕ hides it (the View tab brings it back). Where it is, its size and zoom are remembered. Click the map:
+// go there.
+const MINI_SIZES = [160, 220, 300];
+const MINI_DOCK = 70;                       // (let go this near a corner: docked in it)
+function miniSize(){ return MINI_SIZES[VT.miniSize ?? 1] || 220; }
+function miniZoom(){ return VT.miniZoom || 1; }
+
+function vtMiniBox(){
+  let box = $('#minibox');
+  if (box) return box;
+  box = document.createElement('div'); box.id = 'minibox';
+  box.innerHTML = `<div class="mm-bar" title="Drag to move; let go near a corner to dock it there">
+      <span class="tb-grip">⋮⋮</span><b>Map</b><span class="mm-where"></span>
+      <button data-mm="out" title="Show more">−</button><button data-mm="in" title="Show less, closer">+</button>
+      <button data-mm="size" title="Bigger or smaller">◱</button><button data-mm="hide" title="Hide (the View tab brings it back)">✕</button></div>
+    <canvas id="minimap" title="Click: go there"></canvas>`;
+  $('#view').appendChild(box);
+  const c = box.querySelector('canvas');
+  c.addEventListener('click', e => {
+    const r = c.getBoundingClientRect(), n = miniSize();
+    const [x, y] = vtMiniWorld((e.clientX - r.left) / r.width * n, (e.clientY - r.top) / r.height * n);
+    W.cam.position.x = x; W.cam.position.y = y;
+    if (A.outside && typeof gbHeight === 'function'){ const z = gbHeight(x, y); if (z !== null) W.cam.position.z = z + 300; }
+  });
+  box.querySelector('.mm-bar').addEventListener('click', e => {
+    const a = e.target.dataset.mm; if (!a) return;
+    if (a === 'hide'){ VT.mini = false; vtSave(); box.style.display = 'none'; toast('Map hidden: the View tab brings it back'); if ($('#tab-view').classList.contains('on')) vtDraw(); }
+    if (a === 'size'){ VT.miniSize = ((VT.miniSize ?? 1) + 1) % MINI_SIZES.length; vtSave(); vtMiniPlace(); }
+    if (a === 'in'){ VT.miniZoom = Math.min(8, miniZoom() * 1.5); vtSave(); }
+    if (a === 'out'){ VT.miniZoom = Math.max(0.15, miniZoom() / 1.5); vtSave(); }
+  });
+  // dragging it by its bar
+  box.querySelector('.mm-bar').addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    const A_ = $('#view').getBoundingClientRect(), b = box.getBoundingClientRect();
+    const D = {sx: e.clientX, sy: e.clientY, x: b.left - A_.left, y: b.top - A_.top};
+    document.body.classList.add('tb-dragging');
+    const move = ev => miniPut(D.x + ev.clientX - D.sx, D.y + ev.clientY - D.sy);
+    const up = () => {
+      removeEventListener('pointermove', move, true); removeEventListener('pointerup', up, true);
+      document.body.classList.remove('tb-dragging');
+      const V = $('#view'), x = box.offsetLeft, y = box.offsetTop, w = box.offsetWidth, h = box.offsetHeight;
+      const right = x + w / 2 > V.clientWidth / 2, bottom = y + h / 2 > V.clientHeight / 2;
+      const dx = right ? V.clientWidth - x - w : x, dy = bottom ? V.clientHeight - y - h : y;
+      // near a corner: docked in it (snug, the top ones under the buttons); else just where it was let go
+      VT.miniPos = dx < MINI_DOCK && dy < MINI_DOCK ? {dock: (bottom ? 'b' : 't') + (right ? 'r' : 'l')}
+                                                   : {ax: right ? 'r' : 'l', x: Math.round(dx), ay: bottom ? 'b' : 't', y: Math.round(dy)};
+      vtSave(); vtMiniPlace();
+    };
+    addEventListener('pointermove', move, true); addEventListener('pointerup', up, true);
+  });
+  new ResizeObserver(() => vtMiniPlace()).observe($('#view'));
+  return box;
+}
+function miniPut(x, y){
+  const V = $('#view'), box = $('#minibox');
+  box.style.left = Math.max(4, Math.min(V.clientWidth - box.offsetWidth - 4, x)) + 'px';
+  box.style.top = Math.max(4, Math.min(V.clientHeight - box.offsetHeight - 4, y)) + 'px';
+}
+function vtMiniPlace(){
+  const box = $('#minibox'); if (!box) return;
+  const n = miniSize(), c = box.querySelector('canvas');
+  if (c.width !== n * 2){ c.width = c.height = n * 2; c.style.width = c.style.height = n + 'px'; }
+  const V = $('#view'), p = VT.miniPos || {dock: 'bl'}, w = box.offsetWidth, h = box.offsetHeight;
+  if (!V.clientWidth) return;
+  if (p.dock){
+    const pad = 10, top = 56;
+    miniPut(p.dock[1] === 'r' ? V.clientWidth - w - pad : pad, p.dock[0] === 'b' ? V.clientHeight - h - pad : top);
+  } else miniPut(p.ax === 'r' ? V.clientWidth - p.x - w : p.x, p.ay === 'b' ? V.clientHeight - p.y - h : p.y);
+}
+
 function vtMini(){
-  let c = $('#minimap');
   const on = VT.mini && !(typeof M !== 'undefined' && M.on) && $('#page-world').style.display !== 'none' && (A.outside || A.cellId);
-  if (!on){ if (c) c.style.display = 'none'; return; }
-  if (!c){
-    c = document.createElement('canvas'); c.id = 'minimap'; c.width = 360; c.height = 360;
-    c.title = 'Click: go there';
-    $('#view').appendChild(c);
-    c.addEventListener('click', e => {
-      const r = c.getBoundingClientRect(), [x, y] = vtMiniWorld((e.clientX - r.left) / r.width * 180, (e.clientY - r.top) / r.height * 180);
-      W.cam.position.x = x; W.cam.position.y = y;
-      if (A.outside && typeof gbHeight === 'function'){ const z = gbHeight(x, y); if (z !== null) W.cam.position.z = z + 300; }
-    });
-  }
-  c.style.display = 'block';
+  const old = $('#minibox');
+  if (!on){ if (old) old.style.display = 'none'; return; }
+  const box = vtMiniBox();
+  if (box.style.display !== 'block'){ box.style.display = 'block'; vtMiniPlace(); }
+  const n = miniSize(), half = n / 2, c = box.querySelector('canvas');
+  const css = getComputedStyle(document.documentElement), col = v => css.getPropertyValue(v).trim();
   const g = c.getContext('2d'); g.setTransform(2, 0, 0, 2, 0, 0);
-  g.fillStyle = '#14110d'; g.fillRect(0, 0, 180, 180);
-  const S = vtMiniScale();
-  const scr = (x, y) => [90 + (x - W.cam.position.x) * S, 90 - (y - W.cam.position.y) * S];
+  g.fillStyle = col('--bg2') || '#14110d'; g.fillRect(0, 0, n, n);
+  const S = vtMiniScale() * n / 180;
+  const scr = (x, y) => [half + (x - W.cam.position.x) * S, half - (y - W.cam.position.y) * S];
+  box.querySelector('.mm-where').textContent = A.outside ? `${Math.floor(W.cam.position.x / 4096)}, ${Math.floor(W.cam.position.y / 4096)}` : '';
   if (A.outside && OUT.world && typeof mapTile === 'function'){
-    const span = 90 / S, x0 = W.cam.position.x - span, x1 = W.cam.position.x + span, y0 = W.cam.position.y - span, y1 = W.cam.position.y + span;
+    const span = half / S, x0 = W.cam.position.x - span, x1 = W.cam.position.x + span, y0 = W.cam.position.y - span, y1 = W.cam.position.y + span;
     for (let tx = Math.floor(x0 / MAP_TILE); tx <= Math.floor(x1 / MAP_TILE); tx++)
       for (let ty = Math.floor(y0 / MAP_TILE); ty <= Math.floor(y1 / MAP_TILE); ty++){
         const img = mapTile(tx, ty); if (!img) continue;
@@ -128,31 +195,30 @@ function vtMini(){
       g.font = '10px Inter, sans-serif';
       for (const m of OUT.info.markers){
         const [sx, sy] = scr(m.p[0], m.p[1]);
-        if (sx < -40 || sy < -10 || sx > 220 || sy > 190) continue;
-        g.fillStyle = '#f0cd87'; g.fillRect(sx - 2, sy - 2, 4, 4);
-        g.lineWidth = 3; g.strokeStyle = '#14110d'; g.strokeText(m.name, sx + 5, sy + 3); g.fillText(m.name, sx + 5, sy + 3);
+        if (sx < -40 || sy < -10 || sx > n + 40 || sy > n + 10) continue;
+        g.fillStyle = col('--gold2') || '#f0cd87'; g.fillRect(sx - 2, sy - 2, 4, 4);
+        g.lineWidth = 3; g.strokeStyle = col('--bg2') || '#14110d'; g.strokeText(m.name, sx + 5, sy + 3); g.fillText(m.name, sx + 5, sy + 3);
       }
     }
   } else if (W.group){
     for (const gr of W.group.children){
       if (!gr.visible || gr.userData.thing.marker || typeof mapBox !== 'function') continue;
       const b = mapBox(gr), [sx0, sy0] = scr(b.min.x, b.max.y), [sx1, sy1] = scr(b.max.x, b.min.y);
-      if (sx1 < 0 || sy1 < 0 || sx0 > 180 || sy0 > 180) continue;
+      if (sx1 < 0 || sy1 < 0 || sx0 > n || sy0 > n) continue;
       g.fillStyle = (MAP_COL[gr.userData.thing.type] || '#c8bca4') + '99';
       g.fillRect(sx0, sy0, Math.max(1, sx1 - sx0), Math.max(1, sy1 - sy0));
     }
   }
   // you: where the camera stands and which way it looks, with the field of view
-  g.save(); g.translate(90, 90); g.rotate(-W.yaw);
-  g.fillStyle = 'rgba(240,205,135,0.18)'; g.beginPath(); g.moveTo(0, 0);
-  const half = W.cam.fov * Math.PI / 360 * W.cam.aspect;
-  g.arc(0, 0, 60, -half, half); g.closePath(); g.fill();
-  g.fillStyle = '#f0cd87'; g.beginPath(); g.moveTo(9, 0); g.lineTo(-5, 5); g.lineTo(-2, 0); g.lineTo(-5, -5); g.closePath(); g.fill();
+  g.save(); g.translate(half, half); g.rotate(-W.yaw);
+  g.globalAlpha = 0.2; g.fillStyle = col('--gold2') || '#f0cd87'; g.beginPath(); g.moveTo(0, 0);
+  const fov = W.cam.fov * Math.PI / 360 * W.cam.aspect;
+  g.arc(0, 0, half * 0.66, -fov, fov); g.closePath(); g.fill();
+  g.globalAlpha = 1; g.beginPath(); g.moveTo(9, 0); g.lineTo(-5, 5); g.lineTo(-2, 0); g.lineTo(-5, -5); g.closePath(); g.fill();
   g.restore();
-  g.strokeStyle = '#463c2e'; g.lineWidth = 1; g.strokeRect(0.5, 0.5, 179, 179);
 }
-function vtMiniScale(){ return A.outside ? 90 / (4096 * 2.5) : 90 / 2500; }
-function vtMiniWorld(sx, sy){ const S = vtMiniScale(); return [W.cam.position.x + (sx - 90) / S, W.cam.position.y - (sy - 90) / S]; }
+function vtMiniScale(){ return (A.outside ? 90 / (4096 * 2.5) : 90 / 2500) * miniZoom(); }
+function vtMiniWorld(sx, sy){ const n = miniSize(), S = vtMiniScale() * n / 180; return [W.cam.position.x + (sx - n / 2) / S, W.cam.position.y - (sy - n / 2) / S]; }
 setInterval(vtMini, 250);
 
 // ---------- cell borders, outside: lines along the cells' edges, on the ground ----------

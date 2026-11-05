@@ -15,6 +15,10 @@ The buttons float over the 3D view and the map in groups (Map/3D, the handles, s
 ground tools outside). Drag a group by its **⋮⋮** grip to put it anywhere; it stays there. Right-click a group to put it
 back in the row, arrange them all automatically, or lock them in place.
 
+**The minimap** shows the place round you from above, with which way you look. Drag it by its title bar anywhere;
+let go near a corner and it docks there. **◱** makes it bigger or smaller, **+ / −** zoom, **✕** hides it (the View tab
+brings it back), and a click on it takes you there.
+
 ## Moving about
 
 | Do | To |
