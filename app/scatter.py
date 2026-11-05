@@ -12,8 +12,10 @@ PLANT_WORDS = ('bush', 'shrub', 'agave', 'cactus', 'yucca', 'nettle', 'plant', '
 
 def kind(btype, edid, model):
     """Which set a base form belongs to, or None (buildings, markers, things that do something)."""
-    if btype not in ('STAT', 'MSTT') or not model:
+    if btype not in ('STAT', 'MSTT', 'TREE') or not model:
         return None
+    if btype == 'TREE':                          # (SpeedTree: the sagebrush shrubs are these too)
+        return 'plants' if any(w in edid.lower() for w in ('shrub', 'bush', 'undergrowth')) else 'trees'
     m, e = model.lower().replace('/', '\\'), edid.lower()
     if 'marker' in e or 'collision' in e or 'fx' in e[:3]:
         return None
@@ -73,7 +75,10 @@ def learn(gd, world, cx, cy, reach=3, top=12):
     out = {k: [] for k, _l in SETS}
     for fid, s in seen.items():
         dz = sorted(s['dz'])
+        if s['type'] == 'TREE':
+            s['tree'] = gd.tree(fid)
         out[s['kind']].append({'key': gd.key(fid), 'edid': s['edid'], 'model': s['model'], 'type': s['type'], 'n': s['n'],
+                               'tree': s.get('tree'),
                                'smin': round(min(s['scales']), 2), 'smax': round(max(s['scales']), 2),
                                'dz': round(dz[len(dz) // 2], 1) if dz else 0.0, 'tilt': round(min(s['tilt'], 0.6), 2)})
     for k in out:

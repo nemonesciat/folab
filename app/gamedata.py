@@ -139,6 +139,23 @@ class GameData:
         return (rec.tag, tes4.zstr(f.get('EDID', b'')), tes4.zstr(f.get('FULL', b'')),
                 tes4.zstr(m) if rec.tag in MODEL_TYPES else '')
 
+    def tree(self, fid):
+        """A SpeedTree tree (TREE) as FOLab draws it: the flat picture the game shows of it from afar (its
+        billboard: the .dds named like its .spt, in textures/trees/billboards) and that picture's size (BNAM; the
+        height at least half its bounds' height)."""
+        f = self.fields(fid)
+        model = tes4.zstr(f.get('MODL', b''))
+        stem = model.replace('/', chr(92)).rsplit(chr(92), 1)[-1].rsplit('.', 1)[0].lower()
+        tex = chr(92).join(['textures', 'trees', 'billboards', stem + '.dds'])
+        w = h = 256.0
+        if 'BNAM' in f and len(f['BNAM']) >= 8:
+            w, h = struct.unpack_from('<2f', f['BNAM'])
+        if 'OBND' in f and len(f['OBND']) >= 12:
+            b = struct.unpack_from('<6h', f['OBND'])
+            if b[5] > b[2]:
+                h = max(h * 0.5, b[5] - b[2])
+        return {'tex': tex if self.find_file(tex) else '', 'w': w, 'h': h}
+
     def navmeshes(self, cell):
         return [e for e in self.cell_refs.get(cell, {}).values() if e[1].tag == 'NAVM']
 

@@ -30,3 +30,8 @@ new = [r for r in gd2.refs(cell) if r['ref'] >> 24 == me]
 check('written as a plain ref of the rock', len(new) == 1 and gd2.describe(new[0]['base'])[1] == rock['edid'] and abs(new[0]['scale'] - 0.8) < 1e-5)
 for p in gd2.plugins:
     p.close()
+# SpeedTree trees: drawn from their billboard, sized from BNAM; the sagebrush is a plant the brush offers
+shrub = next(f for f, (i, r) in gd.forms.items() if r.tag == 'TREE' and gd.edid(f) == 'WastelandShrub01')
+tr = gd.tree(shrub)
+check('the shrub\'s billboard is found, 175 across', tr['tex'].endswith('wastelandshrub01.dds') and gd.find_file(tr['tex']) and tr['w'] == 175)
+check('the sagebrush is the plant used most round Goodsprings', names['plants'][0] == 'WastelandShrub01' and found['plants'][0]['tree'])

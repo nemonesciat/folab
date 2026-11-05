@@ -45,6 +45,7 @@ function leaveOutside(){
   for (const c of OUT.cells.values()) if (c.land) W.scene.remove(c.land);
   W.lands = null;
   if (typeof groundOff === 'function') groundOff();
+  if (typeof farClear === 'function') farClear();
   OUT.cells.clear(); OUT.queue = [];
   W.scene.fog = null; W.scene.background = new T.Color(0x0e0c0a);
   W.outdoors = false; assignLights();
@@ -63,14 +64,16 @@ function goOutside(info, at){
   if (W.grid){ W.scene.remove(W.grid); W.grid = null; }
   W.cell = {things: []};
   OUT.world = info.id; OUT.token++;
+  OUT.since = performance.now();
   if (typeof M !== 'undefined'){ M.tiles.clear(); M.want = []; M.dirty = true; }
   W.lands = new Set();
   $('#t-ground').style.display = '';
   A.cellId = null; A.things = []; A.outside = info;
   W.scene.background = new T.Color(SKY);
-  W.scene.fog = new T.Fog(SKY, CELL * 2, CELL * (LAND_R + 0.5));
+  // (the distant hills reach about 40 cells: the haze thickens out to there)
+  W.scene.fog = new T.Fog(SKY, CELL * 3, CELL * 40);
   W.outdoors = true; assignLights();                         // (the desert sun)
-  W.cam.far = CELL * (LAND_R + 1); W.cam.updateProjectionMatrix();
+  W.cam.far = CELL * 44; W.cam.updateProjectionMatrix();
   // stand above the spot (the ground's height isn't known yet: the camera settles onto it once the cell is in)
   W.cam.position.set(at.p[0], at.p[1], (at.p[2] || 0) + 200);
   W.yaw = Math.PI / 2 - (at.facing ? at.p[5] || 0 : 0); W.pitch = -0.15;
@@ -95,7 +98,7 @@ function outsideTick(){
     const d = Math.max(Math.abs(c.x - cx), Math.abs(c.y - cy));
     if (d > LAND_R + 1){ cellDrop(c); OUT.cells.delete(k); continue; }
     // (things once the ground round you is in: their many mesh downloads would otherwise hold the ground back)
-    if (c.data && d <= THING_R && !c.shown && !landPending(cx, cy) && !(M.on && (!cs3dThings() || M.loading || M.want.length))) cellThings(c);   // (the map, zoomed out, shows none)
+    if (c.data && d <= THING_R && !c.shown && !landPending(cx, cy) && !(M.on && (!cs3dThings() || M.loading || M.want.length)) && !(FAR.tiles.size && farPending() && performance.now() - OUT.since < 20000)) cellThings(c);   // (the map, zoomed out, shows none)
     if (c.shown && d > THING_R + 1) cellThingsOff(c);
   }
   while (OUT.busy < 2 && OUT.queue.length) cellLoad(OUT.queue.splice(0, 9));
@@ -125,7 +128,7 @@ async function cellLoad(list){
   cells.forEach((c, n) => {
     if (OUT.cells.get(c.x + ',' + c.y) !== c) return;
     c.data = got[n] || {land: null, things: []};
-    if (c.data.land){ c.land = landMesh(c.data.land, c.x, c.y); c.land.userData.cell = c; W.scene.add(c.land); W.lands.add(c.land); }
+    if (c.data.land){ c.land = landMesh(c.data.land, c.x, c.y); c.land.userData.cell = c; W.scene.add(c.land); W.lands.add(c.land); FAR.at = null; }
     if (OUT.settle && c.data.land){
       const [cx, cy] = camCell();
       if (cx === c.x && cy === c.y){ W.cam.position.z = groundAt(c.data.land, c.x, c.y, W.cam.position.x, W.cam.position.y) + 220; OUT.settle = false; }
@@ -244,6 +247,7 @@ async function outsideResync(){
         JSON.stringify(c.data.land.h) + c.data.land.c + JSON.stringify(c.data.land.q)){
       c.data.land = got[n].land; c.data.changed_land = got[n].changed_land; landRebuild(c);
       if (typeof mapLandChanged === 'function') mapLandChanged();
+      if (typeof farLandChanged === 'function') farLandChanged();
     }
     if (!c.shown) return;
     for (const k of c.keys) if (!keys.has(k)) dropThing(k);

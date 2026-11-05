@@ -76,7 +76,21 @@ const STANDIN = new T.CylinderGeometry(14, 14, 128, 10).rotateX(Math.PI / 2).tra
 const STANDIN_MAT = new T.MeshLambertMaterial({color: 0x7fa7d6, transparent: true, opacity: 0.55});
 // a light with nothing of its own to draw: a small glowing bulb (the game shows nothing there, only its light)
 const BULB = new T.SphereGeometry(7, 10, 8);
+// a SpeedTree tree: two crossed planes with the picture the game shows of it from afar
+const TREE_STANDIN = {};
+function treeParts(tr){
+  const k = tr.tex + '|' + tr.w + '|' + tr.h;
+  if (!TREE_STANDIN[k]){
+    const a = new T.PlaneGeometry(tr.w, tr.h).rotateX(Math.PI / 2).translate(0, 0, tr.h / 2);
+    const b = a.clone().rotateZ(Math.PI / 2);
+    for (const g of [a, b]) g.computeBoundingBox();
+    const m = tr.tex ? material(tr.tex, 'test', true) : new T.MeshLambertMaterial({color: 0x6f7a4a, side: T.DoubleSide});
+    TREE_STANDIN[k] = [[a, m, false], [b, m, false]];
+  }
+  return TREE_STANDIN[k];
+}
 async function thingParts(t){
+  if (t.tree) return {parts: treeParts(t.tree), scale: 1};
   if (t.type === 'LIGH' && !t.model){
     const c = t.light ? t.light.color : [255, 230, 180];
     return {parts: [[BULB, new T.MeshBasicMaterial({color: new T.Color(c[0] / 255, c[1] / 255, c[2] / 255)}), false]], scale: 1};

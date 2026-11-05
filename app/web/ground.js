@@ -265,6 +265,7 @@ async function gbCommit(){
   const d = await edit(label, ops);
   if (d) for (const c of cells) c.data.changed_land = true;
   if (d && typeof mapLandChanged === 'function') mapLandChanged();
+  if (d && typeof farLandChanged === 'function') farLandChanged();
 }
 
 // the brush's reach, drawn on the ground
@@ -346,7 +347,7 @@ function scApply(at){
     const tilt = b.tilt > 0.05 ? b.tilt : 0;
     const p = [x, y, z + Math.min(b.dz, 4), (Math.random() * 2 - 1) * tilt, (Math.random() * 2 - 1) * tilt, Math.random() * Math.PI * 2]
       .map(v => Math.round(v * 1000) / 1000);
-    const t = {key: '~sc' + (++SC.temp), bkey: b.key, base: b.edid, type: b.type, name: '', model: b.model, p,
+    const t = {key: '~sc' + (++SC.temp), bkey: b.key, base: b.edid, type: b.type, name: '', model: b.tree ? '' : b.model, tree: b.tree || undefined, p,
                s: Math.round((b.smin + Math.random() * (b.smax - b.smin)) * 100) / 100, marker: false, state: 'new', sc: true};
     addThing(t, W.token);
     s.placed.push(t); near.push([x, y]); made++;

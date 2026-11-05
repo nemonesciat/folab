@@ -170,7 +170,19 @@ def thing(key, bkey, p, s, state):
         t['actor'] = True
     if btype == 'LIGH':
         t['light'] = light_of(bkey)
+    if btype == 'TREE':
+        t['model'], t['tree'] = '', tree_of(bkey, model)
     return t
+
+
+_trees = {}
+
+
+def tree_of(bkey, model):
+    """A SpeedTree tree as FOLab draws it (gamedata.tree)."""
+    if bkey not in _trees:
+        _trees[bkey] = GD.tree(GD.from_key(bkey))
+    return _trees[bkey]
 
 
 def cell_things(ckey):
@@ -183,7 +195,7 @@ def cell_things(ckey):
         if r['base'] not in GD.forms or not r['pos']:
             continue
         btype, _e, _n, model = GD.describe(r['base'])
-        if (not model and btype not in ACTORS and btype != 'LIGH') or btype == 'TREE':
+        if not model and btype not in ACTORS and btype != 'LIGH':
             continue
         k = GD.key(r['ref'])
         ch = mine.get(k)
@@ -310,6 +322,41 @@ def map_tile(wkey, tx, ty):
             _tiles.clear()
         _tiles[k] = _painter.tile(w, tx, ty, mine)
     return _tiles[k]
+
+
+_far = {}
+
+
+def far_land(wkey, tx, ty):
+    """The far ground of a map tile: heights every 8th point (4 a cell, 65 x 65 for the tile, rows from the south),
+    the mod's ground in them; None where there's no land (drawn as a hole)."""
+    w = GD.from_key(wkey)
+    mine = _mine_in_tile(w, tx, ty)
+    k = (wkey, tx, ty, hashlib.md5(json.dumps({c: L['h'] for c, L in mine.items()}).encode()).hexdigest() if mine else '')
+    if k in _far:
+        return _far[k]
+    n = maptiles.TILE * 4 + 1
+    out = [None] * (n * n)
+    grid = GD.grid(w)
+    for i in range(maptiles.TILE):
+        for j in range(maptiles.TILE):
+            cx, cy = tx * maptiles.TILE + i, ty * maptiles.TILE + j
+            c = grid.get((cx, cy))
+            L = mine.get(GD.key(c)) if c is not None else None
+            if L:
+                h = L['h']
+            else:
+                e = GD.land_at(w, cx, cy)
+                if not e:
+                    continue
+                h = land.heights_of(dict(tes4.iter_subrecords(GD.plugins[e[0]].data(e[1])))['VHGT'])
+            for r in range(5):
+                for q in range(5):
+                    out[(j * 4 + r) * n + i * 4 + q] = round(h[(r * 8) * 33 + q * 8])
+    if len(_far) > 300:
+        _far.clear()
+    _far[k] = {'n': n, 'h': out}
+    return _far[k]
 
 
 def _mine_in_tile(w, tx, ty):
@@ -857,6 +904,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(actor_parts(q['key']))
             if u.path == '/api/maptile':
                 return self.send(map_tile(q['world'], int(q['tx']), int(q['ty'])), 'image/png')
+            if u.path == '/api/farland':
+                return self.send(far_land(q['world'], int(q['tx']), int(q['ty'])))
             if u.path == '/api/goto':
                 return self.send(goto(q.get('q', ''), q.get('world') or None))
             if u.path == '/api/scatter':
