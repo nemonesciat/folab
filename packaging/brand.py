@@ -65,7 +65,8 @@ def mark_svg():
     """The F-wrench before the gear, 230 x 210, in currentColor: the gear an outline, big and fat-toothed, tucked
     behind the wrench (a rim of the header's colour round the wrench keeps them apart)."""
     g = gear(150, 104, 88, 70, 10, 30)
-    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 204">'
+    x0, y0, x1, y1 = _mark_box()
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="%.0f %.0f %.0f %.0f">' % (x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4) +
             '<path fill="none" stroke="currentColor" stroke-width="11" stroke-linejoin="round" d="%s"/>'
             '<path fill="currentColor" fill-rule="evenodd" stroke="var(--bg3,#1d1914)" stroke-width="9" paint-order="stroke" '
             'stroke-linejoin="round" d="%s"/>'
@@ -78,7 +79,8 @@ ICON_BG, ICON_RIM, ICON_GEAR, ICON_WRENCH = (27, 24, 19), (70, 60, 46), (210, 16
 
 
 ICON_GOLD, ICON_LIGHT = (210, 168, 90), (240, 205, 135)
-MARK_SCALE = 0.86                  # (the mark in the 256 x 256 icon, centred on its own extent)
+MARK_SCALE = 0.84                  # (the mark in the 256 x 256 icon, centred on its own extent...)
+MARK_NUDGE = (12, 6)               # (...then moved toward where its weight is: the solid wrench outweighs the gear's outline)
 
 
 def _mark_box():
@@ -92,7 +94,7 @@ def _mark_box():
 def _fit(polys):
     x0, y0, x1, y1 = _mark_box()
     s = MARK_SCALE
-    ox, oy = 128 - (x0 + x1) / 2 * s, 128 - (y0 + y1) / 2 * s
+    ox, oy = 128 - (x0 + x1) / 2 * s + MARK_NUDGE[0], 128 - (y0 + y1) / 2 * s + MARK_NUDGE[1]
     return [[(ox + x * s, oy + y * s) for x, y in poly] for poly in polys]
 
 

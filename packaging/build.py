@@ -197,6 +197,8 @@ def main():
     ver = version()
     log('FOLab', ver)
     shutil.rmtree(OUT, ignore_errors=True)
+    if os.path.exists(STAGE):
+        raise SystemExit('packaging\out\FOLab is in use (is FOLab.exe from it still running?): close it and build again.')
     os.makedirs(STAGE)
     icon = os.path.join(APP, 'web', 'vendor', 'folab.ico')
     if not os.path.exists(icon):
