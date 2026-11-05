@@ -31,6 +31,7 @@ function texture(path){
 
 function material(tex, alpha, double){
   const k = tex + '|' + alpha + '|' + double;
+  if (!tex && alpha === 'skin') return W.mats[k] = W.mats[k] || new T.MeshLambertMaterial({color: 0xc8a888});
   if (W.mats[k]) return W.mats[k];
   // plain sand colour until the texture arrives (and for the few shapes that have none)
   const m = new T.MeshLambertMaterial({color: 0xb8a888, side: double || alpha === 'blend' ? T.DoubleSide : T.FrontSide});
@@ -41,10 +42,13 @@ function material(tex, alpha, double){
 }
 
 // ---------- meshes: built once per file, shared by every thing that uses it ----------
-function model(path){
-  if (!W.models[path]) W.models[path] = api('/api/mesh?path=' + encodeURIComponent(path)).then(d => {
+// (tex: a texture to use instead of the mesh's own, for a race's skin)
+function model(path, tex){
+  const key = path + (tex ? '|' + tex : '');
+  if (!W.models[key]) W.models[key] = api('/api/mesh?path=' + encodeURIComponent(path)).then(d => {
     const parts = [];
     for (const s of d.shapes || []){
+      if (tex) s.tex = tex;
       const g = new T.BufferGeometry();
       g.setAttribute('position', new T.Float32BufferAttribute(s.p, 3));
       if (s.uv.length === s.p.length / 3 * 2) g.setAttribute('uv', new T.Float32BufferAttribute(s.uv, 2));
@@ -55,11 +59,39 @@ function model(path){
     }
     return parts;
   }).catch(() => []);
-  return W.models[path];
+  return W.models[key];
 }
 
+// a character or creature: every part of it (body, head, hair, apparel...), and how much bigger or smaller it is
+const ACTOR_Q = {};
+async function actorModel(bkey){
+  if (!ACTOR_Q[bkey]) ACTOR_Q[bkey] = api('/api/actor?key=' + encodeURIComponent(bkey)).then(async d => {
+    const lists = await Promise.all((d.parts || []).map(p => model(p.model, p.tex)));
+    return {parts: lists.flat(), scale: d.scale || 1};
+  }).catch(() => ({parts: [], scale: 1}));
+  return ACTOR_Q[bkey];
+}
+// what stands in for a thing with nothing to draw: a post as tall as a person, so it can still be found and moved
+const STANDIN = new T.CylinderGeometry(14, 14, 128, 10).rotateX(Math.PI / 2).translate(0, 0, 64);
+const STANDIN_MAT = new T.MeshLambertMaterial({color: 0x7fa7d6, transparent: true, opacity: 0.55});
+// a light with nothing of its own to draw: a small glowing bulb (the game shows nothing there, only its light)
+const BULB = new T.SphereGeometry(7, 10, 8);
+async function thingParts(t){
+  if (t.type === 'LIGH' && !t.model){
+    const c = t.light ? t.light.color : [255, 230, 180];
+    return {parts: [[BULB, new T.MeshBasicMaterial({color: new T.Color(c[0] / 255, c[1] / 255, c[2] / 255)}), false]], scale: 1};
+  }
+  if (t.actor || A_ACTORS.has(t.type)){
+    const a = await actorModel(t.bkey || t.key);
+    return {parts: a.parts.length ? a.parts : [[STANDIN, STANDIN_MAT, false]], scale: a.scale};
+  }
+  return {parts: await model(t.model), scale: 1};
+}
+const A_ACTORS = new Set(['NPC_', 'CREA']);
+
 // how far a model's underside is below its origin, so it can be stood on a surface
-async function modelLift(path){
+async function modelLift(path, item){
+  if (item && A_ACTORS.has(item.type)) return 0;          // (characters and creatures: feet at 0)
   const parts = await model(path), b = new T.Box3();
   for (const [g] of parts) b.union(g.boundingBox);
   return b.isEmpty() ? 0 : -b.min.z;
@@ -80,6 +112,12 @@ function worldInit(box){
   W.scene.add(new T.HemisphereLight(0xfff1dd, 0x3a3428, 0.85));
   const sun = new T.DirectionalLight(0xffffff, 0.45); sun.position.set(0.4, -0.6, 1); W.scene.add(sun);
   W.lamp = new T.PointLight(0xffe2b0, 0.6, 3000); W.scene.add(W.lamp);
+  W.hemi = W.scene.children.find(o => o.isHemisphereLight); W.sun = sun;
+  // the game's lights: a fixed handful of point lights, given each moment to the lights nearest the camera (a fixed
+  // number, so the shaders never have to be rebuilt; hundreds of live lights would bring the view to a crawl)
+  W.pool = [];
+  for (let i = 0; i < 12; i++){ const l = new T.PointLight(0xffffff, 0, 1, 2); W.scene.add(l); W.pool.push(l); }
+  W.gameLight = true;
   W.outline = new T.Box3Helper(new T.Box3(), 0xf0cd87); W.outline.visible = false; W.scene.add(W.outline);
   W.pivot = new T.Object3D(); W.scene.add(W.pivot);
   W.gizmo = new T.TransformControls(W.cam, W.ren.domElement);
@@ -99,6 +137,7 @@ function worldInit(box){
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     move(dt);
     W.lamp.position.copy(W.cam.position);
+    if (now - (W.lightsAt || 0) > 300){ W.lightsAt = now; assignLights(); }
     W.ren.render(W.scene, W.cam);
     requestAnimationFrame(frame);
   };
@@ -263,11 +302,34 @@ function boxSelect(x0, y0, x1, y1, add){
   select(keys);
 }
 
+// ---------- the game's lights ----------
+function assignLights(){
+  const on = W.gameLight, cam = W.cam.position, list = [];
+  if (on && W.group) for (const g of W.group.children){
+    const t = g.userData.thing, L = t.light;
+    if (!L || L.off || L.negative || !L.radius || t.state === 'removed') continue;
+    const d = g.position.distanceTo(cam) - L.radius;
+    list.push([d, g, L]);
+  }
+  list.sort((a, b) => a[0] - b[0]);
+  W.pool.forEach((l, i) => {
+    const e = list[i];
+    if (!e){ l.intensity = 0; return; }
+    const [, g, L] = e;
+    l.position.copy(g.position);
+    l.color.setRGB(L.color[0] / 255, L.color[1] / 255, L.color[2] / 255);
+    l.distance = L.radius * 1.2; l.decay = 1.2; l.intensity = 1.6;
+  });
+  // with the game's light on, the room is lit mostly by its own lights
+  W.hemi.intensity = on ? 0.35 : 0.85; W.sun.intensity = on ? 0.15 : 0.45; W.lamp.intensity = on ? 0.15 : 0.6;
+}
+function setGameLight(on){ W.gameLight = on; assignLights(); }
+
 // ---------- things ----------
 function setTransform(g, t){
   g.position.set(t.p[0], t.p[1], t.p[2]);
   g.rotation.set(-t.p[3], -t.p[4], -t.p[5], 'XYZ');      // the game turns the other way round each axis
-  g.scale.setScalar(t.s || 1);
+  g.scale.setScalar((t.s || 1) * (g.userData.bodyScale || 1));
 }
 
 function thingVisible(t){ return (!t.marker || W.show.markers) && (t.state !== 'removed' || W.show.removed) && !W.hidden.has(t.key); }
@@ -279,8 +341,9 @@ async function addThing(t, token){
   g.visible = thingVisible(t);
   W.group.add(g);
   W.byKey.set(t.key, g);
-  const parts = await model(t.model);
+  const {parts, scale} = await thingParts(t);
   if (token !== W.token || !g.parent) return g;
+  if (scale !== 1){ g.userData.bodyScale = scale; setTransform(g, t); }
   for (const [geo, mat, blend] of parts){ const m = new T.Mesh(geo, mat); if (blend) m.renderOrder = 1; g.add(m); }
   if (t.state === 'removed') ghostly(g, true);
   if (W.sel.includes(g)) refreshSel();
@@ -453,13 +516,14 @@ function pointUnder(e){
 async function startPlacing(item){
   W.placing = item;
   select([]);
-  const parts = await model(item.model);
+  const {parts, scale} = await thingParts(item);
   if (W.placing !== item) return;
   if (W.ghost) W.scene.remove(W.ghost);
   const g = new T.Group();
   for (const [geo, mat] of parts) g.add(new T.Mesh(geo, mat));
   g.traverse(m => { if (m.isMesh) m.raycast = () => {}; });
-  W.ghostLift = await modelLift(item.model);
+  g.scale.setScalar(scale);
+  W.ghostLift = await modelLift(item.model, item);
   g.visible = false;
   W.ghost = g; W.scene.add(g);
 }

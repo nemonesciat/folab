@@ -5,7 +5,8 @@
 // are the two or three a kind of thing is right-clicked for most.
 const CM_GROUPS = [['This door', '🚪'], ['Look and open', '👁'], ['Edit', '✎'], ['Move and place', '⟳'],
                    ['Replace and select', '⇄'], ['This place', '🏠'], ['View', '▤']];
-const CM_QUICK = {DOOR: ['Go where it leads', 'Open its window'], '': ['Open its window', 'Look at it']};
+const CM_QUICK = {DOOR: ['Go where it leads', 'Open its window'], NPC_: ['Open its record', 'Open its window'],
+                  CREA: ['Open its record', 'Open its window'], '': ['Open its window', 'Open its record']};
 const CM = {el: null, items: [], recent: []};
 try { CM.recent = JSON.parse(localStorage.getItem('folab-cm-recent') || '[]'); } catch (e) {}
 
@@ -17,7 +18,7 @@ function cmEntries(key, point){
   const add = (group, label, run, opt) => E.push(Object.assign({group, label, run}, opt || {}));
   if (key){
     if (one && one.door) add('This door', 'Go where it leads', () => goThroughDoor(one));
-    if (one){ add('Look and open', 'Open its window', () => owOpen(one.key)); }
+    if (one){ add('Look and open', 'Open its window', () => owOpen(one.key)); add('Look and open', 'Open its record', () => openRecord(one.bkey)); }
     add('Look and open', 'Look at it', focusSel);
     add('Edit', n > 1 ? `Copy ${n}` : 'Copy', copySel);
     if (A.clip) add('Edit', 'Paste here', () => { W.mouse = CM.at; paste(); });

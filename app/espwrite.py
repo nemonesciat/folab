@@ -138,7 +138,10 @@ class Writer:
             subs.append(('XSCL', struct.pack('<f', r['s'])))
         subs.append(('DATA', struct.pack('<6f', *r['p'])))
         flags = tes4.PERSISTENT if r.get('persistent') else 0
-        return plugintree.Rec.new('REFR', flags, self.own(int(rkey[1:], 16)), join(subs), FORM_VERSION)
+        # (a character is placed as an ACHR, a creature as an ACRE, everything else as a REFR)
+        btype = (self.pr.records.get(r['base']) or {}).get('type') if r['base'].startswith('+') else             self.gd.forms[self.gd.from_key(r['base'])][1].tag
+        tag = {'NPC_': 'ACHR', 'CREA': 'ACRE'}.get(btype, 'REFR')
+        return plugintree.Rec.new(tag, flags, self.own(int(rkey[1:], 16)), join(subs), FORM_VERSION)
 
     def changed_ref(self, subs, flags, r):
         """A ref's subrecords and flags with the mod's change laid over: moved, rescaled, swapped, removed."""

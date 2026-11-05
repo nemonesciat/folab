@@ -6,6 +6,7 @@ Game files are only read. Projects live in FOLab's projects folder; Save writes 
 and Install (the user's choice) copies it into the game."""
 import json
 import os
+import struct
 import sys
 import threading
 import time
@@ -17,6 +18,7 @@ import gamedata
 import install
 import nif
 import project
+import actors
 import adopt
 import browse
 import recordio
@@ -35,13 +37,15 @@ PLACEABLE = {'STAT': 'Statics', 'MSTT': 'Movable statics', 'FURN': 'Furniture', 
              'TERM': 'Terminals', 'BOOK': 'Books', 'NOTE': 'Notes', 'WEAP': 'Weapons', 'ARMO': 'Apparel',
              'ALCH': 'Aid', 'AMMO': 'Ammo', 'KEYM': 'Keys', 'IDLM': 'Idle markers', 'PWAT': 'Placeable water',
              'ADDN': 'Addon nodes', 'IMOD': 'Weapon mods', 'CHIP': 'Chips', 'CMNY': 'Caravan money',
-             'CCRD': 'Caravan cards'}
+             'CCRD': 'Caravan cards', 'NPC_': 'Characters', 'CREA': 'Creatures'}
+ACTORS = {'NPC_', 'CREA'}
 
 GD = None
 PR = None
 BR = None
 CATALOGUE = []                          # [key, type, edid, name, model] of every placeable game object
 _meshes = {}
+_actors = {}                            # base key -> parts (actors.py)
 _lock = threading.RLock()
 
 
@@ -72,6 +76,9 @@ def build_catalogue():
         if rec.tag not in PLACEABLE:
             continue
         btype, edid, name, model = GD.describe(fid)
+        if btype in ACTORS:
+            out.append([GD.key(fid), btype, edid, name, ''])
+            continue
         if not model or is_marker(btype, edid, model):
             continue
         out.append([GD.key(fid), btype, edid, name, GD.model_path(btype, model)])
@@ -97,15 +104,57 @@ def base_info(bkey):
     """(type, editor ID, name, model) of a base form as the mod leaves it: its own records and changes first."""
     rec = PR.records.get(bkey) if PR else None
     if rec:
-        return rec['type'], recordio.field(rec, 'EDID'), recordio.field(rec, 'FULL'), recordio.field(rec, 'MODL')
+        model = (recordio.field(rec, 'MOD2') if rec['type'] == 'ARMO' else '') or recordio.field(rec, 'MODL')
+        return rec['type'], recordio.field(rec, 'EDID'), recordio.field(rec, 'FULL'), model
     return GD.describe(GD.from_key(bkey))
+
+
+def light_of(bkey):
+    """A light's radius, colour and flags, as the mod leaves it (None when it isn't a light)."""
+    rec = PR.records.get(bkey) if PR else None
+    if rec:
+        d = next((s for s in rec['subs'] if s['tag'] == 'DATA' and s['kind'] == 'struct'), None)
+        if not d:
+            return None
+        v = {f['name']: f['value'] for f in d['fields'] if 'name' in f}
+    else:
+        fid = GD.from_key(bkey)
+        data = GD.fields(fid).get('DATA', b'')
+        if len(data) < 32:
+            return None
+        t, radius, r, g, b, _x, flags, falloff, fov = struct.unpack_from('<iIBBBBIff', data)
+        v = {'Radius': radius, 'Red': r, 'Green': g, 'Blue': b, 'Flags': flags, 'Falloff exponent': falloff}
+    flags = v.get('Flags', 0)
+    return {'radius': v.get('Radius', 0), 'color': [v.get('Red', 255), v.get('Green', 255), v.get('Blue', 255)],
+            'off': bool(flags & 0x20), 'negative': bool(flags & 0x4), 'falloff': v.get('Falloff exponent', 1)}
+
+
+def actor_parts(bkey):
+    """The meshes a character or creature is drawn from (the game's form, or a record of the mod's own copied from
+    one: drawn as the one it was copied from, by its editor ID's original)."""
+    if bkey not in _actors:
+        try:
+            if bkey.startswith('+'):
+                bkey_draw = (PR.records.get(bkey) or {}).get('copied_from', '') if PR else ''
+                fid = GD.from_key(bkey_draw) if bkey_draw else None
+            else:
+                fid = GD.from_key(bkey)
+            _actors[bkey] = actors.parts(GD, fid) if fid in GD.forms else {'parts': [], 'scale': 1.0}
+        except Exception as e:
+            _actors[bkey] = {'parts': [], 'scale': 1.0, 'error': str(e)}
+    return _actors[bkey]
 
 
 def thing(key, bkey, p, s, state):
     btype, edid, name, model = base_info(bkey)
-    return {'key': key, 'bkey': bkey, 'base': edid, 'type': btype, 'name': name,
-            'model': GD.model_path(btype, model) if model else '', 'p': list(p), 's': s,
-            'marker': is_marker(btype, edid, model), 'state': state}
+    t = {'key': key, 'bkey': bkey, 'base': edid, 'type': btype, 'name': name,
+         'model': GD.model_path(btype, model) if model else '', 'p': list(p), 's': s,
+         'marker': is_marker(btype, edid, model), 'state': state}
+    if btype in ACTORS:
+        t['actor'] = True
+    if btype == 'LIGH':
+        t['light'] = light_of(bkey)
+    return t
 
 
 def cell_things(ckey):
@@ -118,7 +167,7 @@ def cell_things(ckey):
         if r['base'] not in GD.forms or not r['pos']:
             continue
         btype, _e, _n, model = GD.describe(r['base'])
-        if not model or btype == 'TREE':
+        if (not model and btype not in ACTORS and btype != 'LIGH') or btype == 'TREE':
             continue
         k = GD.key(r['ref'])
         ch = mine.get(k)
@@ -230,6 +279,7 @@ def load_game(pr):
     CATALOGUE = build_catalogue()
     BR = browse.Browse(GD, lambda: PR)
     _meshes.clear()
+    _actors.clear()
     print('loaded %d plugins (%.1fs)' % (len(GD.plugins), time.time() - t), flush=True)
 
 
@@ -275,6 +325,7 @@ def record_copy(key):
         edid = '%sCopy%d' % (base, n)
     recordio.set_field(rec, 'EDID', edid, label='Editor ID')
     rec['src'] = rec.get('src') or ''
+    rec['copied_from'] = (PR.records.get(key) or {}).get('copied_from') or key   # (drawn like the one it came from)
     return edit('Copy ' + base, [{'op': 'record_new', 'record': rec}])
 
 
@@ -337,6 +388,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(BR.where_used(q['key']))
             if u.path == '/api/search':
                 return self.send(search(q.get('q', ''), q.get('kind', '')))
+            if u.path == '/api/actor':
+                with _lock:
+                    return self.send(actor_parts(q['key']))
             if u.path == '/api/mesh':
                 return self.send(mesh(q['path']), cache=True)
             if u.path == '/api/file':

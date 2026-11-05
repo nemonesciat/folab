@@ -23,7 +23,7 @@ async function owOpen(key){
     <div class="owbody">
       <div class="owcol"><div class="h">Record · ${esc(b.type)}</div>
         ${kv('Editor ID', b.edid)}${kv('Name', b.name)}${kv('Model', b.model)}${kv('From', b.from)}
-        <div class="note">Editing the record itself comes with the Browse page.</div></div>
+        <p><a href="#" data-a="record">Open its record</a> to change it (everywhere it's used).</p></div>
       <div class="owcol"><div class="h">Placed here · ${esc(t.key)}</div>
         <div class="fields">
           <label>Position</label><input data-i="0" value="${t.p[0].toFixed(1)}"><input data-i="1" value="${t.p[1].toFixed(1)}"><input data-i="2" value="${t.p[2].toFixed(1)}">
@@ -49,6 +49,7 @@ async function owOpen(key){
     ev.preventDefault();
     if (a === 'cancel') owClose();
     else if (a === 'save') owSave();
+    else if (a === 'record'){ const k = OW.data.base.key; owClose(); openRecord(k); }
     else if (a === 'go'){ const th = W.byKey.get(OW.key); owClose(); if (th) goThroughDoor(th.userData.thing); }
   });
   el.addEventListener('keydown', ev => { if (ev.key === 'Escape') owClose(); if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') owSave(); ev.stopPropagation(); });

@@ -116,8 +116,10 @@ class GameData:
         """(type, editor ID, display name, model path or '') for a base form."""
         i, rec = self.forms[fid]
         f = self.plugins[i].fields(rec)
+        # (apparel lying in the world uses its ground model, MOD2; MODL is the one worn)
+        m = f.get('MOD2') or f.get('MODL', b'') if rec.tag == 'ARMO' else f.get('MODL', b'')
         return (rec.tag, tes4.zstr(f.get('EDID', b'')), tes4.zstr(f.get('FULL', b'')),
-                tes4.zstr(f.get('MODL', b'')) if rec.tag in MODEL_TYPES else '')
+                tes4.zstr(m) if rec.tag in MODEL_TYPES else '')
 
     def navmeshes(self, cell):
         return [e for e in self.cell_refs.get(cell, {}).values() if e[1].tag == 'NAVM']

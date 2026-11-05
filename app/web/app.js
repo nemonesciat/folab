@@ -157,8 +157,60 @@ function drawSelected(list){
       <button class="btn" data-a="del">✕ Remove</button>`}
       ${t.state === 'moved' ? '<button class="btn" data-a="revert" title="Put it back where the game has it">↺ As the game has it</button>' : ''}
       <button class="btn" data-a="focus">Focus</button>
-    </div>`;
+      <button class="btn" data-a="record" title="Open ${esc(t.base)}'s record on the Browse page">Open its record</button>
+    </div>
+    <div id="sel-rec"></div>`;
+  selRecord(t);
 }
+
+// ---------- the selected thing's record: its main values, editable here ----------
+// (what each kind is most often changed for; the rest is on the Browse page)
+const KEY_FIELDS = {
+  WEAP: [['DATA', 'Damage'], ['DATA', 'Value'], ['DATA', 'Weight'], ['DATA', 'Health'], ['DATA', 'Clip size'], ['CRDT', 'Critical damage']],
+  ARMO: [['DATA', 'Value'], ['DATA', 'Weight'], ['DATA', 'Health'], ['DNAM', 'DT'], ['DNAM', 'DR']],
+  AMMO: [['DATA', 'Value'], ['DATA', 'Clip rounds']], ALCH: [['ENIT', 'Value'], ['DATA', 'Weight']],
+  MISC: [['DATA', 'Value'], ['DATA', 'Weight']], KEYM: [['DATA', 'Value'], ['DATA', 'Weight']], BOOK: [['DATA', 'Value'], ['DATA', 'Weight']],
+  CONT: [['DATA', 'Weight']],
+  NPC_: [['ACBS', 'Level'], ['DATA', 'Health'], ['ACBS', 'Karma'], ['ACBS', 'Barter gold'], ['AIDT', 'Aggression'], ['AIDT', 'Confidence']],
+  CREA: [['ACBS', 'Level'], ['DATA', 'Health'], ['DATA', 'Damage'], ['AIDT', 'Aggression'], ['AIDT', 'Confidence']],
+  LIGH: [['DATA', 'Radius'], ['DATA', 'Red'], ['DATA', 'Green'], ['DATA', 'Blue'], ['DATA', 'Falloff exponent'], ['DATA', 'FOV']],
+};
+const REC_CACHE = {};
+function recCacheDrop(key){ delete REC_CACHE[key]; }
+async function selRecord(t){
+  const want = KEY_FIELDS[t.type], box = $('#sel-rec');
+  if (!box || !t.bkey) return;
+  if (!REC_CACHE[t.bkey]) REC_CACHE[t.bkey] = api('/api/record?key=' + encodeURIComponent(t.bkey)).catch(() => null);
+  const d = await REC_CACHE[t.bkey];
+  if (!d || A.sel.length !== 1 || A.sel[0] !== t.key || !$('#sel-rec')) return;
+  const rows = [];
+  for (const [tag, name] of want || []){
+    const si = d.record.subs.findIndex(s => s.tag === tag && s.kind === 'struct' && s.fields.some(f => f.name === name));
+    if (si < 0) continue;
+    const fi = d.record.subs[si].fields.findIndex(f => f.name === name), f = d.record.subs[si].fields[fi];
+    // (a character set to level with the player keeps a multiplier there: 1000 is the player's own level)
+    const pcMult = name === 'Level' && (d.record.subs[si].fields.find(x => x.name === 'Flags') || {}).value & 0x80;
+    rows.push(`<label title="${pcMult ? 'Levels with the player: 1000 is the same level, 500 half' : ''}">${pcMult ? 'Level × player (1000 = same)' : esc(name)}</label><input data-rs="${si}" data-rf="${fi}" value="${f.code === 'f' ? +(+f.value).toPrecision(6) : f.value}" ${d.editable ? '' : 'disabled'}>`);
+  }
+  const what = d.state === 'changed' ? ' · changed by your mod' : d.state === 'new' ? ' · your own' : '';
+  $('#sel-rec').innerHTML = `<div class="h">Record${what}</div>` + (rows.length ? `<div class="recgrid">${rows.join('')}</div>
+    <div class="note">Changing these changes ${esc(t.base)} everywhere it's used.</div>` : `<div class="note">Its values are on the Browse page.</div>`);
+}
+$('#selected').addEventListener('change', async e => {
+  const si = e.target.dataset.rs; if (si === undefined || W.sel.length !== 1) return;
+  const t = W.sel[0].userData.thing, d = await REC_CACHE[t.bkey];
+  const rec = JSON.parse(JSON.stringify(d.record)), f = rec.subs[+si].fields[+e.target.dataset.rf];
+  const v = f.code === 'f' ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
+  if (isNaN(v)) return toast(`${f.name}: that isn't a number`, true);
+  f.value = v;
+  try {
+    const r = await post('/api/record/save', {key: t.bkey, record: rec});
+    setState(r.state); recCacheDrop(t.bkey); toast(`${t.base}: ${f.name} ${v}`);
+    if (t.type === 'LIGH' && typeof lightsRefresh === 'function') lightsRefresh();
+    selRecord(t);
+  } catch (err){ fail(err); }
+});
+function openRecord(key){ page('browse'); browseInit().then(() => bwOpen(key)); }
 $('#selected').addEventListener('change', e => {
   const i = e.target.dataset.i; if (i === undefined || W.sel.length !== 1) return;
   const t = W.sel[0].userData.thing, p = t.p.slice(), v = parseFloat(e.target.value);
@@ -169,7 +221,8 @@ $('#selected').addEventListener('change', e => {
 });
 $('#selected').addEventListener('click', e => {
   const a = e.target.dataset.a; if (!a) return;
-  ({drop: dropSel, dup: dupSel, del: delSel, focus: focusSel, hide: hideSel, restore: revertSel, revert: revertSel})[a]();
+  ({drop: dropSel, dup: dupSel, del: delSel, focus: focusSel, hide: hideSel, restore: revertSel, revert: revertSel,
+    record: () => { const t = selThings()[0]; if (t) openRecord(t.bkey); }})[a]();
 });
 
 W.onSelect = list => {
@@ -291,7 +344,7 @@ W.onPlace = (item, p) => {
 };
 W.onDropItem = async (key, e) => {
   const it = findItem(key); if (!it || !A.cellId) return;
-  const at = pointUnder(e), lift = await modelLift(it.model), g = +$('#t-grid').value, s = v => g ? Math.round(v / g) * g : v;
+  const at = pointUnder(e), lift = await modelLift(it.model, it), g = +$('#t-grid').value, s = v => g ? Math.round(v / g) * g : v;
   remember(it);
   edit('Place ' + it.edid, [{op: 'add', cell: A.cellId, base: it.key, p: [s(at.x), s(at.y), at.z + lift, 0, 0, 0].map(v => Math.round(v * 100) / 100), s: 1}], true);
 };
@@ -305,6 +358,8 @@ $('#t-grid').onchange = $('#t-angle').onchange = snapNow;
 $('#t-drop').onclick = dropSel; $('#t-dup').onclick = dupSel; $('#t-del').onclick = delSel;
 $('#t-markers').onchange = e => { setShow('markers', e.target.checked); drawObjects(); };
 $('#t-removed').onchange = e => { setShow('removed', e.target.checked); drawObjects(); };
+$('#t-light').onchange = e => { setGameLight(e.target.checked); try { localStorage.setItem('folab-light', e.target.checked ? '1' : '0'); } catch (err) {} };
+function lightsRefresh(){ resync(); }
 $('#t-help').onclick = () => { const h = $('#help3d'); h.style.display = h.style.display === 'block' ? 'none' : 'block'; };
 $('#b-undo').onclick = () => undoRedo('undo'); $('#b-redo').onclick = () => undoRedo('redo');
 $('#b-save').onclick = save; $('#b-install').onclick = install;
@@ -408,6 +463,7 @@ async function start(){
   worldInit($('#view'));
   try { const [g, a] = (localStorage.getItem('folab-snap') || '128,15').split(','); $('#t-grid').value = g; $('#t-angle').value = a; } catch (e) {}
   snapNow();
+  try { if (localStorage.getItem('folab-light') === '0'){ $('#t-light').checked = false; setGameLight(false); } } catch (e) {}
   await refreshState();
   for (const [k, v] of Object.entries(A.state.kinds)) $('#f-kind').insertAdjacentHTML('beforeend', `<option value="${k}">${esc(v)}</option>`);
   drawRecent();

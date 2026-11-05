@@ -145,6 +145,7 @@ async function bwSave(){
   try {
     const d = await post('/api/record/save', {key: BW.key, record: rec});
     setState(d.state); BW.dirty = false;
+    if (typeof recCacheDrop === 'function') recCacheDrop(BW.key);
     toast('Saved in your mod');
     await bwList(); bwOpen(BW.key, true);
   } catch (e){ fail(e); }
