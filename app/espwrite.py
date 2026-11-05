@@ -7,6 +7,7 @@ ref. Form IDs in copied records are re-pointed from the source file's own master
 import struct
 
 import gamedata
+import recordio
 import tes4
 
 FORM_VERSION = 15                       # New Vegas records
@@ -56,6 +57,10 @@ class Writer:
     def own(self, objid):
         return (len(self.masters) << 24) | objid
 
+    def link(self, key):
+        """A form key (a game form's, or '+ID' for one of the mod's own) as this plugin writes it."""
+        return self.own(int(key[1:], 16)) if key.startswith('+') else self.local(self.gd.from_key(key))
+
     def remap_fields(self, plugin_i, tag, subs):
         """Form IDs inside a copied record, from plugin plugin_i's numbering to ours."""
         fields = FORMID_FIELDS.get(tag, {})
@@ -85,8 +90,16 @@ class Writer:
                 if not rkey.startswith('+'):
                     used.add(gd.from_key(rkey) >> 24)
                     used.add(gd.cell_refs[cell][gd.from_key(rkey)][0])
-                if r.get('base'):
+                if r.get('base') and not r['base'].startswith('+'):
                     used.add(gd.from_key(r['base']) >> 24)
+        for key, rec in self.pr.records.items():
+            if not key.startswith('+'):
+                used.add(gd.from_key(key) >> 24)
+            if rec.get('src', '').lower() in gd.names:
+                used.add(gd.names.index(rec['src'].lower()))
+            for k in recordio.links(rec):
+                if not k.startswith('+'):
+                    used.add(gd.from_key(k) >> 24)
         for i in list(used):                    # a copied record may name its own file's masters
             for m in gd.plugins[i].header['masters']:
                 if m.lower() in gd.names:
@@ -98,6 +111,10 @@ class Writer:
     # --- records ---
 
     def cell_record(self, cell):
+        mine = self.pr.records.get(self.gd.key(cell))
+        if mine:                                # the place's record as the mod has changed it
+            return record('CELL', mine['flags'], self.local(cell),
+                          b''.join(sub(t, d) for t, d in recordio.to_bytes(mine, self.link)))
         i, rec = self.gd.source(cell)
         subs = self.remap_fields(i, 'CELL', list(tes4.iter_subrecords(self.gd.plugins[i].data(rec))))
         return record('CELL', rec.flags & ~tes4.COMPRESSED, self.local(cell), b''.join(sub(t, d) for t, d in subs))
@@ -106,7 +123,7 @@ class Writer:
         """(persistent?, record bytes) for one changed or new ref."""
         gd = self.gd
         if rkey.startswith('+'):
-            subs = [('NAME', struct.pack('<I', self.local(gd.from_key(r['base']))))]
+            subs = [('NAME', struct.pack('<I', self.link(r['base'])))]
             if r.get('s', 1.0) != 1.0:
                 subs.append(('XSCL', struct.pack('<f', r['s'])))
             subs.append(('DATA', struct.pack('<6f', *r['p'])))
@@ -129,7 +146,7 @@ class Writer:
             if t == 'XSCL' and s is not None:
                 continue
             if t == 'NAME' and r.get('base'):
-                d = struct.pack('<I', self.local(gd.from_key(r['base'])))
+                d = struct.pack('<I', self.link(r['base']))
             if t == 'DATA' and p is not None:
                 if s is not None and s != 1.0:
                     out.append(('XSCL', struct.pack('<f', s)))
@@ -143,10 +160,23 @@ class Writer:
         gd = self.gd
         blocks = {}                             # block -> subblock -> [cell bytes + children group]
         nrec = ngrp = 0
-        for ckey in sorted(self.pr.cells):
-            c = self.pr.cells[ckey]
-            if not c['refs']:
-                continue
+        # records the mod changes or adds, one top group per type, in the order the game's own files keep them
+        bytype = {}
+        for key, rec in self.pr.records.items():
+            if rec['type'] == 'CELL':
+                continue                        # (written with the place, below)
+            fid = self.link(key)
+            bytype.setdefault(rec['type'], []).append(
+                (fid, record(rec['type'], rec['flags'], fid, b''.join(sub(t, d) for t, d in recordio.to_bytes(rec, self.link)))))
+        tops = {}
+        for t in bytype:
+            tops[t] = group(t, tes4.G_TOP, b''.join(d for _f, d in sorted(bytype[t])))
+            nrec += len(bytype[t])
+            ngrp += 1
+        cells = {k for k, c in self.pr.cells.items() if c['refs']}
+        cells |= {k for k, r in self.pr.records.items() if r['type'] == 'CELL' and not k.startswith('+')}
+        for ckey in sorted(cells):
+            c = self.pr.cells.get(ckey) or {'refs': {}}
             cell = gd.from_key(ckey)
             lid = self.local(cell)
             pers, temp = [], []
@@ -155,6 +185,8 @@ class Writer:
                 (pers if is_p else temp).append(data)
                 nrec += 1
             kids = b''
+            if not c['refs']:
+                kids = None
             if pers:
                 kids += group(lid, tes4.G_CELL_PERSISTENT, b''.join(pers))
                 ngrp += 1
@@ -163,18 +195,19 @@ class Writer:
                 ngrp += 1
             obj = cell & 0xFFFFFF
             blocks.setdefault(obj % 10, {}).setdefault((obj // 10) % 10, []).append(
-                self.cell_record(cell) + group(lid, tes4.G_CELL_CHILDREN, kids))
+                self.cell_record(cell) + (group(lid, tes4.G_CELL_CHILDREN, kids) if kids is not None else b''))
             nrec += 1
-            ngrp += 1
-        body = b''
+            ngrp += kids is not None
         if blocks:
             top = b''
             for b in sorted(blocks):
                 inner = b''.join(group(sb, tes4.G_INT_SUBBLOCK, b''.join(blocks[b][sb])) for sb in sorted(blocks[b]))
                 top += group(b, tes4.G_INT_BLOCK, inner)
                 ngrp += 1 + len(blocks[b])
-            body = group('CELL', tes4.G_TOP, top)
+            tops['CELL'] = group('CELL', tes4.G_TOP, top)
             ngrp += 1
+        order = gd.plugins[0].top_groups()
+        body = b''.join(tops[t] for t in sorted(tops, key=lambda t: order.index(t) if t in order else len(order)))
         hdr = [sub('HEDR', struct.pack('<fiI', HEDR_VERSION, nrec + ngrp, self.own(self.pr.next_id))),
                sub('CNAM', (self.pr.author or 'FOLab').encode('cp1252', 'replace')[:511] + b'\0')]
         if self.pr.description:

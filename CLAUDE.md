@@ -23,6 +23,11 @@ the model for style, UI and approach. Python, standard library first, code in `a
   user's own mods. Never test `install` against the real game: use a fake Data folder and `LOCALAPPDATA`.
 - New Vegas rules kept in the writer: game refs are never deleted (disabled + sunk to z -30000); form IDs in
   copied records are re-pointed to this plugin's master list.
+- Records: `schema.py` layouts (checked against every record of each type: run `checkall`; a layout only counts
+  if every subrecord fits and encodes back byte for byte), `recordio.py` (a mod's records with links as keys),
+  `browse.py` (Browse page data; its index builds in the background, ~20 s). Known limit: subrecords no layout
+  reads are kept raw in their source file's numbering, so links inside them are only right for FalloutNV.esm
+  records (and a DLC that ends up at the same master index). Add layouts (e.g. WEAP DNAM) to close it.
 
 ## Finding the game
 

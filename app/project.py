@@ -46,6 +46,7 @@ class Project:
         self.author = d.get('author', '')
         self.description = d.get('description', '')
         self.cells = d.get('cells', {})
+        self.records = d.get('records', {})     # form key or '+ID' -> record (recordio.py): game records changed, new ones
         self.next_id = d.get('next_id', FIRST_ID)
         self.undo_stack, self.redo_stack = [], []
 
@@ -66,7 +67,7 @@ class Project:
 
     def to_dict(self):
         return {'name': self.name, 'plugin': self.plugin, 'author': self.author, 'description': self.description,
-                'cells': self.cells, 'next_id': self.next_id}
+                'cells': self.cells, 'records': self.records, 'next_id': self.next_id}
 
     def save(self):
         tmp = self.path + '.tmp'
@@ -79,12 +80,12 @@ class Project:
         return os.path.join(BUILD_DIR, self.plugin)
 
     def count(self):
-        return sum(len(c['refs']) for c in self.cells.values())
+        return sum(len(c['refs']) for c in self.cells.values()) + len(self.records)
 
     # --- edits: each one a single undo step ---
 
     def _step(self, label):
-        self.undo_stack.append((label, copy.deepcopy(self.cells), self.next_id))
+        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id))
         del self.undo_stack[:-200]
         self.redo_stack.clear()
 
@@ -97,6 +98,18 @@ class Project:
         self._step(label)
         made = []
         for o in ops:
+            if o['op'] == 'record':                  # a record as the mod has it (a game one changed, or its own)
+                self.records[o['key']] = o['record']
+                continue
+            if o['op'] == 'record_new':              # a record of the mod's own: its key is made here
+                key = '+%06X' % self.next_id
+                self.next_id += 1
+                self.records[key] = o['record']
+                made.append(key)
+                continue
+            if o['op'] == 'record_revert':           # a game record back as the game has it; one of the mod's own, gone
+                self.records.pop(o['key'], None)
+                continue
             refs = self._refs(o['cell'])
             if o['op'] == 'add':
                 key = '+%06X' % self.next_id
@@ -128,18 +141,18 @@ class Project:
     def undo(self):
         if not self.undo_stack:
             return None
-        label, cells, nid = self.undo_stack.pop()
-        self.redo_stack.append((label, copy.deepcopy(self.cells), self.next_id))
-        self.cells, self.next_id = cells, max(nid, self.next_id)   # (an undone ref's ID is never reused)
+        label, cells, records, nid = self.undo_stack.pop()
+        self.redo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id))
+        self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)   # (an undone ID is never reused)
         self.save()
         return label
 
     def redo(self):
         if not self.redo_stack:
             return None
-        label, cells, nid = self.redo_stack.pop()
-        self.undo_stack.append((label, copy.deepcopy(self.cells), self.next_id))
-        self.cells, self.next_id = cells, max(nid, self.next_id)
+        label, cells, records, nid = self.redo_stack.pop()
+        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id))
+        self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)
         self.save()
         return label
 

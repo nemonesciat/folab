@@ -17,6 +17,8 @@ import gamedata
 import install
 import nif
 import project
+import browse
+import recordio
 import refinfo
 import tes4
 
@@ -36,6 +38,7 @@ PLACEABLE = {'STAT': 'Statics', 'MSTT': 'Movable statics', 'FURN': 'Furniture', 
 
 GD = None
 PR = None
+BR = None
 CATALOGUE = []                          # [key, type, edid, name, model] of every placeable game object
 _meshes = {}
 _lock = threading.RLock()
@@ -89,9 +92,17 @@ def interiors():
     return out
 
 
-def thing(key, bfid, p, s, state):
-    btype, edid, name, model = GD.describe(bfid)
-    return {'key': key, 'bkey': GD.key(bfid), 'base': edid, 'type': btype, 'name': name,
+def base_info(bkey):
+    """(type, editor ID, name, model) of a base form as the mod leaves it: its own records and changes first."""
+    rec = PR.records.get(bkey) if PR else None
+    if rec:
+        return rec['type'], recordio.field(rec, 'EDID'), recordio.field(rec, 'FULL'), recordio.field(rec, 'MODL')
+    return GD.describe(GD.from_key(bkey))
+
+
+def thing(key, bkey, p, s, state):
+    btype, edid, name, model = base_info(bkey)
+    return {'key': key, 'bkey': bkey, 'base': edid, 'type': btype, 'name': name,
             'model': GD.model_path(btype, model) if model else '', 'p': list(p), 's': s,
             'marker': is_marker(btype, edid, model), 'state': state}
 
@@ -110,21 +121,21 @@ def cell_things(ckey):
             continue
         k = GD.key(r['ref'])
         ch = mine.get(k)
-        p, s, state, base = list(r['pos']) + list(r['rot']), r['scale'], '', r['base']
+        p, s, state, base = list(r['pos']) + list(r['rot']), r['scale'], '', GD.key(r['base'])
         if ch:
             if ch.get('removed'):
                 state = 'removed'
             else:
                 p, s, state = ch.get('p', p), ch.get('s', s), 'moved'
                 if ch.get('base'):
-                    base = GD.from_key(ch['base'])
+                    base = ch['base']
         t = thing(k, base, p, s, state)
         if r['leads']:
             t['door'] = True
         out.append(t)
     for k, ch in mine.items():
         if k.startswith('+'):
-            out.append(thing(k, GD.from_key(ch['base']), ch['p'], ch.get('s', 1.0), 'new'))
+            out.append(thing(k, ch['base'], ch['p'], ch.get('s', 1.0), 'new'))
     return out
 
 
@@ -137,10 +148,9 @@ def ref(ckey, rkey):
     t = next((t for t in cell_things(ckey) if t['key'] == rkey), None)
     if not t:
         raise FileNotFoundError(rkey)
-    bfid = GD.from_key(t['bkey'])
-    bi, brec = GD.source(bfid)
-    out = {'thing': t, 'base': {'key': t['bkey'], 'type': brec.tag, 'edid': t['base'], 'name': t['name'],
-                                'model': t['model'], 'from': GD.names[bi]}}
+    frm = 'your mod' if t['bkey'].startswith('+') else GD.names[GD.source(GD.from_key(t['bkey']))[0]]
+    out = {'thing': t, 'base': {'key': t['bkey'], 'type': t['type'], 'edid': t['base'], 'name': t['name'],
+                                'model': t['model'], 'from': frm}}
     if not rkey.startswith('+'):
         out['ref'] = refinfo.ref_info(GD, GD.from_key(rkey))
     return out
@@ -174,6 +184,11 @@ def mesh(path):
 def search(q, kind='', limit=300):
     words = q.lower().split()
     out = []
+    for k, r in (PR.records.items() if PR else ()):         # the mod's own new things first
+        if k.startswith('+') and r['type'] in PLACEABLE and (not kind or r['type'] == kind) and recordio.field(r, 'MODL'):
+            e, n = recordio.field(r, 'EDID'), recordio.field(r, 'FULL')
+            if all(w in (e + ' ' + n).lower() for w in words):
+                out.append({'key': k, 'type': r['type'], 'edid': e, 'name': n, 'model': GD.model_path(r['type'], recordio.field(r, 'MODL'))})
     for row in CATALOGUE:
         if kind and row[1] != kind:
             continue
@@ -209,10 +224,25 @@ def edit(label, ops):
         raise ValueError('no mod open')
     made = PR.apply(label, ops)
     out = {'state': state(), 'made': made}
-    cells = {o['cell'] for o in ops}
+    cells = {o['cell'] for o in ops if 'cell' in o}
     if len(cells) == 1:
         out['things'] = [t for t in cell_things(cells.pop()) if t['key'] in made or t['key'] in {o.get('ref') for o in ops}]
     return out
+
+
+def record_copy(key):
+    """A new record of the mod's own, a copy of this one, with an editor ID of its own."""
+    rec = BR.record(key)['record']
+    rec = json.loads(json.dumps(rec))
+    base = recordio.field(rec, 'EDID') or 'Record'
+    taken = set(BR.edids or {}) | {recordio.field(r, 'EDID').lower() for r in PR.records.values()}
+    n, edid = 1, base + 'Copy'
+    while edid.lower() in taken:
+        n += 1
+        edid = '%sCopy%d' % (base, n)
+    recordio.set_field(rec, 'EDID', edid, label='Editor ID')
+    rec['src'] = rec.get('src') or ''
+    return edit('Copy ' + base, [{'op': 'record_new', 'record': rec}])
 
 
 def save():
@@ -258,6 +288,18 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(ref(q['cell'], q['key']))
             if u.path == '/api/door':
                 return self.send(door(q['key']))
+            if u.path == '/api/types':
+                return self.send(BR.types())
+            if u.path == '/api/records':
+                with _lock:
+                    return self.send(BR.records(q['type'], q.get('q', '')))
+            if u.path == '/api/record':
+                with _lock:
+                    return self.send(BR.record(q['key']))
+            if u.path == '/api/resolve':
+                return self.send(BR.resolve(q.get('q', '')))
+            if u.path == '/api/used':
+                return self.send(BR.where_used(q['key']))
             if u.path == '/api/search':
                 return self.send(search(q.get('q', ''), q.get('kind', '')))
             if u.path == '/api/mesh':
@@ -287,6 +329,13 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path in ('/api/undo', '/api/redo'):
                     label = PR.undo() if u.path == '/api/undo' else PR.redo()
                     return self.send({'label': label, 'state': state()})
+                if u.path == '/api/record/save':
+                    rec = body['record']
+                    return self.send(edit('Edit ' + (recordio.field(rec, 'EDID') or body['key']), [{'op': 'record', 'key': body['key'], 'record': rec}]))
+                if u.path == '/api/record/copy':
+                    return self.send(record_copy(body['key']))
+                if u.path == '/api/record/revert':
+                    return self.send(edit('Put back ' + body['key'], [{'op': 'record_revert', 'key': body['key']}]))
                 if u.path == '/api/save':
                     return self.send(save())
                 if u.path == '/api/install':
@@ -306,12 +355,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global GD, CATALOGUE, PR
+    global GD, CATALOGUE, PR, BR
     args = sys.argv[1:]
     port = next((int(a) for a in args if a.isdigit()), PORT)
     t = time.time()
     GD = gamedata.GameData()
     CATALOGUE = build_catalogue()
+    BR = browse.Browse(GD, lambda: PR)
     last = load_settings().get('project')
     if last:
         try:

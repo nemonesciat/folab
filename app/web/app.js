@@ -342,12 +342,12 @@ function tab(side, name){
 $('#left .tabs').onclick = e => { if (e.target.closest('button')) tab('left', e.target.closest('button').dataset.tab); };
 $('#right .tabs').onclick = e => { if (e.target.closest('button')) tab('right', e.target.closest('button').dataset.tab); };
 
-const PAGES = ['world', 'mod'];
+const PAGES = ['browse', 'world', 'mod'];
 function page(name){
   for (const p of PAGES){
     const nav = $('#nav-' + p), el = $('#page-' + p);
     if (nav) nav.classList.toggle('on', p === name);
-    if (el) el.style.display = p === name ? (p === 'world' ? 'flex' : 'block') : 'none';
+    if (el) el.style.display = p === name ? (p === 'mod' ? 'block' : 'flex') : 'none';
   }
   if (name === 'mod') drawModPage();
   if (typeof onPage === 'function') onPage(name);

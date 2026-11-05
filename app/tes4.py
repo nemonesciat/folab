@@ -125,6 +125,15 @@ class PluginFile:
             yield Record(tag.decode('ascii', 'replace'), pos, flags, formid, size), path
             pos += 24 + size
 
+    def top_groups(self):
+        """The record type of each top group, in file order (the order the game's own files keep)."""
+        out, pos, mm = [], self.first, self.mm
+        while pos + 24 <= len(mm) and mm[pos:pos + 4] == b'GRUP':
+            size, label = struct.unpack_from('<II', mm, pos + 4)
+            out.append(struct.pack('<I', label).decode('ascii', 'replace'))
+            pos += size
+        return out
+
     def group_at(self, offset):
         """(type, label, start of contents, end) for the group header at offset."""
         gsize, label, gtype = struct.unpack_from('<IIi', self.mm, offset + 4)
@@ -139,7 +148,9 @@ class PluginFile:
         raw = self.mm[rec.offset + 24:rec.offset + 24 + rec.size]
         if rec.flags & COMPRESSED:
             want = struct.unpack_from('<I', raw, 0)[0]
-            out = zlib.decompress(raw[4:])
+            # read as raw deflate past the 2-byte zlib header: one of the game's own records (a LAND in FalloutNV.esm)
+            # carries a wrong checksum, which the game ignores
+            out = zlib.decompressobj(-zlib.MAX_WBITS).decompress(raw[6:])
             if len(out) != want:
                 raise ValueError('%r inflated to %d bytes, expected %d' % (rec, len(out), want))
             return out
