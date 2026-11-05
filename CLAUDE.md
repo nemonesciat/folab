@@ -55,6 +55,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - New worldspace (`/api/world/new`, `worldgen.py`): the mod is saved with every game file as a master, the world
   added to that plugin, then the plugin opened as the mod (undo starts afresh) so the world is game data to edit.
 - Auto-paint (`autopaint.py`): textures by slope band learnt from the game's land nearby; land shaping uses it.
+- Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
+  FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
+  `folab_running.json`, opens an Edge app window titled "FOLab", quits it with POST /api/quit (X-FOLab-Quit).
+  `brand.py` draws the logo/icon (wrench F, gear O, LAB) into app/web/vendor. Themes: `web/theme.js` (CSS variables).
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.

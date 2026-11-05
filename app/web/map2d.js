@@ -95,7 +95,7 @@ function mapLandChanged(){
 
 function mapDraw(){
   const g = M.g;
-  g.fillStyle = A.outside ? '#1a1712' : '#0e0c0a'; g.fillRect(0, 0, M.w, M.h);
+  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(A.outside ? '--bg3' : '--bg').trim() || '#0e0c0a'; g.fillRect(0, 0, M.w, M.h);
   const [x0, y1] = mapWorld(0, 0), [x1, y0] = mapWorld(M.w, M.h);
   if (A.outside && OUT.world){
     const b = OUT.info && OUT.info.bounds;

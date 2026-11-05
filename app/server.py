@@ -896,6 +896,7 @@ def search(q, kind='', limit=300):
 
 LOG = os.path.join(project.HOME, 'logs', 'folab.log')
 _errors = []                            # the last few errors, for a problem report
+SERVER = None
 
 
 def log_error(where, e):
@@ -1310,6 +1311,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             n = int(self.headers.get('Content-Length') or 0)
             body = json.loads(self.rfile.read(n) or b'{}')
+            if u.path == '/api/quit':
+                # (FOLab.exe asks this when its window closes or Quit is picked: everything is saved as it's made)
+                if self.headers.get('X-FOLab-Quit') != '1':
+                    return self.send({'error': 'no'}, code=403)
+                self.send({'ok': True})
+                threading.Thread(target=SERVER.shutdown, daemon=True).start()
+                return
             with _lock:
                 if u.path == '/api/nvse/download':
                     rel = nvse.latest()
@@ -1399,6 +1407,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send(f.read(), TYPES.get(os.path.splitext(p)[1], 'application/octet-stream'))
 
 
+def _running_here():
+    """This folder's FOLab, if one is running (its folab_running.json, its process alive)."""
+    try:
+        with open(os.path.join(project.HOME, 'folab_running.json'), encoding='utf-8') as f:
+            d = json.load(f)
+        import ctypes
+        h = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(d['pid']))
+        if not h:
+            return None
+        ctypes.windll.kernel32.CloseHandle(h)
+        return d
+    except (OSError, ValueError, KeyError, AttributeError):
+        return None
+
+
 def main():
     global GD, CATALOGUE, PR, BR
     args = sys.argv[1:]
@@ -1416,16 +1439,40 @@ def main():
     # (on Windows, address reuse lets a second FOLab bind the same port, and the browser then talks to whichever
     # answers, an old one included: refuse to start twice instead)
     ThreadingHTTPServer.allow_reuse_address = False
-    try:
-        srv = ThreadingHTTPServer(('127.0.0.1', port), Handler)
-    except OSError:
-        print('FOLab is already running on port %d: close that one first (or open http://127.0.0.1:%d/).' % (port, port))
+    asked = any(a.isdigit() for a in args)
+    srv = None
+    for p in ([port] if asked else range(port, port + 20)):
+        try:
+            srv = ThreadingHTTPServer(('127.0.0.1', p), Handler)
+            port = p
+            break
+        except OSError:
+            # (this folder's FOLab already running: say so; another program, or another folder's FOLab: the next port)
+            mine = _running_here()
+            if asked or (mine and mine.get('port') == p):
+                print('FOLab is already running on port %d: close that one first (or open http://127.0.0.1:%d/).' % (p, p))
+                sys.exit(1)
+    if srv is None:
+        print('No free port for FOLab between %d and %d.' % (port, port + 19))
         sys.exit(1)
-    print('FOLab on http://127.0.0.1:%d/' % port, flush=True)
-    if '--no-browser' not in args:
+    url = 'http://127.0.0.1:%d/' % port
+    print('FOLab on ' + url, flush=True)
+    # (for FOLab.exe: where this FOLab answers, so it can open its window and later ask it to quit)
+    global SERVER
+    SERVER = srv
+    running = os.path.join(project.HOME, 'folab_running.json')
+    with open(running, 'w', encoding='utf-8') as f:
+        json.dump({'url': url, 'pid': os.getpid(), 'port': port}, f)
+    import atexit
+    atexit.register(lambda: os.path.exists(running) and os.remove(running))
+    if '--no-browser' not in args and not os.environ.get('FOLAB_NO_BROWSER'):
         import webbrowser
-        webbrowser.open('http://127.0.0.1:%d/' % port)
-    srv.serve_forever()
+        webbrowser.open(url)
+    try:
+        srv.serve_forever()
+    finally:
+        if os.path.exists(running):
+            os.remove(running)
 
 
 if __name__ == '__main__':

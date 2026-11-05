@@ -49,7 +49,7 @@ function leaveOutside(){
   if (typeof groundOff === 'function') groundOff();
   if (typeof farClear === 'function') farClear();
   OUT.cells.clear(); OUT.queue = [];
-  W.scene.fog = null; W.scene.background = new T.Color(0x0e0c0a);
+  W.scene.fog = null; W.scene.background = new T.Color(thView3d());
   W.outdoors = false; assignLights();
   $('#t-ground').style.display = 'none'; $('#ls-btn').style.display = 'none';
   if (typeof lsClose === 'function') lsClose();

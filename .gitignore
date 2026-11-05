@@ -8,3 +8,5 @@ folab_settings.json
 downloads/
 prefabs/
 logs/
+folab_running.json
+packaging/out/

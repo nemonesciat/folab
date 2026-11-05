@@ -120,7 +120,7 @@ function worldInit(box){
   W.ren.domElement.style.outline = 'none';
   box.appendChild(W.ren.domElement);
   W.scene = new T.Scene();
-  W.scene.background = new T.Color(0x0e0c0a);
+  W.scene.background = new T.Color(typeof thView3d === 'function' ? thView3d() : 0x0e0c0a);
   W.cam = new T.PerspectiveCamera(70, 1, 4, 60000);
   W.cam.up.set(0, 0, 1);
   W.scene.add(new T.HemisphereLight(0xfff1dd, 0x3a3428, 0.85));

@@ -13,6 +13,7 @@ $('#b-help').onclick = e => {
 document.addEventListener('click', e => { if (!e.target.closest('#helpmenu')) $('#helpmenu').style.display = 'none'; });
 $('#helpmenu').innerHTML = HELP_DOCS.map(([k, l]) => `<div class="row" data-doc="${k}"><div>${esc(l)}</div></div>`).join('') +
   `<div class="sep"></div><div class="row" data-help="keys"><div>3D controls</div></div>
+   <div class="row" data-help="look"><div>Appearance: themes, text size…</div></div>
    <div class="row" data-help="report"><div>Report a problem…</div></div><div class="row" data-help="about"><div>About FOLab</div></div>`;
 $('#helpmenu').addEventListener('click', e => {
   const r = e.target.closest('.row'); if (!r) return;
@@ -20,6 +21,7 @@ $('#helpmenu').addEventListener('click', e => {
   if (r.dataset.doc) return helpDoc(r.dataset.doc);
   if (r.dataset.help === 'keys'){ page('world'); $('#help3d').style.display = 'block'; return; }
   if (r.dataset.help === 'report') return helpReport();
+  if (r.dataset.help === 'look') return thWindow();
   if (r.dataset.help === 'about') return helpAbout();
 });
 

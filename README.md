@@ -22,15 +22,19 @@ what's needed).
 
 - **Fallout: New Vegas** from Steam (FOLab finds it in your Steam libraries; set `FOLAB_NV_DATA` to its Data folder
   if it doesn't).
-- **Python 3.10 or newer** for Windows, from [python.org](https://www.python.org/downloads/) (tick "Add to PATH" and
+- With the **portable download** (FOLab.exe), nothing else: Python comes with it. From the source: **Python 3.10 or newer** for Windows, from [python.org](https://www.python.org/downloads/) (tick "Add to PATH" and
   the "py launcher"). Nothing else to install.
 - For Play here and Give it to me in game: **xNVSE** (FOLab can download and install it for you, from its GitHub) and
   **JIP LN NVSE** (from its Nexus page).
 
 ## Starting it
 
-Double-click **Start FOLab.bat**. The game's data loads (about ten seconds) and FOLab opens in your browser at
-http://127.0.0.1:8771/. Keep the black window open while you work; close it to stop FOLab.
+Double-click **FOLab.exe** (the portable download: unzip it somewhere you can save files, such as Documents or the
+desktop). FOLab reads the game (about ten seconds) and opens in its own window, with an icon by the clock to open it
+again, see its log, or quit. Closing its window closes FOLab. Your mods and settings are kept in that folder.
+
+From the source: double-click **Start FOLab.bat**; FOLab opens in your browser at http://127.0.0.1:8771/ (keep the black
+window open while you work). To make the portable download yourself: `py -3 packaginguild.py`.
 
 The first time, a Getting started guide opens. Help (top right) has the rest.
 

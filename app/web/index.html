@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FOLab</title>
 <link href="/web/vendor/fonts.css" rel="stylesheet">
+<link rel="icon" type="image/png" href="/web/vendor/folab-icon.png">
+<script src="/web/theme.js"></script>
 <style>
 :root{
   --bg:#13110d; --panel:#1b1813; --panel2:#221e18; --line:#342d23; --line2:#463c2e;
@@ -15,13 +17,14 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
-body{background:var(--bg);color:var(--text);font:14px/1.45 Inter,"Segoe UI",system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column}
+body{background:var(--bg);color:var(--text);font:var(--fs,14px)/1.45 Inter,"Segoe UI",system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column}
 button,input,select{font:inherit;color:inherit}
 input,select{background:var(--bg2);border:1px solid var(--line2);border-radius:6px;padding:5px 8px}
 input:focus,select:focus{outline:none;border-color:var(--gold)}
-header{display:flex;align-items:center;gap:16px;padding:6px 18px;min-width:0;border-bottom:1px solid var(--line);background:linear-gradient(var(--bg3),var(--bg2));flex:none}
-.brand{display:flex;flex-direction:column;flex:none;line-height:1.1}
-.brand b{font:600 22px Cinzel,serif;color:var(--gold);letter-spacing:.06em}
+header{display:flex;align-items:center;gap:16px;padding:6px 18px;min-width:0;border-bottom:1px solid var(--line);background:linear-gradient(var(--bg3),var(--bg2));flex:none;box-shadow:inset 0 -2px 0 -1px var(--goldline)}
+.brand{display:flex;flex-direction:column;align-items:center;gap:0;flex:none;line-height:1;color:var(--gold)}
+.brand .mark{height:36px;width:auto;display:block}
+.brand b{font:600 13px Cinzel,serif;color:var(--gold);letter-spacing:.42em;margin:1px 0 0 .42em}
 .brand small{font:500 10.5px Inter,sans-serif;color:var(--muted);letter-spacing:.18em}
 nav{display:flex;gap:3px;flex:none}
 nav button{min-width:78px;height:62px;padding:0 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
@@ -33,7 +36,7 @@ nav button.on{color:var(--gold2);border-color:var(--line2);background:var(--pane
 nav button.on svg{stroke:var(--gold)}
 .bar{display:flex;gap:6px;align-items:center;margin-left:auto;justify-content:flex-end;min-width:0}
 .bar .modpill{min-width:0;overflow:hidden;text-overflow:ellipsis}
-.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;padding:5px 11px;cursor:pointer;white-space:nowrap;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 0 rgba(0,0,0,.25);transition:border-color .15s,background .15s}
 .btn:hover{border-color:var(--gold)}
 .btn:disabled{opacity:.45;cursor:default;border-color:var(--line2)}
 .btn.primary{background:var(--btn-primary);border-color:var(--goldline);color:var(--gold2)}
@@ -192,12 +195,23 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 #loading{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity .4s}
 #loading div{display:flex;flex-direction:column;align-items:center;gap:10px}#loading b{font:600 30px Cinzel,serif;color:var(--gold);letter-spacing:.2em}
 #loading span{color:var(--muted)}#loading.gone{opacity:0;pointer-events:none}
+/* the theme's extras (theme.js) */
+.th-mono body,.th-mono .brand b,.th-mono h2,.th-mono h3,.th-mono .h,.th-mono .owtitle b{font-family:var(--mono)!important;letter-spacing:.04em}
+.th-mono .brand b{text-shadow:0 0 6px var(--gold)}
+.th-scan body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:500;background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px);mix-blend-mode:multiply}
+.th-scan.th-mono body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:499;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.35))}
+.th-calm *{transition:none!important;animation:none!important}
+.th-light .owin,.th-light #helpmenu{box-shadow:0 8px 24px #0003}
+.th-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin:8px 0}
+.th-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:var(--c-bg);color:var(--c-text);border:2px solid var(--c-panel);border-radius:10px;padding:10px;cursor:pointer}
+.th-card.on{border-color:var(--c-gold)}.th-card b{color:var(--c-gold);font-family:Cinzel,serif}.th-card small{opacity:.75;font-size:12px}
+.th-sw{display:flex;gap:4px;margin-bottom:4px}.th-sw i{width:22px;height:12px;border-radius:3px;background:var(--c-panel)}.th-sw i:nth-child(2){background:var(--c-gold)}.th-sw i:nth-child(3){background:var(--c-text)}
 #toast.err{border-color:var(--red);color:#f3b2a5}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand"><b>FOLAB</b><small>NEW VEGAS EDITOR</small></div>
+  <div class="brand" title="FOLab, a New Vegas editor"><svg class="mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 204"><path fill="none" stroke="currentColor" stroke-width="11" stroke-linejoin="round" d="M220.0 104.0 L237.7 110.6 L233.7 131.2 L214.8 130.6 L213.6 133.1 L212.4 135.6 L211.1 138.1 L209.7 140.5 L208.2 142.9 L206.6 145.1 L217.1 160.9 L201.7 175.2 L186.8 163.6 L184.4 165.0 L181.9 166.3 L179.4 167.5 L176.9 168.6 L174.3 169.7 L171.6 170.6 L170.8 189.5 L150.0 192.0 L144.7 173.8 L142.0 173.5 L139.2 173.2 L136.5 172.7 L133.7 172.1 L131.0 171.4 L128.4 170.6 L116.6 185.4 L98.3 175.2 L104.7 157.4 L102.6 155.5 L100.6 153.6 L98.7 151.6 L96.8 149.5 L95.1 147.4 L93.4 145.1 L75.1 150.2 L66.3 131.2 L82.0 120.6 L81.4 117.8 L80.9 115.1 L80.5 112.3 L80.2 109.6 L80.1 106.8 L80.0 104.0 L62.3 97.4 L66.3 76.8 L85.2 77.4 L86.4 74.9 L87.6 72.4 L88.9 69.9 L90.3 67.5 L91.8 65.1 L93.4 62.9 L82.9 47.1 L98.3 32.8 L113.2 44.4 L115.6 43.0 L118.1 41.7 L120.6 40.5 L123.1 39.4 L125.7 38.3 L128.4 37.4 L129.2 18.5 L150.0 16.0 L155.3 34.2 L158.0 34.5 L160.8 34.8 L163.5 35.3 L166.3 35.9 L169.0 36.6 L171.6 37.4 L183.4 22.6 L201.7 32.8 L195.3 50.6 L197.4 52.5 L199.4 54.4 L201.3 56.4 L203.2 58.5 L204.9 60.6 L206.6 62.9 L224.9 57.8 L233.7 76.8 L218.0 87.4 L218.6 90.2 L219.1 92.9 L219.5 95.7 L219.8 98.4 L219.9 101.2 Z M180.0 104.0 L179.6 99.3 L178.5 94.7 L176.7 90.4 L174.3 86.4 L171.2 82.8 L167.6 79.7 L163.6 77.3 L159.3 75.5 L154.7 74.4 L150.0 74.0 L145.3 74.4 L140.7 75.5 L136.4 77.3 L132.4 79.7 L128.8 82.8 L125.7 86.4 L123.3 90.4 L121.5 94.7 L120.4 99.3 L120.0 104.0 L120.4 108.7 L121.5 113.3 L123.3 117.6 L125.7 121.6 L128.8 125.2 L132.4 128.3 L136.4 130.7 L140.7 132.5 L145.3 133.6 L150.0 134.0 L154.7 133.6 L159.3 132.5 L163.6 130.7 L167.6 128.3 L171.2 125.2 L174.3 121.6 L176.7 117.6 L178.5 113.3 L179.6 108.7 Z"/><path fill="currentColor" fill-rule="evenodd" stroke="var(--bg3,#1d1914)" stroke-width="9" paint-order="stroke" stroke-linejoin="round" d="M8.0 4.0 L112.0 4.0 L112.0 38.0 L112.0 38.0 L107.0 46.0 L102.0 38.0 L102.0 38.0 L97.0 46.0 L92.0 38.0 L92.0 38.0 L87.0 46.0 L82.0 38.0 L82.0 38.0 L77.0 46.0 L72.0 38.0 L72.0 38.0 L67.0 46.0 L62.0 38.0 L62.0 38.0 L57.0 46.0 L52.0 38.0 L52.0 38.0 L47.0 46.0 L42.0 38.0 L38.0 38.0 L38.0 70.0 L8.0 70.0 Z M42.0 60.0 L42.0 60.0 L47.0 52.0 L52.0 60.0 L52.0 60.0 L57.0 52.0 L62.0 60.0 L62.0 60.0 L67.0 52.0 L72.0 60.0 L72.0 60.0 L77.0 52.0 L82.0 60.0 L82.0 60.0 L87.0 52.0 L92.0 60.0 L92.0 60.0 L97.0 52.0 L102.0 60.0 L104.0 60.0 L104.0 82.0 L42.0 82.0 Z M10.0 78.0 L38.0 78.0 L38.0 132.0 L10.0 132.0 Z M48.0 82.0 L80.0 82.0 L84.0 200.0 L44.0 200.0 Z"/><g stroke="rgba(0,0,0,0.35)" stroke-width="2.5"><line x1="12" y1="88" x2="36" y2="88"/><line x1="12" y1="96" x2="36" y2="96"/><line x1="12" y1="104" x2="36" y2="104"/><line x1="12" y1="112" x2="36" y2="112"/><line x1="12" y1="120" x2="36" y2="120"/><line x1="12" y1="128" x2="36" y2="128"/></g></svg><b>LAB</b></div>
   <nav>
     <button id="nav-browse" title="The game's records by kind: weapons, apparel, characters, perks…">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>Browse</button>
@@ -310,7 +324,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <div id="page-mod"></div>
 <div id="page-game"></div>
 <div id="toast"></div>
-<div id="loading"><div><b>FOLAB</b><span>Opening the game's places…</span></div></div>
+<div id="loading"><div><svg class="mark" style="height:110px;color:var(--gold)" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 204"><path fill="none" stroke="currentColor" stroke-width="11" stroke-linejoin="round" d="M220.0 104.0 L237.7 110.6 L233.7 131.2 L214.8 130.6 L213.6 133.1 L212.4 135.6 L211.1 138.1 L209.7 140.5 L208.2 142.9 L206.6 145.1 L217.1 160.9 L201.7 175.2 L186.8 163.6 L184.4 165.0 L181.9 166.3 L179.4 167.5 L176.9 168.6 L174.3 169.7 L171.6 170.6 L170.8 189.5 L150.0 192.0 L144.7 173.8 L142.0 173.5 L139.2 173.2 L136.5 172.7 L133.7 172.1 L131.0 171.4 L128.4 170.6 L116.6 185.4 L98.3 175.2 L104.7 157.4 L102.6 155.5 L100.6 153.6 L98.7 151.6 L96.8 149.5 L95.1 147.4 L93.4 145.1 L75.1 150.2 L66.3 131.2 L82.0 120.6 L81.4 117.8 L80.9 115.1 L80.5 112.3 L80.2 109.6 L80.1 106.8 L80.0 104.0 L62.3 97.4 L66.3 76.8 L85.2 77.4 L86.4 74.9 L87.6 72.4 L88.9 69.9 L90.3 67.5 L91.8 65.1 L93.4 62.9 L82.9 47.1 L98.3 32.8 L113.2 44.4 L115.6 43.0 L118.1 41.7 L120.6 40.5 L123.1 39.4 L125.7 38.3 L128.4 37.4 L129.2 18.5 L150.0 16.0 L155.3 34.2 L158.0 34.5 L160.8 34.8 L163.5 35.3 L166.3 35.9 L169.0 36.6 L171.6 37.4 L183.4 22.6 L201.7 32.8 L195.3 50.6 L197.4 52.5 L199.4 54.4 L201.3 56.4 L203.2 58.5 L204.9 60.6 L206.6 62.9 L224.9 57.8 L233.7 76.8 L218.0 87.4 L218.6 90.2 L219.1 92.9 L219.5 95.7 L219.8 98.4 L219.9 101.2 Z M180.0 104.0 L179.6 99.3 L178.5 94.7 L176.7 90.4 L174.3 86.4 L171.2 82.8 L167.6 79.7 L163.6 77.3 L159.3 75.5 L154.7 74.4 L150.0 74.0 L145.3 74.4 L140.7 75.5 L136.4 77.3 L132.4 79.7 L128.8 82.8 L125.7 86.4 L123.3 90.4 L121.5 94.7 L120.4 99.3 L120.0 104.0 L120.4 108.7 L121.5 113.3 L123.3 117.6 L125.7 121.6 L128.8 125.2 L132.4 128.3 L136.4 130.7 L140.7 132.5 L145.3 133.6 L150.0 134.0 L154.7 133.6 L159.3 132.5 L163.6 130.7 L167.6 128.3 L171.2 125.2 L174.3 121.6 L176.7 117.6 L178.5 113.3 L179.6 108.7 Z"/><path fill="currentColor" fill-rule="evenodd" stroke="var(--bg3,#1d1914)" stroke-width="9" paint-order="stroke" stroke-linejoin="round" d="M8.0 4.0 L112.0 4.0 L112.0 38.0 L112.0 38.0 L107.0 46.0 L102.0 38.0 L102.0 38.0 L97.0 46.0 L92.0 38.0 L92.0 38.0 L87.0 46.0 L82.0 38.0 L82.0 38.0 L77.0 46.0 L72.0 38.0 L72.0 38.0 L67.0 46.0 L62.0 38.0 L62.0 38.0 L57.0 46.0 L52.0 38.0 L52.0 38.0 L47.0 46.0 L42.0 38.0 L38.0 38.0 L38.0 70.0 L8.0 70.0 Z M42.0 60.0 L42.0 60.0 L47.0 52.0 L52.0 60.0 L52.0 60.0 L57.0 52.0 L62.0 60.0 L62.0 60.0 L67.0 52.0 L72.0 60.0 L72.0 60.0 L77.0 52.0 L82.0 60.0 L82.0 60.0 L87.0 52.0 L92.0 60.0 L92.0 60.0 L97.0 52.0 L102.0 60.0 L104.0 60.0 L104.0 82.0 L42.0 82.0 Z M10.0 78.0 L38.0 78.0 L38.0 132.0 L10.0 132.0 Z M48.0 82.0 L80.0 82.0 L84.0 200.0 L44.0 200.0 Z"/><g stroke="rgba(0,0,0,0.35)" stroke-width="2.5"><line x1="12" y1="88" x2="36" y2="88"/><line x1="12" y1="96" x2="36" y2="96"/><line x1="12" y1="104" x2="36" y2="104"/><line x1="12" y1="112" x2="36" y2="112"/><line x1="12" y1="120" x2="36" y2="120"/><line x1="12" y1="128" x2="36" y2="128"/></g></svg><b>LAB</b><span>Opening the game's places…</span></div></div>
 <script src="/web/vendor/three.min.js"></script>
 <script src="/web/vendor/DDSLoader.js"></script>
 <script src="/web/vendor/TransformControls.js"></script>
