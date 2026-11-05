@@ -30,11 +30,11 @@ const TH_THEMES = {
     gold: '#9a6412', gold2: '#7a4c08', goldline: '#c9a361', hover: '#ece2cd', sel: '#e6d4ad', bg2: '#fffdf8', bg3: '#f4ecdb',
     'btn-primary': '#e3c27e', 'btn-primary-hover': '#d8b264', red: '#b8432e', amber: '#a87a10', green: '#4f8a3a', blue: '#3c6fa8'}},
 };
-const TH = {theme: 'mojave', size: 14, scan: false, calm: false};
+const TH = {theme: 'pipboy', size: 14, scan: false, calm: false};      // (Pip-Boy green unless you pick another)
 try { Object.assign(TH, JSON.parse(localStorage.getItem('folab-theme') || '{}')); } catch (e) {}
 
 function thApply(){
-  const t = TH_THEMES[TH.theme] || TH_THEMES.mojave, root = document.documentElement;
+  const t = TH_THEMES[TH.theme] || TH_THEMES.pipboy, root = document.documentElement;
   for (const k of new Set(Object.values(TH_THEMES).flatMap(x => Object.keys(x.v)))) root.style.removeProperty('--' + k);
   for (const [k, v] of Object.entries(t.v)) root.style.setProperty('--' + k, v);
   root.style.setProperty('--fs', TH.size + 'px');

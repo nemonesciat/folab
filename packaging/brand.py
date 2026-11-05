@@ -75,10 +75,10 @@ def mark_svg():
         ''.join('<line x1="12" y1="%d" x2="36" y2="%d"/>' % (y, y) for y in range(88, 130, 8)))   # (the nut's knurls)
 
 
-ICON_BG, ICON_RIM, ICON_GEAR, ICON_WRENCH = (27, 24, 19), (70, 60, 46), (210, 168, 90), (236, 228, 210)
+ICON_BG, ICON_RIM, ICON_GEAR, ICON_WRENCH = (7, 15, 9), (31, 74, 44), (61, 242, 122), (138, 255, 172)   # (the Pip-Boy theme's greens)
 
 
-ICON_GOLD, ICON_LIGHT = (210, 168, 90), (240, 205, 135)
+ICON_GOLD, ICON_LIGHT = (52, 214, 108), (138, 255, 172)
 MARK_SCALE = 0.92                  # (the mark in the 256 x 256 icon, centred on its own extent...)
 MARK_NUDGE = (0, 3)                # (...then moved toward where its weight is: the solid wrench outweighs the gear's outline)
 
