@@ -78,11 +78,21 @@ ICON_BG, ICON_RIM, ICON_GEAR, ICON_WRENCH = (27, 24, 19), (70, 60, 46), (210, 16
 
 
 ICON_GOLD, ICON_LIGHT = (210, 168, 90), (240, 205, 135)
-MARK_FIT = (0.86, 18, 36)          # (the mark's 256 x 204 laid in the 256 x 256 icon: scale, left, top)
+MARK_SCALE = 0.86                  # (the mark in the 256 x 256 icon, centred on its own extent)
+
+
+def _mark_box():
+    """The mark's extent (the wrench, and the gear with its outline), in its own units."""
+    pts = [p for poly in wrench(8, 4) + gear(150, 104, 88, 70, 10, 30) for p in poly]
+    pad = 13 / 2
+    return (min(x for x, _y in pts) - pad, min(y for _x, y in pts) - pad,
+            max(x for x, _y in pts) + pad, max(y for _x, y in pts) + pad)
 
 
 def _fit(polys):
-    s, ox, oy = MARK_FIT
+    x0, y0, x1, y1 = _mark_box()
+    s = MARK_SCALE
+    ox, oy = 128 - (x0 + x1) / 2 * s, 128 - (y0 + y1) / 2 * s
     return [[(ox + x * s, oy + y * s) for x, y in poly] for poly in polys]
 
 
@@ -96,7 +106,7 @@ def icon_layers():
             a = math.radians(a0 + 90 * k / 8)
             sq.append((cxx + corner * math.cos(a), cyy + corner * math.sin(a)))
     inner = [((x - 128) * 0.95 + 128, (y - 128) * 0.95 + 128) for x, y in sq]
-    sc = MARK_FIT[0]
+    sc = MARK_SCALE
     g, w = _fit(gear(150, 104, 88, 70, 10, 30)), _fit(wrench(8, 4))
     return [('fill', ICON_RIM, [sq], 0), ('fill', ICON_BG, [inner], 0),
             ('stroke', ICON_GOLD, g, 13 * sc),
