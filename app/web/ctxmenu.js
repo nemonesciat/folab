@@ -133,7 +133,22 @@ async function goThroughDoor(t){
   const d = await api('/api/door?key=' + encodeURIComponent(t.key));
   if (!d) return toast('This door doesn\'t lead anywhere (it may open in place).', true);
   if (!d.cell) return toast('It leads to a place that isn\'t loaded.', true);
-  if (!d.interior) return toast(`It leads outside${d.cell_name ? ' (' + d.cell_name + ')' : ''}: FOLab can't show outdoor places yet.`, true);
+  if (d.world){
+    // outside: the worldspace, standing where the door lets you out, facing the way the game turns you
+    const info = await api('/api/world?id=' + encodeURIComponent(d.world));
+    OUT.info = info;
+    tab('left', 'outside'); if (!OUT.worlds.length) await outsideTab(); else drawOutside();
+    goOutside(info, {p: [d.p[0], d.p[1], d.p[2] - 80, d.p[3], d.p[4], d.p[5]], facing: true});
+    toast('Out to ' + (d.world_name || 'the world outside'));
+    // (select the door once its cell is in)
+    for (let i = 0; i < 40 && OUT.world === info.id; i++){
+      const g = W.byKey.get(d.door);
+      if (g){ select([d.door]); break; }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    return;
+  }
+  if (!d.interior) return toast(`It leads to ${d.cell_name || d.cell_edid || 'a place'} FOLab can't open.`, true);
   await openPlace(d.cell, {p: d.p, facing: true});
   const other = W.byKey.get(d.door);
   if (other){

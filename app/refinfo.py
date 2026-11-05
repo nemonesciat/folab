@@ -33,6 +33,12 @@ def door_target(gd, fid):
         cf = gd.fields(cell)
         out['cell_edid'] = tes4.zstr(cf.get('EDID', b''))
         out['cell_name'] = tes4.zstr(cf.get('FULL', b''))
+        # outside: the worldspace it leads into (the door itself is usually in the world's persistent cell)
+        world = gd.ext_cells.get(cell) or next((w for w, c in gd.world_persistent.items() if c == cell), None)
+        if world is not None:
+            wf = gd.fields(world)
+            out['world'] = gd.key(world)
+            out['world_name'] = tes4.zstr(wf.get('FULL', b'')) or tes4.zstr(wf.get('EDID', b''))
     return out
 
 

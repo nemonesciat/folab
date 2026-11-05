@@ -392,8 +392,13 @@ def door(rkey):
         if tel:
             dest = ref_cell_key(tel['door'])
             e, n = place_name(dest) if dest else ('', '')
-            return {'door': tel['door'], 'p': tel['p'], 'cell': dest, 'cell_edid': e, 'cell_name': n,
-                    'interior': True, 'mine': True}
+            out = {'door': tel['door'], 'p': tel['p'], 'cell': dest, 'cell_edid': e, 'cell_name': n,
+                   'interior': True, 'mine': True}
+            c = GD.from_key(dest) if dest and not dest.startswith('+') else None
+            world = GD.ext_cells.get(c) or next((w for w, pc in GD.world_persistent.items() if pc == c), None)
+            if world is not None:
+                out.update(interior=False, world=GD.key(world), world_name=place_name(GD.key(world))[1])
+            return out
     if rkey.startswith('+'):
         return None
     return refinfo.door_target(GD, GD.from_key(rkey))
