@@ -42,8 +42,12 @@ class Painter:
             self.colour[path] = c or (128, 116, 96)
         return self.colour[path]
 
-    def water(self, world, cell):
-        """The water's height in a cell, or None where it has none."""
+    def water(self, world, cell, mine=None):
+        """The water's height in a cell, or None where it has none. mine: {CELL key: height or None} as a mod sets
+        it (None: the world's own level)."""
+        k = self.gd.key(cell)
+        if mine is not None and k in mine:
+            return self.world_water(world) if mine[k] is None else mine[k]
         f = self.gd.fields(cell)
         flags = f.get('DATA', b'\0')[0]
         if not flags & 2:
@@ -52,10 +56,13 @@ class Painter:
             v = struct.unpack_from('<f', f['XCLW'])[0]
             if abs(v) < 1e7:
                 return v
+        return self.world_water(world)
+
+    def world_water(self, world):
         wd = self.gd.fields(world).get('DNAM')
         return struct.unpack_from('<f', wd, 4)[0] if wd and len(wd) >= 8 else None
 
-    def tile(self, world, tx, ty, mine=None):
+    def tile(self, world, tx, ty, mine=None, water=None):
         """PNG bytes for tile (tx, ty): cells tx*16 .. +15 across, ty*16 .. +15 up. mine: {CELL key: land} as the
         mod has it, over the game's."""
         gd, size = self.gd, TILE * PX
@@ -73,7 +80,7 @@ class Painter:
                     L = land.decode(gd, e, self.tex)
                 if not L.get('h'):
                     continue
-                wl = self.water(world, cell) if cell is not None else None
+                wl = self.water(world, cell, water) if cell is not None else None
                 self._cell(img, size, i, TILE - 1 - j, L, wl)
         return png(size, size, [img[r * size * 4:(r + 1) * size * 4] for r in range(size)])
 

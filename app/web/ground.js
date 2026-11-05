@@ -50,7 +50,8 @@ function gbDraw(){
     ${GB.tool === 'raise' || GB.tool === 'lower' ? '<div class="note" style="padding:2px 0">Ctrl: the other way</div>' : ''}
     <label class="gb-row"><input type="checkbox" data-gb="follow" ${GB.follow ? 'checked' : ''}> Things on the ground move with it</label>
     <div class="note" style="padding:2px 0">[ and ] size · each stroke is one Undo</div>
-    ${hmHtml()}`;
+    ${hmHtml()}
+    ${wtHtml()}`;
   if ($('[data-gb="find"]') && GB.q) $('[data-gb="find"]').value = GB.q;
 }
 document.addEventListener('click', e => {
@@ -63,6 +64,9 @@ document.addEventListener('click', e => {
   if (x){ GB.tex = x.dataset.tex; gbSave(); gbDraw(); }
   if (e.target.dataset.gb === 'close') groundOff();
   if (e.target.dataset.gb === 'hmload') $('#hm-file').click();
+  if (e.target.dataset.gb === 'wtset') wtSet(+$('[data-gb="wth"]').value);
+  if (e.target.dataset.gb === 'wtoff') wtSet(null);
+  if (e.target.dataset.gb === 'wtgame') wtSet(undefined);
 });
 document.addEventListener('input', e => {
   if (!e.target.closest('#gb')) return;
@@ -413,3 +417,30 @@ document.addEventListener('change', async e => {
     toast(`Height map loaded: ${d.cells} cell${d.cells === 1 ? '' : 's'} (one Undo)`);
   } catch (err){ fail(err); }
 });
+
+
+// ---------- Water: the cell under the camera's water level ----------
+function wtCell(){ const [cx, cy] = camCell(); return OUT.cells.get(cx + ',' + cy); }
+function wtHtml(){
+  const c = wtCell(); if (!c || !c.data || !c.data.cell) return '';
+  const h = c.data.water, low = c.data.land ? Math.round(Math.min(...c.data.land.h)) : 0, shows = h !== null && h > low;
+  return `<div class="h" style="padding-left:0;margin-top:8px">Water · cell ${c.x}, ${c.y}</div>
+    <div class="note" style="padding:0 0 4px">${shows ? `Water stands at ${Math.round(h)} here.` : 'No water shows here.'} The ground's lowest point is ${low}. The game has one water level a cell: everything in the cell lower than it is under water.</div>
+    <label class="gb-row">Level <input type="number" data-gb="wth" value="${Math.round(shows ? h : low + 200)}" style="width:90px"> <button class="btn" data-gb="wtset">Set</button></label>
+    <div class="gb-tools" style="grid-template-columns:1fr 1fr"><button class="btn" data-gb="wtoff" title="Back to the world's own level, below all the land">No water</button>
+      ${c.data.changed_water ? '<button class="btn" data-gb="wtgame">As the game has it</button>' : ''}</div>`;
+}
+async function wtSet(h){
+  const c = wtCell(); if (!c) return;
+  const op = h === undefined ? {op: 'water_revert', cell: c.data.cell} : {op: 'water', cell: c.data.cell, h};
+  const d = await edit(h === undefined ? 'Water as the game has it' : h === null ? 'Take the water away' : 'Water at ' + Math.round(h), [op]);
+  if (!d) return;
+  (OUT.touched = OUT.touched || new Set()).add(c);
+  await outsideResync(); gbDraw();
+}
+// (the Water section follows the cell you're over)
+setInterval(() => {
+  if (!GB.on || !OUT.world) return;
+  const k = camCell().join(',');
+  if (k !== GB.cellAt && !(document.activeElement && document.activeElement.closest && document.activeElement.closest('#gb'))){ GB.cellAt = k; gbDraw(); }
+}, 700);

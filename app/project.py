@@ -50,6 +50,7 @@ class Project:
         self.cells = d.get('cells', {})
         self.records = d.get('records', {})     # form key or '+ID' -> record (recordio.py): game records changed, new ones
         self.land = d.get('land', {})           # outside CELL key -> its ground as the mod has it (land.py's form)
+        self.water = d.get('water', {})         # outside CELL key -> its water's height (None: the world's own level)
         self.source = d.get('source')           # an opened plugin: its copy, under projects/ (adopt.py); None for a new mod
         self.esm = d.get('esm', False)          # saved as a master (.esm)
         self.next_id = d.get('next_id', FIRST_ID)
@@ -72,7 +73,7 @@ class Project:
 
     def to_dict(self):
         return {'name': self.name, 'plugin': self.plugin, 'author': self.author, 'description': self.description,
-                'cells': self.cells, 'records': self.records, 'land': self.land, 'next_id': self.next_id,
+                'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'next_id': self.next_id,
                 'source': self.source, 'esm': self.esm}
 
     def save(self):
@@ -89,12 +90,12 @@ class Project:
         return os.path.join(BUILD_DIR, self.plugin)
 
     def count(self):
-        return sum(len(c['refs']) for c in self.cells.values()) + len(self.records) + len(self.land)
+        return sum(len(c['refs']) for c in self.cells.values()) + len(self.records) + len(self.land) + len(self.water)
 
     # --- edits: each one a single undo step ---
 
     def _step(self, label):
-        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land)))
+        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water)))
         del self.undo_stack[:-200]
         self.redo_stack.clear()
 
@@ -125,6 +126,12 @@ class Project:
                 continue
             if o['op'] == 'land_revert':
                 self.land.pop(o['cell'], None)
+                continue
+            if o['op'] == 'water':                   # an outside cell's water level (None: back to the world's)
+                self.water[o['cell']] = None if o.get('h') is None else float(o['h'])
+                continue
+            if o['op'] == 'water_revert':
+                self.water.pop(o['cell'], None)
                 continue
             if o.get('cell') == '$new':                # (the place a record_new earlier in these ops just made)
                 o = dict(o, cell=new_record)
@@ -172,20 +179,20 @@ class Project:
     def undo(self):
         if not self.undo_stack:
             return None
-        label, cells, records, nid, land = self.undo_stack.pop()
-        self.redo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land)))
+        label, cells, records, nid, land, water = self.undo_stack.pop()
+        self.redo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water)))
         self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)   # (an undone ID is never reused)
-        self.land = land
+        self.land, self.water = land, water
         self.save()
         return label
 
     def redo(self):
         if not self.redo_stack:
             return None
-        label, cells, records, nid, land = self.redo_stack.pop()
-        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land)))
+        label, cells, records, nid, land, water = self.redo_stack.pop()
+        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water)))
         self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)
-        self.land = land
+        self.land, self.water = land, water
         self.save()
         return label
 

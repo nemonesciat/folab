@@ -119,6 +119,10 @@ class Writer:
                     used.add(gd.source(gd.ref_cell.get(fid, cell))[0])
                 if r.get('base') and not r['base'].startswith('+'):
                     used.add(gd.from_key(r['base']) >> 24)
+        for ckey in getattr(self.pr, 'water', {}):
+            cell = gd.from_key(ckey)
+            used.add(gd.source(cell)[0])
+            used.add(gd.source(gd.ext_cells[cell])[0])
         for ckey, L in getattr(self.pr, 'land', {}).items():
             cell = gd.from_key(ckey)
             used.add(gd.source(cell)[0])
@@ -222,7 +226,7 @@ class Writer:
 
         # places: the cell's record, then its refs
         cells = {k for k, c in self.pr.cells.items() if c['refs']}
-        cells |= set(getattr(self.pr, 'land', {}))
+        cells |= set(getattr(self.pr, 'land', {})) | set(getattr(self.pr, 'water', {}))
         cells |= {k for k, r in self.pr.records.items() if r['type'] == 'CELL'}
         nodes = {}
 
@@ -310,6 +314,15 @@ class Writer:
             node = plugintree.Rec.new('LAND', rec.flags & ~tes4.COMPRESSED, llid, join(subs), FORM_VERSION)
             group.kids.insert(0, node)                      # (the land first, as the game's cells have it)
             found[llid] = (node, group)
+
+        # water: the cell's record says how high its water stands (XCLW; the world's own level: the greatest float)
+        for ckey, h in sorted(getattr(self.pr, 'water', {}).items()):
+            cell = gd.from_key(ckey)
+            cell_kids(cell)
+            node = nodes[cell][0]
+            subs = list(tes4.iter_subrecords(node.data()))
+            subs = set_water(subs, h)
+            node.set_data(join(subs), node.flags & ~tes4.COMPRESSED)
 
         # the header: an opened plugin's own, with its count and next ID brought up to date
         own_ids = [r.formid & 0xFFFFFF for r, _p, _path in tree.records() if r.formid >> 24 == len(self.masters)]
@@ -448,6 +461,26 @@ class Writer:
         # (persistent before temporary, as the game's files have them)
         kids.kids.insert(0 if persistent else len(kids.kids), g)
         return g
+
+
+WORLD_WATER = 3.4028234663852886e+38       # (XCLW at the greatest float: the cell takes its world's water level)
+WATER_AFTER = ('EDID', 'FULL', 'DATA', 'XCLC', 'XCLL', 'IMPS', 'IMPF', 'LTMP', 'LNAM')
+
+
+def set_water(subs, h):
+    """A CELL's subrecords with its water at h (None: the world's level), the has-water flag on."""
+    v = struct.pack('<f', WORLD_WATER if h is None else float(h))
+    out, done = [], False
+    for t, d in subs:
+        if t == 'DATA' and d:
+            d = bytes([d[0] | 2]) + d[1:]
+        if t == 'XCLW':
+            d, done = v, True
+        out.append((t, d))
+    if not done:
+        at = max([n + 1 for n, (t, _d) in enumerate(out) if t in WATER_AFTER] or [len(out)])
+        out.insert(at, ('XCLW', v))
+    return out
 
 
 def write(gd, project, path):

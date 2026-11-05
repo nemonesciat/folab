@@ -299,6 +299,14 @@ def world(wkey):
             'markers': marks, 'middle': mid, 'bounds': bounds}
 
 
+def map_painter():
+    global _painter
+    if _painter is None or _painter.gd is not GD:
+        _painter = maptiles.Painter(GD)
+        _tiles.clear()
+    return _painter
+
+
 def map_tile(wkey, tx, ty):
     """The flat map's picture of 16 x 16 cells (maptiles.py), with the mod's ground in it. The game's own tiles are
     kept on disk (under cache/maps, for exactly these game files), and asking for one starts drawing the rest of
@@ -309,7 +317,8 @@ def map_tile(wkey, tx, ty):
         _painter = maptiles.Painter(GD)
         _tiles.clear()
     mine = _mine_in_tile(w, tx, ty)
-    if not mine:
+    water = _water_in_tile(w, tx, ty)
+    if not mine and not water:
         path = _tile_path(wkey, tx, ty)
         if os.path.isfile(path):
             with open(path, 'rb') as f:
@@ -318,12 +327,12 @@ def map_tile(wkey, tx, ty):
         _tile_save(path, data)
         _tiles_ahead(wkey, tx, ty)
         return data
-    sig = hashlib.md5(json.dumps(mine, sort_keys=True).encode()).hexdigest()
+    sig = hashlib.md5(json.dumps([mine, water], sort_keys=True).encode()).hexdigest()
     k = (wkey, tx, ty, sig)
     if k not in _tiles:
         if len(_tiles) > 200:
             _tiles.clear()
-        _tiles[k] = _painter.tile(w, tx, ty, mine)
+        _tiles[k] = _painter.tile(w, tx, ty, mine, water)
     return _tiles[k]
 
 
@@ -541,6 +550,18 @@ def heightmap_import(body):
     return out
 
 
+def _water_in_tile(w, tx, ty):
+    out = {}
+    if PR and PR.water:
+        grid = GD.grid(w)
+        for i in range(maptiles.TILE):
+            for j in range(maptiles.TILE):
+                c = grid.get((tx * maptiles.TILE + i, ty * maptiles.TILE + j))
+                if c is not None and GD.key(c) in PR.water:
+                    out[GD.key(c)] = PR.water[GD.key(c)]
+    return out
+
+
 def _mine_in_tile(w, tx, ty):
     mine = {}
     if PR and PR.land:
@@ -646,8 +667,12 @@ def outside(wkey, x, y):
     c = GD.grid(w).get((x, y))
     entry = GD.land_at(w, x, y)
     mine = PR.land.get(GD.key(c)) if PR and c is not None else None
+    if _painter is None:
+        map_painter()
     out = {'x': x, 'y': y, 'cell': GD.key(c) if c is not None else None,
            'land': mine or (land.decode(GD, entry, _land_tex) if entry else None), 'things': [],
+           'water': _painter.water(w, c, PR.water if PR else None) if c is not None else None,
+           'changed_water': bool(PR and c is not None and GD.key(c) in PR.water),
            'own_land': c is not None and c in GD.land, 'changed_land': bool(mine)}
     if c is not None:
         out['things'] = cell_things(GD.key(c))

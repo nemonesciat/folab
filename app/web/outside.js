@@ -131,6 +131,7 @@ async function cellLoad(list){
     if (OUT.cells.get(c.x + ',' + c.y) !== c) return;
     c.data = got[n] || {land: null, things: []};
     if (c.data.land){ c.land = landMesh(c.data.land, c.x, c.y); c.land.userData.cell = c; W.scene.add(c.land); W.lands.add(c.land); FAR.at = null; }
+    waterRebuild(c);
     if (OUT.settle && c.data.land){
       const [cx, cy] = camCell();
       if (cx === c.x && cy === c.y){ W.cam.position.z = groundAt(c.data.land, c.x, c.y, W.cam.position.x, W.cam.position.y) + 220; OUT.settle = false; }
@@ -159,6 +160,7 @@ function cellThingsOff(c){
 }
 function cellDrop(c){
   if (c.shown) cellThingsOff(c);
+  if (c.water){ W.scene.remove(c.water); c.water = null; }
   if (c.land){
     W.lands.delete(c.land);
     W.scene.remove(c.land);
@@ -233,7 +235,7 @@ function landMesh(d, x, y){
 
 // ---------- after an undo, a redo or a refused change: every cell on show again as the server has it ----------
 async function outsideResync(){
-  const shown = [...OUT.cells.values()].filter(c => c.data && c.data.cell && (c.shown || c.data.changed_land || OUT.touched && OUT.touched.has(c)));
+  const shown = [...OUT.cells.values()].filter(c => c.data && c.data.cell && (c.shown || c.data.changed_land || c.data.changed_water || OUT.touched && OUT.touched.has(c)));
   if (!shown.length) return;
   const token = OUT.token;
   const got = [];
@@ -245,9 +247,11 @@ async function outsideResync(){
   shown.forEach((c, n) => {
     const fresh = got[n].things, keys = new Set(fresh.map(t => t.key));
     c.data.things = fresh;
+    if (got[n].water !== c.data.water){ c.data.water = got[n].water; c.data.changed_water = got[n].changed_water; waterRebuild(c); if (typeof mapLandChanged === 'function') mapLandChanged(); }
     if (got[n].land && JSON.stringify(got[n].land.h) + got[n].land.c + JSON.stringify(got[n].land.q) !==
         JSON.stringify(c.data.land.h) + c.data.land.c + JSON.stringify(c.data.land.q)){
       c.data.land = got[n].land; c.data.changed_land = got[n].changed_land; landRebuild(c);
+      waterRebuild(c);
       if (typeof mapLandChanged === 'function') mapLandChanged();
       if (typeof farLandChanged === 'function') farLandChanged();
     }
@@ -285,4 +289,18 @@ function landRebuild(c){
     W.lands.delete(old); W.scene.remove(old);
     old.traverse(m => { if (m.isMesh) m.geometry.dispose(); });
   }
+}
+
+
+// ---------- water: one level a cell, as the game has it; drawn where it stands above the ground ----------
+const WATER_MAT = new T.MeshLambertMaterial({color: 0x3f6670, transparent: true, opacity: 0.78, depthWrite: false});
+const WATER_GEO = new T.PlaneGeometry(CELL, CELL).translate(CELL / 2, CELL / 2, 0);
+function waterRebuild(c){
+  if (c.water){ W.scene.remove(c.water); c.water = null; }
+  const d = c.data, h = d && d.water;
+  if (h === null || h === undefined || !d.land || h <= Math.min(...d.land.h)) return;
+  c.water = new T.Mesh(WATER_GEO, WATER_MAT);
+  c.water.position.set(c.x * CELL, c.y * CELL, h);
+  c.water.renderOrder = 2;
+  W.scene.add(c.water);
 }
