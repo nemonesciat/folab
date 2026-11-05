@@ -1,17 +1,18 @@
 """Starting the game from FOLab, and "Play here".
 
-Open in game puts the mod in the game and asks Steam to start it (the game's launcher opens: Play). The game can't be
-told on its command line where to start, so you still press Continue or load a save.
+Open in game puts the mod in the game and starts it (through xNVSE's loader when it's there, else Steam). The game
+can't be told on its command line where to start, so you still press Continue or load a save.
 
 Play here adds FOLab Test.esp, kept apart from your mod: an invisible marker where you asked, and a quest whose script
 moves you there once a save is loaded. It is the one script FOLab writes, compiled by hand to the same bytes the game's
-own compiler gives (checked against the game's scripts: GameMode block, if/set on a local, MoveTo):
+own compiler gives (checked against the game's scripts: GameMode block, if/set on a local, ShowWarning, MoveTo):
 
     scn FOLabTestScript
     short done
     begin GameMode
         if done == 0
             set done to 1
+            ShowWarning "FOLab: Play here (...)"
             player.MoveTo FOLabTestMarker
         endif
     end
@@ -64,20 +65,25 @@ def launch(data_dir, via='nvse'):
     return 'steam'
 
 
-def compiled_script():
-    """The bytecode of the script in this module's docstring (ref 1 = the player, ref 2 = the marker)."""
+def compiled_script(message=b''):
+    """The bytecode of the script in this module's docstring (ref 1 = the player, ref 2 = the marker); with a message,
+    ShowWarning shows it on screen as you're moved."""
     cond = b' s\x01\x00 0 =='                                        # done == 0
-    if_ = struct.pack('<HHHH', 0x16, 4 + len(cond), 2, len(cond)) + cond  # if (skip 2 statements when false)
     set_ = struct.pack('<HH', 0x15, 7) + b's\x01\x00' + struct.pack('<H', 2) + b' 1'   # set done to 1
+    # ShowWarning "text": 1 parameter, the text, then how many values fill into it (none)
+    warn = struct.pack('<HHHH', 0x11B9, 6 + len(message), 1, len(message)) + message + b'\0\0' if message else b''
     moveto = struct.pack('<HHHHH', 0x1C, 1, 0x109E, 5, 1) + b'r\x02\x00'               # player.MoveTo marker
+    inside = 3 if message else 2
+    if_ = struct.pack('<HHHH', 0x16, 4 + len(cond), inside, len(cond)) + cond  # if (skip what's inside when false)
     endif, end = struct.pack('<HH', 0x19, 0), struct.pack('<HH', 0x11, 0)
-    body = if_ + set_ + moveto + endif + end
+    body = if_ + set_ + warn + moveto + endif + end
     begin = struct.pack('<HHHI', 0x10, 6, 0, len(body))                 # begin GameMode
     return struct.pack('<HH', 0x1D, 0) + begin + body                     # (scn)
 
 
-SOURCE = ('scn FOLabTestScript\r\n\r\nshort done\r\n\r\nbegin GameMode\r\n\tif done == 0\r\n\t\tset done to 1\r\n'
-          '\t\tplayer.MoveTo FOLabTestMarker\r\n\tendif\r\nend\r\n')
+def source(message):
+    return ('scn FOLabTestScript\r\n\r\nshort done\r\n\r\nbegin GameMode\r\n\tif done == 0\r\n\t\tset done to 1\r\n'
+            '\t\tShowWarning "%s"\r\n\t\tplayer.MoveTo FOLabTestMarker\r\n\tendif\r\nend\r\n' % message)
 
 
 def _settings_counter():
@@ -95,7 +101,7 @@ def _settings_counter():
     return n
 
 
-def write_test_plugin(gd, cell, p, path):
+def write_test_plugin(gd, cell, p, path, place=''):
     """FOLab Test.esp: an XMarkerHeading at p = [x, y, z, rz] in cell, and the quest and script that move the player
     there once. Its masters are every file the game loads before it (so every form ID reads the same in it)."""
     n = _settings_counter()
@@ -119,11 +125,12 @@ def write_test_plugin(gd, cell, p, path):
     tree = plugintree.Plugin.empty(b'')
     order = gd.plugins[0].top_groups()
     # the script and its quest
-    scda = compiled_script()
+    msg = ('FOLab: Play here%s' % (' (' + place + ')' if place else '')).encode('cp1252', 'replace')[:120]
+    scda = compiled_script(msg)
     schr = struct.pack('<IIIIHH', 0, 2, len(scda), 1, SCRIPT_QUEST, 1)
     slsd = struct.pack('<I12sB7s', 1, b'\0' * 12, 1, b'\0' * 7)          # local 1: done (a short)
     script = espwrite.join([('EDID', b'FOLabTestScript%d\0' % n), ('SCHR', schr), ('SCDA', scda),
-                            ('SCTX', SOURCE.encode('cp1252')), ('SLSD', slsd), ('SCVR', b'done\0'),
+                            ('SCTX', source(msg.decode('cp1252')).encode('cp1252')), ('SLSD', slsd), ('SCVR', b'done\0'),
                             ('SCRO', struct.pack('<I', PLAYER_REF)), ('SCRO', struct.pack('<I', marker_id))])
     tree.top('SCPT', order).kids.append(plugintree.Rec.new('SCPT', 0, script_id, script))
     quest = espwrite.join([('EDID', b'FOLabTestQuest%d\0' % n), ('SCRI', struct.pack('<I', script_id)),

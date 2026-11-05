@@ -346,7 +346,9 @@ def play(body):
     if body.get('cell'):
         cell = GD.from_key(body['cell'])
         path = os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN)
-        out['test'] = playtest.write_test_plugin(GD, cell, body['p'], path)
+        f = GD.fields(cell)
+        place = tes4.zstr(f.get('FULL', b'')) or tes4.zstr(f.get('EDID', b''))
+        out['test'] = playtest.write_test_plugin(GD, cell, body['p'], path, place)
         out['test_install'] = install.install(GD.data_dir, path)      # (after the mod: newest, so it loads last)
     else:
         playtest.take_out_test(GD.data_dir)

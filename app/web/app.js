@@ -364,6 +364,18 @@ $('#t-help').onclick = () => { const h = $('#help3d'); h.style.display = h.style
 $('#b-undo').onclick = () => undoRedo('undo'); $('#b-redo').onclick = () => undoRedo('redo');
 $('#b-save').onclick = save; $('#b-install').onclick = install;
 $('#b-play').onclick = () => play();
+$('#b-playhere').onclick = () => {
+  // where the middle of the view lands, standing a step back from it, facing the way the view looks
+  const r = W.ren.domElement.getBoundingClientRect(), h = typeof hitThing === 'function' && hitThing({clientX: r.left + r.width / 2, clientY: r.top + r.height / 2});
+  let p = W.cam.position.clone();
+  if (h && h.point){
+    const d = Math.min(120, W.cam.position.distanceTo(h.point) * 0.8), f = new THREE.Vector3(Math.cos(W.yaw), Math.sin(W.yaw), 0);
+    p = h.point.clone().addScaledVector(f, -d);
+    const floor = new THREE.Raycaster(new THREE.Vector3(p.x, p.y, W.cam.position.z), new THREE.Vector3(0, 0, -1)).intersectObjects(visibleGroups(), true)[0];
+    if (floor) p.z = floor.point.z;
+  }
+  playHere(p);
+};
 
 // Open in game, and Play here (at = {cell, p: [x, y, z, facing]}): the game starts; Continue or load a save there
 async function play(at){
