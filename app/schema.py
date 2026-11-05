@@ -14,7 +14,34 @@ import struct
 OBND = ('Bounds', [('h', 'X1'), ('h', 'Y1'), ('h', 'Z1'), ('h', 'X2'), ('h', 'Y2'), ('h', 'Z2')])
 CTDA = [('Condition', [('B', 'Type'), ('3x', ''), ('I', 'Value'), ('H', 'Function'), ('2x', ''), ('I', 'Parameter 1'),
                        ('I', 'Parameter 2'), ('I', 'Run on'), ('F', 'Reference')]),
+        ('Condition', [('B', 'Type'), ('3x', ''), ('I', 'Value'), ('H', 'Function'), ('2x', ''), ('I', 'Parameter 1'), ('I', 'Parameter 2'), ('I', 'Run on')]),
         ('Condition', [('B', 'Type'), ('3x', ''), ('I', 'Value'), ('H', 'Function'), ('2x', ''), ('I', 'Parameter 1'), ('I', 'Parameter 2')])]
+
+def _size(fields):
+    return sum(struct.calcsize('<' + ((c[:-1] or '1') + 's' if c.endswith('x') else 'I' if c == 'F' else c)) for c, _n in fields)
+
+
+def _prefixes(label, fields, sizes):
+    """The same layout cut short at each of several byte sizes (newer files grew some records at the end),
+    longest first."""
+    out = []
+    for want in sorted(sizes, reverse=True):
+        for k in range(len(fields) + 1):
+            if _size(fields[:k]) == want:
+                out.append((label, fields[:k]))
+                break
+        else:
+            raise ValueError('%s: no cut of the layout is %d bytes' % (label, want))
+    return out
+
+
+def _rep(label, fields, counts):
+    """A layout of n entries of the same shape, for each n in counts (largest first, so the fullest fits first)."""
+    return [(label, [(c, '%s %d' % (nm, k + 1) if nm else nm) for k in range(n) for c, nm in fields]) for n in sorted(counts, reverse=True)]
+
+
+MARK = ('Marker', [])
+
 COMMON = {
     'EDID': ('Editor ID', 'z'), 'FULL': ('Name', 'z'), 'MODL': ('Model', 'z'), 'MODB': ('Model bound', [('f', 'Radius')]),
     'ICON': ('Icon', 'z'), 'MICO': ('Small icon', 'z'), 'SCRI': ('Script', 'F'), 'OBND': OBND, 'DESC': ('Description', 'z'),
@@ -22,6 +49,16 @@ COMMON = {
     'REPL': ('Repair list', 'F'), 'BIPL': ('Biped model list', 'F'), 'CTDA': CTDA, 'EAMT': ('Effect charge', [('H', 'Amount')]),
     'EFID': ('Effect', 'F'), 'EFIT': ('Effect data', [('I', 'Magnitude'), ('I', 'Area'), ('I', 'Duration'), ('I', 'Range'), ('i', 'Actor value')]),
     'CNTO': ('Item', [('F', 'Item'), ('i', 'Count')]), 'SNAM': ('Sound', 'F'),
+    # scripts, as they sit inside quests, dialogue, packages, perks, terminals and script records
+    'SCHR': ('Script header', [('4x', ''), ('I', 'Reference count'), ('I', 'Compiled size'), ('I', 'Variable count'), ('H', 'Type'), ('H', 'Flags')]),
+    'SCRO': ('Script reference', 'F'), 'SCRV': ('Script variable', [('I', 'Index')]),
+    'SLSD': ('Script variable data', [('I', 'Index'), ('12x', ''), ('B', 'Flags'), ('7x', '')]),
+    # what a thing breaks into
+    'DEST': ('Destruction', [('I', 'Health'), ('B', 'Stages'), ('B', 'Flags'), ('2x', '')]),
+    'DSTD': ('Damage stage', [('B', 'Health %'), ('B', 'Index'), ('B', 'Damage stage'), ('B', 'Flags'), ('I', 'Self damage per second'),
+                              ('F', 'Explosion'), ('F', 'Debris'), ('i', 'Debris count')]),
+    'DSTF': MARK, 'DMDL': ('Damaged model', 'z'),
+    'COED': ('Owner', [('F', 'Owner'), ('I', 'Rank or global'), ('f', 'Condition')]),
 }
 
 TYPES = {
@@ -137,6 +174,178 @@ TYPES = {
     'WRLD': ('Worldspaces', {}),
     'SPEL': ('Spells and abilities', {'SPIT': ('Data', [('I', 'Type'), ('I', 'Cost'), ('I', 'Level'), ('B', 'Flags'), ('3x', '')])}),
 }
+
+
+# ---- more layouts (kept apart from the first set above; same rules) ----
+_WEAP_DNAM = [
+    ('I', 'Animation type'), ('f', 'Animation multiplier'), ('f', 'Reach'), ('B', 'Flags'), ('B', 'Grip animation'),
+    ('B', 'Ammo used per shot'), ('B', 'Reload animation'), ('f', 'Min spread'), ('f', 'Spread'), ('f', 'Drift'),
+    ('f', 'Sight FOV'), ('f', 'Unknown 1'), ('F', 'Projectile'), ('B', 'V.A.T.S. to-hit chance'), ('B', 'Attack animation'),
+    ('B', 'Projectiles per shot'), ('B', 'Embedded weapon actor value'), ('f', 'Min range'), ('f', 'Max range'),
+    ('I', 'On hit'), ('I', 'More flags'), ('f', 'Attack animation multiplier'), ('f', 'Fire rate'), ('f', 'Override action points'),
+    ('f', 'Rumble left motor'), ('f', 'Rumble right motor'), ('f', 'Rumble duration'), ('f', 'Override damage to weapon ×'),
+    ('f', 'Attack shots per second'), ('f', 'Reload time'), ('f', 'Jam time'), ('f', 'Aim arc'), ('I', 'Skill'),
+    ('I', 'Rumble pattern'), ('f', 'Rumble wavelength'), ('f', 'Limb damage ×'), ('I', 'Resist'), ('f', 'Sight usage'),
+    ('f', 'Semi-auto delay min'), ('f', 'Semi-auto delay max'),
+    ('I', 'Mod 1 effect'), ('I', 'Mod 2 effect'), ('I', 'Mod 3 effect'), ('f', 'Mod 1 value'), ('f', 'Mod 2 value'), ('f', 'Mod 3 value'),
+    ('I', 'Power attack animation'), ('I', 'Strength needed'), ('B', 'Unknown 2'), ('B', 'Reload animation mod'), ('2x', ''),
+    ('f', 'Regen rate'), ('f', 'Kill impulse'), ('f', 'Mod 1 value B'), ('f', 'Mod 2 value B'), ('f', 'Mod 3 value B'),
+    ('f', 'Impulse distance'), ('I', 'Skill needed'), ('I', 'Unknown 3')]
+_ARMO_DNAM = _prefixes('Protection', [('h', 'DR'), ('H', 'Flags'), ('f', 'DT'), ('4x', '')], [12, 4])
+_MODEL_DETAIL = {'MODD': ('Face-gen model flags', [('B', 'Flags')]), 'MOSD': ('Face-gen model flags', [('B', 'Flags')])}
+_DECAL = ('Decal', [('f', 'Min width'), ('f', 'Max width'), ('f', 'Min height'), ('f', 'Max height'), ('f', 'Depth'), ('f', 'Shininess'),
+                    ('f', 'Parallax scale'), ('B', 'Parallax passes'), ('B', 'Flags'), ('2x', ''), ('B', 'Red'), ('B', 'Green'), ('B', 'Blue'), ('x', '')])
+_IDLE_LIST = {'IDLF': ('Idle flags', [('B', 'Flags')]), 'IDLC': [('Idle count', [('B', 'Count')]), ('Idle count', [('B', 'Count'), ('3x', '')])],
+              'IDLT': ('Idle timer', [('f', 'Seconds')]), 'IDLA': ('Idles', 'F*')}
+_TYPE_ADD = {
+    'WEAP': {
+        'MODD': ('Face-gen model flags', [('B', 'Flags')]),
+        'DNAM': _prefixes('Weapon data', _WEAP_DNAM, [204, 200, 196, 180, 172, 164, 136]),
+        'XNAM': ('Sound (far shot)', 'F'), 'TNAM': ('Sound (no ammo)', 'F'), 'NAM6': ('Sound (idle / melee)', 'F'),
+        'NAM7': ('Sound (looping shot)', 'F'), 'NAM8': ('Unequip sound', 'F'), 'NAM9': ('Equip sound', 'F'), 'UNAM': ('Idle sound', 'F'),
+        'WMS1': ('Mod shot sound', 'F'), 'WMS2': ('Mod shot sound (2D)', 'F'), 'EFSD': ('Effect shader', 'F'),
+        'WNM1': ('1st-person model with mod 1', 'F'), 'WNM2': ('1st-person model with mod 2', 'F'), 'WNM3': ('1st-person model with mod 3', 'F'),
+        'WNM4': ('1st-person model with mods 1+2', 'F'), 'WNM5': ('1st-person model with mods 1+3', 'F'),
+        'WNM6': ('1st-person model with mods 2+3', 'F'), 'WNM7': ('1st-person model with all mods', 'F'),
+        'MWD1': ('Model with mod 1', 'z'), 'MWD2': ('Model with mod 2', 'z'), 'MWD3': ('Model with mod 3', 'z'),
+        'MWD4': ('Model with mods 1+2', 'z'), 'MWD5': ('Model with mods 1+3', 'z'), 'MWD6': ('Model with mods 2+3', 'z'),
+        'MWD7': ('Model with all mods', 'z'), 'MOD2': ('Shell casing model', 'z'), 'MOD3': ('1st-person model', 'z'),
+        'MOD4': ('Model for mods', 'z'), 'NNAM': ('Embedded weapon node', 'z'), 'VANM': ('V.A.T.S. attack name', 'z'),
+    },
+    'ARMO': dict(_MODEL_DETAIL, ICO2=('Icon (female)', 'z'), MIC2=('Small icon (female)', 'z'), BMCT=('Ragdoll constraint template', 'z'),
+                 DNAM=_ARMO_DNAM),
+    'ARMA': ('Armor addons', dict(_MODEL_DETAIL, ICO2=('Icon (female)', 'z'), MOD2=('Ground model', 'z'), MOD3=('Worn model (female)', 'z'),
+                                  BMDT=('Body slots', [('I', 'Biped flags'), ('B', 'Flags'), ('3x', '')]),
+                                  DATA=('Data', [('i', 'Value'), ('i', 'Health'), ('f', 'Weight')]), DNAM=_ARMO_DNAM)),
+    'NPC_': {'NAM5': ('Unknown', [('B', 'Unknown 1'), ('B', 'Unknown 2')])},
+    'CREA': {
+        'PNAM': ('Body part data', 'F'), 'CNAM': ('Impact data set', 'F'), 'LNAM': ('Melee weapon list', 'F'),
+        'CSDT': ('Sound type', [('I', 'Type')]), 'CSDI': ('Sound', 'F'), 'CSDC': ('Sound chance', [('B', 'Chance')]),
+    },
+    'FACT': {'DATA': [('Flags', [('B', 'Flags'), ('B', 'Flags 2'), ('2x', '')]), ('Flags', [('B', 'Flags')])],
+             'CNAM': ('Unknown', [('f', 'Value')])},
+    'DIAL': ('Dialogue topics', {
+        'QSTI': ('Quest', 'F'), 'PNAM': ('Priority', [('f', 'Priority')]), 'INFC': ('Response link', 'F'), 'INFX': ('Response link index', [('i', 'Index')]),
+        'DATA': [('Data', [('B', 'Type'), ('B', 'Flags')]), ('Data', [('B', 'Type')])], 'TDUM': ('Dumb response', 'z')}),
+    'INFO': ('Dialogue responses', {
+        'DATA': ('Data', [('B', 'Type'), ('B', 'Next speaker'), ('H', 'Flags')]), 'QSTI': ('Quest', 'F'),
+        'TRDT': ('Response', [('I', 'Emotion'), ('i', 'Emotion strength'), ('4x', ''), ('B', 'Response number'), ('3x', ''), ('F', 'Sound'),
+                              ('B', 'Use emotion animation'), ('3x', '')]),
+        'NAM1': ('Response text', 'z'), 'NAM2': ('Script notes', 'z'), 'NAM3': ('Edits', 'z'), 'TCLT': ('Choice', 'F'), 'NEXT': MARK,
+        'ANAM': ('Speaker', 'F'), 'TCFU': ('Linked from topic', 'F'), 'NAME': ('Add topic', 'F'), 'KNAM': ('Speech skill', 'F'),
+        'TCLF': ('Link from', 'F'), 'RNAM': ('Prompt', 'z'), 'PNAM': ('Previous response', 'F'), 'DNAM': ('Speech challenge', [('I', 'Difficulty')]),
+        'LNAM': ('Listener idle', 'F'), 'SNAM': ('Speaker idle', 'F')}),
+    'QUST': {'INDX': ('Stage', [('h', 'Index')]), 'QSDT': ('Stage flags', [('B', 'Flags')]), 'QOBJ': ('Objective', [('i', 'Index')]),
+             'NNAM': ('Objective text', 'z'), 'NAM0': ('Next quest', 'F'), 'QSTA': ('Target', [('F', 'Target'), ('B', 'Flags'), ('3x', '')]), 'CNAM': ('Log entry', 'z')},
+    'PERK': {'PRKE': ('Entry', [('B', 'Type'), ('B', 'Rank'), ('B', 'Priority')]), 'PRKC': ('Condition runs on', [('b', 'Who')]),
+             'EPFT': ('Entry value type', [('B', 'Type')]), 'EPF3': ('Entry script flags', [('H', 'Flags')]), 'PRKF': MARK},
+    'RACE': ('Races', {
+        'DATA': ('Data', [(c, 'Skill %d %s' % (k + 1, w)) for k in range(7) for c, w in (('b', 'skill'), ('b', 'boost'))] +
+                          [('2x', ''), ('f', 'Male height'), ('f', 'Female height'), ('f', 'Male weight'), ('f', 'Female weight'), ('I', 'Flags')]),
+        'VTCK': ('Voices', [('F', 'Male voice'), ('F', 'Female voice')]), 'DNAM': ('Default hair', [('F', 'Male hair'), ('F', 'Female hair')]),
+        'CNAM': ('Default hair colour', [('B', 'Male'), ('B', 'Female')]), 'PNAM': ('Face-gen main clamp', [('f', 'Value')]),
+        'UNAM': ('Face-gen face clamp', [('f', 'Value')]), 'ATTR': ('Attributes', [('B', 'Male'), ('B', 'Female')]),
+        'INDX': ('Head part index', [('I', 'Index')]), 'HNAM': ('Hairs', 'F*'), 'ENAM': ('Eyes', 'F*'), 'ONAM': ('Older race', 'F'), 'YNAM': ('Younger race', 'F'),
+        'MODD': ('Face-gen model flags', [('B', 'Flags')]), 'NAM0': MARK, 'NAM1': MARK, 'NAM2': MARK, 'MNAM': MARK, 'FNAM': MARK, 'SNAM': ('Unknown', [('B', 'Unknown 1'), ('B', 'Unknown 2')])}),
+    'CLAS': ('Classes', {
+        'DATA': ('Data', [('i', 'Tag skill 1'), ('i', 'Tag skill 2'), ('i', 'Tag skill 3'), ('i', 'Tag skill 4'), ('I', 'Flags'), ('I', 'Services'),
+                          ('b', 'Teaches'), ('B', 'Max training'), ('2x', '')]),
+        'ATTR': ('S.P.E.C.I.A.L.', [('B', n) for n in ('Strength', 'Perception', 'Endurance', 'Charisma', 'Intelligence', 'Agility', 'Luck')])}),
+    'ECZN': ('Encounter zones', {'DATA': ('Data', [('F', 'Owner'), ('b', 'Rank'), ('b', 'Min level'), ('B', 'Flags'), ('B', 'Unused')])}),
+    'REGN': ('Regions', {
+        'RCLR': ('Map colour', [('B', 'Red'), ('B', 'Green'), ('B', 'Blue'), ('x', '')]), 'WNAM': ('Worldspace', 'F'),
+        'RPLI': ('Edge fall-off', [('I', 'Distance')]),
+        'RDAT': ('Data header', [('I', 'Type'), ('B', 'Override'), ('B', 'Priority'), ('2x', '')]),
+        'RDWT': _rep('Weather', [('F', 'Weather'), ('I', 'Chance'), ('F', 'Global')], range(1, 9)),
+        'RDSD': _rep('Sound', [('F', 'Sound'), ('I', 'Flags'), ('I', 'Chance')], range(1, 70)),
+        'RDMP': ('Map name', 'z'), 'RDID': ('Imposters', 'F*'),
+        'RDOT': [MARK] + _rep('Object', [('F', 'Object'), ('H', 'Parent index'), ('2x', ''), ('f', 'Density'), ('B', 'Clustering'), ('B', 'Min slope'),
+                                          ('B', 'Max slope'), ('B', 'Flags'), ('H', 'Radius from parent'), ('H', 'Radius'), ('f', 'Min height'),
+                                          ('f', 'Max height'), ('f', 'Sink'), ('f', 'Sink variance'), ('f', 'Size variance'), ('H', 'Angle X'),
+                                          ('H', 'Angle Y'), ('H', 'Angle Z'), ('2x', ''), ('4x', '')], range(1, 14)), 'RDSI': ('Incidental sound', 'F'), 'RDSB': ('Sound set', 'F')}),
+    'PACK': ('AI packages', dict(_IDLE_LIST, **{
+        'PKDT': _prefixes('Data', [('I', 'Flags'), ('B', 'Type'), ('B', 'Unused'), ('H', 'Fallout flags'), ('H', 'Type flags'), ('2x', '')], [12, 8]),
+        'PSDT': ('Schedule', [('b', 'Month'), ('b', 'Day of week'), ('B', 'Date'), ('b', 'Time'), ('i', 'Duration')]),
+        'INAM': ('Idle', 'F'), 'TNAM': ('Topic', 'F'), 'PKFD': ('Follow distance', [('f', 'Distance')]),
+        'PKPT': [('Patrol flags', [('B', 'Flags'), ('B', 'Flags 2')]), ('Patrol flags', [('B', 'Flags')])],
+        'POBA': MARK, 'POEA': MARK, 'POCA': MARK, 'PKAM': MARK, 'PKED': MARK, 'PUID': MARK, 'CNAM': ('Combat style', 'F')})),
+    'IDLE': ('Idle animations', {
+        'ANAM': ('Related idles', [('F', 'Parent'), ('F', 'Previous')]),
+        'DATA': _prefixes('Data', [('B', 'Group'), ('B', 'Loop min'), ('B', 'Loop max'), ('B', 'Unknown'), ('h', 'Replay delay'), ('B', 'Flags'), ('B', 'Unused')], [8, 6])}),
+    'IDLM': ('Idle markers', dict(_IDLE_LIST)),
+    'MGEF': ('Magic effects', {
+        'DATA': ('Data', [('I', 'Flags'), ('f', 'Base cost'), ('F', 'Associated item'), ('i', 'School'), ('i', 'Resist'), ('H', 'Counter effects'), ('2x', ''),
+                          ('F', 'Light'), ('f', 'Projectile speed'), ('F', 'Effect shader'), ('F', 'Object display shader'), ('F', 'Effect sound'),
+                          ('F', 'Bolt sound'), ('F', 'Hit sound'), ('F', 'Area sound'), ('f', 'Enchantment factor'), ('f', 'Barter factor'),
+                          ('I', 'Archetype'), ('i', 'Actor value')])}),
+    'ENCH': ('Enchantments', {'ENIT': ('Data', [('I', 'Type'), ('i', 'Charge'), ('i', 'Cost'), ('B', 'Flags'), ('3x', '')])}),
+    'INGR': ('Ingredients', {'ENIT': ('Data', [('i', 'Value'), ('B', 'Flags'), ('3x', '')]), 'DATA': ('Data', [('f', 'Weight')])}),
+    'PROJ': ('Projectiles', {
+        'DATA': _prefixes('Data', [('H', 'Flags'), ('H', 'Type'), ('f', 'Gravity'), ('f', 'Speed'), ('f', 'Range'), ('F', 'Light'),
+                                   ('F', 'Muzzle flash light'), ('f', 'Tracer chance'), ('f', 'Explosion proximity'), ('f', 'Explosion timer'),
+                                   ('F', 'Explosion'), ('F', 'Sound'), ('f', 'Muzzle flash duration'), ('f', 'Fade duration'),
+                                   ('f', 'Impact force'), ('F', 'Countdown sound'), ('F', 'Disable sound'), ('F', 'Default weapon source'),
+                                   ('f', 'Rotation X'), ('f', 'Rotation Y'), ('f', 'Rotation Z'), ('f', 'Bounce ×')], [84, 68]),
+        'NAM1': ('Model file', 'z'), 'VNAM': ('Sound level', [('I', 'Level')])}),
+    'EXPL': ('Explosions', {
+        'DATA': ('Data', [('f', 'Force'), ('f', 'Damage'), ('f', 'Radius'), ('F', 'Light'), ('F', 'Sound 1'), ('I', 'Flags'), ('f', 'Image space radius'),
+                          ('F', 'Impact data set'), ('F', 'Sound 2'), ('f', 'Radiation level'), ('f', 'Radiation time'), ('f', 'Radiation radius'),
+                          ('I', 'Sound level')]),
+        'MNAM': ('Image space modifier', 'F')}),
+    'IPCT': ('Impacts', {
+        'DATA': ('Data', [('f', 'Effect duration'), ('I', 'Orientation'), ('f', 'Angle threshold'), ('f', 'Placement radius'), ('I', 'Sound level'), ('I', 'Flags')]),
+        'DODT': _DECAL, 'DNAM': ('Texture set', 'F'), 'NAM1': ('Second sound', 'F')}),
+    'IPDS': ('Impact data sets', {'DATA': ('Impacts', 'F*')}),
+    'TXST': ('Texture sets', {'TX00': ('Colour map', 'z'), 'TX01': ('Normal map', 'z'), 'TX02': ('Mask', 'z'), 'TX03': ('Glow map', 'z'),
+                              'TX04': ('Height map', 'z'), 'TX05': ('Environment map', 'z'), 'DNAM': ('Flags', [('H', 'Flags')]), 'DODT': _DECAL}),
+    'RCPE': ('Recipes', {'DATA': ('Data', [('I', 'Skill'), ('I', 'Level'), ('F', 'Category'), ('F', 'Sub-category')]),
+                         'RCIL': ('Ingredient', 'F'), 'RCQY': ('Quantity', [('i', 'Count')]), 'RCOD': ('Output', 'F')}),
+    'CHAL': ('Challenges', {'DATA': ('Data', [('I', 'Type'), ('I', 'Threshold'), ('I', 'Flags'), ('I', 'Interval'), ('I', 'Parameter 1'), ('I', 'Parameter 2')]),
+                            'XNAM': ('Parameter', 'F')}),
+    'CMNY': ('Caravan money', {'DATA': ('Data', [('I', 'Absolute value')])}),
+    'REPU': ('Reputations', {'DATA': ('Data', [('f', 'Value')])}),
+    'GLOB': ('Globals', {'FNAM': ('Type', [('B', 'Type')]), 'FLTV': ('Value', [('f', 'Value')])}),
+    'FLST': ('Form lists', {'LNAM': ('Entry', 'F')}),
+    'TACT': ('Talking activators', {'VNAM': ('Voice type', 'F'), 'INAM': ('Radio template', 'F')}),
+    'ADDN': ('Addon nodes', {'DATA': ('Node index', [('I', 'Index')]), 'DNAM': ('Data', [('H', 'Particle cap'), ('H', 'Flags')])}),
+    'ANIO': ('Animated objects', {'DATA': ('Animation', 'F')}),
+    'HDPT': ('Head parts', {'DATA': ('Flags', [('B', 'Flags')]), 'HNAM': ('Extra part', 'F')}),
+    'LTEX': ('Landscape textures', {'TNAM': ('Texture set', 'F'), 'HNAM': ('Physics', [('B', 'Material'), ('B', 'Friction'), ('B', 'Restitution')]),
+                                    'GNAM': ('Grass', 'F'), 'SNAM': ('Specular exponent', [('B', 'Exponent')])}),
+    'EYES': ('Eyes', {'DATA': ('Flags', [('B', 'Flags')])}), 'HAIR': ('Hair', {'DATA': ('Flags', [('B', 'Flags')])}),
+    'VTYP': ('Voice types', {'DNAM': ('Flags', [('B', 'Flags')])}),
+    'CELL': {'XCLC': [('Grid', [('i', 'X'), ('i', 'Y'), ('B', 'Flags'), ('3x', '')]), ('Grid', [('i', 'X'), ('i', 'Y')])],
+             'LNAM': ('Lighting inherits', [('I', 'Flags')]),
+             'XCLL': ('Lighting', [('B', 'Ambient red'), ('B', 'Ambient green'), ('B', 'Ambient blue'), ('x', ''), ('B', 'Directional red'),
+                                   ('B', 'Directional green'), ('B', 'Directional blue'), ('x', ''), ('B', 'Fog red'), ('B', 'Fog green'),
+                                   ('B', 'Fog blue'), ('x', ''), ('f', 'Fog near'), ('f', 'Fog far'), ('i', 'Direction XY'), ('i', 'Direction Z'),
+                                   ('f', 'Directional fade'), ('f', 'Clip distance'), ('f', 'Fog power')])},
+    'CAMS': ('Camera shots', {
+        'DATA': _prefixes('Data', [('I', 'Action'), ('I', 'Location'), ('I', 'Target'), ('I', 'Flags'), ('f', 'Player time ×'), ('f', 'Target time ×'),
+                                   ('f', 'Global time ×'), ('f', 'Max time'), ('f', 'Min time'), ('f', 'Target % between actors')], [40, 36]),
+        'MNAM': ('Image space modifier', 'F')}),
+    'CPTH': ('Camera paths', {'ANAM': ('Related paths', [('F', 'Parent'), ('F', 'Previous')]), 'DATA': ('Zoom', [('B', 'Zoom')])}),
+    'LSCR': ('Loading screens', {'WMI1': ('Loading screen type', 'F'),
+                                 'LNAM': ('Location', [('F', 'Direct'), ('F', 'Worldspace'), ('h', 'Grid Y'), ('h', 'Grid X')])}),
+    'GRAS': ('Grass', {'DATA': ('Data', [('B', 'Density'), ('B', 'Min slope'), ('B', 'Max slope'), ('B', 'Unknown'), ('H', 'Units from water'), ('2x', ''),
+                                         ('I', 'Water rule'), ('f', 'Position range'), ('f', 'Height range'), ('f', 'Colour range'), ('f', 'Wave period'),
+                                         ('B', 'Flags'), ('3x', '')])}),
+    'CCRD': ('Cards', {'TX00': ('Face image', 'z'), 'TX01': ('Back image', 'z'), 'INTV': ('Number', [('I', 'Value')]), 'DATA': ('Value', [('I', 'Value')])}),
+    'CDCK': ('Card decks', {'CARD': ('Card', 'F'), 'DATA': ('Count', [('I', 'Count')])}),
+    'DOBJ': ('Default objects', {'DATA': ('Objects', 'F*')}),
+    'IMOD': ('Weapon mods', {'DATA': ('Data', [('i', 'Value'), ('f', 'Weight')])}),
+    'PWAT': ('Placeable water', {'DNAM': ('Data', [('I', 'Flags'), ('F', 'Water')])}),
+    'AMEF': ('Ammo effects', {'DATA': ('Data', [('I', 'Type'), ('I', 'Operation'), ('f', 'Value')])}),
+    'CLMT': ('Climates', {'WLST': _rep('Weather', [('F', 'Weather'), ('I', 'Chance'), ('F', 'Global')], [1, 2, 3, 4, 5, 6, 7, 8]),
+                          'FNAM': ('Sun texture', 'z'), 'GNAM': ('Sun glare texture', 'z'),
+                          'TNAM': ('Timing', [('B', 'Sunrise begin'), ('B', 'Sunrise end'), ('B', 'Sunset begin'), ('B', 'Sunset end'), ('B', 'Volatility'), ('B', 'Moons')])}),
+    'ASPC': ('Acoustic spaces', {'WNAM': ('Unused', [('I', 'Value')]), 'RDAT': ('Region sound', 'F'), 'ANAM': ('Environment', [('I', 'Type')]), 'INAM': ('Is interior', [('I', 'Value')])}),
+}
+for _t, _d in _TYPE_ADD.items():
+    if _t in TYPES:
+        TYPES[_t][1].update(_d if isinstance(_d, dict) else _d[1])
+    else:
+        TYPES[_t] = _d
 
 
 # subrecords that mean something else once a record's later parts begin (PERK's DATA inside its effects)

@@ -70,9 +70,11 @@ the model for style, UI and approach. Python, standard library first, code in `a
   copied records are re-pointed to this plugin's master list.
 - Records: `schema.py` layouts (checked against every record of each type: run `checkall`; a layout only counts
   if every subrecord fits and encodes back byte for byte), `recordio.py` (a mod's records with links as keys),
-  `browse.py` (Browse page data; its index builds in the background, ~20 s). Known limit: subrecords no layout
-  reads are kept raw in their source file's numbering, so links inside them are only right for FalloutNV.esm
-  records (and a DLC that ends up at the same master index). Add layouts (e.g. WEAP DNAM) to close it.
+  `browse.py` (Browse page data; its index builds in the background, ~20 s). Known limit: subrecords no layout reads are kept raw in their source file's numbering, so links inside them are only right
+  for FalloutNV.esm records (and a DLC that ends up at the same master index). What's still raw and holds links: alternate
+  textures (MODS, MO2S..MO4S: a list with strings), PACK location/target unions (PLDT, PLD2, PTDT, PTD2), PERK EPFD, condition
+  parameters (CTDA, which form they are depends on the function), owner COED's rank-or-global, CHAL parameters, and whole types
+  not in `schema.TYPES`. Everything else raw is hash/geometry blobs (MODT, FGGS, NIFT, KFFZ, DMDT) or compiled script text.
 
 ## Finding the game
 
