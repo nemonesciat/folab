@@ -7,7 +7,18 @@ const CR = {kind: 'WEAP', rows: [], key: null, data: null, rec: null, dirty: fal
 const CR_KINDS = [
   ['WEAP', 'Weapons'], ['ARMO', 'Apparel'], ['ALCH', 'Aid'], ['AMMO', 'Ammo'],
   ['MISC', 'Misc items'], ['BOOK', 'Books'], ['NOTE', 'Notes'], ['KEYM', 'Keys'],
+  ['-', 'What they carry'], ['CONT', 'Containers'], ['NPC_', 'Characters'], ['CREA', 'Creatures'],
+  ['-', 'Levelled lists'], ['LVLI', 'Item lists'], ['LVLN', 'Character lists'], ['LVLC', 'Creature lists'],
 ];
+const CR_ITEMS = new Set(['WEAP', 'ARMO', 'ALCH', 'AMMO', 'MISC', 'BOOK', 'NOTE', 'KEYM']);
+// what an entry holds, and where a first entry goes (before the first of these subrecords; else at the end)
+const CR_ENTRIES = {CONT: ['CNTO', ['DATA']], NPC_: ['CNTO', ['AIDT']], CREA: ['CNTO', ['AIDT']],
+                    LVLI: ['LVLO', []], LVLN: ['LVLO', []], LVLC: ['LVLO', []]};
+// what an entry can be, by the kind of record it's in
+const CR_ENTRY_TYPES = {LVLN: 'NPC_ LVLN', LVLC: 'CREA LVLC'};
+const CR_ITEM_TYPES = 'WEAP ARMO AMMO ALCH MISC BOOK NOTE KEYM LVLI';
+const CR_LVLF = [[1, "Count every level up to the player's", "Pick from all entries at or below the player's level, not only the highest"],
+                 [2, 'Each item in the count', 'With a count above 1, pick again for each one'], [4, 'Use all', 'Give every entry, not one of them']];
 // [subrecord, field (null: the subrecord's own value), label, what it links to, note]
 const CR_FIELDS = {
   WEAP: [['DATA', 'Damage', 'Damage', null, 'Per shot, before skill and condition'], ['DATA', 'Clip size', 'Rounds per clip'],
@@ -20,6 +31,8 @@ const CR_FIELDS = {
   AMMO: [['ONAM', null, 'Short name'], ['DAT2', 'Projectiles per shot', 'Projectiles per shot']],
   BOOK: [['DESC', null, 'Text', null, '', 'long']],
   MISC: [], KEYM: [], NOTE: [],
+  LVLI: [['LVLD', 'Percent', 'Chance of nothing (%)', null, 'How often the list gives nothing at all']],
+  LVLN: [['LVLD', 'Percent', 'Chance of nothing (%)']], LVLC: [['LVLD', 'Percent', 'Chance of nothing (%)']],
 };
 const CR_VALUE = {WEAP: ['DATA', 'Value'], ARMO: ['DATA', 'Value'], ALCH: ['ENIT', 'Value'], AMMO: ['DATA', 'Value'],
                   MISC: ['DATA', 'Value'], KEYM: ['DATA', 'Value'], BOOK: ['DATA', 'Value']};
@@ -27,7 +40,7 @@ const CR_WEIGHT = {WEAP: ['DATA', 'Weight'], ARMO: ['DATA', 'Weight'], ALCH: ['D
                    MISC: ['DATA', 'Weight'], KEYM: ['DATA', 'Weight'], BOOK: ['DATA', 'Weight']};
 
 function crInit(){
-  $('#cr-kinds').innerHTML = CR_KINDS.map(([t, l]) => `<div class="row${t === CR.kind ? ' on' : ''}" data-t="${t}"><div>${l}</div></div>`).join('');
+  $('#cr-kinds').innerHTML = CR_KINDS.map(([t, l]) => t === '-' ? `<div class="h">${l}</div>` : `<div class="row${t === CR.kind ? ' on' : ''}" data-t="${t}"><div>${l}</div></div>`).join('');
   crList();
 }
 $('#cr-kinds').addEventListener('click', e => {
@@ -42,7 +55,8 @@ async function crList(){
   const token = CR.token = (CR.token || 0) + 1;
   const rows = await api(`/api/records?type=${CR.kind}&q=${encodeURIComponent($('#cr-find').value)}`);
   if (token !== CR.token) return;
-  CR.rows = rows.filter(r => r.name || r.state);        // (things with no name never show in game; yours always do)
+  // (items with no name never show in game, so they're left out; lists never have names)
+  CR.rows = CR_ITEMS.has(CR.kind) ? rows.filter(r => r.name || r.state) : rows;
   const mine = CR.rows.filter(r => r.state);
   const row = r => `<div class="row${r.key === CR.key ? ' on' : ''}" data-k="${esc(r.key)}"><div>${r.state ? `<span class="dot ${r.state === 'new' ? 'new' : 'moved'}" title="${r.state === 'new' ? 'your own' : 'changed by your mod'}"></span>` : ''}${esc(r.name || r.edid)}<small>${esc(r.edid)}</small></div></div>`;
   $('#cr-rows').innerHTML = (mine.length ? '<div class="h">Yours</div>' + mine.map(row).join('') + '<div class="h">The game\'s</div>' : '') +
@@ -94,26 +108,28 @@ function crDraw(){
   let n = 0;
   const f = (tag, name, label, link, note, long) => crInput(n++, tag, name, label, link, note, long);
   const v = CR_VALUE[t], w = CR_WEIGHT[t];
-  const effects = t === 'ALCH' ? crEffects() : '';
+  const effects = t === 'ALCH' ? crEffects() : CR_ENTRIES[t] ? crEntries() : '';
+  const item = CR_ITEMS.has(t);
   $('#cr-detail').innerHTML = `
     <div class="bwtitle"><b>${esc(crGet('FULL') || crGet('EDID') || d.key)}</b>
       <small>${esc(kind)} · ${mine ? 'your own' : d.state === 'changed' ? 'the game\'s, changed by your mod' : 'the game\'s (' + esc(d.from) + ')'}</small></div>
     <div class="acts">
       <button class="btn primary" data-a="save" disabled>${mine ? 'Save' : 'Save changes to this one'}</button>
-      ${mine ? '' : '<button class="btn primary" data-a="copy" title="A new item of your own, starting as a copy of this one; the game\'s stays as it is">＋ New item from this</button>'}
-      <button class="btn" data-a="give" title="Start the game, load your newest save and put it in your inventory">Give it to me in game</button>
+      ${mine ? '' : `<button class="btn primary" data-a="copy" title="A new one of your own, starting as a copy of this one; the game's stays as it is">＋ New ${item ? 'item' : 'one'} from this</button>`}
+      ${item ? '<button class="btn" data-a="give" title="Start the game, load your newest save and put it in your inventory">Give it to me in game</button>' : ''}
       ${d.state === 'changed' ? '<button class="btn" data-a="revert">Put back as the game has it</button>' : ''}
       ${mine ? '<button class="btn" data-a="revert">Delete this item</button>' : ''}
       <button class="btn" data-a="browse" title="Every part of the record">Open in Browse</button>
     </div>
-    ${mine ? '' : `<div class="note" style="padding:4px 0 8px">Changing a game item changes it everywhere it is in the game. To keep it and make another, use <b>New item from this</b>.</div>`}
+    ${mine ? '' : item ? `<div class="note" style="padding:4px 0 8px">Changing a game item changes it everywhere it is in the game. To keep it and make another, use <b>New item from this</b>.</div>`
+      : `<div class="note" style="padding:4px 0 8px">Changes here change the game's own: everything that uses it gets them. A new one of your own is only used where you put it.</div>`}
     <div class="crgrid">
       ${f('FULL', null, 'Name')}
       ${f('EDID', null, 'Editor ID', null, 'The name scripts and the console use; no spaces')}
       ${(CR_FIELDS[t] || []).map(x => f(...x)).join('')}
       ${v ? f(v[0], v[1], 'Value (caps)') : ''}
       ${w ? f(w[0], w[1], 'Weight') : ''}
-      ${crGet('MODL') !== undefined ? `<label>Model</label><span class="crmodel">${esc(crGet('MODL'))}</span>` : ''}
+      ${item && crGet('MODL') !== undefined ? `<label>Model</label><span class="crmodel">${esc(crGet('MODL'))}</span>` : ''}
     </div>
     ${effects}`;
   crBind();
@@ -142,8 +158,64 @@ function crEffects(){
 
 // a link's label is 'EditorID — Name (TYPE)'
 function crEdid(k){ return k ? (CR.data.links[k] || k).split(' (')[0].split(' — ')[0] : ''; }
-function crName(k){ const l = k ? CR.data.links[k] || '' : ''; return l.includes(' — ') ? l.split(' — ')[1].replace(/ \([A-Z_]{4}\)$/, '') : ''; }
+const CR_KINDNAME = {LVLI: 'a levelled item list', LVLN: 'a levelled character list', LVLC: 'a levelled creature list', FLST: 'a list of forms'};
+function crName(k){
+  const l = k ? CR.data.links[k] || '' : '';
+  if (l.includes(' — ')) return l.split(' — ')[1].replace(/ \([A-Z_]{4}\)$/, '');
+  const t = (l.match(/\(([A-Z_]{4})\)$/) || [])[1];
+  return t ? CR_KINDNAME[t] || t : '';
+}
 function crConds(si){ let n = si + 1; while (CR.rec.subs[n] && CR.rec.subs[n].tag === 'EFIT') n++; return CR.rec.subs[n] && CR.rec.subs[n].tag === 'CTDA'; }
+
+// ---------- inventories and levelled lists: entries (CNTO or LVLO), each maybe followed by COED (owner, condition) ----------
+function crEntryGroups(){
+  const tag = CR_ENTRIES[CR.rec.type][0], out = [];
+  CR.rec.subs.forEach((s, i) => { if (s.tag === tag) out.push(i); });
+  return out;
+}
+function crGroupEnd(at){ let e = at + 1; while (CR.rec.subs[e] && CR.rec.subs[e].tag === 'COED') e++; return e; }
+function crEntries(){
+  const t = CR.rec.type, lv = t.startsWith('LVL'), g = crEntryGroups();
+  const fv = (s, n) => (s.fields.find(f => f.name === n) || {}).value;
+  const flags = lv ? crGet('LVLF', 'Flags') : undefined;
+  return `${flags !== undefined ? `<div class="crflags">${CR_LVLF.map(([b, l, tip]) => `<label title="${esc(tip)}"><input type="checkbox" data-flag="${b}" ${flags & b ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>` : ''}
+    <div class="h" style="padding-left:0;margin-top:14px">${lv ? 'Entries' : 'Carries'} · ${g.length}</div>
+    <table class="crfx"><tr>${lv ? '<th>From level</th>' : ''}<th>Editor ID</th><th></th><th>How many</th><th></th></tr>
+    ${g.map((si, n) => {
+      const s = CR.rec.subs[si], k = s.fields.find(f => f.code === 'F').value, extra = crGroupEnd(si) > si + 1;
+      return `<tr>${lv ? `<td><input data-entn="${si}" data-name="Level" value="${fv(s, 'Level')}" style="width:60px"></td>` : ''}
+        <td><input data-ent="${si}" data-type="${CR_ENTRY_TYPES[t] || CR_ITEM_TYPES}" data-key="${esc(k || '')}" value="${esc(crEdid(k))}" list="cr-dl-e${si}" autocomplete="off" style="width:240px"><datalist id="cr-dl-e${si}"></datalist></td>
+        <td class="note" style="padding:0 8px 0 0;max-width:260px">${esc(crName(k))}${extra ? ' <small title="Its owner or condition, kept as the game has it">· with owner/condition</small>' : ''}</td>
+        <td><input data-entn="${si}" data-name="Count" value="${fv(s, 'Count')}" style="width:60px"></td>
+        <td><button class="btn" data-entdel="${n}" title="Take this out">✕</button></td></tr>`;
+    }).join('')}</table>
+    <button class="btn" data-a="entadd" style="margin-top:6px">＋ Add</button>
+    ${lv ? `<p class="note" style="padding:6px 0 0">The game picks among the entries whose level is at or below the player's; FOLab keeps them in level order.</p>` : ''}`;
+}
+function crNewEntry(){
+  const t = CR.rec.type, lv = t.startsWith('LVL'), g = crEntryGroups();
+  if (g.length){
+    const e = JSON.parse(JSON.stringify(CR.rec.subs[g[g.length - 1]]));
+    e.fields.forEach(f => { if (f.code === 'F') f.value = ''; if (f.name === 'Count') f.value = 1; if (f.pad !== undefined) f.pad = f.pad.replace(/./g, '0'); });
+    return e;
+  }
+  const item = {LVLI: 'Item', LVLN: 'Character', LVLC: 'Creature'}[t];
+  return lv ? {tag: 'LVLO', label: 'Entry', kind: 'struct', fields: [{name: 'Level', code: 'h', value: 1}, {pad: '0000'},
+                {name: item, code: 'F', value: ''}, {name: 'Count', code: 'h', value: 1}, {pad: '0000'}]}
+            : {tag: 'CNTO', label: 'Item', kind: 'struct', fields: [{name: 'Item', code: 'F', value: ''}, {name: 'Count', code: 'i', value: 1}]};
+}
+function crSortLevels(){
+  // levelled list entries in level order (each with its COED), in the place the first one was
+  if (!CR.rec.type.startsWith('LVL')) return;
+  const g = crEntryGroups(); if (!g.length) return;
+  const inGroup = i => g.some(at => i >= at && i < crGroupEnd(at));
+  const groups = g.map(at => CR.rec.subs.slice(at, crGroupEnd(at)));
+  groups.sort((a, b) => a[0].fields[0].value - b[0].fields[0].value);
+  const keep = CR.rec.subs.filter((s, i) => !inGroup(i));
+  const first = g[0] - CR.rec.subs.slice(0, g[0]).filter((s, i) => inGroup(i)).length;
+  keep.splice(first, 0, ...groups.flat());
+  CR.rec.subs = keep;
+}
 
 function crDirty(){ CR.dirty = true; const b = $('#cr-detail [data-a="save"]'); if (b) b.disabled = false; }
 
@@ -151,6 +223,20 @@ function crBind(){
   const box = $('#cr-detail');
   box.querySelectorAll('[data-in]').forEach(i => i.oninput = crDirty);
   box.querySelectorAll('[data-fxn]').forEach(i => i.oninput = crDirty);
+  box.querySelectorAll('[data-entn]').forEach(i => i.oninput = crDirty);
+  box.querySelectorAll('[data-flag]').forEach(i => i.onchange = crDirty);
+  box.querySelectorAll('[data-ent]').forEach(i => {
+    let timer;
+    i.oninput = () => {
+      crDirty(); i._touched = true;
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const r = await api('/api/resolve?q=' + encodeURIComponent(i.value));
+        i._hits = (r.hits || []).map(h => ({key: h.key, edid: h.label.split(/[ (]/)[0], name: h.label}));
+        i.nextElementSibling.innerHTML = i._hits.map(h => `<option value="${esc(h.edid)}">${esc(h.name)}</option>`).join('');
+      }, 180);
+    };
+  });
   box.querySelectorAll('[data-pick],[data-fx]').forEach(i => {
     let timer;
     i.oninput = () => {
@@ -171,14 +257,16 @@ async function crResolve(i){
   const v = i.value.trim();
   if (!v) return '';
   const hit = (i._hits || []).find(r => r.edid.toLowerCase() === v.toLowerCase());
-  if (hit) return hit.key;
-  const rows = await api(`/api/records?type=${i.dataset.type}&q=${encodeURIComponent(v)}`);
+  if (hit){ if (!CR.data.links[hit.key]) CR.data.links[hit.key] = hit.name && hit.name.includes(" — ") ? hit.name : hit.name ? `${hit.edid} — ${hit.name}` : hit.edid; return hit.key; }
+  // (each kind it can be, asked at once; these lists don't wait for the editor ID index)
+  const rows = (await Promise.all(i.dataset.type.split(' ').map(t => api(`/api/records?type=${t}&q=${encodeURIComponent(v)}`)))).flat();
   const r = rows.find(r => r.edid.toLowerCase() === v.toLowerCase());
-  if (r) return r.key;
+  if (r){ CR.data.links[r.key] = r.name ? `${r.edid} — ${r.name}` : r.edid; return r.key; }
   // (some links take other kinds too, as a weapon's ammo can be a list of ammo)
   const any = await api('/api/resolve?q=' + encodeURIComponent(v));
   const found = (any.hits || []).find(h => h.label.split(/[ (]/)[0].toLowerCase() === v.toLowerCase());
   if (!found) throw new Error(any.busy ? "FOLab is still reading the game's editor IDs: try again in a moment." : `Nothing has the editor ID "${v}"`);
+  CR.data.links[found.key] = found.label;
   return found.key;
 }
 
@@ -203,6 +291,18 @@ function crRead(){
       if (isNaN(n) || n < 0) throw new Error(`${i.dataset.name}: "${i.value}" isn't a whole number`);
       CR.rec.subs[+i.dataset.fxn].fields.find(f => f.name === i.dataset.name).value = n;
     }
+    for (const i of box.querySelectorAll('[data-ent]')){
+      const f = CR.rec.subs[+i.dataset.ent].fields.find(f => f.code === 'F');
+      f.value = await crResolve(i);
+      if (!f.value) throw new Error('An entry has nothing in it: pick something, or take it out with ✕');
+    }
+    for (const i of box.querySelectorAll('[data-entn]')){
+      const n = parseInt(i.value, 10), lo = i.dataset.name === 'Count' ? 1 : 0;
+      if (isNaN(n) || n < lo || n > 32767) throw new Error(`${i.dataset.name}: "${i.value}" isn't a whole number from ${lo} up`);
+      CR.rec.subs[+i.dataset.entn].fields.find(f => f.name === i.dataset.name).value = n;
+    }
+    const fl = box.querySelectorAll('[data-flag]');
+    if (fl.length){ let v = crGet('LVLF', 'Flags') & ~7; fl.forEach(c => { if (c.checked) v |= +c.dataset.flag; }); crSet('LVLF', 'Flags', v); }
     const edid = crGet('EDID');
     if (!/^[A-Za-z0-9_]+$/.test(edid || '')) throw new Error('Editor ID: letters, digits and _ only');
   })();
@@ -219,7 +319,25 @@ $('#cr-detail').addEventListener('click', async e => {
     CR.rec.subs.splice(at, end - at);
     crDraw(); crDirty(); return;
   }
+  const edel = e.target.closest('[data-entdel]');
+  if (edel){
+    try { await crRead(); } catch (err){ return fail(err); }
+    const at = crEntryGroups()[+edel.dataset.entdel];
+    CR.rec.subs.splice(at, crGroupEnd(at) - at);
+    crDraw(); crDirty(); return;
+  }
   const a = e.target.dataset.a; if (!a) return;
+  if (a === 'entadd'){
+    try { await crRead(); } catch (err){ return fail(err); }
+    const g = crEntryGroups(), before = CR_ENTRIES[CR.rec.type][1];
+    let at = g.length ? crGroupEnd(g[g.length - 1]) : CR.rec.subs.findIndex(s => before.includes(s.tag));
+    if (at < 0) at = CR.rec.subs.length;
+    CR.rec.subs.splice(at, 0, crNewEntry());
+    crDraw(); crDirty();
+    const box = document.querySelector(`#cr-detail [data-ent="${at}"]`);
+    if (box) box.focus();
+    return;
+  }
   try {
     if (a === 'fxadd'){
       await crRead();
@@ -233,6 +351,7 @@ $('#cr-detail').addEventListener('click', async e => {
     }
     if (a === 'save'){
       await crRead();
+      crSortLevels();
       const d = await post('/api/record/save', {key: CR.key, record: CR.rec});
       setState(d.state); CR.dirty = false;
       if (typeof recCacheDrop === 'function') recCacheDrop(CR.key);

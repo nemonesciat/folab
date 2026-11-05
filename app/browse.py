@@ -141,13 +141,17 @@ class Browse:
 
     def resolve(self, q, limit=30):
         """Forms whose editor ID starts with (or contains) q, for picking a link."""
-        if self.edids is None:
-            return {'busy': True, 'hits': []}
         q = q.lower().strip()
-        hits = [fid for e, fid in self.edids.items() if e.startswith(q)][:limit]
-        if len(hits) < limit:
-            hits += [fid for e, fid in self.edids.items() if q in e and not e.startswith(q)][:limit - len(hits)]
-        return {'busy': False, 'hits': [{'key': self.gd.key(f), 'label': self.label(self.gd.key(f))} for f in hits]}
+        pr = self.pr()
+        mine = [k for k, r in (pr.records if pr else {}).items()          # (the mod's own first)
+                if k.startswith('+') and q in recordio.field(r, 'EDID').lower()][:limit]
+        if self.edids is None:
+            return {'busy': True, 'hits': [{'key': k, 'label': self.label(k)} for k in mine]}
+        hits = [fid for e, fid in self.edids.items() if e.startswith(q)][:limit - len(mine)]
+        if len(hits) + len(mine) < limit:
+            hits += [fid for e, fid in self.edids.items() if q in e and not e.startswith(q)][:limit - len(hits) - len(mine)]
+        return {'busy': False, 'hits': [{'key': k, 'label': self.label(k)} for k in mine] +
+                                       [{'key': self.gd.key(f), 'label': self.label(self.gd.key(f))} for f in hits]}
 
     def where_used(self, key, limit=200):
         if self.used is None:
