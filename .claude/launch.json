@@ -10,7 +10,7 @@
     {
       "name": "folab-test",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set FOLAB_HOME=%TEMP%\\folab-test&& py -3 app/server.py 8772 --no-browser"],
+      "runtimeArgs": ["/c", "set FOLAB_HOME=%TEMP%\\folab-test&& set FOLAB_NV_INI=%TEMP%\\folab-test\\ini&& py -3 app/server.py 8772 --no-browser"],
       "port": 8772
     }
   ]

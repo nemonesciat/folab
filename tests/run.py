@@ -25,7 +25,7 @@ def main(args):
         home = tempfile.mkdtemp(prefix='folab-test-')
         start = time.time()
         r = subprocess.run([sys.executable, t], cwd=os.path.join(HERE, '..', 'app'), capture_output=True, text=True,
-                           env=dict(os.environ, FOLAB_HOME=home))
+                           env=dict(os.environ, FOLAB_HOME=home, FOLAB_NV_INI=os.path.join(home, 'ini')))
         out = (r.stdout + r.stderr).splitlines()
         passes = sum(l.startswith('PASS') for l in out)
         fails = [l for l in out if l.startswith('FAIL')]

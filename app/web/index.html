@@ -127,7 +127,15 @@ kbd{font:500 11.5px var(--mono);background:var(--bg2);border:1px solid var(--lin
 .acts{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px}
 .kv{padding:2px 12px;font-size:13px}
 .kv span{color:var(--muted)}
-#page-mod{flex:1;overflow-y:auto;display:none;padding:24px 32px}
+#page-mod,#page-game{flex:1;overflow-y:auto;display:none;padding:24px 32px}
+#page-game h2{font:600 20px Cinzel,serif;color:var(--gold);margin:0 0 4px}
+.gs-grid{display:grid;grid-template-columns:220px 1fr;gap:8px 14px;align-items:center;margin-top:8px}
+.gs-grid>label{color:var(--muted)}
+.gs-modes label{margin-right:18px}
+.gs-range{display:inline-flex;align-items:center;gap:8px}.gs-range input{width:200px}
+.gs-table{border-collapse:collapse;width:100%}.gs-table td{padding:2px 6px 2px 0;font-size:13px}
+.gs-table input{width:140px}.gs-table input.changed,.gs-grid input.changed{border-color:var(--gold)}
+.gs-save{position:sticky;bottom:0;background:var(--bg);padding:12px 0;max-width:760px}
 #page-mod h2{font:600 20px Cinzel,serif;color:var(--gold);margin:0 0 4px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0;max-width:760px}
 .card h3{margin:0 0 8px;font-size:15px;color:var(--gold2);font-weight:500}
@@ -150,6 +158,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>World</button>
     <button id="nav-mod" title="Your mod: save it, put it in the game, start another">
       <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 14h6M9 17h4"/></svg>My mod</button>
+    <button id="nav-game" title="New Vegas's own settings: screen, resolution, field of view…">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Game</button>
   </nav>
   <div class="bar">
     <span id="modpill" class="pill modpill" title="Your mod">No mod open</span>
@@ -230,6 +240,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
   <div id="bw-detail"><div class="note" style="padding:24px">Pick a record. Underlined values are links: click them to go to that record.</div></div>
 </main>
 <div id="page-mod"></div>
+<div id="page-game"></div>
 <div id="toast"></div>
 <script src="/web/vendor/three.min.js"></script>
 <script src="/web/vendor/DDSLoader.js"></script>
@@ -239,5 +250,6 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/ctxmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>
+<script src="/web/gamepage.js"></script>
 </body>
 </html>

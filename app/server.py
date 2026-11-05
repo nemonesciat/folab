@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import espwrite
 import gamedata
+import gameini
 import install
 import nif
 import nvse
@@ -465,9 +466,60 @@ def play(body):
     else:
         playtest.take_out_test(GD.data_dir)
         playtest.set_autoload(GD.data_dir, False)
-    out['via'] = playtest.launch(GD.data_dir, load_settings().get('launch_via', 'nvse'))
+    out['via'] = start_game()
     out['state'] = state()
     return out
+
+
+def game_settings():
+    """The game's settings page: the chosen settings with their values, every setting of both files, the screens."""
+    files = gameini.read_all()
+    final = {}
+    for fn in gameini.FILES:
+        for sec, k, v in files.get(fn, []):
+            final[(sec.lower(), k.lower())] = v
+    rows = []
+    for sid, group, label, sec, key, kind, opts, note in gameini.SETTINGS:
+        rows.append({'id': sid, 'group': group, 'label': label, 'section': sec, 'key': key, 'kind': kind,
+                     'options': opts, 'note': note, 'value': final.get((sec.lower(), key.lower()))})
+    every = {}
+    for fn in gameini.FILES:
+        for sec, k, v in files.get(fn, []):
+            every.setdefault((sec, k), {'section': sec, 'key': k, 'files': {}})['files'][fn] = v
+    return {'folder': gameini.folder(), 'files': [fn for fn in gameini.FILES if fn in files], 'settings': rows,
+            'all': sorted(every.values(), key=lambda r: (r['section'].lower(), r['key'].lower())),
+            'screens': gameini.screens(), 'borderless': load_settings().get('borderless'), 'intro': gameini.INTRO,
+            'running': playtest.game_running()}
+
+
+def game_settings_save(body):
+    """body: {changes: [[section, key, value]], borderless: screen number or null (left out: as it is)}"""
+    not_while_playing()
+    changes = [tuple(c) for c in body.get('changes', [])]
+    if 'borderless' in body:
+        n = body['borderless']
+        if n is not None:
+            sc = gameini.screens()[int(n)]
+            # windowed, the screen's size, at its top left (where Windows puts it, the screen's own corner)
+            changes += [('Display', 'bFull Screen', '0'), ('Display', 'iSize W', str(sc['w'])),
+                        ('Display', 'iSize H', str(sc['h'])), ('Display', 'iLocation X', str(sc['x'])),
+                        ('Display', 'iLocation Y', str(sc['y']))]
+        save_settings(borderless=n)
+    backup = gameini.write(changes) if changes else None
+    out = game_settings()
+    out['backup'] = backup
+    return out
+
+
+def start_game():
+    """Start the game the chosen way; borderless when that's on."""
+    via = playtest.launch(GD.data_dir, load_settings().get('launch_via', 'nvse'))
+    n = load_settings().get('borderless')
+    if n is not None:
+        sc = gameini.screens()
+        if int(n) < len(sc):
+            gameini.make_borderless(sc[int(n)])
+    return via
 
 
 def save():
@@ -513,6 +565,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(ref(q['cell'], q['key']))
             if u.path == '/api/door':
                 return self.send(door(q['key']))
+            if u.path == '/api/gamesettings':
+                return self.send(game_settings())
             if u.path == '/api/nvse/latest':
                 return self.send(nvse.latest())
             if u.path == '/api/plugins':
@@ -563,6 +617,8 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path == '/api/nvse/uninstall':
                     not_while_playing()
                     return self.send({'removed': nvse.uninstall(GD.data_dir), 'state': state()})
+                if u.path == '/api/gamesettings':
+                    return self.send(game_settings_save(body))
                 if u.path == '/api/launch_via':
                     save_settings(launch_via='nvse' if body.get('via') == 'nvse' else 'steam')
                     return self.send(state())
