@@ -17,6 +17,7 @@ import gamedata
 import install
 import nif
 import project
+import adopt
 import browse
 import recordio
 import refinfo
@@ -209,14 +210,46 @@ def state():
         s['installed'] = install.status(GD.data_dir, PR.plugin)
         built = os.path.join(project.BUILD_DIR, PR.plugin)
         s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= os.path.getmtime(PR.path)
+        s['project']['masters'] = masters()
     return s
+
+
+def load_game(pr):
+    """The game as FOLab shows it: the official files, and an opened mod's own plugin on top of them."""
+    global GD, CATALOGUE, BR
+    data_dir = GD.data_dir if GD else gamedata.find_data_dir()
+    want = [os.path.join(data_dir, n) for n in gamedata.OFFICIAL if os.path.isfile(os.path.join(data_dir, n))]
+    if pr and pr.source:
+        want.append(pr.source_path())
+    if GD and [p.path for p in GD.plugins] == want:
+        return
+    t = time.time()
+    if BR:
+        BR.close()
+    GD = gamedata.GameData(data_dir, want)
+    CATALOGUE = build_catalogue()
+    BR = browse.Browse(GD, lambda: PR)
+    _meshes.clear()
+    print('loaded %d plugins (%.1fs)' % (len(GD.plugins), time.time() - t), flush=True)
 
 
 def open_project(name, create=False):
     global PR
-    PR = project.Project.create(name) if create else project.Project.open(name)
+    pr = project.Project.create(name) if create else project.Project.open(name)
+    load_game(pr)
+    PR = pr
     save_settings(project=PR.name)
     return state()
+
+
+def masters():
+    """The open mod's masters, as it would be saved now."""
+    try:
+        w = espwrite.Writer(GD, PR)
+        w.plan()
+        return w.masters
+    except Exception as e:
+        return ['(%s)' % e]
 
 
 def edit(label, ops):
@@ -288,6 +321,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(ref(q['cell'], q['key']))
             if u.path == '/api/door':
                 return self.send(door(q['key']))
+            if u.path == '/api/plugins':
+                return self.send(adopt.candidates(GD.data_dir))
             if u.path == '/api/types':
                 return self.send(BR.types())
             if u.path == '/api/records':
@@ -322,6 +357,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(open_project(body['name'], create=True))
                 if u.path == '/api/project/open':
                     return self.send(open_project(body['name']))
+                if u.path == '/api/project/adopt':
+                    name = adopt.adopt(GD, os.path.join(GD.data_dir, os.path.basename(body['file'])))
+                    return self.send(open_project(name))
                 if not PR:
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
                 if u.path == '/api/edit':
@@ -336,6 +374,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(record_copy(body['key']))
                 if u.path == '/api/record/revert':
                     return self.send(edit('Put back ' + body['key'], [{'op': 'record_revert', 'key': body['key']}]))
+                if u.path == '/api/project/esm':
+                    PR.esm = bool(body.get('on'))
+                    PR.save()
+                    return self.send(state())
                 if u.path == '/api/save':
                     return self.send(save())
                 if u.path == '/api/install':
@@ -359,15 +401,13 @@ def main():
     args = sys.argv[1:]
     port = next((int(a) for a in args if a.isdigit()), PORT)
     t = time.time()
-    GD = gamedata.GameData()
-    CATALOGUE = build_catalogue()
-    BR = browse.Browse(GD, lambda: PR)
     last = load_settings().get('project')
     if last:
         try:
             PR = project.Project.open(last)
         except (OSError, ValueError):
             PR = None
+    load_game(PR)
     print('%s: %d interiors, %d placeable objects (%.1fs)' % (GD.data_dir, len(GD.interiors), len(CATALOGUE),
                                                                time.time() - t), flush=True)
     # (on Windows, address reuse lets a second FOLab bind the same port, and the browser then talks to whichever

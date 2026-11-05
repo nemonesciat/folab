@@ -47,6 +47,8 @@ class Project:
         self.description = d.get('description', '')
         self.cells = d.get('cells', {})
         self.records = d.get('records', {})     # form key or '+ID' -> record (recordio.py): game records changed, new ones
+        self.source = d.get('source')           # an opened plugin: its copy, under projects/ (adopt.py); None for a new mod
+        self.esm = d.get('esm', False)          # saved as a master (.esm)
         self.next_id = d.get('next_id', FIRST_ID)
         self.undo_stack, self.redo_stack = [], []
 
@@ -67,13 +69,16 @@ class Project:
 
     def to_dict(self):
         return {'name': self.name, 'plugin': self.plugin, 'author': self.author, 'description': self.description,
-                'cells': self.cells, 'records': self.records, 'next_id': self.next_id}
+                'cells': self.cells, 'records': self.records, 'next_id': self.next_id, 'source': self.source, 'esm': self.esm}
 
     def save(self):
         tmp = self.path + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(self.to_dict(), f, indent=1)
         os.replace(tmp, self.path)
+
+    def source_path(self):
+        return os.path.join(PROJECTS_DIR, self.source) if self.source else None
 
     def plugin_path(self):
         os.makedirs(BUILD_DIR, exist_ok=True)
@@ -157,6 +162,6 @@ class Project:
         return label
 
     def state(self):
-        return {'name': self.name, 'plugin': self.plugin, 'changes': self.count(),
+        return {'name': self.name, 'plugin': self.plugin, 'changes': self.count(), 'opened': bool(self.source), 'esm': self.esm,
                 'undo': self.undo_stack[-1][0] if self.undo_stack else None,
                 'redo': self.redo_stack[-1][0] if self.redo_stack else None, 'saved': time.time()}

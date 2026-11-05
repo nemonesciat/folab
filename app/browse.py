@@ -18,7 +18,12 @@ class Browse:
         self._names = {}                   # fid -> (edid, name), filled as asked and by the index below
         self.edids = None                  # lower editor ID -> fid, built in the background
         self.used = None                   # fid -> [(kind, key)], built in the background
+        self.stopped = False
         threading.Thread(target=self._index, daemon=True).start()
+
+    def close(self):
+        """Stop the background index (the game was loaded again, for another mod)."""
+        self.stopped = True
 
     # ---- names ----
 
@@ -52,6 +57,8 @@ class Browse:
         gd, edids, used = self.gd, {}, {}
         for n, fid in enumerate(gd.forms):
             if n % 400 == 0:
+                if self.stopped:
+                    return
                 time.sleep(0.002)
             try:
                 e, _n = self.names(fid)
@@ -63,6 +70,8 @@ class Browse:
         # where each form is used: placed in a place, or named by a record a layout reads
         for n, (cell, refs) in enumerate(gd.cell_refs.items()):
             if n % 20 == 0:
+                if self.stopped:
+                    return
                 time.sleep(0.002)
             ck = gd.key(cell)
             for r in gd.refs(cell):
@@ -70,6 +79,8 @@ class Browse:
                     used.setdefault(r['base'], []).append(('placed', ck))
         for n, (fid, (i, rec)) in enumerate(gd.forms.items()):
             if n % 400 == 0:
+                if self.stopped:
+                    return
                 time.sleep(0.002)
             if rec.tag not in schema.TYPES or rec.tag == 'CELL':
                 continue

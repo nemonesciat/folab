@@ -16,8 +16,11 @@ the model for style, UI and approach. Python, standard library first, code in `a
 ## Layout
 
 - Readers: `tes4.py` (plugins), `bsa.py` (archives), `nif.py` (meshes), `gamedata.py` (the game as one thing).
-- Mod: `project.py` (changes as JSON in `projects/`, undo/redo), `espwrite.py` (writes `build/<mod>.esp`),
-  `install.py` (copies into Data + plugins.txt, backups in `backups/`).
+- Mod: `project.py` (changes as JSON in `projects/`, undo/redo), `espwrite.py` (writes `build/<mod>.esp` by laying
+  the changes over a `plugintree.py` tree: empty for a new mod, the plugin itself for an opened one, so untouched
+  records keep their exact bytes), `adopt.py` (open a plugin as your mod: a copy in `projects/<name> source/`,
+  loaded on top of the game; its masters are kept as they are and can't grow yet), `install.py` (copies into
+  Data + plugins.txt, backups in `backups/`).
 - Editor: `server.py` (port 8771) + `web/index.html`, `web/app.js` (panels, edits), `web/world.js` (3D view).
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the
   user's own mods. Never test `install` against the real game: use a fake Data folder and `LOCALAPPDATA`.

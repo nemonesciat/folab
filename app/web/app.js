@@ -49,7 +49,7 @@ async function newMod(name){
   catch (e){ fail(e); }
 }
 async function openMod(name){
-  try { setState(await post('/api/project/open', {name})); await loadPlaces(); if (A.cellId) openPlace(A.cellId); }
+  try { setState(await post('/api/project/open', {name})); if (typeof BW !== 'undefined') BW.types = []; await loadPlaces(); if (A.cellId) openPlace(A.cellId); }
   catch (e){ fail(e); }
 }
 
@@ -371,6 +371,13 @@ function drawModPage(){
       <p>After <b>Put in game</b>, start New Vegas and load a save. Open the console with <code>~</code> and type
          <code>coc ${esc(A.cellEdid || 'CellEditorID')}</code> to go to the place you're working on.</p>
       <p>Changes to a place you've already visited in that save can stay hidden until the place resets. A new save, or one from before you went there, shows them straight away.</p></div>` : ''}
+    ${p ? `<div class="card"><h3>Plugin</h3>
+      <p>${p.opened ? 'Opened from an existing plugin: saving keeps everything in it and lays your changes over it.' : 'A new mod of your own.'}</p>
+      <p>Masters: ${(p.masters || []).map(m => `<code>${esc(m)}</code>`).join(' ') || 'none yet'}</p>
+      <p><label><input type="checkbox" id="m-esm" ${p.esm ? 'checked' : ''}> Save as a master (other mods can build on it; the game loads it before plugins)</label></p></div>` : ''}
+    <div class="card"><h3>Open a plugin as your mod</h3>
+      <p>Mods in the game's Data folder. FOLab works on a copy; <b>Put in game</b> writes it back over the original (the old one goes to backups first).</p>
+      <div id="m-plugins"><div class="note">Looking…</div></div></div>
     <div class="card"><h3>Start another mod</h3>
       <p><input id="m-name" placeholder="Name" style="width:280px"> <button class="btn" id="m-new">Start</button></p>
       ${others.length ? '<p>Or open one:</p>' + others.map(x => `<div class="row" data-open="${esc(x.name)}">${esc(x.name)}<span class="n">${new Date(x.modified * 1000).toLocaleString()}</span></div>`).join('') : ''}</div>
@@ -382,6 +389,18 @@ function drawModPage(){
   on('#m-save', save); on('#m-install', install); on('#m-new', () => newMod($('#m-name').value));
   on('#m-uninstall', async () => { try { const d = await post('/api/uninstall'); setState(d.state); toast('Taken out of the game.'); } catch (e){ fail(e); } });
   $('#page-mod').querySelectorAll('[data-open]').forEach(r => r.onclick = () => { openMod(r.dataset.open); page('world'); });
+  const esm = $('#m-esm');
+  if (esm) esm.onchange = async () => { try { setState(await post('/api/project/esm', {on: esm.checked})); toast(esm.checked ? 'Will save as a master' : 'Will save as a plugin'); } catch (e){ fail(e); } };
+  api('/api/plugins').then(list => {
+    const box = $('#m-plugins'); if (!box) return;
+    box.innerHTML = list.length ? list.map(x => `<div class="row" data-adopt="${esc(x.file)}"><div>${esc(x.file)}<small>${x.error ? esc(x.error) : `${x.records} records · needs ${x.masters.map(esc).join(', ') || 'nothing'}${x.author ? ' · by ' + esc(x.author) : ''}`}</small></div><span class="n">Open</span></div>`).join('')
+      : '<div class="note">No mods in the Data folder yet (only the game\'s own files).</div>';
+    box.querySelectorAll('[data-adopt]').forEach(r => r.onclick = async () => {
+      toast('Opening ' + r.dataset.adopt + '… (loading it on top of the game takes a few seconds)');
+      try { setState(await post('/api/project/adopt', {file: r.dataset.adopt})); await loadPlaces(); BW.types = []; page('world'); toast('Opened ' + r.dataset.adopt + ' as your mod'); }
+      catch (e){ fail(e); }
+    });
+  });
 }
 
 // ---------- start ----------

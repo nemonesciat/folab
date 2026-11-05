@@ -1,12 +1,15 @@
-"""Writes a project as a New Vegas plugin (.esp).
+"""Writes a project as a New Vegas plugin (.esp or .esm).
 
-What goes in: the cells the project touches (each a copy of the game's own CELL record, as every plugin that
-edits a cell must carry), every ref it moved or turned (a copy of the game's record with new DATA/XSCL), every ref
-it removed (kept, but disabled and sunk out of sight: deleting a game ref crashes saves that knew it), and every new
-ref. Form IDs in copied records are re-pointed from the source file's own master list to this plugin's."""
+A new mod starts from an empty plugin; a mod opened from a plugin (adopt.py) starts from that file, every group and
+record of it kept as it was, and the changes are laid over it. What a mod's changes put in: the records it changes or
+adds; the cells it touches (each with the game's CELL record, as every plugin that edits a cell must carry); every ref
+it moved, turned, rescaled or swapped (a copy of the record with new DATA/XSCL/NAME); every game ref it removed (kept,
+but disabled and sunk out of sight: deleting a game ref crashes saves that knew it); its new refs. Form IDs in records
+copied from the game are re-pointed from their file's own master list to this plugin's."""
+import os
 import struct
 
-import gamedata
+import plugintree
 import recordio
 import tes4
 
@@ -14,6 +17,7 @@ FORM_VERSION = 15                       # New Vegas records
 HEDR_VERSION = 1.34
 INITIALLY_DISABLED = 0x00000800
 SUNK_Z = -30000.0
+ESM = 0x1
 
 # Subrecords holding form IDs, and where: a list of byte offsets, or 'all' for a plain list of form IDs
 FORMID_FIELDS = {
@@ -26,25 +30,25 @@ FORMID_FIELDS = {
 FORMID_FIELDS['ACHR'] = FORMID_FIELDS['ACRE'] = FORMID_FIELDS['REFR']
 
 
+class MasterError(ValueError):
+    pass
+
+
 def sub(tag, data):
     if len(data) > 0xFFFF:
         return struct.pack('<4sHI', b'XXXX', 4, len(data)) + struct.pack('<4sH', tag.encode(), 0) + data
     return struct.pack('<4sH', tag.encode(), len(data)) + data
 
 
-def record(tag, flags, formid, data):
-    return struct.pack('<4sIIIIHH', tag.encode(), len(data), flags, formid, 0, FORM_VERSION, 0) + data
-
-
-def group(label, gtype, contents):
-    if isinstance(label, str):
-        label = struct.unpack('<I', label.encode())[0]
-    return struct.pack('<4sIIiHHHH', b'GRUP', 24 + len(contents), label, gtype, 0, 0, 0, 0) + contents
+def join(subs):
+    return b''.join(sub(t, d) for t, d in subs)
 
 
 class Writer:
     def __init__(self, gd, project):
         self.gd, self.pr = gd, project
+        self.source = project.source_path()
+        self.own_name = project.plugin.lower()
         self.masters = []
 
     # --- form IDs ---
@@ -52,6 +56,11 @@ class Writer:
     def local(self, fid):
         """A load-order form ID as this plugin writes it."""
         name = self.gd.names[fid >> 24]
+        if name == self.own_name:
+            return self.own(fid & 0xFFFFFF)
+        if name not in self.mindex:
+            raise MasterError('%s uses something from %s, which is not one of its masters (%s). FOLab can\'t add '
+                              'masters to a plugin it opened yet.' % (self.pr.plugin, name, ', '.join(self.masters)))
         return (self.mindex[name] << 24) | (fid & 0xFFFFFF)
 
     def own(self, objid):
@@ -62,7 +71,9 @@ class Writer:
         return self.own(int(key[1:], 16)) if key.startswith('+') else self.local(self.gd.from_key(key))
 
     def remap_fields(self, plugin_i, tag, subs):
-        """Form IDs inside a copied record, from plugin plugin_i's numbering to ours."""
+        """Form IDs inside a record copied from the game, from plugin plugin_i's numbering to ours."""
+        if self.gd.names[plugin_i] == self.own_name:
+            return subs                         # (the opened plugin's own records already number as we do)
         fields = FORMID_FIELDS.get(tag, {})
         out = []
         for st, sd in subs:
@@ -81,8 +92,14 @@ class Writer:
     # --- what the plugin needs ---
 
     def plan(self):
-        """Which game files this plugin must name as masters: every file whose forms it uses, in load order."""
-        gd, used = self.gd, {0}
+        """The masters: an opened plugin keeps its own list as it was; a new mod names every game file whose forms it
+        uses, in load order."""
+        gd = self.gd
+        if self.source:
+            self.masters = list(tes4.PluginFile(self.source).header['masters'])
+            self.mindex = {m.lower(): k for k, m in enumerate(self.masters)}
+            return
+        used = {0}
         for ckey, c in self.pr.cells.items():
             cell = gd.from_key(ckey)
             used.add(gd.source(cell)[0])
@@ -110,30 +127,21 @@ class Writer:
 
     # --- records ---
 
-    def cell_record(self, cell):
-        mine = self.pr.records.get(self.gd.key(cell))
-        if mine:                                # the place's record as the mod has changed it
-            return record('CELL', mine['flags'], self.local(cell),
-                          b''.join(sub(t, d) for t, d in recordio.to_bytes(mine, self.link)))
+    def game_cell(self, cell):
+        """The game's CELL record for a place, numbered as we write."""
         i, rec = self.gd.source(cell)
-        subs = self.remap_fields(i, 'CELL', list(tes4.iter_subrecords(self.gd.plugins[i].data(rec))))
-        return record('CELL', rec.flags & ~tes4.COMPRESSED, self.local(cell), b''.join(sub(t, d) for t, d in subs))
+        return self.remap_fields(i, 'CELL', list(tes4.iter_subrecords(self.gd.plugins[i].data(rec)))), rec.flags & ~tes4.COMPRESSED
 
-    def ref_record(self, cell, rkey, r):
-        """(persistent?, record bytes) for one changed or new ref."""
-        gd = self.gd
-        if rkey.startswith('+'):
-            subs = [('NAME', struct.pack('<I', self.link(r['base'])))]
-            if r.get('s', 1.0) != 1.0:
-                subs.append(('XSCL', struct.pack('<f', r['s'])))
-            subs.append(('DATA', struct.pack('<6f', *r['p'])))
-            flags = tes4.PERSISTENT if r.get('persistent') else 0
-            return bool(r.get('persistent')), record('REFR', flags, self.own(int(rkey[1:], 16)),
-                                                     b''.join(sub(t, d) for t, d in subs))
-        fid = gd.from_key(rkey)
-        i, rec = gd.cell_refs[cell][fid]
-        subs = self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(gd.plugins[i].data(rec))))
-        flags = rec.flags & ~tes4.COMPRESSED
+    def new_ref(self, rkey, r):
+        subs = [('NAME', struct.pack('<I', self.link(r['base'])))]
+        if r.get('s', 1.0) != 1.0:
+            subs.append(('XSCL', struct.pack('<f', r['s'])))
+        subs.append(('DATA', struct.pack('<6f', *r['p'])))
+        flags = tes4.PERSISTENT if r.get('persistent') else 0
+        return plugintree.Rec.new('REFR', flags, self.own(int(rkey[1:], 16)), join(subs), FORM_VERSION)
+
+    def changed_ref(self, subs, flags, r):
+        """A ref's subrecords and flags with the mod's change laid over: moved, rescaled, swapped, removed."""
         p, s = r.get('p'), r.get('s')
         if r.get('removed'):
             flags |= INITIALLY_DISABLED
@@ -152,69 +160,132 @@ class Writer:
                     out.append(('XSCL', struct.pack('<f', s)))
                 d = struct.pack('<6f', *p)
             out.append((t, d))
-        return bool(rec.flags & tes4.PERSISTENT), record(rec.tag, flags, self.local(fid),
-                                                         b''.join(sub(t, d) for t, d in out))
+        return out, flags
+
+    # --- the plugin ---
 
     def build(self):
         self.plan()
         gd = self.gd
-        blocks = {}                             # block -> subblock -> [cell bytes + children group]
-        nrec = ngrp = 0
-        # records the mod changes or adds, one top group per type, in the order the game's own files keep them
-        bytype = {}
-        for key, rec in self.pr.records.items():
+        tree = plugintree.Plugin.read(self.source) if self.source else plugintree.Plugin.empty(b'')
+        order = gd.plugins[0].top_groups()
+        found = {r.formid: (r, parent) for r, parent, _path in tree.records()}
+
+        # records the mod changes or adds (a place's record goes with the place, below)
+        for key, rec in sorted(self.pr.records.items()):
             if rec['type'] == 'CELL':
-                continue                        # (written with the place, below)
+                continue
             fid = self.link(key)
-            bytype.setdefault(rec['type'], []).append(
-                (fid, record(rec['type'], rec['flags'], fid, b''.join(sub(t, d) for t, d in recordio.to_bytes(rec, self.link)))))
-        tops = {}
-        for t in bytype:
-            tops[t] = group(t, tes4.G_TOP, b''.join(d for _f, d in sorted(bytype[t])))
-            nrec += len(bytype[t])
-            ngrp += 1
+            data = join(recordio.to_bytes(rec, self.link))
+            if fid in found:
+                found[fid][0].set_data(data, rec['flags'])
+            else:
+                top = tree.top(rec['type'], order)
+                node = plugintree.Rec.new(rec['type'], rec['flags'], fid, data, FORM_VERSION)
+                top.kids.append(node)
+                found[fid] = (node, top)
+
+        # places: the cell's record, then its refs
         cells = {k for k, c in self.pr.cells.items() if c['refs']}
         cells |= {k for k, r in self.pr.records.items() if r['type'] == 'CELL' and not k.startswith('+')}
         for ckey in sorted(cells):
-            c = self.pr.cells.get(ckey) or {'refs': {}}
             cell = gd.from_key(ckey)
-            lid = self.local(cell)
-            pers, temp = [], []
-            for rkey in sorted(c['refs']):
-                is_p, data = self.ref_record(cell, rkey, c['refs'][rkey])
-                (pers if is_p else temp).append(data)
-                nrec += 1
-            kids = b''
-            if not c['refs']:
-                kids = None
-            if pers:
-                kids += group(lid, tes4.G_CELL_PERSISTENT, b''.join(pers))
-                ngrp += 1
-            if temp:
-                kids += group(lid, tes4.G_CELL_TEMPORARY, b''.join(temp))
-                ngrp += 1
-            obj = cell & 0xFFFFFF
-            blocks.setdefault(obj % 10, {}).setdefault((obj // 10) % 10, []).append(
-                self.cell_record(cell) + (group(lid, tes4.G_CELL_CHILDREN, kids) if kids is not None else b''))
-            nrec += 1
-            ngrp += kids is not None
-        if blocks:
-            top = b''
-            for b in sorted(blocks):
-                inner = b''.join(group(sb, tes4.G_INT_SUBBLOCK, b''.join(blocks[b][sb])) for sb in sorted(blocks[b]))
-                top += group(b, tes4.G_INT_BLOCK, inner)
-                ngrp += 1 + len(blocks[b])
-            tops['CELL'] = group('CELL', tes4.G_TOP, top)
-            ngrp += 1
-        order = gd.plugins[0].top_groups()
-        body = b''.join(tops[t] for t in sorted(tops, key=lambda t: order.index(t) if t in order else len(order)))
-        hdr = [sub('HEDR', struct.pack('<fiI', HEDR_VERSION, nrec + ngrp, self.own(self.pr.next_id))),
-               sub('CNAM', (self.pr.author or 'FOLab').encode('cp1252', 'replace')[:511] + b'\0')]
-        if self.pr.description:
-            hdr.append(sub('SNAM', self.pr.description.encode('cp1252', 'replace')[:511] + b'\0'))
-        for m in self.masters:
-            hdr += [sub('MAST', m.encode('cp1252') + b'\0'), sub('DATA', b'\0' * 8)]
-        return record('TES4', 0, 0, b''.join(hdr)) + body
+            lid = self.link(ckey)
+            node, kids = self._cell_node(tree, found, cell, lid, order)
+            mine = self.pr.records.get(ckey)
+            if mine:
+                node.set_data(join(recordio.to_bytes(mine, self.link)), mine['flags'])
+            for rkey, r in sorted((self.pr.cells.get(ckey) or {'refs': {}})['refs'].items()):
+                if rkey.startswith('+'):
+                    group = self._ref_group(kids, lid, bool(r.get('persistent')))
+                    ref = self.new_ref(rkey, r)
+                    group.kids.append(ref)
+                    found[ref.formid] = (ref, group)
+                    continue
+                fid = gd.from_key(rkey)
+                rlid = self.local(fid)
+                have = found.get(rlid)
+                if have and r.get('removed') and rlid >> 24 == len(self.masters):
+                    have[1].kids.remove(have[0])  # (the mod's own ref, removed: gone)
+                    del found[rlid]
+                    continue
+                if have:
+                    subs = list(tes4.iter_subrecords(have[0].data()))
+                    subs, flags = self.changed_ref(subs, have[0].flags & ~tes4.COMPRESSED, r)
+                    have[0].set_data(join(subs), flags)
+                else:
+                    i, rec = gd.cell_refs[cell][fid]
+                    subs = self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(gd.plugins[i].data(rec))))
+                    subs, flags = self.changed_ref(subs, rec.flags & ~tes4.COMPRESSED, r)
+                    group = self._ref_group(kids, lid, bool(rec.flags & tes4.PERSISTENT))
+                    node2 = plugintree.Rec.new(rec.tag, flags, rlid, join(subs), FORM_VERSION)
+                    group.kids.append(node2)
+                    found[rlid] = (node2, group)
+
+        # the header: an opened plugin's own, with its count and next ID brought up to date
+        own_ids = [r.formid & 0xFFFFFF for r, _p, _path in tree.records() if r.formid >> 24 == len(self.masters)]
+        next_id = self.own(max([self.pr.next_id] + [x + 1 for x in own_ids]))
+        if self.source:
+            subs = list(tes4.iter_subrecords(tree.header.raw))
+            old = next((d for t, d in subs if t == 'HEDR'), None)
+            v, _n, nxt = struct.unpack_from('<fiI', old)
+            hedr = struct.pack('<fiI', v, tree.count(), max(nxt, next_id)) + old[12:]
+            subs = [(t, hedr if t == 'HEDR' else d) for t, d in subs]
+        else:
+            subs = [('HEDR', struct.pack('<fiI', HEDR_VERSION, tree.count(), next_id)),
+                    ('CNAM', (self.pr.author or 'FOLab').encode('cp1252', 'replace')[:511] + b'\0')]
+            if self.pr.description:
+                subs.append(('SNAM', self.pr.description.encode('cp1252', 'replace')[:511] + b'\0'))
+            for m in self.masters:
+                subs += [('MAST', m.encode('cp1252') + b'\0'), ('DATA', b'\0' * 8)]
+        flags = (tree.header.flags & ~ESM) | (ESM if self.pr.esm else 0)
+        new_head = join(subs)
+        if new_head != tree.header.raw or flags != tree.header.flags:
+            tree.header.set_data(new_head, flags)
+        return tree.bytes()
+
+    def _cell_node(self, tree, found, cell, lid, order):
+        """The cell's record in the tree and its children group, both made (as the game files keep them) when the
+        plugin doesn't have the cell yet."""
+        have = found.get(lid)
+        if have and have[0].tag == 'CELL' and have[1] is not None:
+            node, parent = have
+            at = parent.kids.index(node)
+            nxt = parent.kids[at + 1] if at + 1 < len(parent.kids) else None
+            if isinstance(nxt, plugintree.Group) and nxt.gtype == tes4.G_CELL_CHILDREN:
+                return node, nxt
+            kids = plugintree.Group(lid, tes4.G_CELL_CHILDREN)
+            parent.kids.insert(at + 1, kids)
+            return node, kids
+        subs, flags = self.game_cell(cell)
+        node = plugintree.Rec.new('CELL', flags, lid, join(subs), FORM_VERSION)
+        top = tree.top('CELL', order)
+        obj = lid & 0xFFFFFF
+        block = self._group(top, obj % 10, tes4.G_INT_BLOCK)
+        subblock = self._group(block, (obj // 10) % 10, tes4.G_INT_SUBBLOCK)
+        kids = plugintree.Group(lid, tes4.G_CELL_CHILDREN)
+        subblock.kids += [node, kids]
+        found[lid] = (node, subblock)
+        return node, kids
+
+    @staticmethod
+    def _group(parent, label, gtype):
+        for g in parent.kids:
+            if isinstance(g, plugintree.Group) and g.gtype == gtype and g.label == label:
+                return g
+        g = plugintree.Group(label, gtype)
+        parent.kids.append(g)
+        return g
+
+    def _ref_group(self, kids, lid, persistent):
+        gtype = tes4.G_CELL_PERSISTENT if persistent else tes4.G_CELL_TEMPORARY
+        for g in kids.kids:
+            if isinstance(g, plugintree.Group) and g.gtype == gtype:
+                return g
+        g = plugintree.Group(lid, gtype)
+        # (persistent before temporary, as the game's files have them)
+        kids.kids.insert(0 if persistent else len(kids.kids), g)
+        return g
 
 
 def write(gd, project, path):
@@ -222,6 +293,5 @@ def write(gd, project, path):
     tmp = path + '.tmp'
     with open(tmp, 'wb') as f:
         f.write(data)
-    import os
     os.replace(tmp, path)
     return len(data)

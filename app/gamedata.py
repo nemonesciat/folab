@@ -55,8 +55,9 @@ class GameData:
         if not self.data_dir:
             raise FileNotFoundError('New Vegas Data folder not found (set FOLAB_NV_DATA)')
         names = plugins or [p for p in OFFICIAL if os.path.isfile(os.path.join(self.data_dir, p))]
-        self.plugins = [tes4.PluginFile(os.path.join(self.data_dir, n)) for n in names]
-        self.names = [n.lower() for n in names]
+        self.plugins = [tes4.PluginFile(n if os.path.isabs(n) else os.path.join(self.data_dir, n)) for n in names]
+        # (by file name: a plugin loaded from elsewhere, like an opened mod's copy, is still known by its name)
+        self.names = [os.path.basename(n).lower() for n in names]
         self.forms = {}         # global form ID -> (plugin index, Record)
         self.cell_refs = {}     # global CELL form ID -> {global ref form ID: (plugin index, Record)}
         self.ref_cell = {}      # global ref form ID -> global CELL form ID
