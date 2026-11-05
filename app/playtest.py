@@ -1,7 +1,7 @@
 """Starting the game from FOLab, and "Play here".
 
-Open in game puts the mod in the game and starts FalloutNV.exe (Steam must be running, as it always is for the Steam
-copy). The game can't be told on its command line where to start, so you still press Continue or load a save.
+Open in game puts the mod in the game and asks Steam to start it (the game's launcher opens: Play). The game can't be
+told on its command line where to start, so you still press Continue or load a save.
 
 Play here adds FOLab Test.esp, kept apart from your mod: an invisible marker where you asked, and a quest whose script
 moves you there once a save is loaded. It is the one script FOLab writes, compiled by hand to the same bytes the game's
@@ -49,12 +49,14 @@ def game_running():
 
 
 def launch(data_dir):
+    """Start the game the way Steam's Play button does. (Starting FalloutNV.exe directly fails with Steam's
+    "Application load error 5:0000065434": the Steam copy must be started by Steam.) Steam shows the game's
+    launcher first; its Play starts the game."""
     exe = game_exe(data_dir)
     if not os.path.isfile(exe):
         raise FileNotFoundError('FalloutNV.exe not found beside the Data folder (%s)' % exe)
-    flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
-    subprocess.Popen([exe], cwd=os.path.dirname(exe), creationflags=flags, close_fds=True)
-    return exe
+    os.startfile('steam://rungameid/22380')
+    return 'steam://rungameid/22380'
 
 
 def compiled_script():

@@ -372,7 +372,8 @@ async function play(at){
   try {
     const d = await post('/api/play', at || {});
     setState(d.state);
-    toast(at ? 'New Vegas is starting. Continue or load a save: you\'ll arrive here a moment after it loads.' : 'New Vegas is starting with your mod.');
+    toast(at ? 'Steam is starting New Vegas: press Play in its launcher, then Continue or load a save. You\'ll arrive here a moment after it loads.'
+             : 'Steam is starting New Vegas with your mod: press Play in its launcher.');
   } catch (e){ fail(e); }
 }
 function playHere(point){
