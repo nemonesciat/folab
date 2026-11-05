@@ -34,6 +34,7 @@ function cmEntries(key, point){
     add('Move and place', 'Set it down on what\'s below', dropSel);
     add('Move and place', 'Align to the grid', alignSel);
     if (one) add('Replace and select', 'Swap for…', () => swapStart(one));
+    if (one) add('Replace and select', 'Replace every one here…', () => swapAllStart(one));
     if (one) add('Replace and select', `Select all the ${one.base} here`, () => select(visibleGroups().filter(g => g.userData.thing.bkey === one.bkey).map(g => g.userData.thing.key)));
     add('View', n > 1 ? `Hide them` : 'Hide it', hideSel);
     add('View', 'Hide everything else', () => { const keep = new Set(A.sel); hideKeys(W.group.children.map(g => g.userData.thing.key).filter(k => !keep.has(k))); });

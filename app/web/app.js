@@ -421,6 +421,11 @@ function pickToPlace(e){
   if (!A.cellId) return toast('Open a place first.', true);
   if (A.swapping){
     const t = A.swapping; swapEnd(); remember(it);
+    if (t.all){
+      // every one of that thing in the place (outside: in the cells loaded round you)
+      const all = (A.things || []).filter(x => x.bkey === t.bkey && x.state !== 'removed');
+      return edit(`Replace ${all.length} ${t.base} with ${it.edid}`, all.map(x => ({op: 'swap', cell: x.cell || A.cellId, ref: x.key, base: it.key})));
+    }
     return edit(`Swap ${t.base} for ${it.edid}`, [{op: 'swap', cell: A.cellId, ref: t.key, base: it.key}]);
   }
   document.querySelectorAll('#tab-place .row').forEach(x => x.classList.toggle('on', x === r));

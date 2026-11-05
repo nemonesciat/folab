@@ -3,7 +3,8 @@
 // loaded (ground, then the things in them) and the far ones let go, so the whole Mojave can be flown across.
 // Looking only for now: the server refuses changes to outside cells.
 const OUT = {worlds: [], world: null, info: null, cells: new Map(), queue: [], busy: 0, token: 0, timer: null};
-const CELL = 4096, LAND_R = 3, THING_R = 2, QUAD_UV = 2048 / 6;     // (a ground texture repeats 6 times a quarter)
+const CELL = 4096, QUAD_UV = 2048 / 6;                   // (a ground texture repeats 6 times a quarter)
+let LAND_R = 3, THING_R = 2;                              // (how far the ground and the things load: the View panel)
 const SKY = 0xc7b9a0;
 
 async function outsideTab(){

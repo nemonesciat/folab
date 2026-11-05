@@ -171,6 +171,10 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 .goto{position:relative;padding:8px 12px 4px}.goto input{width:100%}
 #goto-list{position:absolute;left:12px;right:12px;top:40px;z-index:20;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;max-height:60vh;overflow-y:auto;display:none;box-shadow:0 8px 24px #0008}
 #goto-list .row.on{background:var(--sel)}
+#minimap{position:absolute;left:10px;bottom:34px;width:180px;height:180px;border-radius:8px;z-index:3;cursor:crosshair;display:none;opacity:.92}
+#tab-view{padding:0 12px 12px;overflow-y:auto}.vt-grid{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center}
+.vt-grid label,.vt-row{color:var(--muted);font-size:13px}.vt-grid small{color:var(--faint)}
+.vt-row{display:flex;align-items:center;gap:8px;margin:5px 0}.vt-row input[type=range]{flex:1}
 #gb{position:absolute;top:10px;right:10px;width:300px;max-height:calc(100% - 20px);overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;z-index:5;display:none;font-size:13px}
 .gb-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}.gb-h b{color:var(--gold2)}.gb-h .btn{margin-left:auto;padding:0 7px}
 .gb-tools{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px}.gb-tools .btn{padding:3px 4px;font-size:12px}
@@ -229,6 +233,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <span class="seg"><button class="btn" id="t-map" title="The place from above (M)">🗺 Map</button><button class="btn on" id="t-3d" title="The 3D view (M)">3D</button></span>
       <button class="btn on" id="t-move" title="Move (1)">✥ Move</button>
       <button class="btn" id="t-turn" title="Turn (2)">⟳ Turn</button>
+      <button class="btn" id="t-scale" title="Size (3): drag any handle, it grows or shrinks evenly">⤢ Scale</button>
+      <button class="btn" id="t-space" title="The handles point the world's directions (click: the thing's own)">✛ World axes</button>
       <span class="grp">Grid <select id="t-grid"><option value="0">off</option><option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option><option>256</option></select></span>
       <span class="grp">Angle <select id="t-angle"><option value="0">off</option><option>5</option><option selected>15</option><option>45</option><option>90</option></select></span>
       <button class="btn" id="t-drop" title="Set the selected thing down on what's below it (End)">⤓ Drop down</button>
@@ -248,7 +254,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
         <kbd>Click</kbd> select · <kbd>Shift+click</kbd> add · drag on empty space: select with a box · <kbd>Ctrl+A</kbd> everything you can see<br>
         Drag the arrows to move, the rings to turn · <kbd>G</kbd> move · <kbd>R</kbd> turn · <kbd>F</kbd> look at it · <kbd>End</kbd> drop it onto what's below<br>
         <kbd>Ctrl+C</kbd>/<kbd>Ctrl+V</kbd> copy and paste where the mouse is · <kbd>Ctrl+D</kbd> duplicate · <kbd>Del</kbd> remove · <kbd>H</kbd> hide · <kbd>Shift+H</kbd> show hidden<br>
-        <kbd>Right-click</kbd> a menu · double-click: its window · <kbd>Esc</kbd> deselect · drag things from Place into the view</div></div>
+        <kbd>Right-click</kbd> a menu · double-click: its window · <kbd>Esc</kbd> deselect · drag things from Place into the view<br>
+        <kbd>3</kbd> scale · <kbd>M</kbd> the flat map · <kbd>Ctrl+K</kbd> go to a place · <kbd>Alt+←</kbd> back · the View tab: what shows, locks, how far</div></div>
     <div id="status"><span id="s-place">No place open</span><span id="s-load"></span>
       <span class="r">Right-drag look · WASD fly · ? all controls</span></div>
     <div id="welcome"><div class="card">
@@ -260,7 +267,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
     </div></div>
   </div>
   <div class="side" id="right">
-    <div class="tabs"><button data-tab="place" class="on">Place</button><button data-tab="selected">Selected</button></div>
+    <div class="tabs"><button data-tab="place" class="on">Place</button><button data-tab="selected">Selected</button><button data-tab="view" title="What shows, what's locked, how far it loads">View</button></div>
     <div class="pane on" id="tab-place">
       <input class="find" id="f-place" placeholder="Search things to place: chair, desk, lamp…">
       <select id="f-kind" style="margin:0 12px 6px"><option value="">Everything</option></select>
@@ -272,6 +279,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <div class="h">Found</div>
       <div class="list" id="found"></div>
     </div>
+    <div class="pane" id="tab-view"></div>
     <div class="pane" id="tab-selected"><div id="selected"><div class="note">Click a thing in the view or in Objects.</div></div></div>
   </div>
 </main>
@@ -297,6 +305,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/ground.js"></script>
 <script src="/web/map2d.js"></script>
 <script src="/web/farland.js"></script>
+<script src="/web/viewtools.js"></script>
 <script src="/web/ctxmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>

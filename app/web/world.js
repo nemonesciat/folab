@@ -137,7 +137,7 @@ function worldInit(box){
   W.gizmo = new T.TransformControls(W.cam, W.ren.domElement);
   W.gizmo.setSize(0.9);
   W.gizmo.addEventListener('mouseDown', gizmoStart);
-  W.gizmo.addEventListener('dragging-changed', e => { W.dragging = e.value; if (!e.value) commitSelected(W.mode === 'rotate' ? 'Turn' : 'Move'); });
+  W.gizmo.addEventListener('dragging-changed', e => { W.dragging = e.value; if (!e.value) commitSelected(W.mode === 'rotate' ? 'Turn' : W.mode === 'scale' ? 'Scale' : 'Move'); });
   W.gizmo.addEventListener('objectChange', gizmoFollow);
   W.scene.add(W.gizmo);
   W.boxEl = document.createElement('div');
@@ -184,9 +184,11 @@ function visibleGroups(except){
   return W.group ? W.group.children.filter(g => g.visible && !skip.has(g)) : [];
 }
 
+// (locked kinds can't be clicked in the view: they're picked from the Objects list instead)
+function pickable(except){ return visibleGroups(except).filter(g => !(W.locked && W.locked.has(thingKind(g.userData.thing)))); }
 function hitThing(e, except){
   const r = ray(e), lands = W.lands ? [...W.lands] : [];
-  const hit = r.intersectObjects(visibleGroups(except).concat(lands), true)[0];
+  const hit = r.intersectObjects(pickable(except).concat(lands), true)[0];
   if (hit && lands.length){
     // (outside: the ground itself, to stand things on or to pick a spot)
     let o = hit.object; while (o && !o.userData.land) o = o.parent;
@@ -368,7 +370,26 @@ function setTransform(g, t){
   g.scale.setScalar((t.s || 1) * (g.userData.bodyScale || 1));
 }
 
-function thingVisible(t){ return (!t.marker || W.show.markers) && (t.state !== 'removed' || W.show.removed) && !W.hidden.has(t.key); }
+// what kind of thing it is, for the View panel's switches
+function thingKind(t){
+  if (t.marker) return 'markers';
+  if (t.tree) return 'scenery';
+  const m = (t.model || '').toLowerCase();
+  if (t.type === 'NPC_') return 'people';
+  if (t.type === 'CREA') return 'creatures';
+  if (t.type === 'DOOR') return 'doors';
+  if (t.type === 'CONT') return 'containers';
+  if (t.type === 'LIGH') return 'lights';
+  if (['WEAP', 'ARMO', 'MISC', 'ALCH', 'AMMO', 'BOOK', 'NOTE', 'KEYM', 'CHIP', 'CMNY', 'IMOD', 'CCRD'].includes(t.type)) return 'items';
+  if (['FURN', 'ACTI', 'TERM', 'TACT'].includes(t.type)) return 'furniture';
+  if (m.includes('\\landscape\\') || m.includes('\\trees\\') || m.includes('\\plants\\') || /bush|shrub|rock|tumbleweed|yucca|cactus/.test(m)) return 'scenery';
+  return 'buildings';
+}
+function thingVisible(t){
+  if (W.show.kinds && W.show.kinds[thingKind(t)] === false && thingKind(t) !== 'markers') return false;
+  if (W.show.onlyMine && !t.state) return false;
+  return (!t.marker || W.show.markers) && (t.state !== 'removed' || W.show.removed) && !W.hidden.has(t.key);
+}
 
 async function addThing(t, token){
   const g = new T.Group();
@@ -575,6 +596,13 @@ function snapApply(){
 
 // several selected: each follows the handles, turning round their middle
 function gizmoFollow(){
+  if (W.mode === 'scale' && W.sel.length === 1){
+    // the game sizes a thing evenly: whichever handle was pulled, all three follow it
+    const g = W.sel[0], b = g.userData.bodyScale || 1, was = (g.userData.thing.s || 1) * b;
+    const v = [g.scale.x, g.scale.y, g.scale.z].reduce((m, x) => Math.abs(x - was) > Math.abs(m - was) ? x : m, was);
+    g.scale.setScalar(Math.max(0.01 * b, Math.min(10 * b, v)));
+    refreshSel(); return;
+  }
   if (W.sel.length === 1 && W.snapBoxes) snapApply();
   if (W.sel.length > 1 && W.snapBoxes && W.dragFrom) snapApply();
   if (W.sel.length > 1 && W.dragFrom){
@@ -585,7 +613,11 @@ function gizmoFollow(){
   refreshSel();
 }
 
-function setMode(m){ W.mode = m; W.gizmo.setMode(m); }
+function setMode(m){
+  W.mode = m; W.gizmo.setMode(m);
+  // (scaling several at once isn't something a ref can hold together: one at a time)
+  if (m === 'scale' && W.sel.length > 1) select([W.sel[0].userData.thing.key]);
+}
 function setSnap(grid, angle){
   W.gridSnap = grid;
   W.gizmo.setTranslationSnap(grid > 0 ? grid : null);
@@ -601,7 +633,9 @@ function commitSelected(label){
   const moves = [];
   for (const g of W.sel){
     const t = g.userData.thing, p = gameP(g);
-    if (!p.every((v, i) => Math.abs(v - t.p[i]) < 1e-4)) moves.push([t, p]);
+    const s = Math.round(g.scale.x / (g.userData.bodyScale || 1) * 1000) / 1000;
+    if (W.mode === 'scale' && Math.abs(s - (t.s || 1)) > 1e-3) moves.push([t, p, s]);
+    else if (!p.every((v, i) => Math.abs(v - t.p[i]) < 1e-4)) moves.push([t, p]);
   }
   if (W.sel.length > 1){ W.pivot.position.copy(selCenter()); W.pivot.rotation.set(0, 0, 0); }
   if (moves.length) W.onMove(moves, label);
