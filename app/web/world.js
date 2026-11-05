@@ -171,7 +171,13 @@ function visibleGroups(except){
 }
 
 function hitThing(e, except){
-  const r = ray(e), hit = r.intersectObjects(visibleGroups(except), true)[0];
+  const r = ray(e), lands = W.lands ? [...W.lands] : [];
+  const hit = r.intersectObjects(visibleGroups(except).concat(lands), true)[0];
+  if (hit && lands.length){
+    // (outside: the ground itself, to stand things on or to pick a spot)
+    let o = hit.object; while (o && !o.userData.land) o = o.parent;
+    if (o) return {group: null, point: hit.point, normal: hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : new T.Vector3(0, 0, 1), floor: true, land: true};
+  }
   if (!hit){
     // nothing there: the floor plane of the place (its lowest floor, or 0 in an empty one)
     const at = new T.Vector3();
@@ -208,6 +214,11 @@ function controls(el){
     el.focus();
     if (e.button === 1) e.preventDefault();
     if (e.button === 0 && (W.dragging || W.gizmo.axis)) return;           // using the handles
+    if (e.button === 0 && !e.altKey && W.tool && W.tool.down(e)){          // a tool working on the ground (the Ground brush)
+      drag = {b: 0, tool: true, x: e.clientX, y: e.clientY, moved: 0};
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      return;
+    }
     drag = {b: e.button, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: 0, alt: e.altKey, shift: e.shiftKey};
     if (e.button === 0 && e.altKey){
       drag.pivot = W.sel.length ? selCenter() : (hitThing(e) || {}).point || W.cam.position.clone().addScaledVector(dir(), 600);
@@ -222,6 +233,8 @@ function controls(el){
   el.addEventListener('pointermove', e => {
     W.mouse = {clientX: e.clientX, clientY: e.clientY};
     if (W.placing) placeGhost(e);
+    if (W.tool && W.tool.hover) W.tool.hover(e, !!(drag && drag.tool));
+    if (drag && drag.tool){ W.tool.move(e); return; }
     if (!drag || W.dragging) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
     if (drag.b === 2){                                                  // right-drag: look around
@@ -241,6 +254,7 @@ function controls(el){
     const d = drag; drag = null;
     W.boxEl.style.display = 'none';
     if (!d) return;
+    if (d.tool){ if (W.tool) W.tool.up(e); return; }
     if (d.b === 2 && d.moved <= 10){                      // (a right-click that wanders a little is still a click, not a look)
       if (W.placing) return stopPlacing();
       const h = hitThing(e);

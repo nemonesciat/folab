@@ -43,9 +43,12 @@ function leaveOutside(){
   OUT.world = null; OUT.token++;
   clearInterval(OUT.timer);
   for (const c of OUT.cells.values()) if (c.land) W.scene.remove(c.land);
+  W.lands = null;
+  if (typeof groundOff === 'function') groundOff();
   OUT.cells.clear(); OUT.queue = [];
   W.scene.fog = null; W.scene.background = new T.Color(0x0e0c0a);
   W.outdoors = false; assignLights();
+  $('#t-ground').style.display = 'none';
   W.cam.far = 60000; W.cam.updateProjectionMatrix();
 }
 
@@ -60,6 +63,8 @@ function goOutside(info, at){
   if (W.grid){ W.scene.remove(W.grid); W.grid = null; }
   W.cell = {things: []};
   OUT.world = info.id; OUT.token++;
+  W.lands = new Set();
+  $('#t-ground').style.display = '';
   A.cellId = null; A.things = []; A.outside = info;
   W.scene.background = new T.Color(SKY);
   W.scene.fog = new T.Fog(SKY, CELL * 2, CELL * (LAND_R + 0.5));
@@ -118,7 +123,7 @@ async function cellLoad(list){
   cells.forEach((c, n) => {
     if (OUT.cells.get(c.x + ',' + c.y) !== c) return;
     c.data = got[n] || {land: null, things: []};
-    if (c.data.land){ c.land = landMesh(c.data.land, c.x, c.y); W.scene.add(c.land); }
+    if (c.data.land){ c.land = landMesh(c.data.land, c.x, c.y); c.land.userData.cell = c; W.scene.add(c.land); W.lands.add(c.land); }
     if (OUT.settle && c.data.land){
       const [cx, cy] = camCell();
       if (cx === c.x && cy === c.y){ W.cam.position.z = groundAt(c.data.land, c.x, c.y, W.cam.position.x, W.cam.position.y) + 220; OUT.settle = false; }
@@ -148,6 +153,7 @@ function cellThingsOff(c){
 function cellDrop(c){
   if (c.shown) cellThingsOff(c);
   if (c.land){
+    W.lands.delete(c.land);
     W.scene.remove(c.land);
     c.land.traverse(m => { if (m.isMesh){ m.geometry.dispose(); } });
   }
@@ -220,7 +226,7 @@ function landMesh(d, x, y){
 
 // ---------- after an undo, a redo or a refused change: every cell on show again as the server has it ----------
 async function outsideResync(){
-  const shown = [...OUT.cells.values()].filter(c => c.data && c.data.cell);
+  const shown = [...OUT.cells.values()].filter(c => c.data && c.data.cell && (c.shown || c.data.changed_land || OUT.touched && OUT.touched.has(c)));
   if (!shown.length) return;
   const token = OUT.token;
   const got = [];
@@ -232,6 +238,10 @@ async function outsideResync(){
   shown.forEach((c, n) => {
     const fresh = got[n].things, keys = new Set(fresh.map(t => t.key));
     c.data.things = fresh;
+    if (got[n].land && JSON.stringify(got[n].land.h) + got[n].land.c + JSON.stringify(got[n].land.q) !==
+        JSON.stringify(c.data.land.h) + c.data.land.c + JSON.stringify(c.data.land.q)){
+      c.data.land = got[n].land; c.data.changed_land = got[n].changed_land; landRebuild(c);
+    }
     if (!c.shown) return;
     for (const k of c.keys) if (!keys.has(k)) dropThing(k);
     c.keys = [];
@@ -252,5 +262,18 @@ function outsideAdopt(t){
     const i = c.data.things.findIndex(x => x.key === t.key);
     if (i >= 0) c.data.things[i] = t; else c.data.things.push(t);
     if (!c.keys.includes(t.key)) c.keys.push(t.key);
+  }
+}
+
+
+// a cell's ground drawn again from its data (the Ground brush changed it)
+function landRebuild(c){
+  if (!c.data || !c.data.land) return;
+  const old = c.land;
+  c.land = landMesh(c.data.land, c.x, c.y); c.land.userData.cell = c;
+  W.scene.add(c.land); W.lands.add(c.land);
+  if (old){
+    W.lands.delete(old); W.scene.remove(old);
+    old.traverse(m => { if (m.isMesh) m.geometry.dispose(); });
   }
 }

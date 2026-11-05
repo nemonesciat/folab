@@ -9,6 +9,7 @@ copied from the game are re-pointed from their file's own master list to this pl
 import os
 import struct
 
+import land as landmod
 import plugintree
 import recordio
 import tes4
@@ -118,6 +119,16 @@ class Writer:
                     used.add(gd.source(gd.ref_cell.get(fid, cell))[0])
                 if r.get('base') and not r['base'].startswith('+'):
                     used.add(gd.from_key(r['base']) >> 24)
+        for ckey, L in getattr(self.pr, 'land', {}).items():
+            cell = gd.from_key(ckey)
+            used.add(gd.source(cell)[0])
+            used.add(gd.source(gd.ext_cells[cell])[0])
+            if cell in gd.land:
+                used.add(gd.land[cell][0])
+            for q in L['q']:
+                for k in [q.get('bkey')] + [l.get('key') for l in q['layers']]:
+                    if k:
+                        used.add(gd.from_key(k) >> 24)
         for key, rec in self.pr.records.items():
             if not key.startswith('+'):
                 used.add(gd.from_key(key) >> 24)
@@ -211,6 +222,7 @@ class Writer:
 
         # places: the cell's record, then its refs
         cells = {k for k, c in self.pr.cells.items() if c['refs']}
+        cells |= set(getattr(self.pr, 'land', {}))
         cells |= {k for k, r in self.pr.records.items() if r['type'] == 'CELL'}
         nodes = {}
 
@@ -280,6 +292,25 @@ class Writer:
                     group.kids.append(node2)
                     found[rlid] = (node2, group)
 
+        # the ground: each changed cell's LAND, over the game's own, in the cell's temporary group
+        for ckey, L in sorted(getattr(self.pr, 'land', {}).items()):
+            cell = gd.from_key(ckey)
+            if cell not in gd.land:
+                continue                                    # (land borrowed from a parent world isn't the cell's own)
+            i, rec = gd.land[cell]
+            llid = self.local(gd.to_global(i, rec.formid))
+            original = list(tes4.iter_subrecords(gd.plugins[i].data(rec)))
+            subs = landmod.encode(L, original, self.link, self._beyond(cell))
+            have = found.get(llid)
+            if have:
+                have[0].set_data(join(subs), rec.flags & ~tes4.COMPRESSED)
+                continue
+            kids = cell_kids(cell)
+            group = self._ref_group(kids, self.local(cell), False)
+            node = plugintree.Rec.new('LAND', rec.flags & ~tes4.COMPRESSED, llid, join(subs), FORM_VERSION)
+            group.kids.insert(0, node)                      # (the land first, as the game's cells have it)
+            found[llid] = (node, group)
+
         # the header: an opened plugin's own, with its count and next ID brought up to date
         own_ids = [r.formid & 0xFFFFFF for r, _p, _path in tree.records() if r.formid >> 24 == len(self.masters)]
         next_id = self.own(max([self.pr.next_id] + [x + 1 for x in own_ids]))
@@ -333,6 +364,31 @@ class Writer:
         subblock.kids += [node, kids]
         found[lid] = (node, subblock)
         return node, kids
+
+    def _beyond(self, cell):
+        """Heights just past a cell's edges, from the cells next door (as the mod has them), for its normals."""
+        gd = self.gd
+        world, xy = gd.ext_cells[cell], gd.cell_grid(cell)
+        cache = {}
+
+        def heights(dx, dy):
+            if (dx, dy) not in cache:
+                c = gd.grid(world).get((xy[0] + dx, xy[1] + dy))
+                mine = self.pr.land.get(gd.key(c)) if c is not None else None
+                if mine:
+                    cache[(dx, dy)] = mine['h']
+                else:
+                    e = gd.land_at(world, xy[0] + dx, xy[1] + dy)
+                    cache[(dx, dy)] = landmod.heights_of(dict(tes4.iter_subrecords(gd.plugins[e[0]].data(e[1])))['VHGT']) if e else None
+            return cache[(dx, dy)]
+
+        def beyond(r, c):
+            dx = -1 if c < 0 else 1 if c > 32 else 0
+            dy = -1 if r < 0 else 1 if r > 32 else 0
+            h = heights(dx, dy)
+            # (cells share their edge points: one past our edge is one in from theirs)
+            return h[(r - 32 * dy) * 33 + (c - 32 * dx)] if h else None
+        return beyond
 
     def _world_children(self, tree, found, world, order):
         """The world's record (a copy of the game's, as every plugin with outside cells carries) and its children."""

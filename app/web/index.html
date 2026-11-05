@@ -166,6 +166,12 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 #welcome .card{width:440px}
 #toast{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--goldline);padding:8px 14px;
   border-radius:8px;display:none;z-index:20;max-width:70%}
+#gb{position:absolute;top:10px;right:10px;width:300px;max-height:calc(100% - 20px);overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;z-index:5;display:none;font-size:13px}
+.gb-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}.gb-h b{color:var(--gold2)}.gb-h .btn{margin-left:auto;padding:0 7px}
+.gb-tools{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px}.gb-tools .btn{padding:3px 4px;font-size:12px}
+.gb-row{display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted)}.gb-row input[type=range]{flex:1}
+.gb-tex{color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gb-list{max-height:220px;border:1px solid var(--line);border-radius:6px}
 #toast.err{border-color:var(--red);color:#f3b2a5}
 </style>
 </head>
@@ -225,6 +231,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <span class="grp"><label><input type="checkbox" id="t-markers"> Markers</label></span>
       <span class="grp"><label><input type="checkbox" id="t-removed"> Removed</label></span>
       <span class="grp"><label title="Light each place with its own lights, as in game"><input type="checkbox" id="t-light" checked> Game light</label></span>
+      <button class="btn" id="t-ground" style="display:none" title="Shape, paint and tint the ground outside">⛰ Ground</button>
       <button class="btn ico" id="t-help" title="The 3D view's controls">?</button>
     </div>
     <div id="view"><div id="hint"></div>
@@ -280,6 +287,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/world.js"></script>
 <script src="/web/app.js"></script>
 <script src="/web/outside.js"></script>
+<script src="/web/ground.js"></script>
 <script src="/web/ctxmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>

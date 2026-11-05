@@ -42,6 +42,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   a new thing by the square it stands in); the writer puts a copy of the WRLD (no OFST) with its children group,
   grid cells in block (y//32, x//32) / sub-block (y//8, x//8) groups, and persistent refs in the world's
   persistent cell (also Play here's marker).
+- Ground: `project.land` {outside CELL key: land.py form, textures by LTEX key}, op `land`/`land_revert`, undo
+  snapshots it shallowly (a change replaces a cell's whole entry). The writer encodes a LAND override (heights in
+  whole 8-unit steps, normals from neighbours, VCLR, BTXT/ATXT/VTXT, at most 6 layers a quarter) into the cell's
+  temporary group. `web/ground.js` is the brush (W.tool hook in world.js; W.lands for ground hits).
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.

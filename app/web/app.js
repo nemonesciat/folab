@@ -496,6 +496,7 @@ function playHere(point){
   const facing = Math.round((Math.PI / 2 - W.yaw) * 10000) / 10000;
   play({cell: A.cellId, p: [p.x, p.y, p.z + 4, facing]});
 }
+$('#t-ground').onclick = () => groundToggle();
 $('#w-new').onclick = () => newMod($('#w-name').value);
 $('#w-name').addEventListener('keydown', e => { if (e.key === 'Enter') newMod(e.target.value); });
 

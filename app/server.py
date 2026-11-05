@@ -279,8 +279,10 @@ def outside(wkey, x, y):
     w = GD.from_key(wkey)
     c = GD.grid(w).get((x, y))
     entry = GD.land_at(w, x, y)
+    mine = PR.land.get(GD.key(c)) if PR and c is not None else None
     out = {'x': x, 'y': y, 'cell': GD.key(c) if c is not None else None,
-           'land': land.decode(GD, entry, _land_tex) if entry else None, 'things': []}
+           'land': mine or (land.decode(GD, entry, _land_tex) if entry else None), 'things': [],
+           'own_land': c is not None and c in GD.land, 'changed_land': bool(mine)}
     if c is not None:
         out['things'] = cell_things(GD.key(c))
     return out
@@ -309,6 +311,19 @@ def outside_cell(o, world):
         c = sq(struct.unpack_from('<2f', f['DATA'])) if 'DATA' in f else None
         return GD.key(c) if c is not None else None
     return None
+
+
+def land_textures():
+    """Every ground texture (LTEX): its key, editor ID and picture, the ones the Mojave uses most first."""
+    out = []
+    for f, (i, r) in GD.forms.items():
+        if r.tag != 'LTEX':
+            continue
+        tex = land.texture_of_fid(GD, f, _land_tex)
+        if tex:
+            out.append({'key': GD.key(f), 'edid': GD.edid(f), 'tex': tex})
+    out.sort(key=lambda t: t['edid'].lower())
+    return out
 
 
 def place_name(ckey):
@@ -703,6 +718,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/actor':
                 with _lock:
                     return self.send(actor_parts(q['key']))
+            if u.path == '/api/landtex':
+                return self.send(land_textures())
             if u.path == '/api/worlds':
                 return self.send(worlds())
             if u.path == '/api/world':
