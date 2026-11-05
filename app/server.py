@@ -1210,7 +1210,14 @@ class Handler(BaseHTTPRequestHandler):
         q = dict(urllib.parse.parse_qsl(u.query))
         try:
             if u.path in ('/', '/index.html'):
-                return self.file(os.path.join(WEB, 'index.html'))
+                # (the icon's address carries a hash of it: Edge keeps an app window's icon in a cache of its own,
+                # so a changed icon only shows under a new address)
+                with open(os.path.join(WEB, 'index.html'), encoding='utf-8') as f:
+                    page = f.read()
+                with open(os.path.join(WEB, 'vendor', 'folab-icon.png'), 'rb') as f:
+                    tag = hashlib.md5(f.read()).hexdigest()[:10]
+                page = page.replace('href="/web/vendor/folab-icon.png"', 'href="/web/vendor/folab-icon.png?v=%s"' % tag)
+                return self.send(page.encode('utf-8'), 'text/html; charset=utf-8')
             if u.path.startswith('/web/'):
                 p = os.path.normpath(os.path.join(WEB, u.path[5:]))
                 if not p.startswith(WEB):
