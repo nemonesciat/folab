@@ -4,7 +4,8 @@
       cell key / game ref key: 'FalloutNV.esm:10FDEB' (file and object ID, whatever the load order)
       new ref key: '+000800' (its object ID in this plugin)
       change: {'base': key, 'p': [x, y, z, rx, ry, rz], 's': scale} for a new ref;
-              {'p': [...], 's': scale} for a moved game ref; {'removed': True} for a removed one
+              {'p': [...], 's': scale, 'base': key} for a changed game ref (each part optional: moved, rescaled,
+              swapped for another thing); {'removed': True} for a removed one
 
 Undo keeps whole copies of the changes: small for now, and impossible to get subtly wrong."""
 import copy
@@ -113,6 +114,10 @@ class Project:
                     refs.pop(o['ref'], None)
                 else:
                     refs[o['ref']] = {'removed': True}
+            elif o['op'] == 'swap':                  # the same spot, another thing
+                r = refs.setdefault(o['ref'], {})
+                r.pop('removed', None)
+                r['base'] = o['base']
             elif o['op'] == 'revert':                # a game ref back to how the game has it
                 refs.pop(o['ref'], None)
             if not refs:

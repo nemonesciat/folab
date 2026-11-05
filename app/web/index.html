@@ -79,6 +79,26 @@ main{flex:1;display:flex;min-height:0}
 #help3d b{color:var(--gold2)}
 kbd{font:500 11.5px var(--mono);background:var(--bg2);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--text)}
 .btn.ico{min-width:32px;padding-left:0;padding-right:0;text-align:center}
+.cmenu{position:fixed;z-index:30;min-width:230px;background:var(--panel);border:1px solid var(--line2);border-radius:8px;
+  box-shadow:0 8px 28px #000a;padding:4px 0;font-size:13.5px}
+.cmenu.cmsub{position:absolute;min-width:220px}
+.cmhead{padding:5px 12px 3px;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}
+.cmfind{margin:3px 8px 4px;width:calc(100% - 16px);padding:4px 8px}
+.cmi,.cmg{padding:5px 12px;cursor:pointer;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.cmi small{margin-left:auto;color:var(--faint);font-size:11px}
+.cmg span{width:18px;text-align:center}
+.cmg b{margin-left:auto;color:var(--faint);font-weight:400}
+.cmi:hover,.cmg:hover{background:var(--hover);color:var(--gold2)}
+.cmsep{border-top:1px solid var(--line);margin:4px 0}
+.owin{position:fixed;z-index:25;width:640px;max-width:calc(100vw - 16px);background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 10px 36px #000b}
+.owtitle{padding:8px 12px;border-bottom:1px solid var(--line);cursor:move;display:flex;align-items:center;gap:6px;color:var(--gold2)}
+.owtitle b{font-weight:600}
+.owx{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
+.owbody{display:flex;gap:8px;padding:4px 0}
+.owcol{flex:1;min-width:0}
+.owcol .kv{overflow-wrap:anywhere}
+.owcol a{color:var(--gold)}
+.owfoot{display:flex;gap:8px;justify-content:flex-end;padding:8px 12px;border-top:1px solid var(--line)}
 .place-item{display:flex;gap:8px;align-items:center}
 .place-item .t{font-size:11px;color:var(--faint);flex:none}
 .fields{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:5px 6px;padding:6px 12px;align-items:center}
@@ -182,5 +202,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/vendor/TransformControls.js"></script>
 <script src="/web/world.js"></script>
 <script src="/web/app.js"></script>
+<script src="/web/ctxmenu.js"></script>
+<script src="/web/objwin.js"></script>
 </body>
 </html>

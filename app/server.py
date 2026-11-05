@@ -17,6 +17,7 @@ import gamedata
 import install
 import nif
 import project
+import refinfo
 import tes4
 
 PORT = 8771
@@ -109,13 +110,18 @@ def cell_things(ckey):
             continue
         k = GD.key(r['ref'])
         ch = mine.get(k)
-        p, s, state = list(r['pos']) + list(r['rot']), r['scale'], ''
+        p, s, state, base = list(r['pos']) + list(r['rot']), r['scale'], '', r['base']
         if ch:
             if ch.get('removed'):
                 state = 'removed'
             else:
                 p, s, state = ch.get('p', p), ch.get('s', s), 'moved'
-        out.append(thing(k, r['base'], p, s, state))
+                if ch.get('base'):
+                    base = GD.from_key(ch['base'])
+        t = thing(k, base, p, s, state)
+        if r['leads']:
+            t['door'] = True
+        out.append(t)
     for k, ch in mine.items():
         if k.startswith('+'):
             out.append(thing(k, GD.from_key(ch['base']), ch['p'], ch.get('s', 1.0), 'new'))
@@ -124,6 +130,26 @@ def cell_things(ckey):
 
 def cell(ckey):
     return {'id': ckey, 'edid': GD.edid(GD.from_key(ckey)), 'things': cell_things(ckey)}
+
+
+def ref(ckey, rkey):
+    """One placed thing for the object window: its base record and its own fields."""
+    t = next((t for t in cell_things(ckey) if t['key'] == rkey), None)
+    if not t:
+        raise FileNotFoundError(rkey)
+    bfid = GD.from_key(t['bkey'])
+    bi, brec = GD.source(bfid)
+    out = {'thing': t, 'base': {'key': t['bkey'], 'type': brec.tag, 'edid': t['base'], 'name': t['name'],
+                                'model': t['model'], 'from': GD.names[bi]}}
+    if not rkey.startswith('+'):
+        out['ref'] = refinfo.ref_info(GD, GD.from_key(rkey))
+    return out
+
+
+def door(rkey):
+    if rkey.startswith('+'):
+        return None
+    return refinfo.door_target(GD, GD.from_key(rkey))
 
 
 def mesh(path):
@@ -227,6 +253,11 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/cell':
                 with _lock:
                     return self.send(cell(q['id']))
+            if u.path == '/api/ref':
+                with _lock:
+                    return self.send(ref(q['cell'], q['key']))
+            if u.path == '/api/door':
+                return self.send(door(q['key']))
             if u.path == '/api/search':
                 return self.send(search(q.get('q', ''), q.get('kind', '')))
             if u.path == '/api/mesh':

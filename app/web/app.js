@@ -271,6 +271,10 @@ function pickToPlace(e){
   const r = e.target.closest('.row'); if (!r) return;
   const it = findItem(r.dataset.key);
   if (!A.cellId) return toast('Open a place first.', true);
+  if (A.swapping){
+    const t = A.swapping; swapEnd(); remember(it);
+    return edit(`Swap ${t.base} for ${it.edid}`, [{op: 'swap', cell: A.cellId, ref: t.key, base: it.key}]);
+  }
   document.querySelectorAll('#tab-place .row').forEach(x => x.classList.toggle('on', x === r));
   startPlacing(it);
   W.ren.domElement.focus();
@@ -320,7 +324,7 @@ addEventListener('keydown', e => {
   else if (ctrl && k === 'a'){ e.preventDefault(); select(visibleGroups().map(g => g.userData.thing.key)); }
   else if (e.key === 'Delete'){ delSel(); }
   else if (e.key === 'End'){ dropSel(); }
-  else if (e.key === 'Escape'){ if (W.placing) stopPlacing(); else if (typeof cmClose === 'function' && cmClose()) {} else select([]); }
+  else if (e.key === 'Escape'){ if (cmClose() || owClose()) return; if (A.swapping) swapEnd(); else if (W.placing) stopPlacing(); else select([]); }
   else if (ctrl || e.altKey) return;
   else if (k === 'g' || k === '1') setTool('translate');
   else if (k === 'r' || k === '2') setTool('rotate');

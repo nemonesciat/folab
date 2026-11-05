@@ -128,6 +128,8 @@ class Writer:
         for t, d in subs:
             if t == 'XSCL' and s is not None:
                 continue
+            if t == 'NAME' and r.get('base'):
+                d = struct.pack('<I', self.local(gd.from_key(r['base'])))
             if t == 'DATA' and p is not None:
                 if s is not None and s != 1.0:
                     out.append(('XSCL', struct.pack('<f', s)))

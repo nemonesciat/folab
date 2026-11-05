@@ -59,6 +59,7 @@ class GameData:
         self.names = [n.lower() for n in names]
         self.forms = {}         # global form ID -> (plugin index, Record)
         self.cell_refs = {}     # global CELL form ID -> {global ref form ID: (plugin index, Record)}
+        self.ref_cell = {}      # global ref form ID -> global CELL form ID
         self.interiors = set()
         for i, p in enumerate(self.plugins):
             self._index(i, p)
@@ -95,6 +96,7 @@ class GameData:
                 for gtype, label, _off in reversed(path):
                     if gtype in (tes4.G_CELL_PERSISTENT, tes4.G_CELL_TEMPORARY, tes4.G_CELL_VWD):
                         self.cell_refs.setdefault(g(label), {})[fid] = (i, rec)
+                        self.ref_cell[fid] = g(label)
                         break
 
     def fields(self, fid):
@@ -138,7 +140,7 @@ class GameData:
                 pos, rot = v[:3], v[3:]
             scale = struct.unpack_from('<f', f['XSCL'])[0] if 'XSCL' in f else 1.0
             out.append({'ref': rfid, 'type': entry[1].tag, 'base': base, 'pos': pos, 'rot': rot, 'scale': scale,
-                        'persistent': bool(entry[1].flags & tes4.PERSISTENT)})
+                        'persistent': bool(entry[1].flags & tes4.PERSISTENT), 'leads': 'XTEL' in f})
         return out
 
     # --- archives and loose files ---
