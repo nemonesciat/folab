@@ -144,6 +144,8 @@ class Project:
                 key = '+%06X' % self.next_id
                 self.next_id += 1
                 refs[key] = {'base': o['base'], 'p': [float(v) for v in o['p']], 's': float(o.get('s', 1.0))}
+                if o.get('sc'):
+                    refs[key]['sc'] = True           # (scattered by the brush)
                 made.append(key)
             elif o['op'] == 'move':
                 r = refs.setdefault(o['ref'], {})

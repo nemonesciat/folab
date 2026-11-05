@@ -30,6 +30,7 @@ import land
 import maptiles
 import re
 import refinfo
+import scatter
 import tes4
 
 PORT = 8771
@@ -203,6 +204,8 @@ def cell_things(ckey):
         if k.startswith('+'):
             t = thing(k, ch['base'], ch['p'], ch.get('s', 1.0), 'new')
             t['cell'] = ckey
+            if ch.get('sc'):
+                t['sc'] = True                   # (put down by the Scatter brush: it may take it back)
             if ch.get('tel'):
                 t['door'] = True
             out.append(t)
@@ -856,6 +859,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(map_tile(q['world'], int(q['tx']), int(q['ty'])), 'image/png')
             if u.path == '/api/goto':
                 return self.send(goto(q.get('q', ''), q.get('world') or None))
+            if u.path == '/api/scatter':
+                return self.send({'sets': scatter.SETS, 'found': scatter.learn(GD, GD.from_key(q['world']), int(q['x']), int(q['y']))})
             if u.path == '/api/landtex':
                 return self.send(land_textures())
             if u.path == '/api/worlds':

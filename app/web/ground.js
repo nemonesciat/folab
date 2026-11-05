@@ -8,7 +8,9 @@ const GB = {on: false, tool: 'raise', size: 768, strength: 4, follow: true, tex:
             ring: null, stroke: null, texes: null};
 try { Object.assign(GB, JSON.parse(localStorage.getItem('folab-ground') || '{}'), {on: false, stroke: null, ring: null, texes: null}); } catch (e) {}
 const GB_TOOLS = [['raise', '▲ Raise'], ['lower', '▼ Lower'], ['smooth', '≈ Smooth'], ['flatten', '▬ Flatten'],
-                  ['paint', '🖌 Paint'], ['tint', '🎨 Tint']];
+                  ['paint', '🖌 Paint'], ['tint', '🎨 Tint'], ['scatter', '🌿 Scatter']];
+// the Scatter brush: what the game itself put round here (scatter.py), the set being scattered, what's left out
+const SC = {found: null, sets: [], at: null, set: 'plants', off: new Set(), density: 5, remove: false, temp: 0};
 function gbSave(){ try { localStorage.setItem('folab-ground', JSON.stringify({tool: GB.tool, size: GB.size, strength: GB.strength, follow: GB.follow, tex: GB.tex, color: GB.color})); } catch (e) {} }
 
 // ---------- the panel ----------
@@ -43,6 +45,7 @@ function gbDraw(){
       <input class="find" data-gb="find" placeholder="Search ground textures… (Shift+click the ground: take its)" style="margin:2px 0 4px;width:100%">
       <div class="list gb-list">${(GB.texes || []).filter(t => !GB.q || (t.edid + ' ' + t.tex).toLowerCase().includes(GB.q)).slice(0, 200).map(t =>
         `<div class="row${t.key === GB.tex ? ' on' : ''}" data-tex="${esc(t.key)}"><div>${esc(t.edid)}<small>${esc(t.tex.split('\\').pop())}</small></div></div>`).join('') || '<div class="note">Loading…</div>'}</div>` : ''}
+    ${GB.tool === 'scatter' ? scHtml() : ''}
     ${GB.tool === 'tint' ? `<label class="gb-row">Colour <input type="color" value="${GB.color}" data-gb="color"> <span class="note" style="padding:0">Ctrl: back to plain · Shift+click: take the ground's</span></label>` : ''}
     ${GB.tool === 'raise' || GB.tool === 'lower' ? '<div class="note" style="padding:2px 0">Ctrl: the other way</div>' : ''}
     <label class="gb-row"><input type="checkbox" data-gb="follow" ${GB.follow ? 'checked' : ''}> Things on the ground move with it</label>
@@ -52,7 +55,10 @@ function gbDraw(){
 document.addEventListener('click', e => {
   const box = e.target.closest('#gb'); if (!box) return;
   const t = e.target.closest('[data-tool]'), x = e.target.closest('[data-tex]');
-  if (t){ GB.tool = t.dataset.tool; gbSave(); gbDraw(); }
+  if (t){ GB.tool = t.dataset.tool; gbSave(); gbDraw(); if (GB.tool === 'scatter') scLearn(); }
+  const set = e.target.closest('[data-scset]');
+  if (set){ SC.set = set.dataset.scset; gbDraw(); }
+  if (e.target.dataset.gb === 'relearn'){ SC.at = null; scLearn(); }
   if (x){ GB.tex = x.dataset.tex; gbSave(); gbDraw(); }
   if (e.target.dataset.gb === 'close') groundOff();
 });
@@ -63,6 +69,9 @@ document.addEventListener('input', e => {
   if (k === 'strength'){ GB.strength = +e.target.value; e.target.nextElementSibling.textContent = GB.strength; gbSave(); }
   if (k === 'color'){ GB.color = e.target.value; gbSave(); }
   if (k === 'follow'){ GB.follow = e.target.checked; gbSave(); }
+  if (k === 'scoff'){ e.target.checked ? SC.off.delete(e.target.value) : SC.off.add(e.target.value); }
+  if (k === 'density'){ SC.density = +e.target.value; e.target.nextElementSibling.textContent = SC.density; }
+  if (k === 'remove'){ SC.remove = e.target.checked; }
   if (k === 'find'){ GB.q = e.target.value.toLowerCase(); const pos = e.target.selectionStart; gbDraw(); const f = $('[data-gb="find"]'); f.focus(); f.setSelectionRange(pos, pos); }
 });
 addEventListener('keydown', e => {
@@ -107,6 +116,12 @@ const GROUND_TOOL = {
     const c = gbCellAt(h.point.x, h.point.y);
     if (c && c.data && c.data.own_land === false){ toast('This cell borrows its ground from another worldspace: shape it there.', true); return true; }
     if (e.shiftKey && (GB.tool === 'paint' || GB.tool === 'tint')){ gbPick(h.point); return true; }
+    if (GB.tool === 'scatter'){
+      if (!SC.found) return true;
+      GB.stroke = {scatter: true, ctrl: e.ctrlKey, last: 0, placed: [], removed: new Map()};
+      scApply(h.point);
+      return true;
+    }
     if (GB.tool === 'paint' && !GB.tex){ toast('Pick a texture first (or Shift+click the ground to take its).', true); return true; }
     GB.stroke = {cells: new Map(), level: gbHeight(h.point.x, h.point.y), ctrl: e.ctrlKey, last: 0, before: new Map()};
     gbApply(h.point);
@@ -132,6 +147,7 @@ function gbTouch(c){
 function gbApply(at){
   const R = GB.size, s = GB.stroke, k = GB.strength / 10;
   const touched = new Set();
+  if (s.scatter) return scApply(at);
   if (['raise', 'lower', 'smooth', 'flatten'].includes(GB.tool)){
     const pts = gbPoints(at.x, at.y, R, 33, 128);
     const sign = (GB.tool === 'raise') !== s.ctrl ? 1 : -1;
@@ -223,6 +239,7 @@ function gbPick(at){
 
 async function gbCommit(){
   const s = GB.stroke; GB.stroke = null;
+  if (s.scatter) return scCommit(s);
   const cells = [...s.cells.keys()];
   if (!cells.length) return;
   const ops = cells.map(c => ({op: 'land', cell: c.data.cell, land: c.data.land}));
@@ -267,4 +284,83 @@ function gbRing(e){
   GB.ring.geometry.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
   GB.ring.geometry.computeBoundingSphere();
   GB.ring.visible = true;
+}
+
+
+// ---------- Scatter ----------
+async function scLearn(){
+  const [cx, cy] = camCell(), k = cx + ',' + cy;
+  if (SC.at && Math.max(Math.abs(cx - SC.at[0]), Math.abs(cy - SC.at[1])) < 3 && SC.found) return;
+  SC.at = [cx, cy];
+  const d = await api(`/api/scatter?world=${encodeURIComponent(OUT.world)}&x=${cx}&y=${cy}`);
+  SC.found = d.found; SC.sets = d.sets;
+  if (!SC.found[SC.set].length) SC.set = (SC.sets.find(([k]) => SC.found[k].length) || [SC.set])[0];
+  if (GB.tool === 'scatter') gbDraw();
+}
+function scHtml(){
+  if (!SC.found) return '<div class="note" style="padding:4px 0">Learning what grows round here…</div>';
+  const list = SC.found[SC.set] || [], tot = list.reduce((a, b) => a + b.n, 0) || 1;
+  return `<div class="gb-tools" style="grid-template-columns:1fr 1fr">${SC.sets.map(([k, l]) =>
+      `<button class="btn${SC.set === k ? ' on' : ''}" data-scset="${k}" ${SC.found[k].length ? '' : 'disabled'}>${esc(l)} <small>${SC.found[k].length}</small></button>`).join('')}</div>
+    <div class="list gb-list">${list.map(b => `<label class="row" title="${esc(b.model)}"><div><input type="checkbox" data-gb="scoff" value="${esc(b.key)}" ${SC.off.has(b.key) ? '' : 'checked'}> ${esc(b.edid)}
+      <small>${Math.round(b.n / tot * 100)}% · size ${b.smin}–${b.smax}${b.tilt > 0.05 ? ' · leans' : ''}</small></div></label>`).join('') || '<div class="note">None of these round here.</div>'}</div>
+    <label class="gb-row">Thickness <input type="range" min="1" max="10" value="${SC.density}" data-gb="density"><b>${SC.density}</b></label>
+    <label class="gb-row"><input type="checkbox" data-gb="remove" ${SC.remove ? 'checked' : ''}> ✕ Remove (or hold Ctrl): takes back only what the brush put down</label>
+    <div class="note" style="padding:2px 0">Learnt from what the game placed within 3 cells. <a href="#" data-gb="relearn">Learn here again</a></div>`;
+}
+
+// one dab of the brush: put things down round the spot, kept apart, on the ground; or take scattered ones back
+function scApply(at){
+  const s = GB.stroke, R = GB.size;
+  const list = (SC.found[SC.set] || []).filter(b => !SC.off.has(b.key));
+  if (s.ctrl || SC.remove){
+    const keys = new Set(list.map(b => b.key));
+    for (const g of W.group.children){
+      const t = g.userData.thing;
+      if (!t.sc || !g.visible || s.removed.has(t.key) || !keys.has(t.bkey)) continue;
+      if (Math.hypot(g.position.x - at.x, g.position.y - at.y) > R) continue;
+      g.visible = false; s.removed.set(t.key, t);
+    }
+    return;
+  }
+  if (!list.length || s.placed.length >= 400) return;
+  const tot = list.reduce((a, b) => a + b.n, 0);
+  const pick = () => { let r = Math.random() * tot; for (const b of list){ r -= b.n; if (r <= 0) return b; } return list[0]; };
+  const apart = 1500 / (SC.density + 1);
+  const want = Math.max(1, Math.round(SC.density * R * R / 1.5e6));
+  // what's already there, of these kinds, keeps its room
+  const near = [];
+  const keys = new Set(list.map(b => b.key));
+  for (const g of W.group.children){
+    const t = g.userData.thing;
+    if (g.visible && keys.has(t.bkey) && Math.hypot(g.position.x - at.x, g.position.y - at.y) < R + apart) near.push([g.position.x, g.position.y]);
+  }
+  for (const t of s.placed) near.push([t.p[0], t.p[1]]);
+  let made = 0;
+  for (let tries = 0; tries < want * 8 && made < want && s.placed.length < 400; tries++){
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * R;
+    const x = at.x + Math.cos(a) * d, y = at.y + Math.sin(a) * d;
+    if (near.some(([px, py]) => Math.hypot(px - x, py - y) < apart)) continue;
+    const z = gbHeight(x, y); if (z === null) continue;
+    const b = pick();
+    const tilt = b.tilt > 0.05 ? b.tilt : 0;
+    const p = [x, y, z + Math.min(b.dz, 4), (Math.random() * 2 - 1) * tilt, (Math.random() * 2 - 1) * tilt, Math.random() * Math.PI * 2]
+      .map(v => Math.round(v * 1000) / 1000);
+    const t = {key: '~sc' + (++SC.temp), bkey: b.key, base: b.edid, type: b.type, name: '', model: b.model, p,
+               s: Math.round((b.smin + Math.random() * (b.smax - b.smin)) * 100) / 100, marker: false, state: 'new', sc: true};
+    addThing(t, W.token);
+    s.placed.push(t); near.push([x, y]); made++;
+  }
+}
+
+async function scCommit(s){
+  const ops = s.placed.map(t => ({op: 'add', cell: A.cellId || (gbCellAt(t.p[0], t.p[1]) || {data: {}}).data.cell, base: t.bkey, p: t.p, s: t.s, sc: true}));
+  for (const [k, t] of s.removed) ops.push({op: 'remove', cell: t.cell, ref: k});
+  for (const t of s.placed) dropThing(t.key);
+  if (!ops.length) return;
+  const kindName = (SC.sets.find(([k]) => k === SC.set) || [0, 'things'])[1].toLowerCase();
+  const d = await edit(s.placed.length ? `Scatter ${s.placed.length} ${kindName}` : `Take back ${s.removed.size} ${kindName}`, ops);
+  if (!d){ for (const [k] of s.removed){ const g = W.byKey.get(k); if (g) g.visible = true; } return; }
+  // (a stroke across more cells than the answer covers: every cell on show again)
+  if (s.placed.length && !(d.things || []).some(t => t.key.startsWith('+'))) outsideResync();
 }
