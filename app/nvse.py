@@ -103,6 +103,78 @@ def install(data_dir, version):
     return {'version': version, 'files': put, 'backups': backups}
 
 
+PLUGINS_RECORD = os.path.join(project.HOME, 'downloads', 'nvse plugins.json')
+
+
+def find_archives(names=('nvtf', 'tick fix', 'jip')):
+    """Archives in the user's Downloads folder whose names look like the xNVSE plugins FOLab knows (newest first)."""
+    d = os.path.join(os.path.expanduser('~'), 'Downloads')
+    out = []
+    for fn in os.listdir(d) if os.path.isdir(d) else []:
+        low = fn.lower()
+        if low.endswith(('.7z', '.zip', '.rar')) and any(n in low for n in names):
+            p = os.path.join(d, fn)
+            out.append({'file': fn, 'path': p, 'size': os.path.getsize(p), 'modified': os.path.getmtime(p)})
+    return sorted(out, key=lambda x: -x['modified'])
+
+
+def install_plugin_archive(data_dir, archive):
+    """Install an xNVSE plugin from its archive: unpacked into FOLab's downloads first, then its NVSE folder (wherever
+    it sits in the archive: at the top, or inside Data) copied into the game's Data\\NVSE. Records what went in."""
+    import subprocess
+    name = os.path.splitext(os.path.basename(archive))[0]
+    out = os.path.join(project.HOME, 'downloads', 'plugins', name)
+    if os.path.isdir(out):
+        shutil.rmtree(out)
+    os.makedirs(out)
+    tar = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'tar.exe')
+    subprocess.run([tar, '-xf', archive, '-C', out], check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    nvse_dir = None
+    for root, dirs, _files in os.walk(out):
+        hit = next((d for d in dirs if d.lower() == 'nvse'), None)
+        if hit:
+            nvse_dir = os.path.join(root, hit)
+            break
+    if not nvse_dir:
+        raise ValueError('%s has no NVSE folder: not an xNVSE plugin FOLab knows how to install.' % os.path.basename(archive))
+    dest_root = os.path.join(data_dir, 'NVSE')
+    stamp = time.strftime('%Y-%m-%d %H%M%S')
+    put, backups = [], []
+    for root, _dirs, files in os.walk(nvse_dir):
+        for fn in files:
+            if fn.lower().endswith('.pdb'):
+                continue
+            rel = os.path.relpath(os.path.join(root, fn), nvse_dir)
+            dest = os.path.join(dest_root, rel)
+            if os.path.exists(dest):
+                keep = os.path.join(project.HOME, 'backups', 'nvse plugins %s' % stamp, rel)
+                os.makedirs(os.path.dirname(keep), exist_ok=True)
+                shutil.copy2(dest, keep)
+                backups.append(keep)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy2(os.path.join(root, fn), dest)
+            put.append(os.path.join('Data', 'NVSE', rel))
+    rec = {}
+    if os.path.isfile(PLUGINS_RECORD):
+        with open(PLUGINS_RECORD, encoding='utf-8') as f:
+            rec = json.load(f)
+    rec[name] = {'files': put, 'when': stamp, 'archive': os.path.basename(archive)}
+    with open(PLUGINS_RECORD, 'w', encoding='utf-8') as f:
+        json.dump(rec, f, indent=1)
+    return {'name': name, 'files': put, 'backups': backups}
+
+
+def plugins(data_dir):
+    """The xNVSE plugins in the game (their .dll files), and which FOLab put in."""
+    d = os.path.join(data_dir, 'NVSE', 'Plugins')
+    dlls = sorted(fn for fn in os.listdir(d) if fn.lower().endswith('.dll')) if os.path.isdir(d) else []
+    rec = {}
+    if os.path.isfile(PLUGINS_RECORD):
+        with open(PLUGINS_RECORD, encoding='utf-8') as f:
+            rec = json.load(f)
+    return {'dlls': dlls, 'by_folab': list(rec)}
+
+
 def uninstall(data_dir):
     """Take out what FOLab put in (a copy of each goes to backups first)."""
     if not os.path.isfile(RECORD):
