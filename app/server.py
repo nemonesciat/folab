@@ -25,7 +25,9 @@ import actors
 import adopt
 import browse
 import recordio
+import base64
 import hashlib
+import heightmap
 import land
 import maptiles
 import re
@@ -357,6 +359,58 @@ def far_land(wkey, tx, ty):
         _far.clear()
     _far[k] = {'n': n, 'h': out}
     return _far[k]
+
+
+def _heights(w, cx, cy, own_only=False):
+    """A grid square's 33 x 33 heights as the mod leaves them (None: no ground; own_only: none either where the land
+    is borrowed from a parent world, which can't be changed here)."""
+    c = GD.grid(w).get((cx, cy))
+    if c is not None and PR and GD.key(c) in PR.land:
+        return PR.land[GD.key(c)]['h']
+    if own_only and (c is None or c not in GD.land):
+        return None
+    e = GD.land_at(w, cx, cy)
+    return land.heights_of(dict(tes4.iter_subrecords(GD.plugins[e[0]].data(e[1])))['VHGT']) if e else None
+
+
+def heightmap_export(q):
+    w = GD.from_key(q['world'])
+    x, y, n, m = int(q['x']), int(q['y']), max(1, min(64, int(q['w']))), max(1, min(64, int(q['h'])))
+    return heightmap.export(lambda cx, cy: _heights(w, cx, cy), q['world'], x, y, n, m)
+
+
+def heightmap_import(body):
+    """A height map back into the ground: every cell it covers, and (follow) the things standing on the ground moved
+    up and down with it, as one Undo."""
+    w = GD.from_key(body['world'])
+    png = base64.b64decode(body['data'])
+    new = heightmap.apply(png, lambda cx, cy: _heights(w, cx, cy, own_only=True), body.get('x'), body.get('y'),
+                          body.get('w'), body.get('h'), body.get('low'), body.get('high'))
+    if not new:
+        raise ValueError('The picture covers no ground FOLab can change here.')
+    ops = []
+    for (cx, cy), hs in sorted(new.items()):
+        c = GD.grid(w)[(cx, cy)]
+        ck = GD.key(c)
+        old = _heights(w, cx, cy)
+        L = dict(PR.land[ck]) if ck in PR.land else land.decode(GD, GD.land[c], _land_tex)
+        L['h'] = hs
+        ops.append({'op': 'land', 'cell': ck, 'land': L})
+        if body.get('follow', True):
+            for t in cell_things(ck):
+                if t['state'] == 'removed':
+                    continue
+                lx, ly = t['p'][0] - cx * 4096, t['p'][1] - cy * 4096
+                if not (0 <= lx <= 4096 and 0 <= ly <= 4096):
+                    continue
+                a, b = heightmap.ground(old, lx, ly), heightmap.ground(hs, lx, ly)
+                if abs(t['p'][2] - a) < 200 and abs(b - a) > 0.5:
+                    p = list(t['p'])
+                    p[2] = round(p[2] + b - a, 2)
+                    ops.append({'op': 'move', 'cell': ck, 'ref': t['key'], 'p': p})
+    out = edit('Import a height map', ops)
+    out['cells'] = len(new)
+    return out
 
 
 def _mine_in_tile(w, tx, ty):
@@ -906,6 +960,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(map_tile(q['world'], int(q['tx']), int(q['ty'])), 'image/png')
             if u.path == '/api/farland':
                 return self.send(far_land(q['world'], int(q['tx']), int(q['ty'])))
+            if u.path == '/api/heightmap':
+                data = heightmap_export(q)
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/png')
+                self.send_header('Content-Length', str(len(data)))
+                self.send_header('Content-Disposition', 'attachment; filename="%s %s,%s %sx%s.png"' % (
+                    place_name(q['world'])[0] or 'world', q['x'], q['y'], q['w'], q['h']))
+                self.end_headers()
+                return self.wfile.write(data)
             if u.path == '/api/goto':
                 return self.send(goto(q.get('q', ''), q.get('world') or None))
             if u.path == '/api/scatter':
@@ -965,6 +1028,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(open_project(name))
                 if not PR:
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
+                if u.path == '/api/heightmap/import':
+                    return self.send(heightmap_import(body))
                 if u.path == '/api/edit':
                     return self.send(edit(body.get('label', 'Edit'), body['ops']))
                 if u.path in ('/api/undo', '/api/redo'):

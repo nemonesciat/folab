@@ -49,7 +49,8 @@ function gbDraw(){
     ${GB.tool === 'tint' ? `<label class="gb-row">Colour <input type="color" value="${GB.color}" data-gb="color"> <span class="note" style="padding:0">Ctrl: back to plain · Shift+click: take the ground's</span></label>` : ''}
     ${GB.tool === 'raise' || GB.tool === 'lower' ? '<div class="note" style="padding:2px 0">Ctrl: the other way</div>' : ''}
     <label class="gb-row"><input type="checkbox" data-gb="follow" ${GB.follow ? 'checked' : ''}> Things on the ground move with it</label>
-    <div class="note" style="padding:2px 0">[ and ] size · each stroke is one Undo</div>`;
+    <div class="note" style="padding:2px 0">[ and ] size · each stroke is one Undo</div>
+    ${hmHtml()}`;
   if ($('[data-gb="find"]') && GB.q) $('[data-gb="find"]').value = GB.q;
 }
 document.addEventListener('click', e => {
@@ -61,6 +62,7 @@ document.addEventListener('click', e => {
   if (e.target.dataset.gb === 'relearn'){ SC.at = null; scLearn(); }
   if (x){ GB.tex = x.dataset.tex; gbSave(); gbDraw(); }
   if (e.target.dataset.gb === 'close') groundOff();
+  if (e.target.dataset.gb === 'hmload') $('#hm-file').click();
 });
 document.addEventListener('input', e => {
   if (!e.target.closest('#gb')) return;
@@ -72,6 +74,7 @@ document.addEventListener('input', e => {
   if (k === 'scoff'){ e.target.checked ? SC.off.delete(e.target.value) : SC.off.add(e.target.value); }
   if (k === 'density'){ SC.density = +e.target.value; e.target.nextElementSibling.textContent = SC.density; }
   if (k === 'remove'){ SC.remove = e.target.checked; }
+  if (k === 'hmsize'){ HM.size = +e.target.value; gbDraw(); }
   if (k === 'find'){ GB.q = e.target.value.toLowerCase(); const pos = e.target.selectionStart; gbDraw(); const f = $('[data-gb="find"]'); f.focus(); f.setSelectionRange(pos, pos); }
 });
 addEventListener('keydown', e => {
@@ -365,3 +368,48 @@ async function scCommit(s){
   // (a stroke across more cells than the answer covers: every cell on show again)
   if (s.placed.length && !(d.things || []).some(t => t.key.startsWith('+'))) outsideResync();
 }
+
+
+// ---------- Height maps: an area of the ground out as a 16-bit greyscale PNG, and back ----------
+const HM = {size: 5};
+function hmArea(){
+  const [cx, cy] = camCell(), n = HM.size, h = Math.floor((n - 1) / 2);
+  return {x: cx - h, y: cy - h, w: n, h: n};
+}
+function hmHtml(){
+  const a = hmArea();
+  const url = `/api/heightmap?world=${encodeURIComponent(OUT.world || '')}&x=${a.x}&y=${a.y}&w=${a.w}&h=${a.h}`;
+  return `<div class="h" style="padding-left:0;margin-top:8px">Height map</div>
+    <label class="gb-row">Area <select data-gb="hmsize">${[1, 3, 5, 9, 16, 32].map(n => `<option value="${n}" ${n === HM.size ? 'selected' : ''}>${n} × ${n} cells</option>`).join('')}</select></label>
+    <div class="note" style="padding:0 0 4px">Round the camera: cells ${a.x} to ${a.x + a.w - 1}, ${a.y} to ${a.y + a.h - 1} (${a.w * 32 + 1} pixels across)</div>
+    <div class="gb-tools" style="grid-template-columns:1fr 1fr"><a class="btn" href="${url}" download title="A 16-bit greyscale PNG: black the lowest, white the highest. It remembers where it came from.">⤓ Save as PNG</a>
+      <button class="btn" data-gb="hmload" title="A height map back: one saved here goes back where it came from">⤒ Load a PNG…</button></div>
+    <div class="note" style="padding:0">Work on it in GIMP, Krita, World Machine or Gaea and load it back. The area's edge keeps its heights so it meets the land round it; things on the ground move with it (the tick above). One Undo.</div>
+    <input type="file" id="hm-file" accept=".png,image/png" style="display:none">`;
+}
+document.addEventListener('change', async e => {
+  if (e.target.id !== 'hm-file' || !e.target.files.length) return;
+  const file = e.target.files[0]; e.target.value = '';
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  const a = hmArea(), body = {world: OUT.world, data: btoa(bin), follow: GB.follow, x: a.x, y: a.y, w: a.w, h: a.h};
+  // (a picture made elsewhere says nothing of its heights: ask what black and white stand for)
+  const text = new TextDecoder('latin1').decode(buf.subarray(0, Math.min(buf.length, 4096)));
+  if (!text.includes('FOLab\0')){
+    const lo = prompt(`This picture didn't come from FOLab: it goes on the area round the camera (${a.w} × ${a.h} cells).\nHow high is black? (game units; Goodsprings is about 8,000)`, '6000');
+    if (lo === null) return;
+    const hi = prompt('And white?', String(+lo + 4000));
+    if (hi === null) return;
+    body.low = +lo; body.high = +hi;
+  }
+  toast('Loading the height map…');
+  try {
+    const d = await post('/api/heightmap/import', body);
+    setState(d.state);
+    for (const c of OUT.cells.values()) (OUT.touched = OUT.touched || new Set()).add(c);   // (its area may be anywhere loaded)
+    await outsideResync();
+    if (typeof mapLandChanged === 'function') mapLandChanged();
+    if (typeof farLandChanged === 'function') farLandChanged();
+    toast(`Height map loaded: ${d.cells} cell${d.cells === 1 ? '' : 's'} (one Undo)`);
+  } catch (err){ fail(err); }
+});
