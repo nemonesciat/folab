@@ -154,6 +154,12 @@ def install_plugin_archive(data_dir, archive):
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             shutil.copy2(os.path.join(root, fn), dest)
             put.append(os.path.join('Data', 'NVSE', rel))
+    # NVTF refuses to run without its NVTF.ini, and some copies of its archive leave it out: FOLab's own, written from
+    # the settings its source reads (app/nvtf_default.ini), goes in when it's missing
+    plug = os.path.join(dest_root, 'Plugins')
+    if any(p.lower().endswith('nvtf.dll') for p in put) and not os.path.exists(os.path.join(plug, 'NVTF.ini')):
+        shutil.copyfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'nvtf_default.ini'), os.path.join(plug, 'NVTF.ini'))
+        put.append(os.path.join('Data', 'NVSE', 'Plugins', 'NVTF.ini'))
     rec = {}
     if os.path.isfile(PLUGINS_RECORD):
         with open(PLUGINS_RECORD, encoding='utf-8') as f:
