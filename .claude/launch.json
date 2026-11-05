@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "folab",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3", "app/server.py", "8771"],
+      "port": 8771
+    }
+  ]
+}
