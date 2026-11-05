@@ -241,7 +241,7 @@ function controls(el){
     const d = drag; drag = null;
     W.boxEl.style.display = 'none';
     if (!d) return;
-    if (d.b === 2 && d.moved <= 4){
+    if (d.b === 2 && d.moved <= 10){                      // (a right-click that wanders a little is still a click, not a look)
       if (W.placing) return stopPlacing();
       const h = hitThing(e);
       const key = h && h.group ? h.group.userData.thing.key : null;

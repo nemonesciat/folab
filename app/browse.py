@@ -56,10 +56,10 @@ class Browse:
         t0 = time.time()
         gd, edids, used = self.gd, {}, {}
         for n, fid in enumerate(gd.forms):
-            if n % 400 == 0:
+            if n % 150 == 0:
                 if self.stopped:
                     return
-                time.sleep(0.002)
+                time.sleep(0.02)                 # (give way: drawing a place comes first)
             try:
                 e, _n = self.names(fid)
             except Exception:
@@ -69,19 +69,19 @@ class Browse:
         self.edids = edids
         # where each form is used: placed in a place, or named by a record a layout reads
         for n, (cell, refs) in enumerate(gd.cell_refs.items()):
-            if n % 20 == 0:
+            if n % 8 == 0:
                 if self.stopped:
                     return
-                time.sleep(0.002)
+                time.sleep(0.02)                 # (give way: drawing a place comes first)
             ck = gd.key(cell)
             for r in gd.refs(cell):
                 if r['base']:
                     used.setdefault(r['base'], []).append(('placed', ck))
         for n, (fid, (i, rec)) in enumerate(gd.forms.items()):
-            if n % 400 == 0:
+            if n % 150 == 0:
                 if self.stopped:
                     return
-                time.sleep(0.002)
+                time.sleep(0.02)                 # (give way: drawing a place comes first)
             if rec.tag not in schema.TYPES or rec.tag == 'CELL':
                 continue
             try:
