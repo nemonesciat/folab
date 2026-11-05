@@ -1,6 +1,9 @@
-"""FOLab's local web server: the viewer page and a small JSON API over the game's data. Read-only.
+"""FOLab's local web server: the editor page and a small JSON API over the game's data and the open project.
 
-    py -3 server.py [port]        then open http://127.0.0.1:8771/"""
+    py -3 server.py [port]        then open http://127.0.0.1:8771/
+
+Game files are only read. Projects live in FOLab's projects folder; Save writes the plugin to FOLab's build folder,
+and Install (the user's choice) copies it into the game."""
 import json
 import os
 import sys
@@ -9,49 +12,118 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import espwrite
 import gamedata
+import install
 import nif
+import project
 import tes4
 
 PORT = 8771
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
+SETTINGS = os.path.join(project.HOME, 'folab_settings.json')
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css',
-         '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain'}
+         '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain',
+         '.woff2': 'font/woff2'}
+# What the Place panel offers, with the names it shows
+PLACEABLE = {'STAT': 'Statics', 'MSTT': 'Movable statics', 'FURN': 'Furniture', 'CONT': 'Containers',
+             'DOOR': 'Doors', 'LIGH': 'Lights', 'MISC': 'Items', 'ACTI': 'Activators', 'TACT': 'Talking activators',
+             'TERM': 'Terminals', 'BOOK': 'Books', 'NOTE': 'Notes', 'WEAP': 'Weapons', 'ARMO': 'Apparel',
+             'ALCH': 'Aid', 'AMMO': 'Ammo', 'KEYM': 'Keys', 'IDLM': 'Idle markers', 'PWAT': 'Placeable water',
+             'ADDN': 'Addon nodes', 'IMOD': 'Weapon mods', 'CHIP': 'Chips', 'CMNY': 'Caravan money',
+             'CCRD': 'Caravan cards'}
 
 GD = None
+PR = None
+CATALOGUE = []                          # [key, type, edid, name, model] of every placeable game object
 _meshes = {}
-_lock = threading.Lock()
+_lock = threading.RLock()
+
+
+def load_settings():
+    try:
+        with open(SETTINGS, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_settings(**kw):
+    s = load_settings()
+    s.update(kw)
+    with open(SETTINGS, 'w', encoding='utf-8') as f:
+        json.dump(s, f, indent=1)
 
 
 def is_marker(btype, edid, model):
-    """Editor-only things the game never draws: markers, and the built-in forms."""
+    """Editor-only things the game never draws."""
     m = model.lower()
     return btype == 'STAT' and ('marker' in edid.lower() or m.startswith(('marker', 'editor')))
 
 
+def build_catalogue():
+    out = []
+    for fid, (i, rec) in GD.forms.items():
+        if rec.tag not in PLACEABLE:
+            continue
+        btype, edid, name, model = GD.describe(fid)
+        if not model or is_marker(btype, edid, model):
+            continue
+        out.append([GD.key(fid), btype, edid, name, GD.model_path(btype, model)])
+    out.sort(key=lambda x: x[2].lower())
+    return out
+
+
+# --- places and things ---
+
 def interiors():
     out = []
+    changed = set(PR.cells) if PR else set()
     for c in GD.interiors:
         f = GD.fields(c)
-        out.append({'id': '%08X' % c, 'edid': tes4.zstr(f.get('EDID', b'')), 'name': tes4.zstr(f.get('FULL', b'')),
-                    'refs': len(GD.cell_refs.get(c, ())), 'plugin': GD.names[c >> 24]})
+        k = GD.key(c)
+        out.append({'id': k, 'edid': tes4.zstr(f.get('EDID', b'')), 'name': tes4.zstr(f.get('FULL', b'')),
+                    'refs': len(GD.cell_refs.get(c, ())), 'plugin': GD.names[c >> 24], 'mine': k in changed})
     out.sort(key=lambda x: x['edid'].lower())
     return out
 
 
-def cell(cid):
-    c = int(cid, 16)
-    things = []
+def thing(key, bfid, p, s, state):
+    btype, edid, name, model = GD.describe(bfid)
+    return {'key': key, 'bkey': GD.key(bfid), 'base': edid, 'type': btype, 'name': name,
+            'model': GD.model_path(btype, model) if model else '', 'p': list(p), 's': s,
+            'marker': is_marker(btype, edid, model), 'state': state}
+
+
+def cell_things(ckey):
+    """Every drawable thing in a cell as the mod leaves it: the game's refs with the project's changes laid over,
+    and the project's own new ones."""
+    c = GD.from_key(ckey)
+    mine = (PR.cells.get(ckey) or {}).get('refs', {}) if PR else {}
+    out = []
     for r in GD.refs(c):
         if r['base'] not in GD.forms or not r['pos']:
             continue
-        btype, edid, name, model = GD.describe(r['base'])
+        btype, _e, _n, model = GD.describe(r['base'])
         if not model or btype == 'TREE':
             continue
-        things.append({'ref': '%08X' % r['ref'], 'base': edid, 'type': btype, 'name': name,
-                       'model': GD.model_path(btype, model), 'p': list(r['pos']) + list(r['rot']), 's': r['scale'],
-                       'marker': is_marker(btype, edid, model)})
-    return {'id': cid, 'edid': GD.edid(c), 'things': things}
+        k = GD.key(r['ref'])
+        ch = mine.get(k)
+        p, s, state = list(r['pos']) + list(r['rot']), r['scale'], ''
+        if ch:
+            if ch.get('removed'):
+                state = 'removed'
+            else:
+                p, s, state = ch.get('p', p), ch.get('s', s), 'moved'
+        out.append(thing(k, r['base'], p, s, state))
+    for k, ch in mine.items():
+        if k.startswith('+'):
+            out.append(thing(k, GD.from_key(ch['base']), ch['p'], ch.get('s', 1.0), 'new'))
+    return out
+
+
+def cell(ckey):
+    return {'id': ckey, 'edid': GD.edid(GD.from_key(ckey)), 'things': cell_things(ckey)}
 
 
 def mesh(path):
@@ -73,16 +145,67 @@ def mesh(path):
     return out
 
 
+def search(q, kind='', limit=300):
+    words = q.lower().split()
+    out = []
+    for row in CATALOGUE:
+        if kind and row[1] != kind:
+            continue
+        hay = (row[2] + ' ' + row[3] + ' ' + row[4]).lower()
+        if all(w in hay for w in words):
+            out.append({'key': row[0], 'type': row[1], 'edid': row[2], 'name': row[3], 'model': row[4]})
+            if len(out) >= limit:
+                break
+    return out
+
+
+# --- the project ---
+
+def state():
+    s = {'game': GD.data_dir, 'interiors': len(GD.interiors), 'project': PR.state() if PR else None,
+         'projects': project.list_projects(), 'kinds': PLACEABLE}
+    if PR:
+        s['installed'] = install.status(GD.data_dir, PR.plugin)
+        built = os.path.join(project.BUILD_DIR, PR.plugin)
+        s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= os.path.getmtime(PR.path)
+    return s
+
+
+def open_project(name, create=False):
+    global PR
+    PR = project.Project.create(name) if create else project.Project.open(name)
+    save_settings(project=PR.name)
+    return state()
+
+
+def edit(label, ops):
+    if not PR:
+        raise ValueError('no mod open')
+    made = PR.apply(label, ops)
+    out = {'state': state(), 'made': made}
+    cells = {o['cell'] for o in ops}
+    if len(cells) == 1:
+        out['things'] = [t for t in cell_things(cells.pop()) if t['key'] in made or t['key'] in {o.get('ref') for o in ops}]
+    return out
+
+
+def save():
+    path = PR.plugin_path()
+    n = espwrite.write(GD, PR, path)
+    return {'path': path, 'bytes': n, 'state': state()}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
     def send(self, body, ctype='application/json', code=200, cache=False):
+        if not isinstance(body, (bytes, bytearray)):
+            body = json.dumps(body).encode()
         self.send_response(code)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
-        if cache:
-            self.send_header('Cache-Control', 'max-age=86400')
+        self.send_header('Cache-Control', 'max-age=86400' if cache else 'no-store')
         self.end_headers()
         self.wfile.write(body)
 
@@ -97,10 +220,15 @@ class Handler(BaseHTTPRequestHandler):
                 if not p.startswith(WEB):
                     return self.send(b'no', 'text/plain', 403)
                 return self.file(p)
+            if u.path == '/api/state':
+                return self.send(state())
             if u.path == '/api/interiors':
-                return self.send(json.dumps(interiors()).encode())
+                return self.send(interiors())
             if u.path == '/api/cell':
-                return self.send(json.dumps(cell(q['id'])).encode())
+                with _lock:
+                    return self.send(cell(q['id']))
+            if u.path == '/api/search':
+                return self.send(search(q.get('q', ''), q.get('kind', '')))
             if u.path == '/api/mesh':
                 return self.send(mesh(q['path']), cache=True)
             if u.path == '/api/file':
@@ -109,7 +237,35 @@ class Handler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send(b'not found', 'text/plain', 404)
         except Exception as e:
-            self.send(json.dumps({'error': str(e)}).encode(), code=500)
+            self.send({'error': str(e)}, code=500)
+
+    def do_POST(self):
+        u = urllib.parse.urlparse(self.path)
+        try:
+            n = int(self.headers.get('Content-Length') or 0)
+            body = json.loads(self.rfile.read(n) or b'{}')
+            with _lock:
+                if u.path == '/api/project/new':
+                    return self.send(open_project(body['name'], create=True))
+                if u.path == '/api/project/open':
+                    return self.send(open_project(body['name']))
+                if not PR:
+                    return self.send({'error': 'Open or start a mod first.'}, code=400)
+                if u.path == '/api/edit':
+                    return self.send(edit(body.get('label', 'Edit'), body['ops']))
+                if u.path in ('/api/undo', '/api/redo'):
+                    label = PR.undo() if u.path == '/api/undo' else PR.redo()
+                    return self.send({'label': label, 'state': state()})
+                if u.path == '/api/save':
+                    return self.send(save())
+                if u.path == '/api/install':
+                    saved = save()
+                    return self.send({'install': install.install(GD.data_dir, saved['path']), 'state': state()})
+                if u.path == '/api/uninstall':
+                    return self.send({'install': install.uninstall(GD.data_dir, PR.plugin), 'state': state()})
+            self.send(b'not found', 'text/plain', 404)
+        except Exception as e:
+            self.send({'error': str(e)}, code=500)
 
     def file(self, p):
         if not os.path.isfile(p):
@@ -119,11 +275,19 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    global GD
+    global GD, CATALOGUE, PR
     port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
     t = time.time()
     GD = gamedata.GameData()
-    print('%s: %d interiors (%.1fs)' % (GD.data_dir, len(GD.interiors), time.time() - t), flush=True)
+    CATALOGUE = build_catalogue()
+    last = load_settings().get('project')
+    if last:
+        try:
+            PR = project.Project.open(last)
+        except (OSError, ValueError):
+            PR = None
+    print('%s: %d interiors, %d placeable objects (%.1fs)' % (GD.data_dir, len(GD.interiors), len(CATALOGUE),
+                                                               time.time() - t), flush=True)
     srv = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     print('FOLab on http://127.0.0.1:%d/' % port, flush=True)
     srv.serve_forever()

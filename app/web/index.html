@@ -4,50 +4,170 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FOLab</title>
+<link href="/web/vendor/fonts.css" rel="stylesheet">
 <style>
-  :root { --bg: #16130f; --panel: #211c16; --line: #3a3127; --text: #e8dcc4; --dim: #9d8f78; --amber: #e0a33a; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; }
-  #app { display: flex; height: 100%; }
-  #side { width: 300px; flex: none; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); }
-  #side h1 { margin: 0; padding: 12px 14px 8px; font-size: 16px; letter-spacing: .08em; color: var(--amber); }
-  #filter { margin: 0 12px 8px; padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 4px; }
-  #list { flex: 1; overflow-y: auto; }
-  .row { padding: 5px 14px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
-  .row:hover { background: #2c251d; }
-  .row.on { background: #3a2f20; color: var(--amber); }
-  .row .n { color: var(--dim); font-variant-numeric: tabular-nums; }
-  .row small { display: block; color: var(--dim); }
-  #main { flex: 1; position: relative; min-width: 0; }
-  #view { position: absolute; inset: 0; }
-  #bar { position: absolute; left: 0; right: 0; top: 0; padding: 8px 12px; display: flex; gap: 14px; align-items: center;
-         background: linear-gradient(#16130fdd, #16130f00); pointer-events: none; }
-  #bar > * { pointer-events: auto; }
-  #title { font-weight: 600; }
-  #status { color: var(--dim); }
-  #bar label { color: var(--dim); }
-  #help { position: absolute; left: 12px; bottom: 10px; color: var(--dim); font-size: 12px; }
-  #pick { position: absolute; right: 12px; bottom: 10px; color: var(--text); background: #211c16cc; padding: 6px 10px;
-          border: 1px solid var(--line); border-radius: 4px; display: none; max-width: 60%; }
+:root{
+  --bg:#13110d; --panel:#1b1813; --panel2:#221e18; --line:#342d23; --line2:#463c2e;
+  --text:#ebe2cf; --muted:#9c917c; --faint:#8b806c; --gold:#d2a85a; --gold2:#f0cd87; --goldline:#8a6a35;
+  --red:#e0705b; --amber:#e2b04a; --blue:#7fa7d6; --green:#8fbf7a; --hover:#2a251d; --sel:#3a3020;
+  --bg2:#16130f; --bg3:#1d1914; --btn-primary:#5a4420; --btn-primary-hover:#6b5126;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.45 Inter,"Segoe UI",system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column}
+button,input,select{font:inherit;color:inherit}
+input,select{background:var(--bg2);border:1px solid var(--line2);border-radius:6px;padding:5px 8px}
+input:focus,select:focus{outline:none;border-color:var(--gold)}
+header{display:flex;align-items:center;gap:16px;padding:6px 18px;min-width:0;border-bottom:1px solid var(--line);background:linear-gradient(var(--bg3),var(--bg2));flex:none}
+.brand{display:flex;flex-direction:column;flex:none;line-height:1.1}
+.brand b{font:600 22px Cinzel,serif;color:var(--gold);letter-spacing:.06em}
+.brand small{font:500 10.5px Inter,sans-serif;color:var(--muted);letter-spacing:.18em}
+nav{display:flex;gap:3px;flex:none}
+nav button{min-width:78px;height:62px;padding:0 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  background:none;border:1px solid transparent;border-radius:8px;color:var(--muted);cursor:pointer;font-size:13px}
+nav button svg{width:22px;height:22px;fill:none;stroke:var(--goldline);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+nav button:hover{color:var(--text);background:var(--hover)}
+nav button:hover svg{stroke:var(--gold)}
+nav button.on{color:var(--gold2);border-color:var(--line2);background:var(--panel2)}
+nav button.on svg{stroke:var(--gold)}
+.bar{display:flex;gap:6px;align-items:center;margin-left:auto;justify-content:flex-end;min-width:0}
+.bar .modpill{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--gold)}
+.btn:disabled{opacity:.45;cursor:default;border-color:var(--line2)}
+.btn.primary{background:var(--btn-primary);border-color:var(--goldline);color:var(--gold2)}
+.btn.primary:hover{background:var(--btn-primary-hover)}
+.btn.on{background:var(--sel);border-color:var(--gold);color:var(--gold2)}
+.pill{padding:4px 10px;border-radius:14px;border:1px solid var(--line2);font-size:12.5px;color:var(--muted);white-space:nowrap}
+.pill.ok{color:var(--green);border-color:#4d6a40}
+.pill.warn{color:var(--amber);border-color:#7a6230}
+.modpill{cursor:pointer}
+.modpill b{color:var(--gold2);font-weight:500}
+main{flex:1;display:flex;min-height:0}
+.side{width:280px;flex:none;display:flex;flex-direction:column;background:var(--panel);min-height:0}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line);width:300px}
+.tabs{display:flex;border-bottom:1px solid var(--line);flex:none}
+.tabs button{flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:8px 6px;color:var(--muted);cursor:pointer}
+.tabs button.on{color:var(--gold2);border-bottom-color:var(--gold)}
+.pane{flex:1;overflow-y:auto;display:none;flex-direction:column;min-height:0}
+.pane.on{display:flex}
+.pane .find{margin:10px 12px 6px}
+.list{flex:1;overflow-y:auto}
+.row{padding:5px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;border-left:2px solid transparent}
+.row:hover{background:var(--hover)}
+.row.on{background:var(--sel);border-left-color:var(--gold)}
+.row small{display:block;color:var(--faint);font-size:11.5px}
+.row .n{color:var(--faint);font-variant-numeric:tabular-nums;font-size:12px}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.dot.moved{background:var(--amber)} .dot.new{background:var(--green)} .dot.removed{background:var(--red)}
+.h{font:600 11px Inter,sans-serif;letter-spacing:.12em;color:var(--muted);padding:12px 12px 4px;text-transform:uppercase}
+.note{color:var(--muted);font-size:12.5px;padding:4px 12px}
+#center{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+#tools{display:flex;gap:6px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);background:var(--bg2);flex-wrap:wrap}
+#tools .grp{display:flex;align-items:center;gap:6px;padding:0 4px;color:var(--muted);font-size:13px}
+#tools select{padding:3px 6px}
+#view{flex:1;position:relative;min-height:0}
+#view canvas{display:block}
+#status{display:flex;gap:16px;padding:4px 12px;border-top:1px solid var(--line);background:var(--bg2);color:var(--muted);font-size:12px;flex:none}
+#status .r{margin-left:auto}
+#hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:#1b1813ee;border:1px solid var(--goldline);color:var(--gold2);
+  padding:5px 12px;border-radius:7px;font-size:13px;display:none;pointer-events:none}
+.place-item{display:flex;gap:8px;align-items:center}
+.place-item .t{font-size:11px;color:var(--faint);flex:none}
+.fields{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:5px 6px;padding:6px 12px;align-items:center}
+.fields label{color:var(--muted);font-size:12.5px}
+.fields input{width:100%;min-width:0;padding:3px 5px;font-variant-numeric:tabular-nums}
+.acts{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px}
+.kv{padding:2px 12px;font-size:13px}
+.kv span{color:var(--muted)}
+#page-mod{flex:1;overflow-y:auto;display:none;padding:24px 32px}
+#page-mod h2{font:600 20px Cinzel,serif;color:var(--gold);margin:0 0 4px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0;max-width:760px}
+.card h3{margin:0 0 8px;font-size:15px;color:var(--gold2);font-weight:500}
+.card p{margin:6px 0;color:var(--muted)}
+code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius:4px;color:var(--gold2)}
+#welcome{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:var(--bg);z-index:5}
+#welcome .card{width:440px}
+#toast{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--goldline);padding:8px 14px;
+  border-radius:8px;display:none;z-index:20;max-width:70%}
+#toast.err{border-color:var(--red);color:#f3b2a5}
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="side">
-    <h1>FOLAB</h1>
-    <input id="filter" placeholder="Find an interior…">
-    <div id="list"></div>
+<header>
+  <div class="brand"><b>FOLAB</b><small>NEW VEGAS EDITOR</small></div>
+  <nav>
+    <button id="nav-world" class="on" title="The place you're working on, in 3D">
+      <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>World</button>
+    <button id="nav-mod" title="Your mod: save it, put it in the game, start another">
+      <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 14h6M9 17h4"/></svg>My mod</button>
+  </nav>
+  <div class="bar">
+    <span id="modpill" class="pill modpill" title="Your mod">No mod open</span>
+    <span id="gamepill" class="pill" title="Is the saved plugin in the game?"></span>
+    <button class="btn" id="b-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+    <button class="btn" id="b-redo" title="Redo (Ctrl+Y)">↷ Redo</button>
+    <button class="btn primary" id="b-save" title="Write your mod's plugin (Ctrl+S)">Save</button>
+    <button class="btn" id="b-install" title="Save, then put the plugin in the game and switch it on">Put in game</button>
   </div>
-  <div id="main">
-    <div id="view"></div>
-    <div id="bar"><span id="title">Pick an interior</span><span id="status"></span>
-      <label><input type="checkbox" id="markers"> Markers</label></div>
-    <div id="help">Drag to look · WASD to move · Q/E down/up · wheel to step · Shift faster · click a thing to name it</div>
-    <div id="pick"></div>
+</header>
+<main id="page-world">
+  <div class="side" id="left">
+    <div class="tabs"><button data-tab="places" class="on">Places</button><button data-tab="objects">Objects <span id="objn" class="n"></span></button></div>
+    <div class="pane on" id="tab-places">
+      <input class="find" id="f-places" placeholder="Find a place…">
+      <div class="list" id="places"></div>
+    </div>
+    <div class="pane" id="tab-objects">
+      <input class="find" id="f-objects" placeholder="Filter…">
+      <div class="list" id="objects"></div>
+    </div>
   </div>
-</div>
+  <div id="center">
+    <div id="tools">
+      <button class="btn on" id="t-move" title="Move (1)">✥ Move</button>
+      <button class="btn" id="t-turn" title="Turn (2)">⟳ Turn</button>
+      <span class="grp">Grid <select id="t-grid"><option value="0">off</option><option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option><option>256</option></select></span>
+      <span class="grp">Angle <select id="t-angle"><option value="0">off</option><option>5</option><option selected>15</option><option>45</option><option>90</option></select></span>
+      <button class="btn" id="t-drop" title="Set the selected thing down on what's below it (End)">⤓ Drop down</button>
+      <button class="btn" id="t-dup" title="Duplicate (Ctrl+D)">⧉ Duplicate</button>
+      <button class="btn" id="t-del" title="Remove (Delete)">✕ Remove</button>
+      <span class="grp"><label><input type="checkbox" id="t-markers"> Markers</label></span>
+      <span class="grp"><label><input type="checkbox" id="t-removed"> Removed</label></span>
+    </div>
+    <div id="view"><div id="hint"></div></div>
+    <div id="status"><span id="s-place">No place open</span><span id="s-cam"></span><span id="s-load"></span>
+      <span class="r">Drag to look · WASD move · Q/E down/up · Shift faster · 1 Move · 2 Turn · F focus · Esc cancel</span></div>
+    <div id="welcome"><div class="card">
+      <h3>Start a mod</h3>
+      <p>Your changes are kept as a mod of their own. The game's files are never touched until you choose <b>Put in game</b>.</p>
+      <p><input id="w-name" placeholder="Name, e.g. My Vault Home" style="width:100%"></p>
+      <p><button class="btn primary" id="w-new">Start</button></p>
+      <div id="w-recent"></div>
+    </div></div>
+  </div>
+  <div class="side" id="right">
+    <div class="tabs"><button data-tab="place" class="on">Place</button><button data-tab="selected">Selected</button></div>
+    <div class="pane on" id="tab-place">
+      <input class="find" id="f-place" placeholder="Search things to place: chair, desk, lamp…">
+      <select id="f-kind" style="margin:0 12px 6px"><option value="">Everything</option></select>
+      <div class="note" id="place-note">Click a thing, then click where it goes. Esc stops.</div>
+      <div class="h" id="recent-h" style="display:none">Recently used</div>
+      <div id="recent"></div>
+      <div class="h">Found</div>
+      <div class="list" id="found"></div>
+    </div>
+    <div class="pane" id="tab-selected"><div id="selected"><div class="note">Click a thing in the view or in Objects.</div></div></div>
+  </div>
+</main>
+<div id="page-mod"></div>
+<div id="toast"></div>
 <script src="/web/vendor/three.min.js"></script>
 <script src="/web/vendor/DDSLoader.js"></script>
-<script src="/web/viewer.js"></script>
+<script src="/web/vendor/TransformControls.js"></script>
+<script src="/web/world.js"></script>
+<script src="/web/app.js"></script>
 </body>
 </html>

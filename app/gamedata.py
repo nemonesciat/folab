@@ -71,6 +71,18 @@ class GameData:
         j = self.names.index(owner) if owner in self.names else i
         return (j << 24) | (formid & 0xFFFFFF)
 
+    def key(self, fid):
+        """A form's lasting name, 'FalloutNV.esm:10FDEB': stays right whatever the load order becomes."""
+        return '%s:%06X' % (self.plugins[fid >> 24].path.replace('\\', '/').rsplit('/', 1)[-1], fid & 0xFFFFFF)
+
+    def from_key(self, key):
+        name, low = key.rsplit(':', 1)
+        return (self.names.index(name.lower()) << 24) | int(low, 16)
+
+    def source(self, fid):
+        """(plugin index, Record) of the winning record for a form, as the game would load it."""
+        return self.forms[fid]
+
     def _index(self, i, p):
         g = lambda fid: self.to_global(i, fid)
         for rec, path in p.walk():

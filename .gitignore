@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 cache/
+projects/
+build/
+backups/
+folab_settings.json
