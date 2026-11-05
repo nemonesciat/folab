@@ -35,6 +35,7 @@ TYPES = {
         'WMI1': ('Mod slot 1', 'F'), 'WMI2': ('Mod slot 2', 'F'), 'WMI3': ('Mod slot 3', 'F'),
     }),
     'ARMO': ('Apparel', {
+        'MOD2': ('Ground model', 'z'), 'MOD3': ('Worn model (female)', 'z'), 'MOD4': ('Ground model (female)', 'z'),
         'BMDT': ('Body slots', [('I', 'Biped flags'), ('B', 'Flags'), ('3x', '')]),
         'DATA': ('Data', [('i', 'Value'), ('i', 'Health'), ('f', 'Weight')]),
         'DNAM': [('Protection', [('h', 'DR'), ('H', 'Flags'), ('f', 'DT'), ('4x', '')]), ('Protection', [('h', 'DR'), ('H', 'Flags')])],

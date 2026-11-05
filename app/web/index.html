@@ -124,6 +124,16 @@ kbd{font:500 11.5px var(--mono);background:var(--bg2);border:1px solid var(--lin
 .crgrid small{color:var(--faint);margin-left:10px;font-size:12px}
 .crmodel{color:var(--faint);font-size:12.5px;word-break:break-all}
 .crfx{border-collapse:collapse}.crfx th{text-align:left;color:var(--muted);font-weight:500;font-size:12.5px;padding:2px 8px 2px 0}
+.crmodels{display:flex;gap:18px;align-items:flex-start;max-width:900px}
+#cr-view{width:240px;height:240px;flex:none;background:var(--bg2);border:1px solid var(--line);border-radius:8px}
+.crslots{flex:1;min-width:0}.crslot{display:grid;grid-template-columns:150px 1fr auto;gap:8px;align-items:center;padding:4px 6px;border-radius:6px;cursor:pointer}
+.crslot.on{background:var(--sel)}.crslot label{color:var(--muted);font-size:13px;cursor:pointer}
+#mp-pick{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;align-items:center;justify-content:center}
+.mp-card{background:var(--panel);border:1px solid var(--line2);border-radius:10px;width:min(900px,94vw);height:min(600px,90vh);display:flex;flex-direction:column}
+.mp-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);color:var(--gold2)}
+.mp-body{flex:1;display:flex;min-height:0;gap:14px;padding:12px 14px}
+.mp-left{width:320px;display:flex;flex-direction:column;min-height:0}.mp-left .list{flex:1}
+.mp-right{flex:1;display:flex;flex-direction:column;min-width:0}#mp-view{flex:1;background:var(--bg2);border:1px solid var(--line);border-radius:8px;min-height:200px}
 .crflags{display:flex;flex-direction:column;gap:4px;margin-top:10px;color:var(--muted)}
 .crfx td{padding:2px 8px 2px 0}.crfx input[data-fx]{width:260px}
 .recgrid{display:grid;grid-template-columns:auto 1fr;gap:5px 8px;padding:4px 12px;align-items:center}
@@ -269,6 +279,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>
 <script src="/web/gamepage.js"></script>
+<script src="/web/modelpick.js"></script>
 <script src="/web/create.js"></script>
 </body>
 </html>

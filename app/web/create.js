@@ -24,7 +24,7 @@ const CR_FIELDS = {
   WEAP: [['DATA', 'Damage', 'Damage', null, 'Per shot, before skill and condition'], ['DATA', 'Clip size', 'Rounds per clip'],
          ['NAM0', null, 'Ammo', 'AMMO'], ['DATA', 'Health', 'Condition', null, 'How much wear it takes before it breaks'],
          ['CRDT', 'Critical damage', 'Critical damage'], ['CRDT', 'Critical chance ×', 'Critical chance ×'],
-         ['EITM', null, 'Effect on hit', 'ENCH']],
+         ['EITM', null, 'Effect on hit', 'ENCH'], ['WNAM', null, 'In your hands', 'STAT', 'The 1st-person model is a static of its own']],
   ARMO: [['DNAM', 'DT', 'Damage threshold (DT)'], ['DNAM', 'DR', 'Damage resistance (DR)'],
          ['DATA', 'Health', 'Condition'], ['EITM', null, 'Effect while worn', 'ENCH']],
   ALCH: [['ENIT', 'Addiction chance', 'Addiction chance', null, '0 to 1'], ['ENIT', 'Withdrawal effect', 'Addiction', 'SPEL']],
@@ -129,10 +129,12 @@ function crDraw(){
       ${(CR_FIELDS[t] || []).map(x => f(...x)).join('')}
       ${v ? f(v[0], v[1], 'Value (caps)') : ''}
       ${w ? f(w[0], w[1], 'Weight') : ''}
-      ${item && crGet('MODL') !== undefined ? `<label>Model</label><span class="crmodel">${esc(crGet('MODL'))}</span>` : ''}
+
     </div>
+    ${item ? crModels() : ''}
     ${effects}`;
   crBind();
+  if (item) crPreview();
 }
 
 // ---------- aid effects: each is an effect (EFID), then its numbers (EFIT), then any conditions ----------
@@ -158,7 +160,7 @@ function crEffects(){
 
 // a link's label is 'EditorID — Name (TYPE)'
 function crEdid(k){ return k ? (CR.data.links[k] || k).split(' (')[0].split(' — ')[0] : ''; }
-const CR_KINDNAME = {LVLI: 'a levelled item list', LVLN: 'a levelled character list', LVLC: 'a levelled creature list', FLST: 'a list of forms'};
+const CR_KINDNAME = {LVLI: 'a levelled item list', LVLN: 'a levelled character list', LVLC: 'a levelled creature list', FLST: 'a list of forms', STAT: 'a static'};
 function crName(k){
   const l = k ? CR.data.links[k] || '' : '';
   if (l.includes(' — ')) return l.split(' — ')[1].replace(/ \([A-Z_]{4}\)$/, '');
@@ -215,6 +217,38 @@ function crSortLevels(){
   const first = g[0] - CR.rec.subs.slice(0, g[0]).filter((s, i) => inGroup(i)).length;
   keep.splice(first, 0, ...groups.flat());
   CR.rec.subs = keep;
+}
+
+// ---------- models: each slot a path under meshes\, previewed turning; Change… opens the picker ----------
+// (a model's texture list (MODT and kin) and alternate textures (MODS) describe that one mesh, so they go with it)
+const CR_MODELS = {ARMO: [['MOD2', 'On the ground'], ['MODL', 'Worn (male)'], ['MOD4', 'On the ground (female)'], ['MOD3', 'Worn (female)']]};
+const CR_MODEL_DATA = {MODL: ['MODT', 'MODS'], MOD2: ['MO2T', 'MO2S'], MOD3: ['MO3T', 'MO3S'], MOD4: ['MO4T', 'MO4S']};
+function crModelSlots(){ return (CR_MODELS[CR.rec.type] || [['MODL', 'In the world']]).filter(([t]) => crSub(t)); }
+function crModels(){
+  const slots = crModelSlots();
+  if (!slots.length) return '';
+  CR.shown = slots.some(([t]) => t === CR.shown) ? CR.shown : slots[0][0];
+  return `<div class="h" style="padding-left:0;margin-top:14px">Model</div>
+    <div class="crmodels"><div id="cr-view" title="The model, turning"></div>
+      <div class="crslots">${slots.map(([t, l]) => `<div class="crslot${t === CR.shown ? ' on' : ''}" data-slot="${t}">
+        <label>${esc(l)}</label><span class="crmodel">${esc(crGet(t) || 'none')}</span>
+        <button class="btn" data-change="${t}">Change…</button></div>`).join('')}
+        <p class="note" style="padding:6px 0 0">The first one also sets the size the game gives it in the world.</p></div></div>`;
+}
+async function crPreview(){
+  const el = $('#cr-view'); if (!el) return;
+  await mpShow(el, crGet(CR.shown));
+  if (el.dataset.empty) el.innerHTML = '<div class="note" style="padding:20px">Nothing to draw</div>';
+}
+function crSetModel(tag, path, bounds){
+  const s = crSub(tag), at = CR.rec.subs.indexOf(s);
+  s.value = path;
+  let n = at + 1;
+  while (CR.rec.subs[n] && CR_MODEL_DATA[tag].includes(CR.rec.subs[n].tag)) CR.rec.subs.splice(n, 1);
+  // the world model's size is the item's bounds (what the game uses to place and pick it up)
+  const ob = crSub('OBND');
+  if (bounds && ob && tag === crModelSlots()[0][0])
+    ['X1', 'Y1', 'Z1', 'X2', 'Y2', 'Z2'].forEach((k, i) => { ob.fields.find(f => f.name === k).value = Math.max(-32768, Math.min(32767, bounds[i])); });
 }
 
 function crDirty(){ CR.dirty = true; const b = $('#cr-detail [data-a="save"]'); if (b) b.disabled = false; }
@@ -325,6 +359,21 @@ $('#cr-detail').addEventListener('click', async e => {
     const at = crEntryGroups()[+edel.dataset.entdel];
     CR.rec.subs.splice(at, crGroupEnd(at) - at);
     crDraw(); crDirty(); return;
+  }
+  const slot = e.target.closest('[data-slot]'), change = e.target.closest('[data-change]');
+  if (change){
+    const tag = change.dataset.change;
+    mpPick(crGet(tag), async (path, bounds) => {
+      try { await crRead(); } catch (err){ return fail(err); }
+      crSetModel(tag, path, bounds); CR.shown = tag;
+      crDraw(); crDirty();
+    });
+    return;
+  }
+  if (slot && slot.dataset.slot !== CR.shown){
+    CR.shown = slot.dataset.slot;
+    document.querySelectorAll('.crslot').forEach(r => r.classList.toggle('on', r.dataset.slot === CR.shown));
+    return crPreview();
   }
   const a = e.target.dataset.a; if (!a) return;
   if (a === 'entadd'){

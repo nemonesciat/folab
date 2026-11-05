@@ -620,6 +620,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/actor':
                 with _lock:
                     return self.send(actor_parts(q['key']))
+            if u.path == '/api/meshes':
+                words = q.get('q', '').lower().replace('/', '\\').split()
+                hits = [m for m in GD.mesh_list() if all(w in m for w in words)]
+                return self.send({'total': len(hits), 'paths': hits[:int(q.get('limit', 300))]})
             if u.path == '/api/mesh':
                 return self.send(mesh(q['path']), cache=True)
             if u.path == '/api/file':

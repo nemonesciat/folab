@@ -169,6 +169,21 @@ class GameData:
                 return os.path.basename(a.path)
         return None
 
+    def mesh_list(self):
+        """Every .nif in the meshes folder the game can load (archives and loose files), relative to that folder as
+        records name them, sorted. Built once."""
+        if getattr(self, '_mesh_list', None) is None:
+            found = set()
+            for a in self.archives():
+                found.update(f[7:] for f in a.files if f.startswith('meshes\\') and f.endswith('.nif'))
+            root = os.path.join(self.data_dir, 'meshes')
+            for d, _dirs, files in os.walk(root):
+                for f in files:
+                    if f.lower().endswith('.nif'):
+                        found.add(bsa.norm(os.path.relpath(os.path.join(d, f), root)))
+            self._mesh_list = sorted(found)
+        return self._mesh_list
+
     def read_file(self, rel):
         rel = bsa.norm(rel)
         p = os.path.join(self.data_dir, rel)
