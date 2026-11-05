@@ -9,6 +9,12 @@
 - **Go to a place** (Ctrl+K): a name, a cell's coordinates (*-18, 0*) or a spot in game units (*x y z*, as the console gives it).
 - Select a door, right-click, **Go where it leads**. **Alt+←** goes back to where you were.
 
+## The buttons over the view
+
+The buttons float over the 3D view and the map in groups (Map/3D, the handles, snapping, editing, what shows, and the
+ground tools outside). Drag a group by its **⋮⋮** grip to put it anywhere; it stays there. Right-click a group to put it
+back in the row, arrange them all automatically, or lock them in place.
+
 ## Moving about
 
 | Do | To |

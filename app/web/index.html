@@ -24,7 +24,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 header{display:flex;align-items:center;gap:16px;padding:6px 18px;min-width:0;border-bottom:1px solid var(--line);background:linear-gradient(var(--bg3),var(--bg2));flex:none;box-shadow:inset 0 -2px 0 -1px var(--goldline)}
 .brand{display:flex;flex-direction:column;align-items:center;gap:0;flex:none;line-height:1;color:var(--gold)}
 .brand .mark{height:34px;width:auto;display:block}
-.brand b{font:700 19px Cinzel,serif;color:var(--gold);letter-spacing:.32em;margin:0 0 0 .32em;line-height:1}
+.brand b{font:600 20px Oswald,'Arial Narrow',sans-serif;color:var(--gold);letter-spacing:.42em;margin:0 0 0 .42em;line-height:1}
 .brand small{font:500 10.5px Inter,sans-serif;color:var(--muted);letter-spacing:.18em}
 nav{display:flex;gap:3px;flex:none}
 nav button{min-width:78px;height:62px;padding:0 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
@@ -68,14 +68,20 @@ main{flex:1;display:flex;min-height:0}
 .h{font:600 11px Inter,sans-serif;letter-spacing:.12em;color:var(--muted);padding:12px 12px 4px;text-transform:uppercase}
 .note{color:var(--muted);font-size:12.5px;padding:4px 12px}
 #center{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
-#tools{display:flex;gap:6px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);background:var(--bg2);flex-wrap:wrap}
-#tools .grp{display:flex;align-items:center;gap:6px;padding:0 4px;color:var(--muted);font-size:13px}
-#tools select{padding:3px 6px}
+#tools{position:absolute;inset:0;z-index:6;pointer-events:none;display:flex;gap:6px;align-items:flex-start;align-content:flex-start;padding:8px 10px;flex-wrap:wrap}
+.tgrp{pointer-events:auto;display:flex;gap:5px;align-items:center;padding:3px 5px 3px 3px;background:color-mix(in srgb,var(--panel) 90%,transparent);border:1px solid var(--line2);border-radius:9px;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.tgrp.tb-placed{position:absolute}
+.tb-grip{cursor:grab;color:var(--faint);font-size:11px;letter-spacing:-2px;padding:5px 3px;user-select:none;align-self:stretch;display:flex;align-items:center}
+.tb-grip:hover{color:var(--gold2)}.tb-dragging,.tb-dragging *{cursor:grabbing!important}
+#view.tb-locked .tb-grip{display:none}
+#tbmenu{position:fixed;z-index:60;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:4px 0;box-shadow:0 8px 24px #0008;min-width:260px}
+.tgrp .grp{display:flex;align-items:center;gap:6px;padding:0 4px;color:var(--muted);font-size:13px}
+.tgrp select{padding:3px 6px}
 #view{flex:1;position:relative;min-height:0}
 #view canvas{display:block}
 #status{display:flex;gap:16px;padding:4px 12px;border-top:1px solid var(--line);background:var(--bg2);color:var(--muted);font-size:12px;flex:none}
 #status .r{margin-left:auto}
-#hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:#1b1813ee;border:1px solid var(--goldline);color:var(--gold2);
+#hint{position:absolute;left:50%;top:54px;transform:translateX(-50%);background:#1b1813ee;border:1px solid var(--goldline);color:var(--gold2);
   padding:5px 12px;border-radius:7px;font-size:13px;display:none;pointer-events:none}
 #help3d{position:absolute;left:12px;bottom:12px;max-width:min(720px,calc(100% - 24px));background:#1b1813f2;border:1px solid var(--line2);
   border-radius:8px;padding:10px 14px;font-size:12.5px;line-height:1.75;color:var(--muted);display:none;z-index:4}
@@ -152,7 +158,7 @@ kbd{font:500 11.5px var(--mono);background:var(--bg2);border:1px solid var(--lin
 .kv{padding:2px 12px;font-size:13px}
 .kv span{color:var(--muted)}
 #page-mod,#page-game{flex:1;overflow-y:auto;display:none;padding:24px 32px}
-#page-game h2{font:600 20px Cinzel,serif;color:var(--gold);margin:0 0 4px}
+#page-game h2{font:600 20px Oswald,'Arial Narrow',sans-serif;color:var(--gold);margin:0 0 4px}
 .gs-grid{display:grid;grid-template-columns:220px 1fr;gap:8px 14px;align-items:center;margin-top:8px}
 .gs-grid>label{color:var(--muted)}
 .gs-modes label{margin-right:18px}
@@ -160,7 +166,7 @@ kbd{font:500 11.5px var(--mono);background:var(--bg2);border:1px solid var(--lin
 .gs-table{border-collapse:collapse;width:100%}.gs-table td{padding:2px 6px 2px 0;font-size:13px}
 .gs-table input{width:140px}.gs-table input.changed,.gs-grid input.changed{border-color:var(--gold)}
 .gs-save{position:sticky;bottom:0;background:var(--bg);padding:12px 0;max-width:760px}
-#page-mod h2{font:600 20px Cinzel,serif;color:var(--gold);margin:0 0 4px}
+#page-mod h2{font:600 20px Oswald,'Arial Narrow',sans-serif;color:var(--gold);margin:0 0 4px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0;max-width:760px}
 .card h3{margin:0 0 8px;font-size:15px;color:var(--gold2);font-weight:500}
 .card p{margin:6px 0;color:var(--muted)}
@@ -178,8 +184,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 #tab-view{padding:0 12px 12px;overflow-y:auto}.vt-grid{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center}
 .vt-grid label,.vt-row{color:var(--muted);font-size:13px}.vt-grid small{color:var(--faint)}
 .vt-row{display:flex;align-items:center;gap:8px;margin:5px 0}.vt-row input[type=range]{flex:1}
-#ls{position:absolute;top:10px;right:10px;width:320px;max-height:calc(100% - 20px);overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;z-index:5;display:none;font-size:13px}
-#gb{position:absolute;top:10px;right:10px;width:300px;max-height:calc(100% - 20px);overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;z-index:5;display:none;font-size:13px}
+#ls{position:absolute;top:54px;right:10px;width:320px;max-height:calc(100% - 64px);overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;z-index:5;display:none;font-size:13px}
+#gb{position:absolute;top:54px;right:10px;width:300px;max-height:calc(100% - 64px);overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;z-index:5;display:none;font-size:13px}
 .gb-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}.gb-h b{color:var(--gold2)}.gb-h .btn{margin-left:auto;padding:0 7px}
 .gb-tools{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px}.gb-tools .btn{padding:3px 4px;font-size:12px}
 .gb-row{display:flex;align-items:center;gap:8px;margin:4px 0;color:var(--muted)}.gb-row input[type=range]{flex:1}
@@ -188,12 +194,12 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 #helpmenu{position:absolute;right:12px;top:58px;z-index:30;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;min-width:280px;display:none;box-shadow:0 8px 24px #0008;padding:4px 0}
 #helpmenu .sep{border-top:1px solid var(--line);margin:4px 0}
 .helpbody{overflow-y:auto;padding:4px 18px 16px;color:var(--text);line-height:1.55}
-.helpbody h3{font:600 15px Cinzel,serif;color:var(--gold);margin:16px 0 4px}.helpbody h4{color:var(--gold2);margin:12px 0 4px}
+.helpbody h3{font:600 15px Oswald,'Arial Narrow',sans-serif;color:var(--gold);margin:16px 0 4px}.helpbody h4{color:var(--gold2);margin:12px 0 4px}
 .helpbody p,.helpbody li{color:var(--muted)}.helpbody b{color:var(--text)}.helpbody code{background:var(--bg2);padding:0 4px;border-radius:4px}
 .helpbody table{border-collapse:collapse;margin:6px 0;width:100%}.helpbody td,.helpbody th{border-bottom:1px solid var(--line);padding:4px 8px 4px 0;text-align:left;vertical-align:top;font-size:13px}
 .helpbody th{color:var(--gold2);font-weight:500}.helpbody a{color:var(--gold)}
 #loading{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;transition:opacity .4s}
-#loading div{display:flex;flex-direction:column;align-items:center;gap:10px}#loading b{font:700 52px Cinzel,serif;color:var(--gold);letter-spacing:.32em;margin-left:.32em;line-height:1}
+#loading div{display:flex;flex-direction:column;align-items:center;gap:10px}#loading b{font:600 56px Oswald,'Arial Narrow',sans-serif;color:var(--gold);letter-spacing:.42em;margin-left:.42em;line-height:1}
 #loading span{color:var(--muted)}#loading.gone{opacity:0;pointer-events:none}
 /* the theme's extras (theme.js) */
 .th-mono body,.th-mono .brand b,.th-mono h2,.th-mono h3,.th-mono .h,.th-mono .owtitle b{font-family:var(--mono)!important;letter-spacing:.04em}
@@ -204,7 +210,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 .th-light .owin,.th-light #helpmenu{box-shadow:0 8px 24px #0003}
 .th-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin:8px 0}
 .th-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:var(--c-bg);color:var(--c-text);border:2px solid var(--c-panel);border-radius:10px;padding:10px;cursor:pointer}
-.th-card.on{border-color:var(--c-gold)}.th-card b{color:var(--c-gold);font-family:Cinzel,serif}.th-card small{opacity:.75;font-size:12px}
+.th-card.on{border-color:var(--c-gold)}.th-card b{color:var(--c-gold);font-family:Oswald,'Arial Narrow',sans-serif}.th-card small{opacity:.75;font-size:12px}
 .th-sw{display:flex;gap:4px;margin-bottom:4px}.th-sw i{width:22px;height:12px;border-radius:3px;background:var(--c-panel)}.th-sw i:nth-child(2){background:var(--c-gold)}.th-sw i:nth-child(3){background:var(--c-text)}
 #toast.err{border-color:var(--red);color:#f3b2a5}
 </style>
@@ -256,26 +262,16 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
     </div>
   </div>
   <div id="center">
+    <div id="view">
     <div id="tools">
-      <span class="seg"><button class="btn" id="t-map" title="The place from above (M)">🗺 Map</button><button class="btn on" id="t-3d" title="The 3D view (M)">3D</button></span>
-      <button class="btn on" id="t-move" title="Move (1)">✥ Move</button>
-      <button class="btn" id="t-turn" title="Turn (2)">⟳ Turn</button>
-      <button class="btn" id="t-scale" title="Size (3): drag any handle, it grows or shrinks evenly">⤢ Scale</button>
-      <button class="btn" id="t-space" title="The handles point the world's directions (click: the thing's own)">✛ World axes</button>
-      <span class="grp">Grid <select id="t-grid"><option value="0">off</option><option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option><option>256</option></select></span>
-      <span class="grp">Angle <select id="t-angle"><option value="0">off</option><option>5</option><option selected>15</option><option>45</option><option>90</option></select></span>
-      <button class="btn" id="t-drop" title="Set the selected thing down on what's below it (End)">⤓ Drop down</button>
-      <button class="btn" id="t-dup" title="Duplicate (Ctrl+D)">⧉ Duplicate</button>
-      <button class="btn" id="t-del" title="Remove (Delete)">✕ Remove</button>
-      <span class="grp"><label title="While moving, pieces slide into place against the pieces round them: edge to edge, sides level, standing on top"><input type="checkbox" id="t-snap" checked> Snap pieces</label></span>
-      <span class="grp"><label><input type="checkbox" id="t-markers"> Markers</label></span>
-      <span class="grp"><label><input type="checkbox" id="t-removed"> Removed</label></span>
-      <span class="grp"><label title="Light each place with its own lights, as in game"><input type="checkbox" id="t-light" checked> Game light</label></span>
-      <button class="btn" id="t-ground" style="display:none" title="Shape, paint and tint the ground outside">⛰ Ground</button>
-      <button class="btn" id="ls-btn" style="display:none" title="Shape many cells at once: ridges, valleys, plateaus, hills… drawn on the flat map">🗺⛰ Shape land</button>
-      <button class="btn ico" id="t-help" title="The 3D view's controls">?</button>
+      <div class="tgrp" data-grp="view" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="seg"><button class="btn" id="t-map" title="The place from above (M)">🗺 Map</button><button class="btn on" id="t-3d" title="The 3D view (M)">3D</button></span><button class="btn ico" id="t-help" title="The 3D view's controls">?</button></div>
+      <div class="tgrp" data-grp="handles" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn on" id="t-move" title="Move (1)">✥ Move</button><button class="btn" id="t-turn" title="Turn (2)">⟳ Turn</button><button class="btn" id="t-scale" title="Size (3): drag any handle, it grows or shrinks evenly">⤢ Scale</button><button class="btn" id="t-space" title="The handles point the world's directions (click: the thing's own)">✛ World axes</button></div>
+      <div class="tgrp" data-grp="snap" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="grp">Grid <select id="t-grid"><option value="0">off</option><option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option><option>256</option></select></span><span class="grp">Angle <select id="t-angle"><option value="0">off</option><option>5</option><option selected>15</option><option>45</option><option>90</option></select></span><span class="grp"><label title="While moving, pieces slide into place against the pieces round them: edge to edge, sides level, standing on top"><input type="checkbox" id="t-snap" checked> Snap pieces</label></span></div>
+      <div class="tgrp" data-grp="edit" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn" id="t-drop" title="Set the selected thing down on what's below it (End)">⤓ Drop down</button><button class="btn" id="t-dup" title="Duplicate (Ctrl+D)">⧉ Duplicate</button><button class="btn" id="t-del" title="Remove (Delete)">✕ Remove</button></div>
+      <div class="tgrp" data-grp="show" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="grp"><label><input type="checkbox" id="t-markers"> Markers</label></span><span class="grp"><label><input type="checkbox" id="t-removed"> Removed</label></span><span class="grp"><label title="Light each place with its own lights, as in game"><input type="checkbox" id="t-light" checked> Game light</label></span></div>
+      <div class="tgrp" data-grp="outside" title="" id="tg-outside" style="display:none"><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn" id="t-ground" title="Shape, paint and tint the ground outside">⛰ Ground</button><button class="btn" id="ls-btn" title="Shape many cells at once: ridges, valleys, plateaus, hills… drawn on the flat map">🗺⛰ Shape land</button></div>
     </div>
-    <div id="view"><div id="hint"></div>
+      <div id="hint"></div>
       <div id="help3d"><b>3D view controls</b><br>
         <kbd>Right-drag</kbd> look around · <kbd>W A S D</kbd> fly · <kbd>Q</kbd>/<kbd>E</kbd> down/up · <kbd>Shift</kbd> faster · tap <kbd>W A S D</kbd> twice and hold: sprint<br>
         <kbd>Wheel</kbd> forward/back · <kbd>Middle-drag</kbd> slide · <kbd>Alt+drag</kbd> circle the selection<br>
@@ -337,6 +333,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/viewtools.js"></script>
 <script src="/web/landshape.js"></script>
 <script src="/web/help.js"></script>
+<script src="/web/toolbar.js"></script>
 <script src="/web/ctxmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>

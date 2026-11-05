@@ -48,7 +48,7 @@ WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 SETTINGS = os.path.join(project.HOME, 'folab_settings.json')
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css',
          '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain',
-         '.woff2': 'font/woff2', '.md': 'text/markdown; charset=utf-8'}
+         '.woff2': 'font/woff2', '.md': 'text/markdown; charset=utf-8', '.ttf': 'font/ttf'}
 # What the Place panel offers, with the names it shows
 PLACEABLE = {'STAT': 'Statics', 'MSTT': 'Movable statics', 'FURN': 'Furniture', 'CONT': 'Containers',
              'DOOR': 'Doors', 'LIGH': 'Lights', 'MISC': 'Items', 'ACTI': 'Activators', 'TACT': 'Talking activators',

@@ -7,7 +7,8 @@ const TH_THEMES = {
   pipboy: {label: 'Pip-Boy', about: 'Phosphor green on a black screen, terminal type', mono: true, v: {
     bg: '#050a06', panel: '#08110a', panel2: '#0c180f', line: '#163020', line2: '#1f4a2c', text: '#b7f5c4', muted: '#6fbf85', faint: '#5aa06f',
     gold: '#3df27a', gold2: '#8affac', goldline: '#1f7a3e', hover: '#0f2416', sel: '#123a1f', bg2: '#060d08', bg3: '#0a150c',
-    'btn-primary': '#14522a', 'btn-primary-hover': '#1a6a36', red: '#ff7a5c', amber: '#e8f25a', green: '#6dff9a', blue: '#7ad7ff'}},
+    'btn-primary': '#14522a', 'btn-primary-hover': '#1a6a36', red: '#ff7a5c', amber: '#e8f25a', green: '#6dff9a', blue: '#7ad7ff',
+    mono: '"Share Tech Mono", ui-monospace, Consolas, monospace'}},
   vaulttec: {label: 'Vault-Tec', about: 'Vault blue and jumpsuit yellow', v: {
     bg: '#0b1424', panel: '#101c31', panel2: '#15243d', line: '#22365a', line2: '#2f4a78', text: '#e6edf8', muted: '#9fb1cf', faint: '#8597b8',
     gold: '#f2c230', gold2: '#ffe07a', goldline: '#8a6e1a', hover: '#182a47', sel: '#223a62', bg2: '#0d1729', bg3: '#122039',
