@@ -363,6 +363,25 @@ function lightsRefresh(){ resync(); }
 $('#t-help').onclick = () => { const h = $('#help3d'); h.style.display = h.style.display === 'block' ? 'none' : 'block'; };
 $('#b-undo').onclick = () => undoRedo('undo'); $('#b-redo').onclick = () => undoRedo('redo');
 $('#b-save').onclick = save; $('#b-install').onclick = install;
+$('#b-play').onclick = () => play();
+
+// Open in game, and Play here (at = {cell, p: [x, y, z, facing]}): the game starts; Continue or load a save there
+async function play(at){
+  if (!A.state.project) return toast('Start a mod first.', true);
+  toast(at ? 'Starting New Vegas: load a save (or Continue) and you\'ll be moved here…' : 'Starting New Vegas…');
+  try {
+    const d = await post('/api/play', at || {});
+    setState(d.state);
+    toast(at ? 'New Vegas is starting. Continue or load a save: you\'ll arrive here a moment after it loads.' : 'New Vegas is starting with your mod.');
+  } catch (e){ fail(e); }
+}
+function playHere(point){
+  if (!A.cellId) return toast('Open a place first.', true);
+  const p = point || W.cam.position;
+  // facing the way the view looks (the game's heading: 0 is north, turning clockwise)
+  const facing = Math.round((Math.PI / 2 - W.yaw) * 10000) / 10000;
+  play({cell: A.cellId, p: [p.x, p.y, p.z + 4, facing]});
+}
 $('#w-new').onclick = () => newMod($('#w-name').value);
 $('#w-name').addEventListener('keydown', e => { if (e.key === 'Enter') newMod(e.target.value); });
 

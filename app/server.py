@@ -17,6 +17,7 @@ import espwrite
 import gamedata
 import install
 import nif
+import playtest
 import project
 import actors
 import adopt
@@ -329,6 +330,28 @@ def record_copy(key):
     return edit('Copy ' + base, [{'op': 'record_new', 'record': rec}])
 
 
+def not_while_playing():
+    if playtest.game_running():
+        raise ValueError('New Vegas is running: close it first (it holds its plugins open while it runs).')
+
+
+def play(body):
+    """Save, put the mod in the game, and start it; with a place and a spot, Play here."""
+    not_while_playing()
+    saved = save()
+    out = {'install': install.install(GD.data_dir, saved['path'])}
+    if body.get('cell'):
+        cell = GD.from_key(body['cell'])
+        path = os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN)
+        out['test'] = playtest.write_test_plugin(GD, cell, body['p'], path)
+        out['test_install'] = install.install(GD.data_dir, path)      # (after the mod: newest, so it loads last)
+    else:
+        playtest.take_out_test(GD.data_dir)
+    out['exe'] = playtest.launch(GD.data_dir)
+    out['state'] = state()
+    return out
+
+
 def save():
     path = PR.plugin_path()
     n = espwrite.write(GD, PR, path)
@@ -434,10 +457,15 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(state())
                 if u.path == '/api/save':
                     return self.send(save())
+                if u.path == '/api/play':
+                    return self.send(play(body))
                 if u.path == '/api/install':
+                    not_while_playing()
                     saved = save()
                     return self.send({'install': install.install(GD.data_dir, saved['path']), 'state': state()})
                 if u.path == '/api/uninstall':
+                    not_while_playing()
+                    playtest.take_out_test(GD.data_dir)
                     return self.send({'install': install.uninstall(GD.data_dir, PR.plugin), 'state': state()})
             self.send(b'not found', 'text/plain', 404)
         except Exception as e:

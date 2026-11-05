@@ -6,7 +6,7 @@
 const CM_GROUPS = [['This door', '🚪'], ['Look and open', '👁'], ['Edit', '✎'], ['Move and place', '⟳'],
                    ['Replace and select', '⇄'], ['This place', '🏠'], ['View', '▤']];
 const CM_QUICK = {DOOR: ['Go where it leads', 'Open its window'], NPC_: ['Open its record', 'Open its window'],
-                  CREA: ['Open its record', 'Open its window'], '': ['Open its window', 'Open its record']};
+                  CREA: ['Open its record', 'Open its window'], '': ['Open its window', 'Open its record'], none: ['Play here']};
 const CM = {el: null, items: [], recent: []};
 try { CM.recent = JSON.parse(localStorage.getItem('folab-cm-recent') || '[]'); } catch (e) {}
 
@@ -35,6 +35,7 @@ function cmEntries(key, point){
     add('View', n > 1 ? `Hide them` : 'Hide it', hideSel);
     add('View', 'Hide everything else', () => { const keep = new Set(A.sel); hideKeys(W.group.children.map(g => g.userData.thing.key).filter(k => !keep.has(k))); });
   } else if (A.clip) add('Edit', 'Paste here', () => { W.mouse = CM.at; paste(); });
+  add('This place', 'Play here', () => playHere(point));
   add('This place', 'Select everything you can see', () => select(visibleGroups().map(g => g.userData.thing.key)));
   add('This place', 'Put my mod in the game and go here…', install);
   add('This place', 'Copy the console line to come here', () => { navigator.clipboard.writeText('coc ' + A.cellEdid); toast('Copied: coc ' + A.cellEdid); });
@@ -55,7 +56,7 @@ function cmOpen(e, key, point){
   CM.at = {clientX: e.clientX, clientY: e.clientY};
   const items = CM.items = cmEntries(key, point), sel = selThings();
   const head = key && sel.length === 1 ? `${sel[0].base}${sel[0].name ? ' — ' + sel[0].name : ''}` : key ? `${sel.length} selected` : A.cellEdid || '';
-  const quickNames = (sel.length === 1 && CM_QUICK[sel[0].type]) || (key ? CM_QUICK[''] : []);
+  const quickNames = (sel.length === 1 && CM_QUICK[sel[0].type]) || (key ? CM_QUICK[''] : CM_QUICK.none);
   const quick = quickNames.map(l => items.find(i => i.label === l)).filter(Boolean);
   const recent = CM.recent.map(l => items.find(i => i.label === l)).filter(i => i && !quick.includes(i));
   const el = CM.el = document.createElement('div');
