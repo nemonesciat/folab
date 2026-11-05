@@ -385,7 +385,9 @@ async function play(at){
     const d = await post('/api/play', at || {});
     setState(d.state);
     const how = d.via === 'nvse' ? 'New Vegas is starting (with xNVSE)' : 'Steam is starting New Vegas: press Play in its launcher';
-    toast(at ? how + '. Continue or load a save: you\'ll arrive here a moment after it loads.' : how + ', with your mod.');
+    toast(at ? (d.autoload ? how + `: it loads your newest save (${d.autoload}) and you'll arrive here.`
+                           : how + '. Continue or load a save: you\'ll arrive here a moment after it loads.')
+             : how + ', with your mod.');
   } catch (e){ fail(e); }
 }
 function playHere(point){

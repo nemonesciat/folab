@@ -154,6 +154,38 @@ def write_test_plugin(gd, cell, p, path, place=''):
     return {'quest': 'FOLabTestQuest%d' % n}
 
 
+AUTOLOAD = os.path.join('NVSE', 'plugins', 'scripts', 'gr_folab_load.txt')
+
+
+def saves_dir():
+    return os.path.join(os.path.expanduser('~'), 'Documents', 'My Games', 'FalloutNV', 'Saves')
+
+
+def newest_save():
+    """The save Continue would load: the newest .fos in the game's Saves folder (its name without .fos), or None."""
+    d = saves_dir()
+    fos = [os.path.join(d, f) for f in os.listdir(d) if f.lower().endswith('.fos')] if os.path.isdir(d) else []
+    return os.path.splitext(os.path.basename(max(fos, key=os.path.getmtime)))[0] if fos else None
+
+
+def set_autoload(data_dir, on):
+    """With JIP LN NVSE in the game, a gr_ text script runs once when the game reaches its main menu: FOLab's loads the
+    newest save there, so Play here goes straight in. Off (Open in game, Take out): the file is removed."""
+    path = os.path.join(data_dir, AUTOLOAD)
+    has_jip = os.path.isfile(os.path.join(data_dir, 'NVSE', 'plugins', 'jip_nvse.dll'))
+    save = newest_save()
+    if not (on and has_jip and save):
+        if os.path.exists(path):
+            os.remove(path)
+        return None
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='cp1252', newline='\r\n') as f:
+        f.write('; FOLab Play here: loads your newest save as the game reaches its menu.\n'
+                '; FOLab removes this file when you use Open in game or Take out of game.\n'
+                'LoadGame "%s"\n' % save)
+    return save
+
+
 def take_out_test(data_dir):
     if os.path.exists(os.path.join(data_dir, TEST_PLUGIN)) or install.status(data_dir, TEST_PLUGIN)['active']:
         return install.uninstall(data_dir, TEST_PLUGIN)

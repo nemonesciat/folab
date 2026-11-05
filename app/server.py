@@ -350,8 +350,10 @@ def play(body):
         place = tes4.zstr(f.get('FULL', b'')) or tes4.zstr(f.get('EDID', b''))
         out['test'] = playtest.write_test_plugin(GD, cell, body['p'], path, place)
         out['test_install'] = install.install(GD.data_dir, path)      # (after the mod: newest, so it loads last)
+        out['autoload'] = playtest.set_autoload(GD.data_dir, True)
     else:
         playtest.take_out_test(GD.data_dir)
+        playtest.set_autoload(GD.data_dir, False)
     out['via'] = playtest.launch(GD.data_dir, load_settings().get('launch_via', 'nvse'))
     out['state'] = state()
     return out
@@ -485,6 +487,7 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path == '/api/uninstall':
                     not_while_playing()
                     playtest.take_out_test(GD.data_dir)
+                    playtest.set_autoload(GD.data_dir, False)
                     return self.send({'install': install.uninstall(GD.data_dir, PR.plugin), 'state': state()})
             self.send(b'not found', 'text/plain', 404)
         except Exception as e:
