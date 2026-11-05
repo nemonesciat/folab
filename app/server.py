@@ -1,6 +1,6 @@
 """FOLab's local web server: the editor page and a small JSON API over the game's data and the open project.
 
-    py -3 server.py [port]        then open http://127.0.0.1:8771/
+    py -3 server.py [port] [--no-browser]        opens http://127.0.0.1:8771/ when ready
 
 Game files are only read. Projects live in FOLab's projects folder; Save writes the plugin to FOLab's build folder,
 and Install (the user's choice) copies it into the game."""
@@ -276,7 +276,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     global GD, CATALOGUE, PR
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
+    args = sys.argv[1:]
+    port = next((int(a) for a in args if a.isdigit()), PORT)
     t = time.time()
     GD = gamedata.GameData()
     CATALOGUE = build_catalogue()
@@ -288,8 +289,18 @@ def main():
             PR = None
     print('%s: %d interiors, %d placeable objects (%.1fs)' % (GD.data_dir, len(GD.interiors), len(CATALOGUE),
                                                                time.time() - t), flush=True)
-    srv = ThreadingHTTPServer(('127.0.0.1', port), Handler)
+    # (on Windows, address reuse lets a second FOLab bind the same port, and the browser then talks to whichever
+    # answers, an old one included: refuse to start twice instead)
+    ThreadingHTTPServer.allow_reuse_address = False
+    try:
+        srv = ThreadingHTTPServer(('127.0.0.1', port), Handler)
+    except OSError:
+        print('FOLab is already running on port %d: close that one first (or open http://127.0.0.1:%d/).' % (port, port))
+        sys.exit(1)
     print('FOLab on http://127.0.0.1:%d/' % port, flush=True)
+    if '--no-browser' not in args:
+        import webbrowser
+        webbrowser.open('http://127.0.0.1:%d/' % port)
     srv.serve_forever()
 
 

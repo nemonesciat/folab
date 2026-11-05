@@ -4,13 +4,13 @@
     {
       "name": "folab",
       "runtimeExecutable": "py",
-      "runtimeArgs": ["-3", "app/server.py", "8771"],
+      "runtimeArgs": ["-3", "app/server.py", "8771", "--no-browser"],
       "port": 8771
     },
     {
       "name": "folab-test",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set FOLAB_HOME=%TEMP%\\folab-test&& py -3 app/server.py 8772"],
+      "runtimeArgs": ["/c", "set FOLAB_HOME=%TEMP%\\folab-test&& py -3 app/server.py 8772 --no-browser"],
       "port": 8772
     }
   ]

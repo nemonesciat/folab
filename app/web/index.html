@@ -74,6 +74,11 @@ main{flex:1;display:flex;min-height:0}
 #status .r{margin-left:auto}
 #hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:#1b1813ee;border:1px solid var(--goldline);color:var(--gold2);
   padding:5px 12px;border-radius:7px;font-size:13px;display:none;pointer-events:none}
+#help3d{position:absolute;left:12px;bottom:12px;max-width:min(720px,calc(100% - 24px));background:#1b1813f2;border:1px solid var(--line2);
+  border-radius:8px;padding:10px 14px;font-size:12.5px;line-height:1.75;color:var(--muted);display:none;z-index:4}
+#help3d b{color:var(--gold2)}
+kbd{font:500 11.5px var(--mono);background:var(--bg2);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--text)}
+.btn.ico{min-width:32px;padding-left:0;padding-right:0;text-align:center}
 .place-item{display:flex;gap:8px;align-items:center}
 .place-item .t{font-size:11px;color:var(--faint);flex:none}
 .fields{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:5px 6px;padding:6px 12px;align-items:center}
@@ -136,10 +141,18 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <button class="btn" id="t-del" title="Remove (Delete)">✕ Remove</button>
       <span class="grp"><label><input type="checkbox" id="t-markers"> Markers</label></span>
       <span class="grp"><label><input type="checkbox" id="t-removed"> Removed</label></span>
+      <button class="btn ico" id="t-help" title="The 3D view's controls">?</button>
     </div>
-    <div id="view"><div id="hint"></div></div>
-    <div id="status"><span id="s-place">No place open</span><span id="s-cam"></span><span id="s-load"></span>
-      <span class="r">Drag to look · WASD move · Q/E down/up · Shift faster · 1 Move · 2 Turn · F focus · Esc cancel</span></div>
+    <div id="view"><div id="hint"></div>
+      <div id="help3d"><b>3D view controls</b><br>
+        <kbd>Right-drag</kbd> look around · <kbd>W A S D</kbd> fly · <kbd>Q</kbd>/<kbd>E</kbd> down/up · <kbd>Shift</kbd> faster · tap <kbd>W A S D</kbd> twice and hold: sprint<br>
+        <kbd>Wheel</kbd> forward/back · <kbd>Middle-drag</kbd> slide · <kbd>Alt+drag</kbd> circle the selection<br>
+        <kbd>Click</kbd> select · <kbd>Shift+click</kbd> add · drag on empty space: select with a box · <kbd>Ctrl+A</kbd> everything you can see<br>
+        Drag the arrows to move, the rings to turn · <kbd>G</kbd> move · <kbd>R</kbd> turn · <kbd>F</kbd> look at it · <kbd>End</kbd> drop it onto what's below<br>
+        <kbd>Ctrl+C</kbd>/<kbd>Ctrl+V</kbd> copy and paste where the mouse is · <kbd>Ctrl+D</kbd> duplicate · <kbd>Del</kbd> remove · <kbd>H</kbd> hide · <kbd>Shift+H</kbd> show hidden<br>
+        <kbd>Right-click</kbd> a menu · double-click: its window · <kbd>Esc</kbd> deselect · drag things from Place into the view</div></div>
+    <div id="status"><span id="s-place">No place open</span><span id="s-load"></span>
+      <span class="r">Right-drag look · WASD fly · ? all controls</span></div>
     <div id="welcome"><div class="card">
       <h3>Start a mod</h3>
       <p>Your changes are kept as a mod of their own. The game's files are never touched until you choose <b>Put in game</b>.</p>
