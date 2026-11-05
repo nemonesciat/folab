@@ -33,6 +33,8 @@ the model for style, UI and approach. Python, standard library first, code in `a
   beside FalloutNV.exe (its config in Data\NVSE), records what it put in for Take out. The game starts through
   nvse_loader.exe when present (setting `launch_via`), else steam://rungameid/22380; never FalloutNV.exe directly
   (Steam's load error 5:0000065434).
+- Tests: `py -3 tests/run.py` (each test_*.py in a fresh FOLAB_HOME, against the game's files; never the real game).
+  Run it before committing changes to the readers, writer, project or schema.
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the
   user's own mods. Never test `install` against the real game: use a fake Data folder and `LOCALAPPDATA`.
 - New Vegas rules kept in the writer: game refs are never deleted (disabled + sunk to z -30000); form IDs in

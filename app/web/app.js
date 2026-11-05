@@ -322,8 +322,10 @@ function sendMoves(moves, label){
 W.onMove = (moves, label) => sendMoves(moves, label);
 
 function needSel(){ if (!W.sel.length){ toast('Select something first.', true); return false; } return true; }
-function dropSel(){
+async function dropSel(){
   if (!needSel()) return;
+  // (a thing just placed or swapped may still be loading its mesh: measured once it's in)
+  await Promise.all(W.sel.map(g => g.userData.ready));
   const moves = [];
   for (const g of W.sel){ const z = dropDown(g); if (z !== null){ const t = g.userData.thing, p = t.p.slice(); p[2] = Math.round(z * 100) / 100; moves.push([t, p]); } }
   if (!moves.length) return toast('Nothing below to set it on.', true);

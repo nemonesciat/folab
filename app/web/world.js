@@ -347,10 +347,13 @@ async function addThing(t, token){
   g.visible = thingVisible(t);
   W.group.add(g);
   W.byKey.set(t.key, g);
+  // (ready once its meshes are in: what measures it, like Drop down, waits for that)
+  let ready; g.userData.ready = new Promise(r => { ready = r; });
   const {parts, scale} = await thingParts(t);
-  if (token !== W.token || !g.parent) return g;
+  if (token !== W.token || !g.parent){ ready(); return g; }
   if (scale !== 1){ g.userData.bodyScale = scale; setTransform(g, t); }
   for (const [geo, mat, blend] of parts){ const m = new T.Mesh(geo, mat); if (blend) m.renderOrder = 1; g.add(m); }
+  ready();
   if (t.state === 'removed') ghostly(g, true);
   if (W.sel.includes(g)) refreshSel();
   return g;
@@ -365,6 +368,12 @@ function ghostly(g, on){
 function updateThing(t){
   const g = W.byKey.get(t.key);
   if (!g) return addThing(t, W.token);
+  if (g.userData.thing.bkey !== t.bkey){
+    // swapped for another thing: drawn again from its own model, still selected if it was
+    const wasSel = W.sel.includes(g), keys = W.sel.map(x => x.userData.thing.key);
+    W.group.remove(g); W.byKey.delete(t.key);
+    return addThing(t, W.token).then(n => { if (wasSel) select(keys); return n; });
+  }
   const was = g.userData.thing.state;
   g.userData.thing = t;
   setTransform(g, t);
