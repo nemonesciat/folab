@@ -154,6 +154,7 @@ async function openPlace(id, at){
   A.things = c.things;
   drawObjects();
   await openCell(c, (n, of) => { $('#s-load').textContent = n < of ? `${n} / ${of} loaded` : `${of} things`; }, at);
+  if (typeof M !== 'undefined' && M.on){ mapFit(); M.dirty = true; }
 }
 
 async function resync(){

@@ -25,7 +25,10 @@ import actors
 import adopt
 import browse
 import recordio
+import hashlib
 import land
+import maptiles
+import re
 import refinfo
 import tes4
 
@@ -50,6 +53,9 @@ BR = None
 CATALOGUE = []                          # [key, type, edid, name, model] of every placeable game object
 _meshes = {}
 _land_tex = {}                          # LTEX -> its picture (land.py)
+_tiles = {}                             # (world, tx, ty, the mod's land there) -> PNG
+_painter = None
+_markers = None                         # every worldspace's map markers, for Go to a place
 _actors = {}                            # base key -> parts (actors.py)
 _lock = threading.RLock()
 
@@ -270,8 +276,136 @@ def world(wkey):
     xs, ys = [k[0] for k in g], [k[1] for k in g]
     mid = [(min(xs) + max(xs) + 1) / 2 * 4096, (min(ys) + max(ys) + 1) / 2 * 4096] if g else [0, 0]
     f = GD.fields(w)
+    bounds = [min(xs), min(ys), max(xs), max(ys)] if g else [0, 0, 0, 0]
     return {'id': wkey, 'edid': tes4.zstr(f.get('EDID', b'')), 'name': tes4.zstr(f.get('FULL', b'')),
-            'markers': marks, 'middle': mid}
+            'markers': marks, 'middle': mid, 'bounds': bounds}
+
+
+def map_tile(wkey, tx, ty):
+    """The flat map's picture of 16 x 16 cells (maptiles.py), with the mod's ground in it. The game's own tiles are
+    kept on disk (under cache/maps, for exactly these game files), and asking for one starts drawing the rest of
+    that world's in the background, nearest first, so the map is quick from then on."""
+    global _painter
+    w = GD.from_key(wkey)
+    if _painter is None or _painter.gd is not GD:
+        _painter = maptiles.Painter(GD)
+        _tiles.clear()
+    mine = _mine_in_tile(w, tx, ty)
+    if not mine:
+        path = _tile_path(wkey, tx, ty)
+        if os.path.isfile(path):
+            with open(path, 'rb') as f:
+                return f.read()
+        data = _painter.tile(w, tx, ty)
+        _tile_save(path, data)
+        _tiles_ahead(wkey, tx, ty)
+        return data
+    sig = hashlib.md5(json.dumps(mine, sort_keys=True).encode()).hexdigest()
+    k = (wkey, tx, ty, sig)
+    if k not in _tiles:
+        if len(_tiles) > 200:
+            _tiles.clear()
+        _tiles[k] = _painter.tile(w, tx, ty, mine)
+    return _tiles[k]
+
+
+def _mine_in_tile(w, tx, ty):
+    mine = {}
+    if PR and PR.land:
+        grid = GD.grid(w)
+        for i in range(maptiles.TILE):
+            for j in range(maptiles.TILE):
+                c = grid.get((tx * maptiles.TILE + i, ty * maptiles.TILE + j))
+                if c is not None and GD.key(c) in PR.land:
+                    mine[GD.key(c)] = PR.land[GD.key(c)]
+    return mine
+
+
+def _tile_dir():
+    # (the game's files as they are now: a patch or another load order draws its own tiles)
+    sig = hashlib.md5('|'.join('%s:%d:%d' % (p.path, os.path.getsize(p.path), os.path.getmtime(p.path))
+                               for p in GD.plugins).encode()).hexdigest()[:12]
+    return os.path.join(project.HOME, 'cache', 'maps', sig)
+
+
+def _tile_path(wkey, tx, ty):
+    return os.path.join(_tile_dir(), wkey.replace(':', '_'), '%d_%d.png' % (tx, ty))
+
+
+def _tile_save(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + '.tmp', 'wb') as f:
+        f.write(data)
+    os.replace(path + '.tmp', path)
+
+
+_ahead = {}
+
+
+def _tiles_ahead(wkey, tx, ty):
+    """Draw the rest of a world's tiles in the background (once per world), nearest to (tx, ty) first."""
+    if wkey in _ahead:
+        return
+    _ahead[wkey] = True
+    gd, painter = GD, _painter
+
+    def run():
+        w = gd.from_key(wkey)
+        tiles = sorted({(x // maptiles.TILE, y // maptiles.TILE) for x, y in gd.grid(w)},
+                       key=lambda t: (t[0] - tx) ** 2 + (t[1] - ty) ** 2)
+        for t in tiles:
+            if GD is not gd:
+                return                              # (the game was loaded again: another mod's land)
+            path = _tile_path(wkey, *t)
+            if os.path.isfile(path):
+                continue
+            try:
+                _tile_save(path, painter.tile(w, *t))
+            except Exception as e:
+                print('map tile', t, e, flush=True)
+            time.sleep(0.05)                        # (give way: the editor answers first)
+    threading.Thread(target=run, daemon=True).start()
+
+
+def goto(q, wkey=None):
+    """Go to a place: places by name, map markers of every worldspace, a cell's coordinates ('-18, 0') or a spot
+    in game units ('x y' or 'x y z', as the console gives it) in the worldspace open now."""
+    global _markers
+    q = q.strip()
+    out = []
+    nums = [float(v) for v in re.findall(r'-?\d+(?:\.\d+)?', q)] if re.fullmatch(r'[\s,;()\-\d.]+', q or 'x') else []
+    world = wkey or (GD.key(next((w for w in GD.worlds() if GD.edid(w) == 'WastelandNV'), GD.worlds()[0])) if GD.worlds() else None)
+    if world and len(nums) == 2 and all(abs(v) < 1000 and v == int(v) for v in nums):
+        x, y = int(nums[0]), int(nums[1])
+        out.append({'kind': 'cell', 'world': world, 'name': 'Cell %d, %d' % (x, y), 'p': [x * 4096 + 2048, y * 4096 + 2048, 0]})
+    elif world and len(nums) in (2, 3):
+        out.append({'kind': 'spot', 'world': world, 'name': 'The spot %s' % ' '.join('%g' % v for v in nums),
+                    'p': nums + ([0] if len(nums) == 2 else [])})
+    if nums:
+        return out
+    words = q.lower().split()
+    if not words:
+        return out
+    for c in interiors():
+        if all(wd in (c['name'] + ' ' + c['edid']).lower() for wd in words):
+            out.append({'kind': 'place', 'id': c['id'], 'name': c['name'] or c['edid'], 'edid': c['edid']})
+        if len(out) >= 40:
+            break
+    if _markers is None:
+        _markers = []
+        for w in GD.worlds():
+            if GD.grid(w):
+                info = world_markers(w)
+                _markers += [{'kind': 'marker', 'world': GD.key(w), 'world_name': info[1], 'name': m['name'], 'p': m['p']}
+                             for m in info[0]]
+    out += [m for m in _markers if all(wd in m['name'].lower() for wd in words)][:40]
+    out.sort(key=lambda r: (not r['name'].lower().startswith(words[0]), r['kind'] != 'marker', r['name'].lower()))
+    return out[:60]
+
+
+def world_markers(w):
+    wk = world(GD.key(w))
+    return wk['markers'], wk['name'] or wk['edid']
 
 
 def outside(wkey, x, y):
@@ -718,6 +852,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/actor':
                 with _lock:
                     return self.send(actor_parts(q['key']))
+            if u.path == '/api/maptile':
+                return self.send(map_tile(q['world'], int(q['tx']), int(q['ty'])), 'image/png')
+            if u.path == '/api/goto':
+                return self.send(goto(q.get('q', ''), q.get('world') or None))
             if u.path == '/api/landtex':
                 return self.send(land_textures())
             if u.path == '/api/worlds':

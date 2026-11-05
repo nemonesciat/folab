@@ -138,7 +138,7 @@ function worldInit(box){
     move(dt);
     W.lamp.position.copy(W.cam.position);
     if (now - (W.lightsAt || 0) > 300){ W.lightsAt = now; assignLights(); }
-    W.ren.render(W.scene, W.cam);
+    if (!W.paused) W.ren.render(W.scene, W.cam);           // (resting while the flat map shows)
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

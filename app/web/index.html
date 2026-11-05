@@ -166,6 +166,11 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 #welcome .card{width:440px}
 #toast{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--goldline);padding:8px 14px;
   border-radius:8px;display:none;z-index:20;max-width:70%}
+#map2d{position:absolute;inset:0;display:none;z-index:2;outline:none;cursor:default}
+.seg{display:inline-flex}.seg .btn{border-radius:0}.seg .btn:first-child{border-radius:6px 0 0 6px}.seg .btn:last-child{border-radius:0 6px 6px 0;margin-left:-1px}
+.goto{position:relative;padding:8px 12px 4px}.goto input{width:100%}
+#goto-list{position:absolute;left:12px;right:12px;top:40px;z-index:20;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;max-height:60vh;overflow-y:auto;display:none;box-shadow:0 8px 24px #0008}
+#goto-list .row.on{background:var(--sel)}
 #gb{position:absolute;top:10px;right:10px;width:300px;max-height:calc(100% - 20px);overflow-y:auto;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;z-index:5;display:none;font-size:13px}
 .gb-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}.gb-h b{color:var(--gold2)}.gb-h .btn{margin-left:auto;padding:0 7px}
 .gb-tools{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px}.gb-tools .btn{padding:3px 4px;font-size:12px}
@@ -203,6 +208,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 </header>
 <main id="page-world">
   <div class="side" id="left">
+    <div class="goto"><input id="goto" placeholder="Go to a place… (Ctrl+K)" autocomplete="off"><div id="goto-list"></div></div>
     <div class="tabs"><button data-tab="places" class="on">Places</button><button data-tab="outside" title="Worldspaces: the Mojave and the DLC lands">Outside</button><button data-tab="objects">Objects <span id="objn" class="n"></span></button></div>
     <div class="pane on" id="tab-places">
       <div style="display:flex;gap:6px;margin:10px 12px 6px"><input class="find" id="f-places" placeholder="Find a place…" style="margin:0;flex:1;min-width:0">
@@ -220,6 +226,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
   </div>
   <div id="center">
     <div id="tools">
+      <span class="seg"><button class="btn" id="t-map" title="The place from above (M)">🗺 Map</button><button class="btn on" id="t-3d" title="The 3D view (M)">3D</button></span>
       <button class="btn on" id="t-move" title="Move (1)">✥ Move</button>
       <button class="btn" id="t-turn" title="Turn (2)">⟳ Turn</button>
       <span class="grp">Grid <select id="t-grid"><option value="0">off</option><option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option><option>256</option></select></span>
@@ -288,6 +295,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/app.js"></script>
 <script src="/web/outside.js"></script>
 <script src="/web/ground.js"></script>
+<script src="/web/map2d.js"></script>
 <script src="/web/ctxmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>

@@ -63,6 +63,7 @@ function goOutside(info, at){
   if (W.grid){ W.scene.remove(W.grid); W.grid = null; }
   W.cell = {things: []};
   OUT.world = info.id; OUT.token++;
+  if (typeof M !== 'undefined'){ M.tiles.clear(); M.want = []; M.dirty = true; }
   W.lands = new Set();
   $('#t-ground').style.display = '';
   A.cellId = null; A.things = []; A.outside = info;
@@ -81,7 +82,8 @@ function goOutside(info, at){
 }
 
 // ---------- which cells to have ----------
-function camCell(){ return [Math.floor(W.cam.position.x / CELL), Math.floor(W.cam.position.y / CELL)]; }
+// (on the flat map, the cells round the map's middle)
+function camCell(){ const x = M.on ? M.cx : W.cam.position.x, y = M.on ? M.cy : W.cam.position.y; return [Math.floor(x / CELL), Math.floor(y / CELL)]; }
 function outsideTick(){
   if (!OUT.world) return;
   const [cx, cy] = camCell();
@@ -93,7 +95,7 @@ function outsideTick(){
     const d = Math.max(Math.abs(c.x - cx), Math.abs(c.y - cy));
     if (d > LAND_R + 1){ cellDrop(c); OUT.cells.delete(k); continue; }
     // (things once the ground round you is in: their many mesh downloads would otherwise hold the ground back)
-    if (c.data && d <= THING_R && !c.shown && !landPending(cx, cy)) cellThings(c);
+    if (c.data && d <= THING_R && !c.shown && !landPending(cx, cy) && !(M.on && (!cs3dThings() || M.loading || M.want.length))) cellThings(c);   // (the map, zoomed out, shows none)
     if (c.shown && d > THING_R + 1) cellThingsOff(c);
   }
   while (OUT.busy < 2 && OUT.queue.length) cellLoad(OUT.queue.splice(0, 9));
@@ -241,6 +243,7 @@ async function outsideResync(){
     if (got[n].land && JSON.stringify(got[n].land.h) + got[n].land.c + JSON.stringify(got[n].land.q) !==
         JSON.stringify(c.data.land.h) + c.data.land.c + JSON.stringify(c.data.land.q)){
       c.data.land = got[n].land; c.data.changed_land = got[n].changed_land; landRebuild(c);
+      if (typeof mapLandChanged === 'function') mapLandChanged();
     }
     if (!c.shown) return;
     for (const k of c.keys) if (!keys.has(k)) dropThing(k);

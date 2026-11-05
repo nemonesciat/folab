@@ -46,6 +46,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   snapshots it shallowly (a change replaces a cell's whole entry). The writer encodes a LAND override (heights in
   whole 8-unit steps, normals from neighbours, VCLR, BTXT/ATXT/VTXT, at most 6 layers a quarter) into the cell's
   temporary group. `web/ground.js` is the brush (W.tool hook in world.js; W.lands for ground hits).
+- Flat map: `web/map2d.js` (Map / 3D, M key; W.paused rests the 3D view). Outside, ground tiles from
+  `maptiles.py` (16 x 16 cells, 16 px a cell; texture colours from `dds.py`), the game's own kept on disk in
+  cache/maps/<game files' hash> and drawn ahead in the background; tiles with the mod's land drawn fresh.
+  `/api/goto` (Ctrl+K): places, every world's map markers, 'x, y' cells, 'x y z' spots.
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.

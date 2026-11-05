@@ -247,6 +247,7 @@ async function gbCommit(){
                  paint: 'Paint the ground', tint: 'Tint the ground'}[s.ctrl && GB.tool === 'raise' ? 'lower' : s.ctrl && GB.tool === 'lower' ? 'raise' : GB.tool];
   const d = await edit(label, ops);
   if (d) for (const c of cells) c.data.changed_land = true;
+  if (d && typeof mapLandChanged === 'function') mapLandChanged();
 }
 
 // the brush's reach, drawn on the ground
