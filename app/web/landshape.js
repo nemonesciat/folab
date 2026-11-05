@@ -20,6 +20,10 @@ const LS_KINDS = {
            fields: [['height', 'Depth', 100, 4000, 50, 800], ['radius', 'Radius', 300, 12000, 100, 2500]]},
   mesa: {label: '▣ Mesa', how: 'One click where it stands.', point: true,
          fields: [['height', 'Height', 100, 5000, 50, 1000], ['radius', 'Radius', 300, 12000, 100, 2000]]},
+  lake: {label: '◍ Lake', how: 'Click round the shore; double-click (or the first point) to close. Its water stands just under the lowest point of its shore.', ring: true,
+         fields: [['depth', 'Depth', 100, 3000, 50, 500], ['bank', 'Bank', 64, 3000, 32, 512], ['below', 'Water under the shore by', 0, 400, 8, 32]]},
+  river: {label: '〰 River', how: 'Click from the source down to the mouth; double-click to finish. It runs downhill all the way; each cell gets one water level, so it steps down cell by cell.', line: true,
+          fields: [['depth', 'Depth', 100, 2000, 25, 300], ['width', 'Width', 200, 6000, 50, 800]]},
 };
 const LS_PLAN = () => ({shapes: [], rough: 0.3, fade: 1024, seed: 1, hold: true, margin: 512, from_game: true});
 

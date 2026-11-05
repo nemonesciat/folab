@@ -484,7 +484,8 @@ def shape_heights(body):
                 b = landshape.footprint(GD, {'base': GD.from_key(t['bkey']), 'pos': t['p'][:3], 'rot': t['p'][3:], 'scale': t['s']})
                 if b and (b[2] - b[0]) * (b[3] - b[1]) > 64 * 64:
                     boxes.append(b)
-    return landshape.shape(plan, start, marked, boxes), w
+    new, water = landshape.shape_all(plan, start, marked, boxes)
+    return new, water, w
 
 
 def _game_heights(w, cx, cy):
@@ -494,8 +495,11 @@ def _game_heights(w, cx, cy):
 
 def shape_preview(body):
     """The plan's land worked out and kept under a key, with the map tiles it touches: drawn by /api/shape/tile."""
-    new, w = shape_heights(body)
+    new, water, w = shape_heights(body)
     mine = dict(PR.land) if PR else {}
+    wat = dict(PR.water) if PR else {}
+    for (cx, cy), lv in water.items():
+        wat[GD.key(GD.grid(w)[(cx, cy)])] = lv
     for (cx, cy), hs in new.items():
         c = GD.grid(w)[(cx, cy)]
         ck = GD.key(c)
@@ -504,13 +508,13 @@ def shape_preview(body):
         mine[ck] = L
     key = hashlib.md5(json.dumps([body['world'], body['plan'], body['marked']], sort_keys=True).encode()).hexdigest()[:16]
     _previews.clear()
-    _previews[key] = (w, mine, {})
+    _previews[key] = (w, mine, {}, wat)
     tiles = sorted({(cx // maptiles.TILE, cy // maptiles.TILE) for cx, cy in new})
     return {'key': key, 'tiles': tiles, 'cells': len(new)}
 
 
 def shape_tile(key, tx, ty):
-    w, mine, done = _previews[key]
+    w, mine, done, wat = _previews[key]
     if (tx, ty) not in done:
         global _painter
         if _painter is None or _painter.gd is not GD:
@@ -522,15 +526,17 @@ def shape_tile(key, tx, ty):
                 c = grid.get((tx * maptiles.TILE + i, ty * maptiles.TILE + j))
                 if c is not None and GD.key(c) in mine:
                     here[GD.key(c)] = mine[GD.key(c)]
-        done[(tx, ty)] = _painter.tile(w, tx, ty, here)
+        done[(tx, ty)] = _painter.tile(w, tx, ty, here, wat)
     return done[(tx, ty)]
 
 
 def shape_apply(body):
-    new, w = shape_heights(body)
+    new, water, w = shape_heights(body)
     if not new:
         raise ValueError('No marked cells with ground to shape.')
-    out = edit('Shape the land (%d cells)' % len(new), ground_ops(w, new, body.get('follow', True)))
+    ops = ground_ops(w, new, body.get('follow', True))
+    ops += [{'op': 'water', 'cell': GD.key(GD.grid(w)[k]), 'h': round(v, 1)} for k, v in sorted(water.items())]
+    out = edit('Shape the land (%d cells)' % len(new), ops)
     out['cells'] = len(new)
     return out
 

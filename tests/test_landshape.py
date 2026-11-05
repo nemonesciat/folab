@@ -46,3 +46,16 @@ m = landshape.cells_reached(plan['shapes'][0])
 new = landshape.shape(plan, base, m)
 check('on the Mojave: the ridge rises about 1500', 1300 < max(max(a - b for a, b in zip(new[k], base(*k))) for k in new) < 1800)
 check('… and its edges with unmarked cells keep their heights', all(new[k][i] == base(*k)[i] for k in new for i in range(33) if (k[0], k[1] - 1) not in m))
+# water: a lake dug in flat ground, its water under its shore; a river running downhill on the Mojave
+ring = [[mid[0] - 3000, mid[1] - 3000], [mid[0] + 3000, mid[1] - 3000], [mid[0] + 3000, mid[1] + 3000], [mid[0] - 3000, mid[1] + 3000]]
+n, wat = landshape.shape_all({'shapes': [{'kind': 'lake', 'pts': ring, 'depth': 500, 'bank': 512, 'below': 32}], 'rough': 0, 'fade': 2048, 'hold': False}, flat, marked)
+check('a lake: 500 deep in the middle, below its water', abs(at(n, (2, 2), 0, 0) - (1000 - 32 - 500)) < 1)
+check('… its water just under the shore, in every cell it touches', wat.get((2, 2)) == 968 and wat.get((1, 1)) == 968)
+check('… the ground outside it as it was', at(n, (0, 0), 16, 16) == 1000)
+river = {'kind': 'river', 'pts': [[-60000, 8000], [-52000, 14000]], 'depth': 300, 'width': 800}
+m2 = landshape.cells_reached(river)
+n, wat = landshape.shape_all({'shapes': [river], 'rough': 0, 'seed': 1, 'fade': 1024, 'hold': False}, base, m2)
+lv = [wat[k] for k in sorted(wat, key=lambda k: (k[0] + k[1]))]
+check('a river: water in the cells along it (%d)' % len(wat), len(wat) >= 3)
+check('… each cell\'s water no higher than upstream', all(a >= b - 1 for a, b in zip(lv, lv[1:])) or len(set(lv)) == 1)
+check('… its bed below its water', all(min(n[k]) < wat[k] for k in wat))

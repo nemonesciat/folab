@@ -6,6 +6,11 @@ A plan: {'shapes': [...], 'rough': 0-1, 'fade': units, 'seed': n, 'hold': bool, 
     plateau   {'pts': [...] (a ring), 'height', 'cliff'}                 a level top so far above its ground, a cliff round
     flatten   {'pts': [...] (a ring), 'fade'}                            level at its ground's middle height
     hill / crater / mesa {'pts': [[x, y]], 'height', 'radius'}
+    lake      {'pts': [...] (a ring), 'depth', 'bank', 'below'}        a basin; its water just under its lowest shore
+    river     {'pts': [...] source to mouth, 'depth', 'width'}          a channel always running downhill, water in it
+Lakes and rivers go after the rest, so they cut through what the others raised. The game keeps one water level a
+cell: a lake's cells get its level, a river's cells the level of its lowest stretch in each (so it steps down from
+cell to cell, as the game's own rivers do), and anything else in those cells lower than that is under water too.
 Each acts on what the ones before it made. Only the marked cells change: the shapes fade out toward the marked
 area's edge (over 'fade'), so an edge shared with an unmarked cell keeps its height exactly. 'rough' adds rolling
 ground where the shapes reach. 'hold' keeps the ground under buildings and doors as it is, fading back to the plan
@@ -51,8 +56,10 @@ def smooth(t):
 def reach(shape):
     """How far past its points a shape changes the ground."""
     k = shape['kind']
-    if k in ('ridge', 'valley'):
+    if k in ('ridge', 'valley', 'river'):
         return shape.get('width', 2000)
+    if k == 'lake':
+        return 256
     if k in ('hill', 'crater', 'mesa'):
         return shape.get('radius', 2000) * (1.3 if k == 'crater' else 1.0)
     return shape.get('cliff', shape.get('fade', 512)) + 64
@@ -62,7 +69,7 @@ def cells_reached(shape):
     """The grid squares a shape reaches: any of a square's corners, edge middles or middle within its reach (or, for
     a ring, inside it)."""
     pts, r = shape['pts'], reach(shape)
-    ring = shape['kind'] in ('plateau', 'flatten')
+    ring = shape['kind'] in ('plateau', 'flatten', 'lake')
     x0, x1 = min(p[0] for p in pts) - r, max(p[0] for p in pts) + r
     y0, y1 = min(p[1] for p in pts) - r, max(p[1] for p in pts) + r
     out = set()
@@ -107,9 +114,15 @@ class Noise:
 # ---------- the plan over the cells ----------
 
 def shape(plan, base, marked, buildings=()):
-    """New heights for the marked cells: {(cx, cy): 33*33}. base(cx, cy) -> the heights to start from;
-    buildings: [(x0, y0, x1, y1)] footprints whose ground is held."""
+    """New heights for the marked cells: {(cx, cy): 33*33} (shape_all also gives the water)."""
+    return shape_all(plan, base, marked, buildings)[0]
+
+
+def shape_all(plan, base, marked, buildings=()):
+    """({(cx, cy): 33*33 new heights}, {(cx, cy): water level}) for the marked cells. base(cx, cy) -> the heights
+    to start from; buildings: [(x0, y0, x1, y1)] footprints whose ground is held."""
     shapes = [s for s in plan.get('shapes', []) if s.get('on', True) and s.get('pts')]
+    shapes = [s for s in shapes if s['kind'] not in WATERY] + [s for s in shapes if s['kind'] in WATERY]
     fade = max(128.0, float(plan.get('fade', 1024)))
     rough = float(plan.get('rough', 0.3))
     noise = Noise(plan.get('seed', 1))
@@ -133,6 +146,25 @@ def shape(plan, base, marked, buildings=()):
                             hs.append(b[r * SIDE + c])
             hs.sort()
             levels[i] = hs[len(hs) // 2] if hs else 0.0
+    ground = _sampler(base)
+    for i, s in enumerate(shapes):
+        if s['kind'] == 'lake':
+            # its water: just under the lowest point of its shore
+            ring = s['pts'] + [s['pts'][0]]
+            shore = [ground(*_along(ring, t)) for t in _steps(ring, 128)]
+            shore = [v for v in shore if v is not None]
+            levels[i] = (min(shore) if shore else 0.0) - float(s.get('below', 32))
+        elif s['kind'] == 'river' and len(s['pts']) > 1:
+            # the ground along it, made to run downhill all the way (each point no higher than the one before)
+            prof, lo = [], None
+            for t in _steps(s['pts'], 128):
+                v = ground(*_along(s['pts'], t))
+                if v is None:
+                    v = lo if lo is not None else 0.0
+                lo = v if lo is None else min(lo, v)
+                prof.append((t, lo))
+            levels[i] = prof
+    water = {}
     for (cx, cy) in sorted(marked):
         b = base(cx, cy)
         if not b:
@@ -153,7 +185,71 @@ def shape(plan, base, marked, buildings=()):
                     w *= _hold_weight(x, y, buildings, margin)
                 new.append(round(h0 + (h - h0) * w, 2))
         out[(cx, cy)] = new
-    return out
+    # the water each marked cell gets from the lakes and rivers that reach it
+    for i, s in enumerate(shapes):
+        if s['kind'] == 'lake':
+            for k in cells_reached(s) & marked:
+                water[k] = max(water.get(k, -1e9), levels[i])
+        elif s['kind'] == 'river' and isinstance(levels.get(i), list):
+            fill = float(s.get('depth', 300)) * 0.35
+            for t, v in levels[i]:
+                x, y = _along(s['pts'], t)
+                k = (int(x // CELL), int(y // CELL))
+                if k in marked:
+                    water[k] = min(water.get(k, 1e9), v - fill)
+    return out, water
+
+
+WATERY = ('lake', 'river')
+
+
+def _steps(pts, step):
+    total = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:]))
+    n = max(1, int(total // step))
+    return [total * i / n for i in range(n + 1)]
+
+
+def _along(pts, t):
+    """The point t along a line of points."""
+    for a, b in zip(pts, pts[1:]):
+        L = math.hypot(b[0] - a[0], b[1] - a[1])
+        if t <= L or b is pts[-1]:
+            f = min(1.0, t / L) if L else 0.0
+            return a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f
+        t -= L
+    return pts[-1][0], pts[-1][1]
+
+
+def _nearest(pts, p):
+    """(distance, how far along) to the nearest point of a line."""
+    best, along, run = 1e18, 0.0, 0.0
+    for a, b in zip(pts, pts[1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L2 = dx * dx + dy * dy
+        f = 0.0 if not L2 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2))
+        d = math.hypot(p[0] - a[0] - f * dx, p[1] - a[1] - f * dy)
+        if d < best:
+            best, along = d, run + f * math.sqrt(L2)
+        run += math.sqrt(L2)
+    return best, along
+
+
+def _sampler(base):
+    cache = {}
+
+    def ground(x, y):
+        k = (int(x // CELL), int(y // CELL))
+        if k not in cache:
+            cache[k] = base(*k)
+        h = cache[k]
+        if not h:
+            return None
+        fx, fy = (x - k[0] * CELL) / 128, (y - k[1] * CELL) / 128
+        c0, r0 = min(31, int(fx)), min(31, int(fy))
+        tx, ty = fx - c0, fy - r0
+        p = lambda r, c: h[r * SIDE + c]
+        return (p(r0, c0) * (1 - tx) + p(r0, c0 + 1) * tx) * (1 - ty) + (p(r0 + 1, c0) * (1 - tx) + p(r0 + 1, c0 + 1) * tx) * ty
+    return ground
 
 
 def _one(s, i, levels, p, h):
@@ -188,6 +284,24 @@ def _one(s, i, levels, p, h):
         rim = math.exp(-((d - 1.0) / 0.18) ** 2)
         bowl = smooth(1 - d / 0.9) if d < 0.9 else 0.0
         return h + H * 0.5 * rim - H * bowl, max(rim, bowl)
+    if k == 'lake':
+        if not inside(p, s['pts']):
+            return h, 0.0
+        f = smooth(line_dist(p, s['pts'], closed=True) / max(32.0, float(s.get('bank', 512))))
+        bed = levels[i] - float(s.get('depth', 500)) * f
+        return min(h, bed), 1.0
+    if k == 'river':
+        prof = levels.get(i)
+        if not isinstance(prof, list):
+            return h, 0.0
+        w = max(64.0, float(s.get('width', 800)))
+        d, t = _nearest(s['pts'], p)
+        if d >= w:
+            return h, 0.0
+        j = min(len(prof) - 1, max(0, int(round(t / max(1e-6, prof[-1][0]) * (len(prof) - 1)))))
+        top = prof[j][1]
+        bed = top - float(s.get('depth', 300)) * (1 - smooth(d / w))
+        return min(h, bed), smooth(1 - d / w)
     if k in ('plateau', 'flatten'):
         edge = float(s.get('cliff' if k == 'plateau' else 'fade', 256 if k == 'plateau' else 512))
         ins = inside(p, s['pts'])
