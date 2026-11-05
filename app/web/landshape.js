@@ -25,7 +25,7 @@ const LS_KINDS = {
   river: {label: '〰 River', how: 'Click from the source down to the mouth; double-click to finish. It runs downhill all the way; each cell gets one water level, so it steps down cell by cell.', line: true,
           fields: [['depth', 'Depth', 100, 2000, 25, 300], ['width', 'Width', 200, 6000, 50, 800]]},
 };
-const LS_PLAN = () => ({shapes: [], rough: 0.3, fade: 1024, seed: 1, hold: true, margin: 512, from_game: true});
+const LS_PLAN = () => ({shapes: [], rough: 0.3, fade: 1024, seed: 1, hold: true, margin: 512, from_game: true, paint: true});
 
 function lsLoad(){
   if (LS.world === OUT.world) return;
@@ -79,6 +79,7 @@ function lsPanel(){
     ${field(P, ['fade', 'Fades in from the edge over', 256, 8192, 128, 1024], 'lpf')}
     <label class="gb-row"><input type="checkbox" data-lp="hold" ${P.hold ? 'checked' : ''}> Keep the ground under buildings and doors</label>
     ${P.hold ? field(P, ['margin', '… fading back over', 64, 2048, 32, 512], 'lpf') : ''}
+    <label class="gb-row"><input type="checkbox" data-lp="paint" ${P.paint !== false ? 'checked' : ''}> Paint the new ground by its slopes, as the land round it is painted (roads kept)</label>
     <label class="gb-row"><input type="checkbox" data-lp="from_game" ${P.from_game ? 'checked' : ''}> Start from the game's land (shaping again leaves no trace of the last time)</label>
     <label class="gb-row"><input type="checkbox" data-lp="settled" ${LS.settled ? 'checked' : ''}> Shape towns and busy places too</label>
     <div class="note" style="padding:2px 0">${LS.marked.length} cell${LS.marked.length === 1 ? '' : 's'} marked${LS.skipped.length ? ` · ${LS.skipped.length} busy place${LS.skipped.length === 1 ? '' : 's'} left out (red)` : ''}${LS.busy ? ' · working out the land…' : LS.preview ? ' · the map shows the plan' : ''}</div>

@@ -27,6 +27,7 @@ import browse
 import recordio
 import base64
 import hashlib
+import autopaint
 import heightmap
 import landshape
 import land
@@ -389,7 +390,7 @@ def heightmap_export(q):
     return heightmap.export(lambda cx, cy: _heights(w, cx, cy), q['world'], x, y, n, m)
 
 
-def ground_ops(w, new, follow=True):
+def ground_ops(w, new, follow=True, quarters=None):
     """Edit ops putting new heights {(cx, cy): 33*33} into the ground (each cell's textures and colours kept) and,
     with follow, moving the things standing on it up and down with it."""
     ops = []
@@ -399,6 +400,8 @@ def ground_ops(w, new, follow=True):
         old = _heights(w, cx, cy)
         L = dict(PR.land[ck]) if ck in PR.land else land.decode(GD, GD.land[c], _land_tex)
         L['h'] = hs
+        if quarters and (cx, cy) in quarters:
+            L['q'] = quarters[(cx, cy)]
         ops.append({'op': 'land', 'cell': ck, 'land': L})
         if follow:
             for t in cell_things(ck):
@@ -485,7 +488,32 @@ def shape_heights(body):
                 if b and (b[2] - b[0]) * (b[3] - b[1]) > 64 * 64:
                     boxes.append(b)
     new, water = landshape.shape_all(plan, start, marked, boxes)
-    return new, water, w
+    quarters = paint_new(w, plan, new, start, marked) if plan.get('paint', True) else {}
+    return new, water, w, quarters
+
+
+_paint_models = {}
+
+
+def paint_new(w, plan, new, start, marked):
+    """The reshaped cells' textures, painted by their new slopes the way the land round them is (autopaint.py)."""
+    if not new:
+        return {}
+    xs, ys = [k[0] for k in new], [k[1] for k in new]
+    cx, cy = (min(xs) + max(xs)) // 2, (min(ys) + max(ys)) // 2
+    mk = (GD.key(w), cx // 4, cy // 4)
+    if mk not in _paint_models:
+        _paint_models[mk] = autopaint.learn(GD, w, cx, cy, tex_cache=_land_tex)
+    model, pics = _paint_models[mk]
+    fade, marked = max(128.0, float(plan.get('fade', 1024))), set(map(tuple, marked))
+    out = {}
+    for (x, y), hs in new.items():
+        c = GD.grid(w)[(x, y)]
+        ck = GD.key(c)
+        L0 = PR.land[ck] if PR and ck in PR.land else land.decode(GD, GD.land[c], _land_tex)
+        weight = lambda gr, gc, x=x, y=y: landshape._edge_weight(x * 4096 + gc * 128, y * 4096 + gr * 128, marked, fade)
+        out[(x, y)] = autopaint.paint(GD, {'h': hs, 'q': L0['q']}, start(x, y), model, pics, weight)
+    return out
 
 
 def _game_heights(w, cx, cy):
@@ -495,7 +523,7 @@ def _game_heights(w, cx, cy):
 
 def shape_preview(body):
     """The plan's land worked out and kept under a key, with the map tiles it touches: drawn by /api/shape/tile."""
-    new, water, w = shape_heights(body)
+    new, water, w, quarters = shape_heights(body)
     mine = dict(PR.land) if PR else {}
     wat = dict(PR.water) if PR else {}
     for (cx, cy), lv in water.items():
@@ -505,6 +533,8 @@ def shape_preview(body):
         ck = GD.key(c)
         L = dict(mine[ck]) if ck in mine else land.decode(GD, GD.land[c], _land_tex)
         L['h'] = hs
+        if (cx, cy) in quarters:
+            L['q'] = quarters[(cx, cy)]
         mine[ck] = L
     key = hashlib.md5(json.dumps([body['world'], body['plan'], body['marked']], sort_keys=True).encode()).hexdigest()[:16]
     _previews.clear()
@@ -531,10 +561,10 @@ def shape_tile(key, tx, ty):
 
 
 def shape_apply(body):
-    new, water, w = shape_heights(body)
+    new, water, w, quarters = shape_heights(body)
     if not new:
         raise ValueError('No marked cells with ground to shape.')
-    ops = ground_ops(w, new, body.get('follow', True))
+    ops = ground_ops(w, new, body.get('follow', True), quarters)
     ops += [{'op': 'water', 'cell': GD.key(GD.grid(w)[k]), 'h': round(v, 1)} for k, v in sorted(water.items())]
     out = edit('Shape the land (%d cells)' % len(new), ops)
     out['cells'] = len(new)
