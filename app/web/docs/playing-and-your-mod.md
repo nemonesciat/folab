@@ -18,7 +18,8 @@ Close New Vegas before saving into the game: it holds its plugins open while it 
 
 - **Save** writes your plugin to FOLab's `build` folder. **Put in game** copies it into the game's Data folder and switches it on (in `plugins.txt`), keeping a copy of anything it replaces in `backups`. **Take it out of the game** removes it.
 - **Save as a master** (My mod page) makes it an .esm other mods can build on.
-- **Open a plugin as your mod** (My mod page): an existing .esp or .esm as your mod. Everything in it is kept exactly as it was; your changes are laid over it.
+- **Open a plugin as your mod** (My mod page): an existing .esp or .esm as your mod. Everything in it is kept exactly as it was; your changes are laid over it, and it gains any masters they need.
+- The **Tools** page checks your mod, handles the game's load order, lists every change and makes a zip to share: see its guide.
 - Your mod is a file in `projects`; FOLab keeps 200 Undo steps while it's open.
 
 ## Game settings

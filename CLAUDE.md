@@ -19,7 +19,7 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Mod: `project.py` (changes as JSON in `projects/`, undo/redo), `espwrite.py` (writes `build/<mod>.esp` by laying
   the changes over a `plugintree.py` tree: empty for a new mod, the plugin itself for an opened one, so untouched
   records keep their exact bytes), `adopt.py` (open a plugin as your mod: a copy in `projects/<name> source/`,
-  loaded on top of the game; its masters are kept as they are and can't grow yet), `install.py` (copies into
+  loaded on top of the game, any mods it needs under it; it gains masters when edits need them: `masterlist.py` re-points every link), `install.py` (copies into
   Data + plugins.txt, backups in `backups/`).
 - Editor: `server.py` (port 8771) + `web/index.html`, `web/app.js` (panels, edits), `web/world.js` (3D view).
 - Building: places of the mod's own are '+ID' keys in both `records` (their CELL) and `cells`; door links are a
@@ -69,6 +69,7 @@ the model for style, UI and approach. Python, standard library first, code in `a
   mesh) says if it's a way through and what it meets; `kit.seen` is every join the game built. `Tileset` + `build_area` fill any
   squares with every side agreeing (one-square, one-level pieces so far: no stairs or big pieces yet); `can_walk_out` checks a
   layout from the real meshes. Editor: `web/kits.js` (Joins under Selected, the Kit tab), `/api/kits`, `/api/kit/piece`, `/api/kit/layout`.
+- Tools page (`web/tools.js`, one hook `/api/tools/` to `modtools.py`): `health.py`/`health.js` (reads the plugin itself, so any plugin; fixes are ops), `loadorder.py` (plugins.txt + file dates, backup first; test only with a fake Data and `LOCALAPPDATA`), `changes.py`/`mychanges.js`, `release.py` (zip into `releases/`, own files from Data or `projects/<name> files/`), `merge.py`/`mergepage.js` (grafts a plugin; the result becomes the mod, like a new world). `formlinks.py` is every form link's byte position, raw parts included; `py -3 app/formlinks.py` rechecks it against every game record. Op `drop`: an opened plugin's record left out on save (`project.drop`).
 - Tests: `py -3 tests/run.py` (each test_*.py in a fresh FOLAB_HOME, against the game's files; never the real game).
   Run it before committing changes to the readers, writer, project or schema.
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the
@@ -81,11 +82,8 @@ the model for style, UI and approach. Python, standard library first, code in `a
   every script of the game with its shipped bytes; all match but the 19 out of step listed in `tests/test_scriptc.py`.
 - Records: `schema.py` layouts (checked against every record of each type: run `checkall`; a layout only counts
   if every subrecord fits and encodes back byte for byte), `recordio.py` (a mod's records with links as keys),
-  `browse.py` (Browse page data; its index builds in the background, ~20 s). Known limit: subrecords no layout reads are kept raw in their source file's numbering, so links inside them are only right
-  for FalloutNV.esm records (and a DLC that ends up at the same master index). What's still raw and holds links: alternate
-  textures (MODS, MO2S..MO4S: a list with strings), PACK location/target unions (PLDT, PLD2, PTDT, PTD2), PERK EPFD, condition
-  parameters (CTDA, which form they are depends on the function), owner COED's rank-or-global, CHAL parameters, and whole types
-  not in `schema.TYPES`. Everything else raw is hash/geometry blobs (MODT, FGGS, NIFT, KFFZ, DMDT) or compiled script text.
+  `browse.py` (Browse page data; its index builds in the background, ~20 s). Subrecords no layout reads stay raw in a kept record, in its source file's numbering; the writer re-points their links with `formlinks.py`, which also reads the types not in `schema.TYPES`.
+  Everything else raw is hash/geometry blobs (MODT, FGGS, NIFT, KFFZ, DMDT) or compiled script text.
 
 ## Finding the game
 

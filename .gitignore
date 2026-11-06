@@ -4,6 +4,7 @@ cache/
 projects/
 build/
 backups/
+releases/
 folab_settings.json
 downloads/
 prefabs/
