@@ -12,6 +12,7 @@ import json
 import os
 import re
 import struct
+import threading
 
 import recordio
 import schema
@@ -172,6 +173,7 @@ class Scripts:
         self.forms = ModForms(gd)
         self.game = sorted(((self._edid(fid), fid) for fid, (i, r) in gd.forms.items() if r.tag == 'SCPT'),
                            key=lambda x: x[0].lower())
+        self.lock = threading.RLock()   # (requests come on many threads; the forms object is shared)
         self._kinds = {}
         self._sources = None       # game script's key -> its source, kept once something searches inside them
         self._names = None         # sorted lower editor IDs, for completing
@@ -536,7 +538,7 @@ class Scripts:
         if rec['type'] not in SCRI_AFTER:
             return {'can': False}
         k = recordio.field(rec, 'SCRI')
-        return {'can': True, 'type': rec['type'], 'script': {'key': k, 'edid': recordio.field(self.record(k), 'EDID') if self._exists(k) else k} if k else None,
+        return {'can': True, 'type': rec['type'], 'edid': recordio.field(rec, 'EDID'), 'script': {'key': k, 'edid': recordio.field(self.record(k), 'EDID') if self._exists(k) else k} if k else None,
                 'needs': 'quest' if rec['type'] == 'QUST' else 'object'}
 
     def _exists(self, key):
@@ -642,6 +644,11 @@ def post(path, b):
 
 def _get(path, q):
     s = scripts()
+    with s.lock:
+        return _get_locked(s, path, q)
+
+
+def _get_locked(s, path, q):
     if path == '/api/scripts':
         return s.rows(q.get('q', ''), q.get('inside') == '1')
     if path == '/api/scripts/info':
@@ -661,6 +668,11 @@ def _get(path, q):
 
 def _post(path, b):
     s = scripts()
+    with s.lock:
+        return _post_locked(s, path, b)
+
+
+def _post_locked(s, path, b):
     if path == '/api/scripts/check':
         return s.check(b.get('text', ''), b.get('key'), b.get('kind'))
     if path == '/api/scripts/save':

@@ -71,7 +71,7 @@ function bwDraw(){
       ${ed ? '<button class="btn primary" data-a="save" disabled>Save</button>' : ''}
       ${ed ? '<button class="btn" data-a="copy" title="Start a record of your own from this one">Make a copy</button>' : ''}
       ${d.state === 'changed' ? '<button class="btn" data-a="revert">Put back as the game has it</button>' : ''}
-      ${d.state === 'new' ? '<button class="btn" data-a="revert">Delete this record</button>' : ''}
+      ${d.state === 'new' && rec.type !== 'SCPT' ? '<button class="btn" data-a="revert">Delete this record</button>' : ''}
       ${placeable ? '<button class="btn" data-a="place">Place it</button>' : ''}
       ${rec.type === 'SCPT' ? '<button class="btn primary" data-a="script">Open in Scripts</button>' : ''}
       <button class="btn" data-a="used">Where it's used</button>

@@ -281,3 +281,25 @@ for r in mesg:
     ok = ok and tags == ['EDID', 'DESC', 'INAM', 'DNAM', 'TNAM']
 check(ok, 'the messages come out in the plugin with the parts a game message has (%d)' % len(mesg))
 check(gd2.plugins[me].top_groups().index('MESG') > gd2.plugins[me].top_groups().index('SCPT'), 'groups in the game\'s order')
+
+# ---- a plugin opened as the mod: its scripts are its own, edited in place, under the masters it has ----
+import adopt  # noqa: E402
+pr_name = adopt.adopt(gd, path)
+pr3 = project.Project.open(pr_name)
+gd3 = gamedata.GameData(plugins=list(gamedata.OFFICIAL) + [pr3.source_path()])
+s3 = api_scripts.Scripts(gd3, lambda: pr3)
+own = next(r for r in s3.rows('FOLabTestScript')['rows'] if r['edid'] == 'FOLabTestScript')
+check(own['key'].lower().startswith('scripts test') and not own['state'], 'opened: the plugin\'s script is listed under its own file')
+text3 = s3.one(own['key'])['text']
+check(s3.one(own['key'])['check']['ok'], 'opened: it compiles, naming the plugin\'s own forms by editor ID')
+got3 = s3.save(own['key'], text3 + '\n; changed\n')
+check(got3['ok'] and got3['script']['state'] == 'changed', 'opened: saving keeps the change over the plugin\'s record')
+out3 = os.path.join(project.BUILD_DIR, 'Opened.esp')
+espwrite.write(gd3, pr3, out3)
+p3 = tes4.PluginFile(out3)
+want3 = s3.compile(text3 + '\n; changed\n', own['key'])
+recs3 = [r for r, _path in p3.walk() if r.tag == 'SCPT' and tes4.zstr(p3.fields(r).get('EDID', b'')) == 'FOLabTestScript']
+check(len(recs3) == 1 and p3.fields(recs3[0])['SCDA'] == want3.data and b'; changed' in p3.fields(recs3[0])['SCTX'], 'opened: the plugin holds one such script, the new bytes')
+check(p3.header['masters'] == tes4.PluginFile(pr3.source_path()).header['masters'], 'opened: its masters are as they were')
+ours = [struct.unpack('<I', d)[0] for t, d in tes4.iter_subrecords(p3.data(recs3[0])) if t == 'SCRO']
+check(any(x >> 24 == len(p3.header['masters']) for x in ours), 'opened: a reference to the plugin\'s own thing numbers as the plugin\'s own')

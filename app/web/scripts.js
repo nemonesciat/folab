@@ -29,7 +29,7 @@ async function scrGet(path){
 .sc-gut div.warn{color:var(--amber);font-weight:600}
 .sc-area{flex:1;position:relative;min-width:0}
 .sc-hl,#sc-ta{position:absolute;inset:0;margin:0;padding:8px 12px;font:inherit;tab-size:4;white-space:pre;overflow:auto;border:0;box-sizing:border-box}
-.sc-hl{pointer-events:none;color:var(--text)}
+.sc-hl{pointer-events:none;color:var(--text);overflow:hidden}
 .sc-hl div{min-height:20px}.sc-hl div.err{background:color-mix(in srgb,var(--red) 22%,transparent)}.sc-hl div.warn{background:color-mix(in srgb,var(--amber) 13%,transparent)}
 #sc-ta{background:transparent;color:transparent;caret-color:var(--gold2);resize:none;outline:none}
 #sc-ta::selection{background:color-mix(in srgb,var(--gold) 34%,transparent);color:transparent}
@@ -88,11 +88,11 @@ $('#page-scripts').innerHTML = `
     </div>
     <div class="pane" id="sc-p-run"></div>
   </div>`;
-$('#sc-help .tabs').onclick = e => {
-  const b = e.target.closest('button'); if (!b) return;
-  document.querySelectorAll('#sc-help .tabs button').forEach(x => x.classList.toggle('on', x === b));
-  document.querySelectorAll('#sc-help .pane').forEach(p => p.classList.toggle('on', p.id === 'sc-p-' + b.dataset.sct));
-};
+function scrPanel(name){
+  document.querySelectorAll('#sc-help .tabs button').forEach(x => x.classList.toggle('on', x.dataset.sct === name));
+  document.querySelectorAll('#sc-help .pane').forEach(p => p.classList.toggle('on', p.id === 'sc-p-' + name));
+}
+$('#sc-help .tabs').onclick = e => { const b = e.target.closest('button'); if (b) scrPanel(b.dataset.sct); };
 
 PAGES.push('scripts');
 $('#nav-scripts').onclick = () => page('scripts');
@@ -230,7 +230,7 @@ async function scrCheckNow(){
 function scrProblems(){
   const box = $('#sc-prob'), c = SCR.check; if (!box || !c) return;
   const row = (line, cls, msg) => `<div class="row" ${line ? `data-go="${line}"` : ''}><span class="ln">${line ? 'line ' + line : ''}</span><span class="${cls}">${esc(msg)}</span></div>`;
-  box.innerHTML = (c.ok ? `<div class="ok">✓ No mistakes. ${c.size} bytes compiled, ${c.vars.length} variable${c.vars.length === 1 ? '' : 's'}, ${c.refs.length} thing${c.refs.length === 1 ? '' : 's'} named.</div>` : row(c.problem.line, 'bad', c.problem.message)) +
+  box.innerHTML = (c.ok ? `<div class="ok">✓ No mistakes. ${c.size} bytes, ${c.vars.length} variable${c.vars.length === 1 ? '' : 's'}, ${c.refs.length} thing${c.refs.length === 1 ? '' : 's'} named.</div>` : row(c.problem.line, 'bad', c.problem.message)) +
     (c.warnings || []).map(w => row(w.line, 'wrn', w.message)).join('');
   box.querySelectorAll('[data-go]').forEach(r => r.onclick = () => scrGoLine(+r.dataset.go));
 }
@@ -266,7 +266,7 @@ function scrKey(e){
 async function scrSave(){
   if (!scrDirty()) return;
   const b = $('#sc-save');
-  if (b){ b.disabled = true; b.textContent = 'Compiling…'; }
+  if (b){ b.disabled = true; b.textContent = 'Saving…'; }
   try {
     const r = await post('/api/scripts/save', {key: SCR.key, text: SCR.text, kind: SCR.kind});
     if (r.state) setState(r.state);
@@ -281,7 +281,7 @@ async function scrSave(){
     if (typeof recCacheDrop === 'function') recCacheDrop(SCR.key);
     scrDraw();
     const ta = $('#sc-ta'); ta.focus(); ta.setSelectionRange(caret, caret); ta.scrollTop = top; scrSyncScroll();
-    toast('Compiled and saved in your mod');
+    toast('Saved in your mod');
     scrList();
   } catch (e){ fail(e); scrDirtyShow(); }
 }
@@ -306,21 +306,61 @@ function scrSuggestName(base){
   const mod = ((A.state && A.state.project && A.state.project.name) || 'My').replace(/[^A-Za-z0-9]/g, '').slice(0, 10) || 'My';
   return mod + (base || 'NewScript');
 }
-function scrNewForm(){
+// opts: {attachTo: a record's key, type, needs}: made from that record's Script row, and put straight on it
+async function scrNewForm(opts){
   if (!scrLeaveOk(null)) return;
+  opts = opts || {};
+  await scrLoadInfo();
   SCR.key = null; SCR.making = true;
   document.querySelectorAll('#sc-rows .row.on').forEach(r => r.classList.remove('on'));
+  $('#sc-p-run').innerHTML = '';
+  const fits = t => !opts.attachTo || t.on.includes(opts.type);
+  const starters = SCR.info.templates.filter(fits);
+  let pick = '';
   $('#sc-main').innerHTML = `<div class="sc-welcome"><h2>A new script</h2>
+    ${opts.attachTo ? `<p>It goes on ${esc(opts.edid || opts.attachTo)} as soon as it's made.</p>` : ''}
     <div class="sc-form"><label>Its name</label><input id="sn-name" value="${esc(scrSuggestName())}" maxlength="60">
-      <div class="hint">Letters, numbers and _ only. Players never see it.</div>
-      <label>What it runs on</label><select id="sn-kind">${Object.entries(SCR_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
+      <div class="hint">Letters, numbers and _ only. Players never see it.</div></div>
+    <div class="h" style="padding-left:0">Start from</div>
+    <div class="sc-cards">
+      <button class="sc-card on" data-tpl=""><b>Nothing: a blank script</b><span>Just the first lines, for you to fill in.</span></button>
+      ${starters.map(t => `<button class="sc-card" data-tpl="${esc(t.id)}"><b>${esc(t.title)}</b><span>${esc(t.desc)}</span></button>`).join('')}
+    </div>
+    <div class="sc-form" id="sn-fields"></div>
     <div class="acts"><button class="btn primary" id="sn-go">Make it</button> <span class="note" id="sn-msg"></span></div></div>`;
   const nm = $('#sn-name'); nm.focus(); nm.select();
+  const drawFields = () => {
+    const t = SCR.info.templates.find(x => x.id === pick), box = $('#sn-fields');
+    if (!t){
+      box.innerHTML = opts.attachTo ? '' : `<label>What it runs on</label><select id="sn-kind">${Object.entries(SCR_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>`;
+      if (opts.needs === 'quest') { const k = $('#sn-kind'); if (k) k.value = 'quest'; }
+      return;
+    }
+    box.innerHTML = t.fields.map(f => `<label>${esc(f.label)}</label>${f.kind === 'form'
+      ? `<span class="sc-pickbox" style="display:block"><input data-sf="${esc(f.id)}" value="${esc(f.default || '')}" placeholder="Search by editor ID…" autocomplete="off"></span>`
+      : f.kind === 'number' ? `<input data-sf="${esc(f.id)}" value="${esc(f.default || '')}" inputmode="numeric" style="max-width:100px">` : `<input data-sf="${esc(f.id)}" value="${esc(f.default || '')}">`}`).join('') +
+      `<div class="hint" style="grid-column:1/3;margin:0">Goes on ${esc(t.on_label)}. You can change all of it afterwards: it's an ordinary script.</div>`;
+    t.fields.filter(f => f.kind === 'form').forEach(f => scrPick(box.querySelector(`[data-sf="${f.id}"]`), f.tags, () => {}));
+  };
+  $('#sc-main').querySelectorAll('[data-tpl]').forEach(b => b.onclick = () => {
+    pick = b.dataset.tpl;
+    $('#sc-main').querySelectorAll('[data-tpl]').forEach(x => x.classList.toggle('on', x === b));
+    drawFields();
+  });
+  drawFields();
   $('#sn-go').onclick = async () => {
+    const msg = $('#sn-msg'), fields = {};
+    document.querySelectorAll('#sn-fields [data-sf]').forEach(i => fields[i.dataset.sf] = i.value);
+    const kind = (document.querySelector('#sn-kind') || {}).value || (opts.needs === 'quest' ? 'quest' : 'object');
+    msg.textContent = '';
     try {
-      const r = await post('/api/scripts/new', {name: nm.value, kind: $('#sn-kind').value});
-      setState(r.state); SCR.making = false; await scrList(); await scrOpen(r.key, true); toast('Made ' + nm.value);
-    } catch (e){ $('#sn-msg').textContent = e.message; $('#sn-msg').style.color = 'var(--red)'; }
+      const r = await post('/api/scripts/new', {name: nm.value, kind, template: pick || null, fields});
+      setState(r.state); SCR.making = false;
+      if (opts.attachTo) await scrAttachDo(opts.attachTo, r.key);
+      await scrList(); await scrOpen(r.key, true);
+      if (r.note && !opts.attachTo){ toast(r.note); scrPanel('run'); }
+      else toast('Made ' + nm.value);
+    } catch (e){ msg.textContent = e.message; msg.style.color = 'var(--red)'; }
   };
 }
 function scrCopyForm(){

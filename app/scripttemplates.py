@@ -11,7 +11,7 @@ TEMPLATES = {
         'title': 'A door that needs a key',
         'desc': 'The door only opens for the player if they carry the key; otherwise it shows your message. Others use it as normal.',
         'kind': 'object', 'on': ['DOOR'], 'on_label': 'a door',
-        'then': 'Now put it on a door: use "Put it on something" below, or the Script row on the door\'s record.',
+        'then': 'Now put it on a door: use the search under What runs it, or the Script row on the door\'s record.',
         'fields': [{'id': 'key', 'label': 'The key', 'kind': 'form', 'tags': ['KEYM'], 'default': ''},
                    {'id': 'text', 'label': 'Message when they don\'t have it', 'kind': 'text', 'default': 'This door is locked. You need a key.'}],
         'message': 'text',
@@ -57,9 +57,9 @@ End
     },
     'trigger_message': {
         'title': 'A trigger that shows a message',
-        'desc': 'When the player walks into the trigger\'s box, your message comes up, once. Put it on an activator placed as a trigger.',
+        'desc': 'When the player walks into the trigger\'s box, your message comes up, once. It needs a trigger box in the world, which FOLab can\'t draw yet.',
         'kind': 'object', 'on': ['ACTI'], 'on_label': 'an activator',
-        'then': 'Now put it on an activator, and place that in the world as a trigger box.',
+        'then': 'Now put it on an activator. It only fires for one that is a trigger box in the world, and FOLab can\'t draw those yet.',
         'fields': [{'id': 'text', 'label': 'The message', 'kind': 'text', 'default': 'You feel you are being watched.'}],
         'message': 'text',
         'text': """scn {name}

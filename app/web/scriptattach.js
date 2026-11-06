@@ -43,6 +43,7 @@ async function scrRunDraw(){
   await scrLoadInfo();
   const who = await scrGet('/api/scripts/who?key=' + encodeURIComponent(key));
   if (key !== SCR.key) return;
+  if (who.busy) setTimeout(() => { if (key === SCR.key) scrRunDraw(); }, 4000);
   const empty = SCR.kind === 'effect'
     ? 'An effect script runs from a base effect: pick it in that effect\'s record. Nothing has this one yet.'
     : 'Nothing runs it yet, so it does nothing in the game. Put it on something below.';
@@ -88,7 +89,7 @@ async function scrOnRow(box, key, after, busy){
     if (busy && busy()) return toast('Save your changes to this first.', true);
     if (await scrAttachDo(key, script)) after();
   };
-  box.querySelector('[data-snew]').onclick = () => { if (busy && busy()) return toast('Save your changes to this first.', true); page('scripts'); scrNewForm({attachTo: key, needs: d.needs, type: d.type}); };
+  box.querySelector('[data-snew]').onclick = () => { if (busy && busy()) return toast('Save your changes to this first.', true); page('scripts'); scrNewForm({attachTo: key, needs: d.needs, type: d.type, edid: d.edid}); };
   const off = box.querySelector('[data-soff]');
   if (off) off.onclick = () => put('');
   const a = box.querySelector('[data-sopen]');

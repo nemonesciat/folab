@@ -79,6 +79,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
   INFO/QUST result scripts; forms come through `GameForms` or anything with its `find`/`find_edid`). Function table:
   `scriptfuncs.json`, made from the user's FalloutNV.exe by `tools/gen_scriptfuncs.py`. `tools/script_oracle.py` compares
   every script of the game with its shipped bytes; all match but the 19 out of step listed in `tests/test_scriptc.py`.
+- Scripts page (`web/scripts.js` + `scriptshelp.js`, `scriptattach.js`; `api_scripts.py`): a script is an SCPT record in `project.records`, only ever
+  written with bytes the compiler gave for its source; `ModForms` lays the mod's forms over `GameForms`, `set_script` puts SCRI in the game's place. A compile
+  problem comes back as `problem`, not `error` (`post()` throws on that). Starters in `scripttemplates.py`, notes on commands in `scriptdocs.py`.
 - Records: `schema.py` layouts (checked against every record of each type: run `checkall`; a layout only counts
   if every subrecord fits and encodes back byte for byte), `recordio.py` (a mod's records with links as keys),
   `browse.py` (Browse page data; its index builds in the background, ~20 s). Known limit: subrecords no layout reads are kept raw in their source file's numbering, so links inside them are only right
