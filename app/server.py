@@ -21,6 +21,8 @@ import gameini
 import install
 import kitindex
 import modtools
+import kitdress
+import kitplan
 import navbuild
 import nif
 import nvse
@@ -1147,12 +1149,48 @@ def navmesh_make(ckey):
     return out
 
 
+def kit_survey(kits):
+    """What the game stands in each kit's pieces (kitdress.py): a few seconds the first time, then kept on disk."""
+    if 'survey' not in _kits['tilesets']:
+        _kits['tilesets']['survey'] = kitdress.load(GD, kits, os.path.join(os.path.dirname(_tile_dir()), '..', 'kits', os.path.basename(_tile_dir())))
+    return _kits['tilesets']['survey']
+
+
 def kit_layout(body):
     kits = kits_state()
     if not kits or body['kit'] not in kits:
         return {'note': 'The kits are still being read: a moment.'}
-    w, h = max(2, min(40, int(body['w']))), max(2, min(40, int(body['h'])))
-    return kitindex.layout(GD, kits, body['kit'], w, h, int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'])
+    w, h = max(3, min(80, int(body['w']))), max(3, min(80, int(body['h'])))
+    return kitplan.layout(GD, kits, body['kit'], w, h, int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits))
+
+
+def kit_vault(body):
+    kits = kits_state()
+    if not kits:
+        return {'note': 'The kits are still being read: a moment.'}
+    return kitplan.vault(GD, kits, int(body['size']), int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits), bool(body.get('ruined')))
+
+
+def kit_grow(body):
+    """More of the place you're in, from the kit most of it is built from."""
+    kits = kits_state()
+    if not kits:
+        return {'note': 'The kits are still being read: a moment.'}
+    things = [t for t in cell_things(body['cell']) if t['state'] != 'removed']
+    counts = {}
+    for t in things:
+        kit, _p = kitindex.find_piece(kits, t['bkey'])
+        if kit:
+            counts[kit.name] = counts.get(kit.name, 0) + 1
+    if not counts:
+        return {'note': 'Nothing here is from a kit: generate a place first.'}
+    name = max(counts, key=counts.get)
+    pieces = []
+    for t in things:
+        turn = kitindex.quarter(t['p'][5])
+        if t['bkey'] in kits[name].pieces and turn is not None:
+            pieces.append((t['bkey'], t['p'][0], t['p'][1], t['p'][2], turn, t['key']))
+    return kitplan.grow(GD, kits, name, pieces, int(body.get('area', 80)), int(body['seed']), _kits['tilesets'], _kits['walls'], kit_survey(kits))
 
 
 def record_copy(key):
@@ -1490,6 +1528,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(out)
                 if u.path == '/api/kit/layout':
                     return self.send(kit_layout(body))
+                if u.path == '/api/kit/vault':
+                    return self.send(kit_vault(body))
+                if u.path == '/api/kit/grow':
+                    return self.send(kit_grow(body))
                 if u.path == '/api/doors/link':
                     return self.send(link_doors(body['a'], body['b']))
                 if u.path == '/api/doors/unlink':

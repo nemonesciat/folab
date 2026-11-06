@@ -167,7 +167,10 @@ def _places(field, headroom):
         for s in col[1:]:
             if s[0] <= high + _GAP:
                 if s[1] > high + _TOP:
-                    high, z, ga, gb, gr = s[1], s[2], s[3], s[4], s[5]
+                    if s[2] is None and z is not None and s[1] - z <= STEP:
+                        high = s[1]         # (a stair's riser in this column: what's above it is one step, not a wall)
+                    else:
+                        high, z, ga, gb, gr = s[1], s[2], s[3], s[4], s[5]
                 else:
                     if s[2] is not None and (z is None or s[2] > z):
                         z, ga, gb, gr = s[2], s[3], s[4], s[5]
