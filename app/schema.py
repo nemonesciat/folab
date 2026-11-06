@@ -197,6 +197,20 @@ _DECAL = ('Decal', [('f', 'Min width'), ('f', 'Max width'), ('f', 'Min height'),
                     ('f', 'Parallax scale'), ('B', 'Parallax passes'), ('B', 'Flags'), ('2x', ''), ('B', 'Red'), ('B', 'Green'), ('B', 'Blue'), ('x', '')])
 _IDLE_LIST = {'IDLF': ('Idle flags', [('B', 'Flags')]), 'IDLC': [('Idle count', [('B', 'Count')]), ('Idle count', [('B', 'Count'), ('3x', '')])],
               'IDLT': ('Idle timer', [('f', 'Seconds')]), 'IDLA': ('Idles', 'F*')}
+
+
+def _union(label, form_kinds, tail):
+    """A subrecord whose first number says what its second one is: a form link for some kinds, a plain number for the
+    rest (a layout may carry a test of the bytes: it only fits when the test passes)."""
+    is_form = lambda data: struct.unpack_from('<i', data)[0] in form_kinds
+    return [(label, [('i', 'Type'), ('F', 'Target')] + tail, is_form), (label, [('i', 'Type'), ('I', 'Value')] + tail)]
+
+
+# where a package happens: 0 near a ref, 1 in a cell, 2 near where they are, 3 near their editor spot, 4 near a thing of
+# a kind (link), 5 near a thing of a kind (number), 6 near their linked ref, 7 at the package's first location
+_PACK_PLACE = _union('Location', (0, 1, 4), [('i', 'Radius')])
+# who or what a package aims at: 0 a ref, 1 a kind of thing (link), 2 a kind of thing (number), 3 their linked ref
+_PACK_TARGET = _union('Target', (0, 1), [('i', 'Count or distance'), ('4x', '')])
 _TYPE_ADD = {
     'WEAP': {
         'MODD': ('Face-gen model flags', [('B', 'Flags')]),
@@ -268,7 +282,10 @@ _TYPE_ADD = {
         'PSDT': ('Schedule', [('b', 'Month'), ('b', 'Day of week'), ('B', 'Date'), ('b', 'Time'), ('i', 'Duration')]),
         'INAM': ('Idle', 'F'), 'TNAM': ('Topic', 'F'), 'PKFD': ('Follow distance', [('f', 'Distance')]),
         'PKPT': [('Patrol flags', [('B', 'Flags'), ('B', 'Flags 2')]), ('Patrol flags', [('B', 'Flags')])],
-        'POBA': MARK, 'POEA': MARK, 'POCA': MARK, 'PKAM': MARK, 'PKED': MARK, 'PUID': MARK, 'CNAM': ('Combat style', 'F')})),
+        'POBA': MARK, 'POEA': MARK, 'POCA': MARK, 'PKAM': MARK, 'PKED': MARK, 'PUID': MARK, 'CNAM': ('Combat style', 'F'),
+        'PLDT': _PACK_PLACE, 'PLD2': _PACK_PLACE, 'PTDT': _PACK_TARGET, 'PTD2': _PACK_TARGET,
+        'PKDD': ('Dialogue', [('f', 'Field of view'), ('F', 'Topic'), ('I', 'Flags'), ('4x', ''), ('I', 'Dialogue type'), ('4x', '')]),
+        'PKE2': ('Escort distance', [('I', 'Distance')])})),
     'IDLE': ('Idle animations', {
         'ANAM': ('Related idles', [('F', 'Parent'), ('F', 'Previous')]),
         'DATA': _prefixes('Data', [('B', 'Group'), ('B', 'Loop min'), ('B', 'Loop max'), ('B', 'Unknown'), ('h', 'Replay delay'), ('B', 'Flags'), ('B', 'Unused')], [8, 6])}),
@@ -386,7 +403,7 @@ def _fits(d, data):
         return len(data) == 4
     if kind == 'F*':
         return len(data) % 4 == 0
-    return struct.calcsize(_fmt(kind)[0]) == len(data)
+    return struct.calcsize(_fmt(kind)[0]) == len(data) and (len(d) < 3 or d[2](data))
 
 
 def decode_sub(rtype, tag, data, late=False):
@@ -394,7 +411,7 @@ def decode_sub(rtype, tag, data, late=False):
     the subrecord is in a later part of the record the layouts don't describe (late)."""
     d = None if late and tag in AFTER.get(rtype, ('', ()))[1] else layout(rtype, tag, data)
     if d:
-        label, kind = d
+        label, kind = d[:2]
         if kind == 'z':
             return {'tag': tag, 'label': label, 'kind': 'z', 'value': data[:-1].decode('cp1252', 'replace')}
         if kind == 'F':
