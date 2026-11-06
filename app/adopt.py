@@ -2,9 +2,9 @@
 
 The plugin is copied into FOLab's projects folder and loaded on top of the game, so everything in it shows and can be
 edited like the game's own things. Saving starts from that copy, every group and record of it kept as it was, with
-your changes laid over it, and keeps its masters in their order (the numbering inside it depends on that order).
-Saved untouched, it comes out the same file. Put in game writes it back where it came from, a copy of the old one
-going to backups first."""
+your changes laid over it, and keeps its masters in their order; anything else your changes use is added after them,
+every link in the file re-pointed (masterlist.py). A mod it needs is loaded under it. Saved untouched, it comes out the
+same file. Put in game writes it back where it came from, a copy of the old one going to backups first."""
 import json
 import os
 import shutil
@@ -40,10 +40,32 @@ def check(gd, path):
         h = tes4.PluginFile(path).header
     except (ValueError, OSError) as e:
         return 'Not a plugin FOLab can read: %s' % e
-    missing = [m for m in h['masters'] if m.lower() not in gd.names]
+    folder = os.path.dirname(path)
+    missing = [m for m in h['masters'] if m.lower() not in gd.names and not os.path.isfile(os.path.join(gd.data_dir, m))
+               and not os.path.isfile(os.path.join(folder, m))]
     if missing:
-        return '%s needs %s, which FOLab doesn\'t load (only the game\'s own files so far).' % (name, ', '.join(missing))
+        return '%s needs %s, which isn\'t in the game\'s Data folder.' % (name, ', '.join(missing))
     return None
+
+
+def extra_masters(data_dir, path):
+    """The mods a plugin needs loaded under it: its masters that aren't the game's, and theirs, those first."""
+    official = {n.lower() for n in gamedata.OFFICIAL}
+    out, seen = [], set()
+
+    def visit(p):
+        pf = tes4.PluginFile(p)
+        masters = list(pf.header['masters'])
+        pf.close()
+        for m in masters:
+            q = os.path.join(data_dir, m)
+            if m.lower() in official or m.lower() in seen or not os.path.isfile(q):
+                continue
+            seen.add(m.lower())
+            visit(q)
+            out.append(q)
+    visit(path)
+    return out
 
 
 def adopt(gd, path):
