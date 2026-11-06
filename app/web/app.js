@@ -542,7 +542,7 @@ $('#left .tabs').onclick = e => {
 };
 $('#right .tabs').onclick = e => { if (e.target.closest('button')) tab('right', e.target.closest('button').dataset.tab); };
 
-const PAGES = ['create', 'browse', 'world', 'mod', 'game'];
+const PAGES = ['create', 'browse', 'quests', 'world', 'mod', 'game'];
 function page(name){
   for (const p of PAGES){
     const nav = $('#nav-' + p), el = $('#page-' + p);

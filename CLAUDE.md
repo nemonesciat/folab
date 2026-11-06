@@ -69,6 +69,7 @@ the model for style, UI and approach. Python, standard library first, code in `a
   mesh) says if it's a way through and what it meets; `kit.seen` is every join the game built. `Tileset` + `build_area` fill any
   squares with every side agreeing (one-square, one-level pieces so far: no stairs or big pieces yet); `can_walk_out` checks a
   layout from the real meshes. Editor: `web/kits.js` (Joins under Selected, the Kit tab), `/api/kits`, `/api/kit/piece`, `/api/kit/layout`.
+- Quests and dialogue: `questrec.py` (QUST/DIAL/INFO as plain data and back, byte exact over every game record; `write_lines` puts each INFO in its DIAL's type-7 group, copying a game topic from the file that first has it with our quests added), `api_quests.py` (routes under /api/quest, /api/dlg; scripts compiled on save through `ModForms`; board, check), `web/quests.js`, `dialogue.js`, `questboard.js`. An INFO record keeps its topic in `rec['topic']` and its place in `rec['seq']`. Silent lines need no voice files (TRDT sound 0, words in NAM1). Conditions: `schema.condition_fields` reads CTDA parameters by function, so their links are keys and re-point; only conditions in records saved before this keep raw numbers.
 - Tests: `py -3 tests/run.py` (each test_*.py in a fresh FOLAB_HOME, against the game's files; never the real game).
   Run it before committing changes to the readers, writer, project or schema.
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the
@@ -83,8 +84,7 @@ the model for style, UI and approach. Python, standard library first, code in `a
   if every subrecord fits and encodes back byte for byte), `recordio.py` (a mod's records with links as keys),
   `browse.py` (Browse page data; its index builds in the background, ~20 s). Known limit: subrecords no layout reads are kept raw in their source file's numbering, so links inside them are only right
   for FalloutNV.esm records (and a DLC that ends up at the same master index). What's still raw and holds links: alternate
-  textures (MODS, MO2S..MO4S: a list with strings), PACK location/target unions (PLDT, PLD2, PTDT, PTD2), PERK EPFD, condition
-  parameters (CTDA, which form they are depends on the function), owner COED's rank-or-global, CHAL parameters, and whole types
+  textures (MODS, MO2S..MO4S: a list with strings), PACK location/target unions (PLDT, PLD2, PTDT, PTD2), PERK EPFD, owner COED's rank-or-global, CHAL parameters, and whole types
   not in `schema.TYPES`. Everything else raw is hash/geometry blobs (MODT, FGGS, NIFT, KFFZ, DMDT) or compiled script text.
 
 ## Finding the game

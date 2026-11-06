@@ -27,6 +27,7 @@ import playtest
 import project
 import actors
 import adopt
+import api_quests
 import browse
 import recordio
 import base64
@@ -1317,6 +1318,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not p.startswith(WEB):
                     return self.send(b'no', 'text/plain', 403)
                 return self.file(p)
+            if u.path.startswith(('/api/quest/', '/api/dlg/')):
+                with _lock:
+                    return self.send(api_quests.get(u.path, q, GD, PR, BR))
             if u.path == '/api/about':
                 return self.send(about())
             if u.path == '/api/report':
@@ -1457,6 +1461,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(open_project(name))
                 if not PR:
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
+                if u.path.startswith(('/api/quest/', '/api/dlg/')):
+                    return self.send(api_quests.post(u.path, body, GD, PR, BR, edit))
                 if u.path == '/api/world/new':
                     return self.send(new_world(body))
                 if u.path == '/api/shape/cells':

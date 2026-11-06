@@ -13,6 +13,7 @@ import land as landmod
 import navbuild
 import navmesh
 import plugintree
+import questrec
 import recordio
 import tes4
 
@@ -50,6 +51,8 @@ def join(subs):
 
 
 class Writer:
+    form_version = FORM_VERSION
+
     def __init__(self, gd, project):
         self.gd, self.pr = gd, project
         self.source = project.source_path()
@@ -153,6 +156,7 @@ class Writer:
             for k in recordio.links(rec):
                 if not k.startswith('+'):
                     used.add(gd.from_key(k) >> 24)
+        questrec.plan_masters(gd, self.pr, used)
         for i in list(used):                    # a copied record may name its own file's masters
             for m in gd.plugins[i].header['masters']:
                 if m.lower() in gd.names:
@@ -224,7 +228,7 @@ class Writer:
 
         # records the mod changes or adds (a place's record goes with the place, below)
         for key, rec in sorted(self.pr.records.items()):
-            if rec['type'] == 'CELL':
+            if rec['type'] in ('CELL', 'INFO'):     # (these go with their place and their topic)
                 continue
             fid = self.link(key)
             data = join(recordio.to_bytes(rec, self.link))
@@ -235,6 +239,7 @@ class Writer:
                 node = plugintree.Rec.new(rec['type'], rec['flags'], fid, data, FORM_VERSION)
                 top.kids.append(node)
                 found[fid] = (node, top)
+        questrec.write_lines(self, tree, found, order, join)
 
         # places: the cell's record, then its refs
         cells = {k for k, c in self.pr.cells.items() if c['refs']}

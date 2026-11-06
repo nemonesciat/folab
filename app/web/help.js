@@ -3,6 +3,7 @@
 // first time FOLab runs in this browser.
 const HELP_DOCS = [['getting-started', 'Getting started'], ['the-world', 'The World page: moving, selecting, placing'],
                    ['outside', 'Outside: land, water, worldspaces'], ['items-and-records', 'Items and records'],
+                   ['quests-and-dialogue', 'Quests and dialogue'],
                    ['playing-and-your-mod', 'Playing, and your mod']];
 
 $('#b-help').onclick = e => {
