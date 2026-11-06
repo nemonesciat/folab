@@ -6,6 +6,7 @@ reads while it works (the game's files are memory maps, the mod's changes plain 
 import threading
 
 import navbuild
+import navedit
 
 JOB = {'running': False}
 _job_lock = threading.Lock()
@@ -58,8 +59,9 @@ def get(path, q, gd, pr, ctx):
     if path == '/api/w/nav/status':
         return nav_status(gd, pr, q['world'])
     if path == '/api/w/nav/job':
-        out = dict(JOB)
-        return out
+        return dict(JOB)
+    if path == '/api/w/nav/meshes':
+        return {'cells': [navedit.view(gd, pr, k) for k in q['cells'].split('|') if k]}
     return None
 
 
@@ -70,4 +72,7 @@ def post(path, body, gd, pr, ctx):
     if path == '/api/w/nav/remove':
         ops = navbuild.remove_area(gd, pr, _cell_keys(gd, body['world'], body['cells']))
         return {'state': ctx['apply'](pr, 'Remove navmesh', ops), 'changed': len(ops)}
+    if path == '/api/w/nav/edit':
+        ops, label, cells = navedit.act(gd, pr, body)
+        return {'state': ctx['apply'](pr, label, ops), 'cells': cells}
     return None

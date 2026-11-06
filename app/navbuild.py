@@ -136,7 +136,7 @@ def as_mesh(data):
 
 
 def as_data(m, form, **more):
-    out = {'form': form, 'verts': [[round(c, 3) for c in v] for v in m['verts']], 'tris': [list(t) for t in m['tris']],
+    out = {'form': form, 'verts': [list(v) if more.get('copy') else [round(c, 3) for c in v] for v in m['verts']], 'tris': [list(t) for t in m['tris']],
            'doors': [[d[0], d[1]] for d in m['doors']], 'ext': [list(e) for e in m['ext']], 'cover': list(m['cover'])}
     out.update(more)
     return out
