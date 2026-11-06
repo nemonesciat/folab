@@ -23,6 +23,8 @@ ROOT = os.path.dirname(HERE)
 APP = os.path.join(ROOT, 'app')
 OUT = os.path.join(HERE, 'out')
 STAGE = os.path.join(OUT, 'FOLab')
+KEEP = os.path.join(HERE, 'kept during build')
+BUILT = {'app', 'python', 'FOLab.exe', 'README.txt', 'THIRD_PARTY_NOTICES.txt', 'folab_running.json'}   # (the rest is the user's)
 CSC = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), r'Microsoft.NET\Framework64\v4.0.30319\csc.exe')
 
 PY = sys.base_prefix
@@ -196,9 +198,33 @@ def main():
         raise SystemExit('The C# compiler that comes with Windows was not found at ' + CSC)
     ver = version()
     log('FOLab', ver)
-    shutil.rmtree(OUT, ignore_errors=True)
+    # FOLab keeps your mods and settings beside FOLab.exe: a copy you've been running keeps them through a rebuild, set
+    # aside here (the zip is made without them) and put back afterwards.
+    if os.path.exists(KEEP):
+        raise SystemExit('A build that stopped left your things in ' + KEEP + ': move what you want back and delete it.')
     if os.path.exists(STAGE):
-        raise SystemExit('packaging\out\FOLab is in use (is FOLab.exe from it still running?): close it and build again.')
+        try:
+            os.rename(STAGE, KEEP)
+        except OSError:
+            raise SystemExit('packaging\\out\\FOLab is in use (is FOLab.exe from it still running?): close it and build again.')
+    try:
+        shutil.rmtree(OUT, ignore_errors=True)
+        make(ver)
+    finally:
+        restore_kept()
+
+
+def restore_kept():
+    if not os.path.exists(KEEP):
+        return
+    os.makedirs(STAGE, exist_ok=True)
+    for name in os.listdir(KEEP):
+        if name not in BUILT:
+            shutil.move(os.path.join(KEEP, name), os.path.join(STAGE, name))
+    shutil.rmtree(KEEP)
+
+
+def make(ver):
     os.makedirs(STAGE)
     icon = os.path.join(APP, 'web', 'vendor', 'folab.ico')
     if not os.path.exists(icon):

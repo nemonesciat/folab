@@ -85,6 +85,91 @@ static class AppWindow
         return true;
     }
 
+    // ---------- a taskbar button of its own ----------
+    // Windows groups taskbar buttons by an ID on the window. Left alone, FOLab's has what Edge gives it, which other Edge
+    // app windows can share (Morrowind Workshop's is one), so they stack on one button. Here it gets FOLab's own, with its
+    // icon and FOLab.exe to start it again when pinned. Only FOLab's own window is ever touched.
+    const string TaskbarId = "FOLab.Editor";
+    static readonly Guid AppUserModelProps = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
+    const uint PropId = 5, PropRelaunchCommand = 2, PropRelaunchIcon = 3, PropRelaunchName = 4;
+    static readonly HashSet<IntPtr> identified = new HashSet<IntPtr>();
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    struct PropKey { public Guid Set; public uint Id; public PropKey(Guid s, uint i) { Set = s; Id = i; } }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct PropValue { public ushort Type, R1, R2, R3; public IntPtr Value, Rest; }
+
+    [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IPropertyStore
+    {
+        void GetCount(out uint n);
+        void GetAt(uint i, out PropKey key);
+        void GetValue(ref PropKey key, out PropValue value);
+        void SetValue(ref PropKey key, ref PropValue value);
+        void Commit();
+    }
+
+    [DllImport("shell32.dll", PreserveSig = false)]
+    static extern void SHGetPropertyStoreForWindow(IntPtr h, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out IPropertyStore store);
+    [DllImport("ole32.dll")] static extern int PropVariantClear(ref PropValue v);
+
+    static IPropertyStore StoreOf(IntPtr h)
+    {
+        Guid iid = typeof(IPropertyStore).GUID;
+        IPropertyStore store;
+        SHGetPropertyStoreForWindow(h, ref iid, out store);
+        return store;
+    }
+
+    static void SetText(IPropertyStore store, uint id, string text)
+    {
+        var key = new PropKey(AppUserModelProps, id);
+        var v = new PropValue { Type = 31, Value = Marshal.StringToCoTaskMemUni(text) };     // VT_LPWSTR
+        try { store.SetValue(ref key, ref v); }
+        finally { Marshal.FreeCoTaskMem(v.Value); }
+    }
+
+    public static void Identify(IntPtr h, string exe)
+    {
+        IPropertyStore store = StoreOf(h);
+        try
+        {
+            // (the three go together, the ID last: pinning reads them when the ID arrives)
+            SetText(store, PropRelaunchCommand, "\"" + exe + "\"");
+            SetText(store, PropRelaunchName, Title);
+            SetText(store, PropRelaunchIcon, exe + ",0");
+            SetText(store, PropId, TaskbarId);
+            store.Commit();
+        }
+        finally { Marshal.ReleaseComObject(store); }
+    }
+
+    public static string IdentityOf(IntPtr h)
+    {
+        IPropertyStore store = StoreOf(h);
+        try
+        {
+            var key = new PropKey(AppUserModelProps, PropId);
+            PropValue v;
+            store.GetValue(ref key, out v);
+            try { return v.Type == 31 ? Marshal.PtrToStringUni(v.Value) : null; }
+            finally { PropVariantClear(ref v); }
+        }
+        finally { Marshal.ReleaseComObject(store); }
+    }
+
+    // Any FOLab window that hasn't its own button yet gets one. (Asked often: a new window has none until its page loads
+    // and gives it its title.) If Windows refuses, the window still works, on a shared button.
+    public static void IdentifyAll(string exe)
+    {
+        foreach (var h in Windows())
+        {
+            if (identified.Contains(h)) continue;
+            try { Identify(h, exe); identified.Add(h); } catch { }
+        }
+    }
+
     // Close FOLab's window (quitting from the tray), the way its ✕ does.
     public static void Close()
     {

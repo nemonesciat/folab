@@ -137,8 +137,9 @@ class Tray : ApplicationContext
             int gone = 0;
             while (!quitting)
             {
-                Thread.Sleep(1500);
+                Thread.Sleep(seen ? 1500 : 250);         // (quickly at first: its button is its own as soon as it opens)
                 if (inBrowser) return;                   // (no Edge: a browser tab we can't watch)
+                AppWindow.IdentifyAll(Application.ExecutablePath);
                 bool showing = AppWindow.Windows().Count > 0;
                 if (showing) { seen = true; gone = 0; }
                 else if (seen && ++gone >= 2) { ui.Post(_ => Quit(), null); return; }
