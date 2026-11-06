@@ -104,7 +104,9 @@ async function helpReport(){
 
 async function helpAbout(){
   const a = await api('/api/about');
-  helpWindow('About FOLab', `<p><b>FOLab ${esc(a.version)}</b>, a New Vegas editor. Your changes become a plugin the game loads; the game's own files are never changed.</p>
+  const mark = document.querySelector('.brand svg.mark');
+  helpWindow('About FOLab', `<div style="display:flex;gap:18px;align-items:center"><div style="flex:1;min-width:0"><p><b>FOLab ${esc(a.version)}</b>, a New Vegas editor. Your changes become a plugin the game loads; the game's own files are never changed.</p>
+    <p>Source and releases: <a href="https://github.com/nemonesciat/folab" target="_blank" rel="noopener">github.com/nemonesciat/folab</a></p></div>${mark ? `<div style="flex:none;height:92px;color:var(--gold)">${mark.outerHTML.replace('class="mark"', 'class="mark" style="height:100%;width:auto;display:block"')}</div>` : ''}</div>
     <table><tr><th>Game</th><td>${esc(a.game || 'not found')}</td></tr><tr><th>Loaded</th><td>${esc(a.plugins.join(', '))}</td></tr>
     <tr><th>FOLab's folder</th><td>${esc(a.home)}</td></tr><tr><th>Python</th><td>${esc(a.python)} · ${esc(a.system)}</td></tr></table>
     <h3>Made with</h3><p>three.js (MIT licence) for the 3D view, its DDS loader and transform handles; Oswald, Share Tech Mono, Cinzel and Inter fonts (SIL Open Font Licence).

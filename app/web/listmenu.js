@@ -141,6 +141,7 @@ addEventListener('contextmenu', e => {
   if (picked.trim() && getSelection().containsNode(t, true)) return;
   e.preventDefault();
   if (t.closest('.cmenu')) return;
+  if (t.closest('.brand')) return cmList(e, '', [['Home', () => page('home')], ['About FOLab…', helpAbout]]);
   const r = t.closest('.row');
   if (r && r.closest('#places')){ const c = A.places.find(p => p.id === r.dataset.id); return c ? placeMenu(e, c) : undefined; }
   if (r && r.closest('#objects')){

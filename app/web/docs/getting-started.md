@@ -8,7 +8,7 @@ FOLab never changes the game's own files. Your changes live in your **mod** (in 
 
 ## Your first mod in five minutes
 
-1. **Start a mod**: type a name in the box in the middle of the World page and press **Start**.
+1. **Start a mod**: FOLab opens on its **Home** page (the logo at the top left always comes back here). Type a name there and press **Start a mod**, then press **World** at the top.
 2. **Open a place**: pick one under **Places** on the left (say *Vault 21*), or press **Ctrl+K** and type a name.
 3. **Look around**: hold the **right mouse button** and move the mouse to look; **W A S D** to fly (the way you look), **Q / E** down and up, **Shift** faster.
 4. **Change something**: click a thing to select it, drag the arrows to move it (**G**), the rings to turn it (**R**), **Del** to remove it. Search for things to add in **Place** on the right, click one, then click where it goes.
