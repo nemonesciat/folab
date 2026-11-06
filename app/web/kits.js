@@ -134,12 +134,12 @@ async function kitTab(){
   KIT.list = d.kits;
   const was = KIT.pick || (d.kits.find(k => k.name === 'dungeons\\vault') || d.kits[0] || {}).name;
   box.innerHTML = `<div class="h">Generate a layout</div>
-    <div class="note" style="padding:0 0 6px">Fills an area with the game's own pieces, each side joining what's beside it, every way out closed off. Best in an empty place of your own (<b>+ New</b> under Places).</div>
+    <div class="note" style="padding:0 0 6px">Plans rooms and corridors with a main route and side branches, then builds them from the game's own pieces, each side joining what's beside it, and walks it from the first room to every square. Best in an empty place of your own (<b>+ New</b> under Places).</div>
     <label class="vt-row">Kit <select id="kit-pick">${d.kits.map(k => `<option value="${esc(k.name)}" ${k.name === was ? 'selected' : ''}>${esc(k.label)} (${k.tiles})</option>`).join('')}</select></label>
-    <label class="vt-row">Size <input type="number" id="kit-w" min="2" max="40" value="${KIT.w || 10}" style="width:60px"> × <input type="number" id="kit-h" min="2" max="40" value="${KIT.h || 10}" style="width:60px"> squares</label>
+    <label class="vt-row">Size <input type="number" id="kit-w" min="3" max="80" value="${KIT.w || 24}" style="width:60px"> × <input type="number" id="kit-h" min="3" max="80" value="${KIT.h || 24}" style="width:60px"> squares</label>
     <div class="kit-go"><button class="btn primary" id="kit-make">Generate</button> <button class="btn" id="kit-again" ${KIT.last ? '' : 'disabled'} title="Replace that layout with another">Try another</button></div>
     <div class="note" id="kit-said" style="padding:6px 0">${KIT.said || ''}</div>
-    <div class="note" style="padding:0">Generating again replaces the last layout here. Not there yet: stairs and big pieces, lights and furnishings.</div>
+    <div class="note" style="padding:0">Generating again replaces the last layout here.</div>
     <div class="h" style="margin-top:10px">Navmesh</div>
     <div id="nav-box"></div>`;
   navDraw();
@@ -152,7 +152,7 @@ async function kitTab(){
 
 async function kitMake(){
   if (!A.cellId || A.outside) return toast('Open a place first: layouts go in places inside.', true);
-  const kit = $('#kit-pick').value, w = +$('#kit-w').value || 10, h = +$('#kit-h').value || 10;
+  const kit = $('#kit-pick').value, w = +$('#kit-w').value || 24, h = +$('#kit-h').value || 24;
   KIT.pick = kit; KIT.w = w; KIT.h = h;
   const info = KIT.list.find(k => k.name === kit), step = info.step;
   // (where you're standing, on the kit's grid, at the height of what you're looking at or the place's floor)
@@ -168,7 +168,7 @@ async function kitMake(){
   const d = await edit(label, old.concat(made.ops.map(o => ({...o, cell: A.cellId}))));
   if (!d) return (said.textContent = '');
   KIT.last = label;
-  KIT.said = `${made.ops.length} pieces. A walker starting inside couldn't get out.`;
+  KIT.said = made.said;
   W.cam.position.set(made.start[0], made.start[1], made.start[2] + 110);
   await kitTab();
   navMake();

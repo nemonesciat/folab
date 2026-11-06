@@ -20,6 +20,7 @@ import gamedata
 import gameini
 import install
 import kitindex
+import kitplan
 import navbuild
 import nif
 import nvse
@@ -1149,8 +1150,8 @@ def kit_layout(body):
     kits = kits_state()
     if not kits or body['kit'] not in kits:
         return {'note': 'The kits are still being read: a moment.'}
-    w, h = max(2, min(40, int(body['w']))), max(2, min(40, int(body['h'])))
-    return kitindex.layout(GD, kits, body['kit'], w, h, int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'])
+    w, h = max(3, min(80, int(body['w']))), max(3, min(80, int(body['h'])))
+    return kitplan.layout(GD, kits, body['kit'], w, h, int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'])
 
 
 def record_copy(key):

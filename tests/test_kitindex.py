@@ -97,3 +97,59 @@ check('… halls and rooms joined up: most of the area filled', len(got['ops']) 
 few = K.layout(G, {'x': K.Kit('x')}, 'x', 4, 4, 1, [0, 0, 0], {}, {})
 check('a kit with too few pieces says so', 'note' in few and 'ops' not in few)
 check('kits have names for people', K.label_of('nvdlc03' + chr(92) + 'dungeons' + chr(92) + 'x13') == 'X-13 (Old World Blues)' and K.label_of('dungeons' + chr(92) + 'nvlucky38') == 'Lucky 38')
+
+# ---------- planned places (kitplan.py) ----------
+import kitplan as P
+B = chr(92)
+vt = P.PlanTiles(vault, G)
+check('the vault kit: rooms, corridors, bends, junctions, stairs', vt.can['rooms'] and vt.can['halls'] and vt.hall_can('hallsmall', '..PP') and vt.hall_can('hallsmall', '.PPP') and bool(vt.stairs))
+check('a side of a piece read as a word: a room middle full, a wall along, a door a passage', P.side_word(by['VRmMid01'].slots[0], 256) == 'F' and P.side_word(by['VRmWall01'].slots[0], 256) == 'A' and P.side_word(by['VRmWallExSm01'].slots[3], 256) == 'P')
+check('a bend\'s chamfered corner isn\'t a way through', [P.side_word(s, 256) for s in by['VHallSm2Way01'].slots].count('.') == 2)
+check('a flight of stairs: its rise is the game\'s own', vt.stairs[0].rise == 256 and vt.stairs[0].piece.edid == 'VHallSmStairs01')
+
+# every kit that generates: sealed, connected, its rooms really there, repeats limited
+for name, k in sorted(kits.items()):
+    if len(K.Tileset(k).slot_sock) < K.MIN_TILES:
+        continue
+    ts = P.PlanTiles(k, G)
+    if not ts.can['rooms']:
+        continue
+    good = rooms_ok = True
+    rep_n = rep_t = made_n = 0
+    for seed in range(2):
+        g = P.generate(G, ts, 110, seed)
+        if not g:
+            continue
+        made_n += 1
+        w = P.walk_check(G, ts, g['plan'], g['made'])
+        good = good and not w['missing'] and not w['escaped']
+        by_cell = {c: m for m in g['made'] for c in m.cells}
+        for o in g['plan'].rooms():
+            rooms_ok = rooms_ok and all(c in by_cell and by_cell[c].owner == o['n'] for c in o['cells'])
+        a, b = P.repeats(ts, g['made'])
+        rep_n, rep_t = rep_n + a, rep_t + b
+    check('%s: planned places made, sealed and every part reached (%d)' % (name, made_n), made_n >= 1 and good)
+    check('%s: the plan\'s rooms are in the result' % name, rooms_ok)
+    # (rooms' floors may have only one piece that fits: counted only where there's another)
+    print('     repeats %d of %d' % (rep_n, rep_t))
+
+g = P.generate(G, vt, 240, 3)
+check('a bigger vault place: at least 8 rooms, all placed, one of them the far end', g and len(g['plan'].rooms()) >= 8 and any(o['purpose'] == 'far end' for o in g['plan'].rooms()))
+a, b = P.repeats(vt, g['made'])
+check('… pieces beside themselves are few where there are others (%d of %d)' % (a, b), a < 0.2 * b)
+check('… corridors, not only doors', any(o['kind'] == P.HALL for o in g['plan'].owners))
+sizes = {len(o['cells']) for o in g['plan'].rooms()}
+check('… rooms of different sizes (%s)' % sorted(sizes), len(sizes) >= 3)
+two = next((P.generate(G, vt, 240, s) for s in range(4, 40) if any(c[2] != 0 for c in P.generate(G, vt, 240, s)['plan'].cells)), None)
+check('… more than one level, stairs among the pieces, and the walk gets to all of them', two and any(m.key == vt.stairs[0].piece.key for m in two['made']) and not two['walk']['missing'])
+check('… bigger pieces are used too', any(len(m.cells) > 1 and m.key != vt.stairs[0].piece.key for m in g['made']) or any(len(m.cells) > 1 and m.key != vt.stairs[0].piece.key for m in two['made']))
+cut = P.Plan(vt.step)
+cut.add_room('a', 'room', [(i, j, 0) for i in range(4) for j in range(4)])
+cut.add_room('b', 'room', [(i, j, 0) for i in range(6, 10) for j in range(4)])
+made = P.fill(vt, cut, 1)
+w = P.walk_check(G, vt, cut, made)
+check('the walk finds a room with no way to it', len(w['missing']) == 16 and not w['escaped'])
+ed = P.layout(G, kits, 'dungeons' + B + 'vault', 24, 24, 5, [256, 512, 64], {}, {})
+check('a place for the editor: changes for the mod, on the spot asked, words for the person', ed.get('ops') and all(o['op'] == 'add' and o['gen'] for o in ed['ops']) and 'rooms' in ed['said'] and min(o['p'][2] for o in ed['ops']) >= 64 - 2 * 256)
+cave = P.layout(G, kits, 'dungeons' + B + 'caves', 8, 8, 2, [0, 0, 0], {}, {})
+check('a kit with no room pieces is still filled and walked, or says why', cave.get('ops') or cave.get('note'))
