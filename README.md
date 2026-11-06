@@ -15,6 +15,14 @@ what's needed).
   the map (painted by slope); height maps out to PNG and back; worldspaces of your own.
 - **Items and records**: weapons, apparel, aid, ammo… in plain fields, inventories and levelled lists, models with a
   3D preview; every record of the game in Browse.
+- **Building**: generate a vault or another interior from the game's own kit pieces, with planned rooms, corridors,
+  stairs, doors, lights and furnishing; grow a place from any wall; navmeshes inside and out, made or edited by hand.
+- **Characters and quests**: people, creatures, AI packages and factions in plain fields; fill a place with Populate;
+  quests, conversations and a board of how a quest moves on.
+- **Scripts**: read, write and compile the game's script language, with errors at their line and starters to build on.
+- **The world**: regions, map markers, encounter zones, roads and distant ground.
+- **Library and tools**: every mesh, texture and sound, with your own files and retexturing; a health check, load order,
+  a list of your changes, merging plugins, and a zip ready to share.
 - **Play**: Open in game, Play here (arrive where the view looks), Give it to me in game; the game's own settings
   (resolution, borderless, field of view…).
 
