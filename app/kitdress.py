@@ -341,6 +341,7 @@ def _exit_in(ts, sv, table, m, d, rng):
 # ---------- lights and things ----------
 
 SOLID = ('furn', 'cont', 'stat', 'rubble', 'act', 'term')
+RUBBLE_SHARE = 0.3      # (of a ruined room's squares, how many get a heap)
 LIGHTS_PER = 7          # (a room gets at least a light for this many squares...)
 LIGHTS_MAX = 5          # (...and no more than one for this many: overlapping lights flicker in the game)
 
@@ -387,8 +388,25 @@ def dress(ts, sv, plan, made, rng, purposes=None, ruined=False):
                 if what == 'rubble' and not ruined and rng.random() < 0.7 or what == 'loot' and rng.random() > LOOT_KEPT:
                     continue
                 out.append(Item(it[0], _world(m, it[1], it[2], it[3], it[4], it[5], it[6]), it[7], what, m.owner, m))
+    if ruined:
+        _rubble(sv, plan, made, out, rng)
     _even_out_lights(ts, sv, plan, made, out, rng)
     return out
+
+
+def _rubble(sv, plan, made, out, rng):
+    """A ruin has more on the floor than any one room of the game's: heaps from its own sets, here and there in the rooms,
+    never in a corridor or a doorway (clear_ways has the last word)."""
+    heaps = sorted({it[0]: it for sets in sv.sets.values() for st in sets for it in st if sv.info.get(it[0], ('',))[0] == 'rubble' and abs(it[3]) < 32}.values())
+    if not heaps:
+        return
+    for m in made:
+        o = plan.owners[m.owner]
+        if o['kind'] != ROOM_KIND or plan.need(m.cell).count('o') < 3 or 'p' in plan.need(m.cell) or rng.random() > RUBBLE_SHARE:
+            continue
+        it = rng.choice(heaps)
+        spot = _world(m, rng.uniform(-70, 70), rng.uniform(-70, 70), it[3], it[4], it[5], rng.uniform(0, 6.28))
+        out.append(Item(it[0], spot, it[7], 'rubble', m.owner, m))
 
 
 def _even_out_lights(ts, sv, plan, made, items, rng):

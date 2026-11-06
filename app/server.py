@@ -1162,6 +1162,35 @@ def kit_layout(body):
     return kitplan.layout(GD, kits, body['kit'], w, h, int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits))
 
 
+def kit_vault(body):
+    kits = kits_state()
+    if not kits:
+        return {'note': 'The kits are still being read: a moment.'}
+    return kitplan.vault(GD, kits, int(body['size']), int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits), bool(body.get('ruined')))
+
+
+def kit_grow(body):
+    """More of the place you're in, from the kit most of it is built from."""
+    kits = kits_state()
+    if not kits:
+        return {'note': 'The kits are still being read: a moment.'}
+    things = [t for t in cell_things(body['cell']) if t['state'] != 'removed']
+    counts = {}
+    for t in things:
+        kit, _p = kitindex.find_piece(kits, t['bkey'])
+        if kit:
+            counts[kit.name] = counts.get(kit.name, 0) + 1
+    if not counts:
+        return {'note': 'Nothing here is from a kit: generate a place first.'}
+    name = max(counts, key=counts.get)
+    pieces = []
+    for t in things:
+        turn = kitindex.quarter(t['p'][5])
+        if t['bkey'] in kits[name].pieces and turn is not None:
+            pieces.append((t['bkey'], t['p'][0], t['p'][1], t['p'][2], turn, t['key']))
+    return kitplan.grow(GD, kits, name, pieces, int(body.get('area', 80)), int(body['seed']), _kits['tilesets'], _kits['walls'], kit_survey(kits))
+
+
 def record_copy(key):
     """A new record of the mod's own, a copy of this one, with an editor ID of its own."""
     rec = BR.record(key)['record']
@@ -1493,6 +1522,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(out)
                 if u.path == '/api/kit/layout':
                     return self.send(kit_layout(body))
+                if u.path == '/api/kit/vault':
+                    return self.send(kit_vault(body))
+                if u.path == '/api/kit/grow':
+                    return self.send(kit_grow(body))
                 if u.path == '/api/doors/link':
                     return self.send(link_doors(body['a'], body['b']))
                 if u.path == '/api/doors/unlink':

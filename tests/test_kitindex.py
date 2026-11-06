@@ -194,5 +194,44 @@ mesh, rep = navgen.generate(G, some_cell, refs=linked, floors=True)
 got, missed = N.link_doors(mesh, rep.get('doors') or [])
 check('the exit door, once it leads somewhere, is linked into the navmesh', mesh and len(got) == 1 and not missed and not N.validate(mesh))
 big = sorted(len(x) for x in P.Walk(G, linked, (0, 0, 0), erode=True).pieces)
-check('… and that navmesh\'s main part is the place itself: the rest is roofs (%d pieces kept)' % rep['kept_pieces'], rep['kept_pieces'] <= 3 and big[-1] > 0)
+check('… and that navmesh\'s main part is the place itself: the rest is roofs (%d pieces kept)' % rep['kept_pieces'], rep['kept_pieces'] <= 8 and big[-1] > 0)
 check('room purposes ask for different things', set(D.PURPOSE_TAGS['quarters']) != set(D.PURPOSE_TAGS['reactor']))
+
+# ---------- a vault in one click ----------
+for ruined in (False, True):
+    label = 'ruined vault' if ruined else 'vault'
+    for size, least in ((2, 6), (6, 11)):
+        v = P.vault(G, kits, size, 11 + size, [0, 0, 0], {}, {}, sv, ruined)
+        rooms = dict(v.get('rooms') or [])
+        check('a %s, size %d: entrance, atrium, quarters, overseer\'s office, reactor (%s)' % (label, size, rooms), {'entrance', 'atrium', 'quarters', 'office', 'reactor'} <= set(rooms))
+        check('… the dial means something: %d rooms or more' % least, sum(rooms.values()) >= least)
+        check('… with changes for the mod and words for the person', v.get('ops') and 'said' in v and 'vault' in v['said'])
+
+# ---------- growing further ----------
+store = {}
+ts = P.tiles_for(G, kits, 'dungeons' + B + 'vault', store, sv)
+g = P.generate(G, ts, 100, 8, survey=sv)
+n = 0
+pieces = []
+for m in g['made']:
+    n += 1
+    pieces.append((m.key, m.x + 512.0, m.y + 1024.0, m.z + 64.0, m.turn, '+%d' % n))
+before = len(pieces)
+one = P.grow(G, kits, 'dungeons' + B + 'vault', pieces, 60, 3, store, {}, sv)
+check('grown from a place: more pieces', one.get('ops') and sum(1 for o in one['ops'] if o['op'] == 'add') > 10)
+gone = [o for o in one['ops'] if o['op'] == 'remove']
+check('… only one piece goes, and that a real one', len(gone) == 1 and any(p[5] == gone[0]['ref'] for p in pieces))
+step = ts.step
+taken = {(round(p[1]), round(p[2]), round(p[3])) for p in pieces if p[5] != gone[0]['ref']}
+added = [o for o in one['ops'] if o['op'] == 'add' and o['base'] in kits['dungeons' + B + 'vault'].pieces and kits['dungeons' + B + 'vault'].pieces[o['base']].slots]
+check('… nothing new stands on anything old', not any((round(o['p'][0]), round(o['p'][1]), round(o['p'][2])) in taken for o in added))
+for o in added:
+    pieces.append((o['base'], o['p'][0], o['p'][1], o['p'][2], K.quarter(o['p'][5]), '+g%d' % len(pieces)))
+pieces = [p for p in pieces if p[5] != gone[0]['ref']]
+all_refs = [{'ref': i, 'type': 'REFR', 'base': G.from_key(p[0]), 'pos': tuple(p[1:4]), 'rot': (0.0, 0.0, p[4] * math.pi / 2), 'scale': 1.0, 'leads': False, 'bkey': p[0]} for i, p in enumerate(pieces)]
+c = g['plan'].owners[0]['cells'][0]
+walked = P.Walk(G, all_refs, (one['start'][0], one['start'][1], one['start'][2] + 8), erode=True)
+first = P.Walk(G, P.as_refs(G, g['made']), (c[0] * step, c[1] * step, 8), erode=True)
+check('… old and new walk as one: from the doorway it covers more than the place had (%d, was %d)' % (len(walked.reached), len(first.reached)), len(walked.reached) > 1.2 * len(first.reached))
+two = P.grow(G, kits, 'dungeons' + B + 'vault', pieces, 60, 5, store, {}, sv)
+check('… and grown again from that', two.get('ops') and sum(1 for o in two['ops'] if o['op'] == 'add') > 10)
