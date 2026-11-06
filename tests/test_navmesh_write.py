@@ -170,10 +170,18 @@ if rep2['doors']:
     linked = [r for r, g, _ in recs3.get('REFR', []) if any(t == 'XNDP' for t, _d in tes4.iter_subrecords(p3.data(r)))]
     check('… its %d doors overridden, each told its triangle' % rep2['doors'], len(linked) == rep2['doors'])
 
-many = next((c for c in G.interiors if len(G.navmeshes(c)) > 1), None)
+many = next((c for c in sorted(G.interiors) if len(G.navmeshes(c)) > 1 and len(G.refs(c)) < 200), None)
 if many:
-    try:
-        navbuild.generate(G, pr2, G.key(many))
-        check('a place with several meshes is refused', False)
-    except navbuild.NavError:
-        check('a place with several meshes is refused', True)
+    pr3 = new_project('Nav Test 3')
+    mk = G.key(many)
+    data3, rep3 = navbuild.generate(G, pr3, mk)
+    forms3 = navbuild.game_meshes(G, mk)
+    check('a place with %d meshes: the first made anew, the rest stubs' % len(forms3), [data3['form']] + [o['form'] for o in data3['others']] == forms3 and all(len(o['tris']) == 1 for o in data3['others']))
+    pr3.apply('Generate navmesh', [{'op': 'navmesh', 'cell': mk, 'mesh': data3}])
+    out3 = os.path.join(project.HOME, 'nav test 3.esp')
+    espwrite.write(G, pr3, out3)
+    p4, recs4 = records_of(out3)
+    navi4 = N.read_navi(p4.data(recs4['NAVI'][0][0]))
+    check('… all written, each sound', len(recs4['NAVM']) == len(forms3) and not any(N.validate(N.read_navm(p4.data(r))) for r, _g, _p in recs4['NAVM']))
+    check('… and every mesh but one has an outline in the index', sum(1 for e in navi4['info'] if e['outline'] is None) == 1 and len(navi4['info']) == len(forms3))
+    check('… which comes back the same', N.write_navi(navi4) == p4.data(recs4['NAVI'][0][0]))

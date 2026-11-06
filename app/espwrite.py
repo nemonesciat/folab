@@ -140,11 +140,14 @@ class Writer:
         for ckey, nav in getattr(self.pr, 'navmesh', {}).items():
             if not ckey.startswith('+'):
                 used.add(gd.source(gd.from_key(ckey))[0])
-            if not nav['form'].startswith('+'):
-                used.add(gd.from_key(nav['form']) >> 24)
-            for door, _tri in nav['doors']:
-                if not door.startswith('+'):
-                    used.add(gd.from_key(door) >> 24)
+                if gd.from_key(ckey) in gd.ext_cells:
+                    used.add(gd.source(gd.ext_cells[gd.from_key(ckey)])[0])
+            for k in navbuild.keys_used(nav):
+                if not k.startswith('+'):
+                    fid = gd.from_key(k)
+                    used.add(fid >> 24)
+                    if fid in gd.ref_cell:                   # (a door's copy needs its place, and its world, numbered too)
+                        used.add(gd.source(gd.ref_cell[fid])[0])
         for key, rec in self.pr.records.items():
             if not key.startswith('+'):
                 used.add(gd.from_key(key) >> 24)
@@ -311,8 +314,14 @@ class Writer:
                     node2 = plugintree.Rec.new(rec.tag, flags, rlid, join(subs), FORM_VERSION)
                     group.kids.append(node2)
                     found[rlid] = (node2, group)
-            if ckey in navs:
-                self._write_navmesh(found, ckey, cell, nodes[cell][1], lid, navs[ckey], nav_info, nav_links)
+        # (after every place's refs, as a door may stand in another cell, or be new there)
+        for ckey, nav in sorted(navs.items()):
+            cell = None if ckey.startswith('+') else gd.from_key(ckey)
+            lid = self.link(ckey)
+            outside = cell in gd.ext_cells
+            kids = cell_kids(cell) if outside else self._cell_node(tree, found, cell, lid, order, self.pr.records.get(ckey))[1]
+            for mesh in [nav] + nav.get('others', []):
+                self._write_navmesh(found, cell, kids, lid, mesh, nav_info, nav_links, cell_kids)
         if nav_info:
             self._write_navi(tree, found, order, nav_info, nav_links)
 
@@ -366,8 +375,9 @@ class Writer:
             tree.header.set_data(new_head, flags)
         return tree.bytes()
 
-    def _write_navmesh(self, found, ckey, cell, kids, lid, nav, info, links):
-        """A place's NAVM, first in its temporary group as the game has it, and its doors told which triangle they stand by."""
+    def _write_navmesh(self, found, cell, kids, lid, nav, info, links, cell_kids):
+        """A place's NAVM, first in its temporary group as the game has it, and its doors told which triangle they stand by
+        (a mesh only copied to change its links keeps its triangles, so its doors are right as they are)."""
         fid = self.link(nav['form'])
         m = navbuild.to_record(nav, lid, self.link)
         data = navmesh.write_navm(m)
@@ -379,24 +389,42 @@ class Writer:
             node = plugintree.Rec.new('NAVM', 0, fid, data, FORM_VERSION)
             group.kids.insert(0, node)
             found[fid] = (node, group)
-        info.append(navmesh.info_for(m, fid, lid, 0))
+        world = self.gd.ext_cells.get(cell)
+        e = navmesh.info_for(m, fid, self.local(world) if world is not None else lid,
+                             navmesh.grid_place(*self.gd.cell_grid(cell)) if world is not None else 0)
+        if nav.get('outline'):
+            e['flags'] |= navmesh.INFO_OUTLINE
+            e['outline'] = navbuild.outline_record(nav['outline'])
+        info.append(e)
         links.append(navmesh.links_for(m, fid))
+        if nav.get('copy'):
+            return
         for door, tri in nav['doors']:
-            rid = self.link(door)
-            have = found.get(rid)
-            if have is None:                            # (a game door nothing else changed: an override of it)
-                g = self.gd.from_key(door)
-                i, rec = self.gd.cell_refs[self.gd.ref_cell.get(g, cell)][g]
-                subs = self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(self.gd.plugins[i].data(rec))))
-                flags = rec.flags & ~tes4.COMPRESSED
-                group = self._ref_group(kids, lid, bool(flags & tes4.PERSISTENT))
-                node = plugintree.Rec.new(rec.tag, flags, rid, join(subs), FORM_VERSION)
-                group.kids.append(node)
-                have = found[rid] = (node, group)
-            subs = [(t, d) for t, d in tes4.iter_subrecords(have[0].data()) if t != 'XNDP']
+            self._door_xndp(found, door, cell, cell_kids, kids, lid, navmesh.door_link(fid, tri))
+        for door in nav.get('no_door', []):
+            self._door_xndp(found, door, cell, cell_kids, kids, lid, None)
+
+    def _door_xndp(self, found, door, cell, cell_kids, kids, lid, xndp):
+        """A door told which triangle it stands by (xndp), or (None) told it stands by none."""
+        rid = self.link(door)
+        have = found.get(rid)
+        if have is None:                            # (a game door nothing else changed: an override of it)
+            g = self.gd.from_key(door)
+            home = self.gd.ref_cell.get(g, cell)
+            i, rec = self.gd.cell_refs[home][g]
+            subs = self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(self.gd.plugins[i].data(rec))))
+            flags = rec.flags & ~tes4.COMPRESSED
+            if home != cell:
+                kids, lid = cell_kids(home), self.local(home)
+            group = self._ref_group(kids, lid, bool(flags & tes4.PERSISTENT))
+            node = plugintree.Rec.new(rec.tag, flags, rid, join(subs), FORM_VERSION)
+            group.kids.append(node)
+            have = found[rid] = (node, group)
+        subs = [(t, d) for t, d in tes4.iter_subrecords(have[0].data()) if t != 'XNDP']
+        if xndp:
             at = navbuild.door_tag_at(subs)
-            subs = subs[:at] + [('XNDP', navmesh.door_link(fid, tri))] + subs[at:]
-            have[0].set_data(join(subs), have[0].flags & ~tes4.COMPRESSED)
+            subs = subs[:at] + [('XNDP', xndp)] + subs[at:]
+        have[0].set_data(join(subs), have[0].flags & ~tes4.COMPRESSED)
 
     def _write_navi(self, tree, found, order, info, links):
         """The master index: entries for this plugin's meshes only (the game merges them into its own), keeping any this

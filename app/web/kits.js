@@ -177,12 +177,12 @@ async function kitMake(){
 // ---------- the place's navmesh: where characters can walk ----------
 async function navDraw(){
   const box = $('#nav-box'); if (!box) return;
-  if (!A.cellId || A.outside){ box.innerHTML = '<div class="note" style="padding:0">Open a place inside to make it a navmesh. Places outside aren\'t ready yet.</div>'; return; }
+  if (!A.cellId || A.outside){ box.innerHTML = '<div class="note" style="padding:0">Open a place inside to make it a navmesh. Outside, it\'s under 🧭 World tools, on the map.</div>'; return; }
   const cell = A.cellId;
   const s = await api('/api/navmesh/status?cell=' + encodeURIComponent(cell)).catch(() => null);
   if (!s || cell !== A.cellId) return;
   const words = s.mine ? (s.current ? `Up to date, ${s.triangles} triangles.` : `<b>Out of date:</b> things have changed since it was made. Make it again.`)
-    : s.game ? `This place has the game's navmesh${s.game > 1 ? 'es' : ''}${s.can ? ', which yours would replace' : ': FOLab can\'t replace several yet'}.`
+    : s.game ? `This place has the game's navmesh${s.game > 1 ? 'es' : ''}${s.game > 1 ? ': yours would replace the first, the rest are retired' : ', which yours would replace'}.`
     : 'None: characters can\'t find their way here in game.';
   box.innerHTML = `<div class="note" style="padding:0 0 6px">${words}</div>
     <div class="kit-go"><button class="btn" id="nav-make" ${s.can ? '' : 'disabled'}>${s.mine ? 'Make it again' : 'Make navmesh'}</button>

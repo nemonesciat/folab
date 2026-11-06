@@ -21,6 +21,7 @@ import gameini
 import install
 import kitindex
 import navbuild
+import worldapi
 import nif
 import nvse
 import playtest
@@ -1052,6 +1053,16 @@ def masters():
         return ['(%s)' % e]
 
 
+def _world_apply(pr, label, ops):
+    """Changes from the World tools, made as one Undo on the mod they were worked out for."""
+    if pr is PR and ops:
+        pr.apply(label, ops)
+    return state()
+
+
+WORLD_CTX = {'lock': _lock, 'apply': _world_apply}
+
+
 def edit(label, ops):
     if not PR:
         raise ValueError('no mod open')
@@ -1331,6 +1342,9 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/cell':
                 with _lock:
                     return self.send(cell(q['id']))
+            if u.path.startswith('/api/w/'):
+                with _lock:
+                    return self.send(worldapi.get(u.path, q, GD, PR, WORLD_CTX))
             if u.path == '/api/navmesh/status':
                 with _lock:
                     return self.send(navbuild.status(GD, PR, q['cell']) if PR else {'none': True})
@@ -1457,6 +1471,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(open_project(name))
                 if not PR:
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
+                if u.path.startswith('/api/w/'):
+                    return self.send(worldapi.post(u.path, body, GD, PR, WORLD_CTX))
                 if u.path == '/api/world/new':
                     return self.send(new_world(body))
                 if u.path == '/api/shape/cells':
