@@ -68,6 +68,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   user's own mods. Never test `install` against the real game: use a fake Data folder and `LOCALAPPDATA`.
 - New Vegas rules kept in the writer: game refs are never deleted (disabled + sunk to z -30000); form IDs in
   copied records are re-pointed to this plugin's master list.
+- Scripts: `scriptc.py` compiles New Vegas script source to the game's bytes (`compile_script`, `compile_result` for
+  INFO/QUST result scripts; forms come through `GameForms` or anything with its `find`/`find_edid`). Function table:
+  `scriptfuncs.json`, made from the user's FalloutNV.exe by `tools/gen_scriptfuncs.py`. `tools/script_oracle.py` compares
+  every script of the game with its shipped bytes; all match but the 19 out of step listed in `tests/test_scriptc.py`.
 - Records: `schema.py` layouts (checked against every record of each type: run `checkall`; a layout only counts
   if every subrecord fits and encodes back byte for byte), `recordio.py` (a mod's records with links as keys),
   `browse.py` (Browse page data; its index builds in the background, ~20 s). Known limit: subrecords no layout
