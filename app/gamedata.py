@@ -70,6 +70,7 @@ class GameData:
         for i, p in enumerate(self.plugins):
             self._index(i, p)
         self._archives = None
+        self.overlay = None         # the open mod's own files, looked for first (library.Overlay)
 
     def to_global(self, i, formid):
         """A form ID as plugin i wrote it, re-based on the load order (its high byte names the owning file)."""
@@ -257,6 +258,8 @@ class GameData:
     def find_file(self, rel):
         """Where a game file comes from: 'loose', an archive's file name, or None."""
         rel = bsa.norm(rel)
+        if self.overlay and self.overlay.path(rel):
+            return 'your mod'
         if os.path.isfile(os.path.join(self.data_dir, rel)):
             return 'loose'
         for a in reversed(self.archives()):
@@ -277,11 +280,11 @@ class GameData:
                     if f.lower().endswith('.nif'):
                         found.add(bsa.norm(os.path.relpath(os.path.join(d, f), root)))
             self._mesh_list = sorted(found)
-        return self._mesh_list
+        return sorted(self._mesh_list + self.overlay.meshes()) if self.overlay else self._mesh_list
 
     def read_file(self, rel):
         rel = bsa.norm(rel)
-        p = os.path.join(self.data_dir, rel)
+        p = (self.overlay.path(rel) if self.overlay else None) or os.path.join(self.data_dir, rel)
         if os.path.isfile(p):
             with open(p, 'rb') as f:
                 return f.read()

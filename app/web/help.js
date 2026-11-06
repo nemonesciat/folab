@@ -2,7 +2,7 @@
 // The guides are Markdown files in web/docs, shown in a window over the page. Getting started opens by itself the
 // first time FOLab runs in this browser.
 const HELP_DOCS = [['getting-started', 'Getting started'], ['the-world', 'The World page: moving, selecting, placing'],
-                   ['outside', 'Outside: land, water, worldspaces'], ['items-and-records', 'Items and records'],
+                   ['outside', 'Outside: land, water, worldspaces'], ['items-and-records', 'Items and records'], ['library', 'The Library, styles and comforts'],
                    ['playing-and-your-mod', 'Playing, and your mod']];
 
 $('#b-help').onclick = e => {

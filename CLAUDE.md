@@ -69,6 +69,14 @@ the model for style, UI and approach. Python, standard library first, code in `a
   mesh) says if it's a way through and what it meets; `kit.seen` is every join the game built. `Tileset` + `build_area` fill any
   squares with every side agreeing (one-square, one-level pieces so far: no stairs or big pieces yet); `can_walk_out` checks a
   layout from the real meshes. Editor: `web/kits.js` (Joins under Selected, the Kit tab), `/api/kits`, `/api/kit/piece`, `/api/kit/layout`.
+- Library (`library.py`, `web/library.js`, hooks `/api/library/*`): `Index` over every mesh, texture and sound; thumbnails in
+  cache/thumbs (`meshthumb.py` software-draws meshes, `dds.decode`). A mod's own files live in `projects/<mod> assets/`, seen through
+  `GameData.overlay` first; Save copies them to `build/<plugin> assets/`, `install.py` puts them in Data with the plugin and lists them in
+  `<plugin>.files.json` for taking out. `nifwrite.py` changes texture paths and nothing else (`py -3 app/nifwrite.py` re-proves every game mesh).
+- Styles: `stylesurvey.py` reads every place once per game files (cache/style) for suggestions, palettes, sets; `web/stylepal.js`.
+- Placed things: `refprops.py` is owner, lock, enable parent (op `props`, kept whole in the ref's change), `web/comforts.js` holds line up, Settle,
+  groups (`projects/<mod> groups.json`) and the second window (BroadcastChannel, `?win=2`). Library, palette and comforts add to the page from their
+  own files (nav button, Place section, menu entries, wrapping `drawSelected`, `select`, `post`): index.html only has their script tags.
 - Tests: `py -3 tests/run.py` (each test_*.py in a fresh FOLAB_HOME, against the game's files; never the real game).
   Run it before committing changes to the readers, writer, project or schema.
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the
