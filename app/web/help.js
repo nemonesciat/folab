@@ -9,6 +9,7 @@ const HELP_DOCS = [['getting-started', 'Getting started'],
                    ['scripts', 'Scripts'],
                    ['quests-and-dialogue', 'Quests and dialogue'],
                    ['characters', 'Characters, packages, factions, Populate'],
+                   ['library', 'The Library, styles and comforts'],
                    ['playing-and-your-mod', 'Playing, and your mod'],
                    ['tools', 'Tools: health check, load order, sharing']];
 

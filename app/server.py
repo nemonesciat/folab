@@ -34,6 +34,7 @@ import api_scripts
 import api_quests
 import api_characters
 import browse
+import library
 import recordio
 import base64
 import hashlib
@@ -839,6 +840,7 @@ def ref(ckey, rkey):
     out = {'thing': t, 'base': {'key': t['bkey'], 'type': t['type'], 'edid': t['base'], 'name': t['name'],
                                 'model': t['model'], 'from': frm}}
     out['ref'] = refinfo.ref_info(GD, GD.from_key(rkey)) if not rkey.startswith('+') else {}
+    out['ref'].update(library.ref_words(GD, PR, ckey, rkey))
     d = door(rkey)
     if d:
         out['ref']['door'] = d
@@ -875,7 +877,8 @@ def mesh(path):
             t = s['tex'].lower()
             if t and not t.startswith('textures\\'):
                 s['tex'] = 'textures\\' + s['tex']
-        out = json.dumps({'shapes': shapes}, separators=(',', ':')).encode()
+        # (a few of the game's meshes hold not-a-number corners, which JSON can't carry)
+        out = re.sub(rb'(?<=[\[,])-?(?:NaN|Infinity)(?=[\],])', b'0', json.dumps({'shapes': shapes}, separators=(',', ':')).encode())
     except Exception as e:
         out = json.dumps({'shapes': [], 'error': str(e)}).encode()
     with _lock:
@@ -988,6 +991,7 @@ def load_game(pr):
     if BR:
         BR.close()
     GD = gamedata.GameData(data_dir, want)
+    GD.overlay = library.Overlay(lambda: PR)
     CATALOGUE = build_catalogue()
     BR = browse.Browse(GD, lambda: PR)
     _meshes.clear()
@@ -1327,10 +1331,12 @@ def give(body):
 def save():
     path = PR.plugin_path()
     n = espwrite.write(GD, PR, path)
+    library.publish(PR)
     return {'path': path, 'bytes': n, 'state': state()}
 
 
 api_scripts.setup(lambda: GD, lambda: PR, lambda: BR, lambda: state())
+library.setup(gd=lambda: GD, pr=lambda: PR, br=lambda: BR, edit=lambda label, ops: edit(label, ops), catalogue=lambda: CATALOGUE, state=lambda: state(), things=lambda c: cell_things(c))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1370,6 +1376,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.startswith(('/api/quest/', '/api/dlg/')):
                 with _lock:
                     return self.send(api_quests.get(u.path, q, GD, PR, BR))
+            if u.path.startswith('/api/library/'):
+                return self.send(*library.get(u.path[13:], q))
             if u.path == '/api/about':
                 return self.send(about())
             if u.path == '/api/report':
@@ -1494,6 +1502,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(modtools.post(u.path[11:], body, sys.modules[__name__]))
                 if u.path.startswith('/api/scripts'):
                     return self.send(api_scripts.post(u.path, body))
+                if u.path.startswith('/api/library/'):
+                    return self.send(library.post(u.path[13:], body))
                 if u.path == '/api/nvse/download':
                     rel = nvse.latest()
                     return self.send({'version': nvse.download(rel), 'state': state()})

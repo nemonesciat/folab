@@ -154,6 +154,8 @@ class Project:
                 continue
             if o.get('cell') == '$new':                # (the place a record_new earlier in these ops just made)
                 o = dict(o, cell=new_record)
+            if o.get('base') == '$made':               # (a thing swapped for the record a record_new just made)
+                o = dict(o, base=new_record)
             refs = self._refs(o['cell'])
             if o['op'] == 'tel':                     # a door's link: where it leads, or (None) nowhere new
                 r = refs.setdefault(o['ref'], {})
@@ -188,6 +190,11 @@ class Project:
                     refs.pop(o['ref'], None)
                 else:
                     refs[o['ref']] = {'removed': True}
+            elif o['op'] == 'props':                 # its owner, lock, what enables it (refprops.py)
+                r = refs.setdefault(o['ref'], {})
+                r.setdefault('props', {}).update(o['props'])
+            elif o['op'] == 'persist':               # kept loaded: something else names it
+                refs.setdefault(o['ref'], {})['persistent'] = True
             elif o['op'] == 'swap':                  # the same spot, another thing
                 r = refs.setdefault(o['ref'], {})
                 r.pop('removed', None)

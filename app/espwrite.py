@@ -17,6 +17,7 @@ import navmesh
 import plugintree
 import questrec
 import recordio
+import refprops
 import tes4
 
 FORM_VERSION = 15                       # New Vegas records
@@ -124,6 +125,9 @@ class Writer:
                     used.add(gd.source(gd.ref_cell.get(fid, cell))[0])
                 if r.get('base') and not r['base'].startswith('+'):
                     used.add(gd.from_key(r['base']) >> 24)
+                for k in refprops.links(r.get('props') or {}):
+                    if not k.startswith('+'):
+                        used.add(gd.from_key(k) >> 24)
         for ckey in getattr(self.pr, 'water', {}):
             cell = gd.from_key(ckey)
             used.add(gd.source(cell)[0])
@@ -193,6 +197,8 @@ class Writer:
             subs.append(('XSCL', struct.pack('<f', r['s'])))
         subs.append(('DATA', struct.pack('<6f', *r['p'])))
         flags = tes4.PERSISTENT if r.get('persistent') else 0
+        if r.get('props'):
+            subs, flags = refprops.apply(subs, r['props'], flags, self.link)
         # (a character is placed as an ACHR, a creature as an ACRE, everything else as a REFR)
         btype = (self.pr.records.get(r['base']) or {}).get('type') if r['base'].startswith('+') else             self.gd.forms[self.gd.from_key(r['base'])][1].tag
         tag = {'NPC_': 'ACHR', 'CREA': 'ACRE'}.get(btype, 'REFR')
@@ -208,6 +214,10 @@ class Writer:
                 v = list(struct.unpack_from('<6f', old))
                 p = v[:2] + [SUNK_Z] + v[3:]
         out = []
+        if r.get('props'):
+            subs, flags = refprops.apply(subs, r['props'], flags, self.link)
+        if r.get('persistent'):
+            flags |= tes4.PERSISTENT
         if 'tel' in r:                                  # (a door the mod links: its XTEL replaced, or put in before DATA)
             subs = [(t, d) for t, d in subs if t != 'XTEL']
             at = next((n for n, (t, _d) in enumerate(subs) if t == 'DATA'), len(subs))
