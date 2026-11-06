@@ -46,6 +46,13 @@ async function scrGet(path){
 .sc-card{background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:9px 11px;cursor:pointer;text-align:left;color:var(--text)}
 .sc-card:hover{border-color:var(--gold)}.sc-card.on{border-color:var(--gold);background:var(--sel)}
 .sc-card b{display:block;margin-bottom:3px;color:var(--gold2);font-weight:500}.sc-card span{color:var(--muted);font-size:12.5px;line-height:1.35;display:block}
+.sc-pickbox{position:relative;display:inline-block;min-width:170px}.sc-pickbox input{width:100%}
+#sc-p-run .sc-pickbox{display:block;margin:4px 12px}#sc-p-run .row .btn{padding:1px 7px}
+.sc-picks{display:none;position:absolute;z-index:20;left:0;top:100%;min-width:100%;width:max-content;max-width:380px;max-height:240px;overflow:auto;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;box-shadow:0 8px 24px #0009;font-size:13px}
+.sc-picks div{padding:3px 8px;cursor:pointer}.sc-picks div.on,.sc-picks div:hover{background:var(--sel)}.sc-picks small{color:var(--faint);margin-left:10px}.sc-picks .none{color:var(--muted);cursor:default}
+.sc-onrow{display:flex;gap:10px;align-items:center;margin:8px 0;padding:6px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:13px}
+.sc-onrow>label{color:var(--muted);flex:none}.sc-onval{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}.sc-onval a{color:var(--gold2)}.sc-onval .btn{padding:2px 8px}
+#sel-rec .sc-onrow{margin:8px 12px}
 #sc-help{border-left:1px solid var(--line);width:310px}
 #sc-here{flex:none;border-bottom:1px solid var(--line);padding:8px 12px;max-height:48%;overflow:auto;font-size:13px}
 #sc-here code,.sc-sig{font:12.5px/1.45 var(--mono);color:var(--gold2);word-break:break-word}
@@ -178,13 +185,13 @@ function scrDraw(){
     if (e.ctrlKey || e.metaKey){ const r = scrKnown().refs.get(scrWordAt(ta.value, ta.selectionStart).toLowerCase()); if (r) openRecord(r.key); }
   };
   ta.onblur = () => setTimeout(() => { if (document.activeElement !== ta) scrPopClose(); }, 100);
-  $('#sc-kind').onchange = e => { SCR.kind = e.target.value; scrDirtyShow(); scrCheckNow(); };
+  $('#sc-kind').onchange = e => { SCR.kind = e.target.value; scrDirtyShow(); scrCheckNow(); scrRunDraw(); };
   $('#sc-save').onclick = scrSave;
   $('#sc-revert').onclick = () => { SCR.text = SCR.orig; SCR.kind = d.kind; $('#sc-kind').value = d.kind; ta.value = SCR.text; scrPaint(); scrDirtyShow(); scrCheckNow(); scrKeepDraft(); };
   $('#sc-copy').onclick = () => scrCopyForm();
   const rm = $('#sc-remove');
   if (rm) rm.onclick = scrRemove;
-  scrPaint(); scrProblems(); scrDirtyShow();
+  scrPaint(); scrProblems(); scrDirtyShow(); scrRunDraw();
 }
 function scrSyncScroll(){
   const ta = $('#sc-ta');
