@@ -42,4 +42,4 @@ At the bottom of the Ground panel: **Save as PNG** saves an area as a 16-bit gre
 
 ## In the game
 
-Changed ground shows in game once you restart it. The game's **distant view** of changed land updates once you run **xLODGen** (a free tool). Characters walk on the game's **navmesh**, which doesn't follow ground you reshape: small changes are fine; big ones in busy places may need it redone.
+Changed ground shows in game once you restart it. Its **distant view** and the **navmesh** characters walk on don't follow by themselves: **🧭 World tools** makes both (see that guide). Distant buildings and trees still want **xLODGen** (a free tool).

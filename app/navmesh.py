@@ -47,9 +47,9 @@ What a plugin must do to add or change a navmesh and keep NAVI valid:
   - Links are triangle numbers, so if a mesh's triangles are renumbered, every mesh linking to it must be overridden too
     with new NVEX entries (link_edges does this, leaving the neighbour's triangles alone), and given new NVMI and NVCI
     if what it joins changed.
-  - One mesh to a cell needs no outline. Replacing a cell's several meshes with one: this module has no way of
-    removing the others. The game has no deleted NAVM to copy from. Not solved here; an empty mesh is the next thing to
-    try (the game does know flag 8 for one, though none is in its files).
+  - One mesh to a cell needs no outline. Replacing a cell's several meshes with one: the others can't be removed (the
+    game has no deleted NAVM to copy from), so each is overridden as a stub_mesh: one triangle, deep under the ground, with
+    an outline (the game itself has 148 one-triangle meshes). Tried in files, not yet in the game.
 """
 import struct
 
@@ -325,6 +325,23 @@ def links_for(m, navm):
 
 def grid_place(x, y):
     return (x & 0xFFFF) << 16 | (y & 0xFFFF)
+
+
+def outline_of(m):
+    """An outline for NVMI: the mesh's box and a copy of it (the game's are rough copies, some exact, some empty)."""
+    V = m['verts']
+    return {'min': tuple(min(v[k] for v in V) for k in range(3)), 'max': tuple(max(v[k] for v in V) for k in range(3)),
+            'verts': [tuple(v) for v in V], 'tris': [tuple(t[:3]) for t in m['tris']]}
+
+
+STUB_Z = -30000.0
+
+
+def stub_mesh(x, y):
+    """What's left of a mesh that had to go: one triangle deep under the place, joined to nothing."""
+    verts = [(x, y, STUB_Z), (x + 64.0, y, STUB_Z), (x, y + 64.0, STUB_Z)]
+    tris = [(0, 1, 2, NONE, NONE, NONE, F_FOUND, 0)]
+    return {'version': VERSION, 'verts': verts, 'tris': tris, 'cover': [], 'doors': [], 'ext': [], 'grid': build_grid(verts, tris)}
 
 
 # --- joining meshes: doors ---
@@ -610,12 +627,12 @@ def validate(m, others=None, navm=None):
                 if o is None:
                     continue
                 if tri >= len(o['tris']):
-                    out.append('triangle %d edge %d: mesh %08X has no triangle %d' % (ti, i, target, tri))
+                    out.append('triangle %d edge %d: mesh %s has no triangle %d' % (ti, i, target, tri))
                 elif navm is not None:
                     ot = o['tris'][tri]
                     if not any(ot[6] >> j & 1 and ot[3 + j] < len(o['ext'])
                                and o['ext'][ot[3 + j]][1:] == (navm, ti) for j in range(3)):
-                        out.append('triangle %d edge %d: mesh %08X triangle %d does not link back' % (ti, i, target, tri))
+                        out.append('triangle %d edge %d: mesh %s triangle %d does not link back' % (ti, i, target, tri))
             elif e != NONE:
                 if e >= nt:
                     out.append('triangle %d edge %d: no triangle %d' % (ti, i, e))
@@ -626,9 +643,9 @@ def validate(m, others=None, navm=None):
                     out.append('triangle %d edge %d: triangle %d does not link back along that edge' % (ti, i, e))
     for d in m['doors']:
         if d[1] >= nt:
-            out.append('door %08X on no triangle %d' % (d[0], d[1]))
+            out.append('door %s on no triangle %d' % (d[0], d[1]))
         elif not tris[d[1]][6] & F_DOOR:
-            out.append('door %08X: triangle %d not marked as a door' % (d[0], d[1]))
+            out.append('door %s: triangle %d not marked as a door' % (d[0], d[1]))
     g = m['grid']
     if g is None:
         out.append('no grid')

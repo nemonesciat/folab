@@ -12,7 +12,7 @@ The steps, all in game units:
      start), then corners are removed one at a time, smallest error first, while the surface stays within HEIGHT_ERROR
      and the outline within OUTLINE_ERROR. Removing corners can't break the mesh, as each removal is checked.
 
-Not done: cover (no NVCA), ledge links, preferred triangles, and several meshes to a cell (one mesh here, any pieces).
+Not done: cover (no NVCA), ledge links, preferred triangles (those last by hand: navedit.py). One mesh here, any pieces.
 
 Outdoors the columns reach MARGIN past the cell on every side and the mesh is cut at the cell's edge, so an edge isn't
 taken for a wall and two neighbouring cells get the same heights along their shared border."""
@@ -664,11 +664,13 @@ def _lay_refs(gd, field, refs, cache, report):
     return doors, seeds
 
 
-def _lay_ground(gd, field, world, gx, gy, tex):
-    entry = gd.land_at(world, gx, gy)
-    if not entry:
-        return False
-    h = land.decode(gd, entry, tex)['h']
+def _lay_ground(gd, field, world, gx, gy, tex, land_of=None):
+    h = land_of(gx, gy) if land_of else None
+    if h is None:
+        entry = gd.land_at(world, gx, gy)
+        if not entry:
+            return False
+        h = land.decode(gd, entry, tex)['h']
     if not h:
         return False
     x0, y0 = gx * CELL, gy * CELL
@@ -719,12 +721,15 @@ def _floor_pieces(g, pieces):
 
 
 def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM, radius=RADIUS,
-             height_error=HEIGHT_ERROR, outline_error=None, refs=None, floors=False):
+             height_error=HEIGHT_ERROR, outline_error=None, refs=None, floors=False, refs_of=None, land_of=None,
+             water=False):
     """A navmesh for one cell of a gamedata.GameData: (mesh or None, report). Links to doors are made by
     navmesh.link_doors, across cell edges by navmesh.link_edges. Form IDs in the mesh are gd's load-order ones.
     refs: what's in a place inside, if not the game's own (a mod's changes; cell may then be the mod's own key).
     floors: inside, keep every area at floor level too, not only those a door or actor stands on: a place being built
-    may have neither yet, and the biggest surface is often its roof."""
+    may have neither yet, and the biggest surface is often its roof.
+    Outside, a mod's changes come through refs_of(cell) (what stands in a cell), land_of(x, y) (a square's heights, None
+    for the game's) and water (its height, None for no water; False: as the game has it)."""
     t0 = time.time()
     report = {'collision': 0, 'drawn': 0, 'unread': 0, 'placed': 0, 'kept_pieces': 0, 'dropped_pieces': 0}
     outside = cell in gd.ext_cells
@@ -742,11 +747,11 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
         tex = {}
         for dy in (-1, 0, 1):
             for dx in (-1, 0, 1):
-                _lay_ground(gd, field, world, gx + dx, gy + dy, tex)
+                _lay_ground(gd, field, world, gx + dx, gy + dy, tex, land_of)
                 c = gd.grid(world).get((gx + dx, gy + dy))
                 if c is None:
                     continue
-                d, s = _lay_refs(gd, field, gd.refs(c), cache, report)
+                d, s = _lay_refs(gd, field, refs_of(c) if refs_of else gd.refs(c), cache, report)
                 if dx == 0 and dy == 0:
                     doors, seeds = d, s
     else:
@@ -786,7 +791,9 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
                   seconds=round(t3 - t0, 2), doors=doors, triangles=len(tris), vertices=len(verts))
     if not tris:
         return None, report
-    return mesh_from(cell, verts, tris, _water_of(gd, cell) if cell in gd.forms else None), report
+    if water is False:
+        water = _water_of(gd, cell) if cell in gd.forms else None
+    return mesh_from(cell, verts, tris, water), report
 
 
 # --- measuring against the game ---
