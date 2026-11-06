@@ -1407,7 +1407,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/goto':
                 return self.send(goto(q.get('q', ''), q.get('world') or None))
             if u.path == '/api/scatter':
-                return self.send({'sets': scatter.SETS, 'found': scatter.learn(GD, GD.from_key(q['world']), int(q['x']), int(q['y']))})
+                return self.send(worldapi.scatter_found(GD, PR, q['world'], int(q['x']), int(q['y'])))
             if u.path == '/api/landtex':
                 return self.send(land_textures())
             if u.path == '/api/worlds':

@@ -15,6 +15,7 @@ import navmesh
 import plugintree
 import recordio
 import tes4
+import worldrec
 
 FORM_VERSION = 15                       # New Vegas records
 HEDR_VERSION = 1.34
@@ -123,6 +124,9 @@ class Writer:
                     used.add(gd.source(gd.ref_cell.get(fid, cell))[0])
                 if r.get('base') and not r['base'].startswith('+'):
                     used.add(gd.from_key(r['base']) >> 24)
+                for k in worldrec.ref_extra_keys(r):
+                    if not k.startswith('+'):
+                        used.add(gd.from_key(k) >> 24)
         for ckey in getattr(self.pr, 'water', {}):
             cell = gd.from_key(ckey)
             used.add(gd.source(cell)[0])
@@ -136,6 +140,16 @@ class Writer:
             for q in L['q']:
                 for k in [q.get('bkey')] + [l.get('key') for l in q['layers']]:
                     if k:
+                        used.add(gd.from_key(k) >> 24)
+        for ckey, info in getattr(self.pr, 'cellinfo', {}).items():
+            if not ckey.startswith('+'):
+                cell = gd.from_key(ckey)
+                used.add(gd.source(cell)[0])
+                if cell in gd.ext_cells:
+                    used.add(gd.source(gd.ext_cells[cell])[0])
+            for tag, v in info.items():
+                for k in (v if tag == 'XCLR' else [v] if tag in worldrec.CELL_LINKS and v else []):
+                    if not k.startswith('+'):
                         used.add(gd.from_key(k) >> 24)
         for ckey, nav in getattr(self.pr, 'navmesh', {}).items():
             if not ckey.startswith('+'):
@@ -178,8 +192,11 @@ class Writer:
 
     def new_ref(self, rkey, r):
         subs = [('NAME', struct.pack('<I', self.link(r['base'])))]
+        first, last = worldrec.ref_extra_subs(r, self.link)
+        subs += first
         if r.get('tel'):
             subs.append(('XTEL', self.tel(r)))
+        subs += last
         if r.get('s', 1.0) != 1.0:
             subs.append(('XSCL', struct.pack('<f', r['s'])))
         subs.append(('DATA', struct.pack('<6f', *r['p'])))
@@ -241,6 +258,7 @@ class Writer:
 
         # places: the cell's record, then its refs
         cells = {k for k, c in self.pr.cells.items() if c['refs']}
+        cells |= set(getattr(self.pr, 'cellinfo', {}))
         cells |= set(getattr(self.pr, 'land', {})) | set(getattr(self.pr, 'water', {}))
         cells |= {k for k, r in self.pr.records.items() if r['type'] == 'CELL'}
         # (a navmesh goes with its place, unless the place itself has been undone away)
@@ -351,6 +369,19 @@ class Writer:
             node = nodes[cell][0]
             subs = list(tes4.iter_subrecords(node.data()))
             subs = set_water(subs, h)
+            node.set_data(join(subs), node.flags & ~tes4.COMPRESSED)
+
+        # details on a place: its music, lighting, region, zone, as worldrec.py has them
+        for ckey, info in sorted(getattr(self.pr, 'cellinfo', {}).items()):
+            if ckey.startswith('+') and ckey not in self.pr.records:
+                continue                                    # (the place itself has been undone away)
+            cell = None if ckey.startswith('+') else gd.from_key(ckey)
+            if cell in gd.ext_cells:
+                cell_kids(cell)
+                node = nodes[cell][0]
+            else:
+                node = self._cell_node(tree, found, cell, self.link(ckey), order, self.pr.records.get(ckey))[0]
+            subs = worldrec.apply_cell(list(tes4.iter_subrecords(node.data())), info, self.link)
             node.set_data(join(subs), node.flags & ~tes4.COMPRESSED)
 
         # the header: an opened plugin's own, with its count and next ID brought up to date

@@ -52,6 +52,7 @@ class Project:
         self.land = d.get('land', {})           # outside CELL key -> its ground as the mod has it (land.py's form)
         self.navmesh = d.get('navmesh', {})     # place's CELL key -> its navmesh as the mod has it (navbuild.py)
         self.water = d.get('water', {})         # outside CELL key -> its water's height (None: the world's own level)
+        self.cellinfo = d.get('cellinfo', {})   # CELL key -> what the mod sets on it (worldrec.py): {tag: key}, XCLR a list
         self.source = d.get('source')           # an opened plugin: its copy, under projects/ (adopt.py); None for a new mod
         self.esm = d.get('esm', False)          # saved as a master (.esm)
         self.next_id = d.get('next_id', FIRST_ID)
@@ -74,7 +75,7 @@ class Project:
 
     def to_dict(self):
         return {'name': self.name, 'plugin': self.plugin, 'author': self.author, 'description': self.description,
-                'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'navmesh': self.navmesh, 'next_id': self.next_id,
+                'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'navmesh': self.navmesh, 'cellinfo': self.cellinfo, 'next_id': self.next_id,
                 'source': self.source, 'esm': self.esm}
 
     def save(self):
@@ -91,12 +92,12 @@ class Project:
         return os.path.join(BUILD_DIR, self.plugin)
 
     def count(self):
-        return sum(len(c['refs']) for c in self.cells.values()) + len(self.records) + len(self.land) + len(self.water) + len(self.navmesh)
+        return sum(len(c['refs']) for c in self.cells.values()) + len(self.records) + len(self.land) + len(self.water) + len(self.navmesh) + len(self.cellinfo)
 
     # --- edits: each one a single undo step ---
 
     def _step(self, label):
-        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh)))
+        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), dict(self.cellinfo)))
         del self.undo_stack[:-200]
         self.redo_stack.clear()
 
@@ -132,6 +133,19 @@ class Project:
             if o['op'] == 'navmesh_revert':
                 self.navmesh.pop(o['cell'], None)
                 continue
+            if o['op'] == 'cellinfo':                # details on a place (music, region, zone...), the entry whole
+                self.cellinfo[o['cell']] = o['info']
+                continue
+            if o['op'] == 'cellinfo_revert':
+                self.cellinfo.pop(o['cell'], None)
+                continue
+            if o['op'] == 'place':                   # a ref whose key is already made, for refs that name each other
+                self._refs(o['cell'])[o['key']] = o['ref']
+                continue
+            if o['op'] == 'ref_set':                 # extras on a ref: a map marker's name, a zone, a link
+                r = self._refs(o['cell']).setdefault(o['ref'], {})
+                r.update(o['set'])
+                continue
             if o['op'] == 'land':                    # an outside cell's ground, whole (heights, colours, textures)
                 self.land[o['cell']] = o['land']
                 continue
@@ -166,6 +180,8 @@ class Project:
                     refs[key]['gen'] = True          # (generated in the Kit tab)
                 if o.get('sc'):
                     refs[key]['sc'] = True           # (scattered by the brush)
+                if o.get('extra'):
+                    refs[key].update(o['extra'])     # (persistent, a map marker, a zone: see worldrec.py)
                 made.append(key)
             elif o['op'] == 'move':
                 r = refs.setdefault(o['ref'], {})
@@ -192,20 +208,20 @@ class Project:
     def undo(self):
         if not self.undo_stack:
             return None
-        label, cells, records, nid, land, water, nav = self.undo_stack.pop()
-        self.redo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh)))
+        label, cells, records, nid, land, water, nav, info = self.undo_stack.pop()
+        self.redo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), dict(self.cellinfo)))
         self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)   # (an undone ID is never reused)
-        self.land, self.water, self.navmesh = land, water, nav
+        self.land, self.water, self.navmesh, self.cellinfo = land, water, nav, info
         self.save()
         return label
 
     def redo(self):
         if not self.redo_stack:
             return None
-        label, cells, records, nid, land, water, nav = self.redo_stack.pop()
-        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh)))
+        label, cells, records, nid, land, water, nav, info = self.redo_stack.pop()
+        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), dict(self.cellinfo)))
         self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)
-        self.land, self.water, self.navmesh = land, water, nav
+        self.land, self.water, self.navmesh, self.cellinfo = land, water, nav, info
         self.save()
         return label
 
