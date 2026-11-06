@@ -20,6 +20,7 @@ import gamedata
 import gameini
 import install
 import kitindex
+import kitdress
 import kitplan
 import navbuild
 import nif
@@ -1146,12 +1147,19 @@ def navmesh_make(ckey):
     return out
 
 
+def kit_survey(kits):
+    """What the game stands in each kit's pieces (kitdress.py): a few seconds the first time, then kept on disk."""
+    if 'survey' not in _kits['tilesets']:
+        _kits['tilesets']['survey'] = kitdress.load(GD, kits, os.path.join(os.path.dirname(_tile_dir()), '..', 'kits', os.path.basename(_tile_dir())))
+    return _kits['tilesets']['survey']
+
+
 def kit_layout(body):
     kits = kits_state()
     if not kits or body['kit'] not in kits:
         return {'note': 'The kits are still being read: a moment.'}
     w, h = max(3, min(80, int(body['w']))), max(3, min(80, int(body['h'])))
-    return kitplan.layout(GD, kits, body['kit'], w, h, int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'])
+    return kitplan.layout(GD, kits, body['kit'], w, h, int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits))
 
 
 def record_copy(key):

@@ -153,3 +153,46 @@ ed = P.layout(G, kits, 'dungeons' + B + 'vault', 24, 24, 5, [256, 512, 64], {}, 
 check('a place for the editor: changes for the mod, on the spot asked, words for the person', ed.get('ops') and all(o['op'] == 'add' and o['gen'] for o in ed['ops']) and 'rooms' in ed['said'] and min(o['p'][2] for o in ed['ops']) >= 64 - 2 * 256)
 cave = P.layout(G, kits, 'dungeons' + B + 'caves', 8, 8, 2, [0, 0, 0], {}, {})
 check('a kit with no room pieces is still filled and walked, or says why', cave.get('ops') or cave.get('note'))
+
+# ---------- doors, lights and things (kitdress.py) ----------
+import math
+import kitdress as D, navgen, navmesh as N
+sv = D.survey(G, kits, only={'dungeons' + B + 'vault', 'dungeons' + B + 'vaultruined', 'dungeons' + B + 'office'})
+vs = sv['dungeons' + B + 'vault']
+check('the survey: lights, furniture and things stand on the vault\'s pieces', vs.sets and any(i[0] == 'light' for i in vs.info.values()) and any(i[0] == 'furn' for i in vs.info.values()))
+check('… sets come from real places, including nothing at all', len(vs.src[by['VRmMid01'].key]) == len(vs.sets[by['VRmMid01'].key]) and any(not st for st in vs.sets[by['VRmWall01'].key]))
+door_at = vs.doors.get(by['VRmWallExSm01'].key)
+check('… doors are read in their pieces: on the doorway\'s line', door_at and any(abs(p[1]) < 8 and abs(abs(p[2]) - 128) < 8 for p in door_at))
+back = D.from_json(json.loads(json.dumps(D.to_json({'v': vs}))))['v']
+check('… read back from disk, the same', back.sets[by['VRmMid01'].key] == [[tuple(i) for i in st] for st in vs.sets[by['VRmMid01'].key]] and back.doors[by['VRmWallExSm01'].key] == door_at)
+for name in sv:
+    store = {}
+    ts = P.tiles_for(G, kits, name, store, sv)
+    for seed in range(3):
+        g = P.generate(G, ts, 130, seed, survey=sv, ruined='ruined' in name)
+        if not g:
+            check('%s: a dressed place made (seed %d)' % (name, seed), False)
+            continue
+        kinds = {it.what for it in g['items']}
+        check('%s: seed %d: doors, an exit, lights and things (%d)' % (name, seed, len(g['items'])), {'door', 'exit', 'light'} <= kinds and len(kinds) > 3)
+        w = P.walk_check(G, ts, g['plan'], g['made'], extra=D.item_refs(G, g['items']))
+        check('… nothing it stands blocks the way: every part still reached as the navmesh will be cut', not w['missing'] and not w['escaped'])
+        squares = {(c[0], c[1]) for c in g['plan'].squares()}
+        step = ts.step
+        out = [it for it in g['items'] if it.what not in ('door', 'exit') and not any((math.floor((it.p[0] + a) / step + 0.5), math.floor((it.p[1] + b) / step + 0.5)) in squares for a in (-40, 0, 40) for b in (-40, 0, 40))]
+        check('… and all of it stands inside the walls (%d out)' % len(out), not out)
+        lit = {it.owner for it in g['items'] if it.what == 'light'}
+        rooms = [o['n'] for o in g['plan'].rooms()]
+        check('… every room has a light (%d of %d)' % (len(lit & set(rooms)), len(rooms)), len(lit & set(rooms)) >= 0.8 * len(rooms))
+        ex = next(it for it in g['items'] if it.what == 'exit')
+ts = P.tiles_for(G, kits, 'dungeons' + B + 'vault', {}, sv)
+g = P.generate(G, ts, 130, 1, survey=sv)
+ex = next(it for it in g['items'] if it.what == 'exit')
+some_cell = next(iter(G.interiors))
+linked = P.as_refs(G, g['made']) + [{'ref': 999999, 'type': 'REFR', 'base': G.from_key(ex.key), 'pos': tuple(ex.p[:3]), 'rot': tuple(ex.p[3:6]), 'scale': 1.0, 'leads': True, 'bkey': ex.key}]
+mesh, rep = navgen.generate(G, some_cell, refs=linked, floors=True)
+got, missed = N.link_doors(mesh, rep.get('doors') or [])
+check('the exit door, once it leads somewhere, is linked into the navmesh', mesh and len(got) == 1 and not missed and not N.validate(mesh))
+big = sorted(len(x) for x in P.Walk(G, linked, (0, 0, 0), erode=True).pieces)
+check('… and that navmesh\'s main part is the place itself: the rest is roofs (%d pieces kept)' % rep['kept_pieces'], rep['kept_pieces'] <= 3 and big[-1] > 0)
+check('room purposes ask for different things', set(D.PURPOSE_TAGS['quarters']) != set(D.PURPOSE_TAGS['reactor']))

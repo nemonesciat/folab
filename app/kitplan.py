@@ -106,6 +106,8 @@ class PlanTiles(K.Tileset):
 
     def __init__(self, kit, game=None, min_uses=1):
         super().__init__(kit, min_uses)
+        self.game = game
+        self._walk_cache = {}
         self.word = [side_word(s, self.step) for s in self.sockets]
         self.ceil = [ceiling(s) if s else None for s in self.sockets]
         # (a niche reads as an opening at the side's own slice: it's a closed side, like any other)
@@ -117,7 +119,7 @@ class PlanTiles(K.Tileset):
         # (a kit's pieces all stand on one floor height, not always nought)
         floors = collections.Counter(s['floor'] for k in self.slot_sock for s in kit.pieces[k].slots if s['open'] and side_word(s, self.step) == 'F')
         self.floor = floors.most_common(1)[0][0] if floors else 0
-        self.level_floor = [not k or all(abs(s['floor'] - self.floor) <= 40 for s in kit.pieces[k].slots if s['open']) for k in self.piece_of]
+        self.level_floor = [not k or self._on_floor(kit.pieces[k]) for k in self.piece_of]
         self.masks = {}
         self.banned = set()
         if game is not None:
@@ -139,6 +141,7 @@ class PlanTiles(K.Tileset):
             bad = not_walkable(game, kit, [p.key for p, _w, _h in self.big], self.step)
             self.big = [b for b in self.big if b[0].key not in bad]
         self.can, self.families, self.door_pairs, self.hall_pairs, self.hall_words = {}, {}, set(), set(), {}
+        self.exit_widths = set()
         self._probe()
 
     def _tighten(self):
@@ -157,6 +160,25 @@ class PlanTiles(K.Tileset):
                 bit = 1 << v
                 for a in self.ok[sides[(d + 2) % 4]]:
                     self.allow[a][d] |= bit
+
+    def takes(self, p):
+        """As a plain Tileset, and a doorway piece whose doorway reads higher (a lip, or rubble in it): the walk has the
+        last word on those."""
+        if super().takes(p):
+            return True
+        floors = sorted({s['floor'] for s in p.slots if s['open']})
+        return len(floors) == 2 and all(s['floor'] == floors[0] or (s['width'] < 0.75 * self.step and side_word(s, self.step) == 'P')
+                                        for s in p.slots if s['open'])
+
+    def _on_floor(self, p):
+        """Does this piece stand on the kit's one floor? (A doorway's lip or rubble in it can read higher: the walk says if
+        it really is a way through.)"""
+        ways = [s for s in p.slots if s['open']]
+        low = [s for s in ways if abs(s['floor'] - self.floor) <= 40]
+        if not low:
+            return False
+        return all(abs(s['floor'] - self.floor) <= 40 or (s['floor'] > self.floor and side_word(s, self.step) == 'P' and s['width'] < 0.75 * self.step)
+                   for s in ways)
 
     def _walk_joins(self, game):
         """Each passage side of each piece, beside the kit's two most used pieces that fit it, walked on their collision
@@ -190,7 +212,7 @@ class PlanTiles(K.Tileset):
         z = self.floor + 8
         refs = [{'ref': 1, 'type': 'REFR', 'base': game.from_key(ka), 'pos': (0.0, 0.0, 0.0), 'rot': (0.0, 0.0, ta * math.pi / 2), 'scale': 1.0, 'leads': False, 'bkey': ka},
                 {'ref': 2, 'type': 'REFR', 'base': game.from_key(kb), 'pos': (float(step), 0.0, 0.0), 'rot': (0.0, 0.0, tb * math.pi / 2), 'scale': 1.0, 'leads': False, 'bkey': kb}]
-        w = Walk(game, refs, (0.0, 0.0, z), cache=cache)
+        w = Walk(game, refs, (0.0, 0.0, z), cache=cache, erode=True)
         p = w.graph.nearest((step / 2 - 40, 0.0, z), 40.0, w.keep)
         q = w.graph.nearest((step / 2 + 40, 0.0, z), 40.0, w.keep)
         return p is not None and q is not None and w.label[p] == w.label[q]
@@ -292,6 +314,15 @@ class PlanTiles(K.Tileset):
                 got |= 1 << v
         return got
 
+    def width_mask(self, d, widths):
+        """Variants with an opening on side d that's one of these widths (in 24-unit buckets)."""
+        got = 0
+        for v in range(1, len(self.vars)):
+            s = self.sockets[self.sides[v][d]]
+            if s and self.word[self.sides[v][d]] == 'P' and s['width'] // 24 in widths:
+                got |= 1 << v
+        return got
+
     def _probe(self):
         """What this kit can really build: small plans, solved. Families that can't close a room don't get used."""
         rooms, halls = collections.Counter(), collections.Counter()
@@ -334,7 +365,28 @@ class PlanTiles(K.Tileset):
         for f in hall_fams:
             self.hall_words[f] = {_word_key(w) for v, w in enumerate(self.vwords) if v and self.family[v] == f and self.level_floor[v]}
         self.can['outer'] = any(_word_key(w) == 'AAFF' for v, w in enumerate(self.vwords) if v and self.family[v] in rooms_ok)
+        if self.game is not None:
+            self.stairs = [st for st in self.stairs[:4] if self._stair_walks(st)]
         self.can['stairs'] = bool(self.stairs and hall_fams)
+
+    def _stair_walks(self, st):
+        """A room, a corridor, this flight, a corridor, a room, built and walked. A flight that doesn't get anyone up it is
+        no use, however it looks."""
+        for room, fam in sorted(self.hall_pairs):
+            p = Plan(self.step)
+            p.rise = st.rise
+            p.add_room('test', room, [(i, j, 0) for i in range(3) for j in range(3)])
+            p.add_hall(fam, [(1, 3, 0), (1, 4, 0)])
+            p.link((1, 2, 0), (1, 3, 0))
+            p.add_flight(st, (1, 5), 1, 0)
+            p.add_hall(fam, [(1, 7, 1), (1, 8, 1)])
+            p.add_room('test', room, [(i, j, 1) for i in range(3) for j in range(9, 12)])
+            p.link((1, 8, 1), (1, 9, 1))
+            made = fill(self, p, 1, budget=60, big=False)
+            if made:
+                w = walk_check(self.game, self, p, made, self._walk_cache)
+                return not w['missing'] and not w['escaped']
+        return False
 
     def hall_can(self, fam, word):
         return word in self.hall_words.get(fam, ())
@@ -353,6 +405,14 @@ class Plan:
         self.links = set()      # frozensets of two squares: a way through between them
         self.flights = []       # {'stair', 'turn', 'cells': squares it stands on, 'level', 'ports': [(square outside, way to the flight, slot, square inside)]}
         self.rise = 256
+        self.exit = None        # (square, way): the door out of the place
+
+    def add_exit(self, c, d):
+        """A doorway in this square's side d that leads out of the place: what's beyond it stays empty."""
+        n = (c[0] + DX[d][0], c[1] + DX[d][1], c[2])
+        self.add_void([n], 'outside')
+        self.link(c, n)
+        self.exit = (c, d)
 
     def free(self, cells):
         return not any(c in self.cells for c in cells)
@@ -471,6 +531,9 @@ def fill(ts, plan, seed=0, budget=SOLVE_BUDGET, big=True):
     for f in plan.flights:
         for outside, way, slot, _inner in f['ports']:
             boundary[outside] &= ts.port_mask(slot, way)
+    if plan.exit and ts.exit_widths:
+        c, d = plan.exit
+        boundary[c] &= ts.width_mask(d, ts.exit_widths)
     solved = {}
     for _level, cells in sorted(levels.items()):
         got = _solve(ts, plan, cells, palette, rng, budget, boundary)
@@ -918,7 +981,7 @@ class Planner:
         return k
 
 
-def make_plan(ts, program, seed=0, bounds=None, plan=None, start=None, level=0, stairs=0.35):
+def make_plan(ts, program, seed=0, bounds=None, plan=None, start=None, level=0, stairs=0.35, with_exit=False):
     """Rooms for this program, joined up: the main route first, one room after another, then the rest off whatever's already
     there, corridors first. A Plan. (plan and start: grow an existing plan from that owner.)"""
     rng = random.Random(seed)
@@ -927,6 +990,13 @@ def make_plan(ts, program, seed=0, bounds=None, plan=None, start=None, level=0, 
         mid = (bounds[0] + (bounds[2] - bounds[0]) // 2, bounds[1] + (bounds[3] - bounds[1]) // 2) if bounds else (0, 0)
         last = pl.first_room(program[0], mid)
         program = program[1:]
+        if with_exit:
+            spots = pl.spots(last)
+            rng.shuffle(spots)
+            for c, d in spots:
+                if pl.clear([(c[0] + DX[d][0], c[1] + DX[d][1], c[2])]):
+                    pl.plan.add_exit(c, d)
+                    break
     else:
         last = start
     owners_of = pl.plan.owners
@@ -957,13 +1027,16 @@ class Walk:
     """What walking a finished place finds, from the real collision shapes (the same reading navgen makes the navmesh from):
     where a person can get to from the start, on any level, over stairs and through doorways."""
 
-    def __init__(self, game, refs, start, voxel=16.0, cache=None):
+    def __init__(self, game, refs, start, voxel=16.0, cache=None, erode=False):
         self.voxel = voxel
         field = navgen.Field(voxel, math.cos(math.radians(navgen.SLOPE_MAX)))
         report = {'collision': 0, 'drawn': 0, 'unread': 0, 'placed': 0}
         navgen._lay_refs(game, field, refs, {} if cache is None else cache, report)
         self.graph = navgen.Graph(navgen._places(field, navgen.HEADROOM), voxel, navgen.STEP, navgen.HEADROOM)
         self.keep = [True] * len(self.graph.p)
+        if erode:
+            # (as the navmesh will be: an actor's middle can't go right up to a wall)
+            self.keep = self.graph.erode(self.keep, navgen.RADIUS)
         self.pieces, self.label = self.graph.pieces(self.keep)
         i = self.graph.nearest(start, 192.0, self.keep)
         self.reached = set(self.pieces[self.label[i]]) if i is not None else set()
@@ -991,7 +1064,7 @@ def walk_check(game, ts, plan, made, cache=None, extra=()):
     cy = sum(c[1] for c in first) / len(first)
     fc = min(first, key=lambda c: (c[0] - cx) ** 2 + (c[1] - cy) ** 2)
     floor = ts.floor
-    w = Walk(game, as_refs(game, made) + list(extra), (fc[0] * step, fc[1] * step, fc[2] * rise + floor + 8), cache=cache)
+    w = Walk(game, as_refs(game, made) + list(extra), (fc[0] * step, fc[1] * step, fc[2] * rise + floor + 8), cache=cache, erode=True)
     covered = collections.Counter()
     escaped = []
     for x, y, z in w.where():
@@ -1033,12 +1106,13 @@ def _blame(ts, plan, made, walk):
     return out
 
 
-def generate(game, ts, area=150, seed=0, bounds=None, cache=None, tries=10, program=None, stairs=0.35):
-    """A whole place: plan, pieces and a clean walk. {'plan', 'made', 'walk', 'tries', 'wanted'} or None."""
+def generate(game, ts, area=150, seed=0, bounds=None, cache=None, tries=10, program=None, stairs=0.35, survey=None, ruined=False):
+    """A whole place: plan, pieces and a clean walk, with doors, lights and things if there's a survey (kitdress.py).
+    {'plan', 'made', 'items', 'walk', 'tries', 'wanted'} or None."""
     for k in range(tries):
         rng = random.Random(seed + k * 7919)
         prog = program or program_for(area, rng)
-        plan = make_plan(ts, prog, seed + k * 104729, bounds, stairs=stairs)
+        plan = make_plan(ts, prog, seed + k * 104729, bounds, stairs=stairs, with_exit=survey is not None and k < tries // 2)
         made = None
         for f in range(3):
             made = fill(ts, plan, seed + k + f * 31)
@@ -1048,7 +1122,16 @@ def generate(game, ts, area=150, seed=0, bounds=None, cache=None, tries=10, prog
             continue
         walk = walk_check(game, ts, plan, made, cache)
         if not walk['missing'] and not walk['escaped']:
-            return {'plan': plan, 'made': made, 'walk': walk, 'tries': k + 1, 'wanted': len(prog)}
+            items = []
+            if survey is not None:
+                import kitdress
+                sv = survey.get(ts.kit.name)
+                if sv is not None:
+                    items = kitdress.place_doors(ts, sv, plan, made, rng) + kitdress.dress(ts, sv, plan, made, rng, ruined=ruined)
+                    walk = kitdress.clear_ways(game, ts, plan, made, items, walk_check, cache)
+                    if walk['missing'] or walk['escaped']:
+                        continue
+            return {'plan': plan, 'made': made, 'items': items, 'walk': walk, 'tries': k + 1, 'wanted': len(prog)}
         for key, _n in _blame(ts, plan, made, walk).most_common(2):
             ts.ban(key)
     return None
@@ -1081,12 +1164,16 @@ def as_ops(ts, made, origin=(0.0, 0.0, 0.0)):
 
 # ---------- what the editor asks ----------
 
-def tiles_for(game, kits, name, store):
+def tiles_for(game, kits, name, store, survey=None):
     """A kit's PlanTiles, kept in store (a second or two's work the first time)."""
     k = ('plan', name)
     ts = store.get(k)
     if ts is None:
         ts = store[k] = PlanTiles(kits[name], game)
+        sv = (survey or {}).get(name)
+        if sv is not None:
+            import kitdress
+            ts.exit_widths = set(kitdress.door_table(ts.kit, sv))
     return ts
 
 
@@ -1128,15 +1215,15 @@ def filled(game, kits, name, w, h, seed, store, cache, tries=16):
     return best
 
 
-def layout(game, kits, name, w, h, seed, at, store, cache):
+def layout(game, kits, name, w, h, seed, at, store, cache, survey=None):
     """A generated place inside this size, as changes for the mod: {'ops', 'start', 'rooms', 'said'} or {'note'}."""
     origin = (float(at[0]), float(at[1]), float(at[2]))
-    ts = tiles_for(game, kits, name, store)
+    ts = tiles_for(game, kits, name, store, survey)
     if ts.can['rooms']:
-        g = generate(game, ts, max(30, int(w * h * 0.55)), seed, bounds=(0, 0, w - 1, h - 1), cache=cache)
+        g = generate(game, ts, max(30, int(w * h * 0.55)), seed, bounds=(0, 0, w - 1, h - 1), cache=cache, survey=survey)
         if not g:
             return {'note': 'No plan passed the walk in this size: try another size or kit.'}
-        return _report(ts, g['plan'], g['made'], origin, 'a')
+        return _report(ts, g['plan'], g['made'], origin, 'a', g['items'])
     got = filled(game, kits, name, w, h, seed, store, cache)
     if not got:
         return {'note': 'This kit has too few pieces that fit on one square to fill an area, or nothing walked out right: try another.'}
@@ -1144,8 +1231,9 @@ def layout(game, kits, name, w, h, seed, at, store, cache):
     return _report(store[('fill', name)], plan, made, origin, 'f')
 
 
-def _report(ts, plan, made, origin, how):
-    ops = as_ops(ts, made, origin)
+def _report(ts, plan, made, origin, how, items=()):
+    import kitdress
+    ops = as_ops(ts, made, origin) + kitdress.item_ops(items, origin)
     first = plan.owners[0]['cells']
     c = first[len(first) // 2]
     rooms = collections.Counter(o['purpose'] for o in plan.rooms())
@@ -1153,8 +1241,12 @@ def _report(ts, plan, made, origin, how):
     out = {'ops': ops, 'start': [origin[0] + c[0] * ts.step, origin[1] + c[1] * ts.step, origin[2] + c[2] * plan.rise + getattr(ts, 'floor', 0)],
            'rooms': sorted(rooms.items()), 'levels': levels, 'step': ts.step}
     if how == 'a':
-        out['said'] = '%d rooms, %d pieces%s. Walked from the first room: every square reached, no way out.' % (
-            len(plan.rooms()), len(made), ', %d levels' % levels if levels > 1 else '')
+        kinds = collections.Counter(it.what for it in items)
+        out['said'] = '%d rooms, %d pieces%s, %d doors, %d lights, %d other things. Walked from the first room: every square reached, no way out.%s' % (
+            len(plan.rooms()), len(made), ', %d levels' % levels if levels > 1 else '', kinds['door'] + kinds['exit'], kinds['light'],
+            sum(kinds.values()) - kinds['door'] - kinds['exit'] - kinds['light'],
+            ' The way out is a door in the first room: select it to link it to another place.' if kinds['exit'] else '')
+        out['exit'] = next(([round(c, 2) for c in it.p[:3]] for it in items if it.what == 'exit'), None)
     else:
         out['said'] = '%d pieces, no rooms planned: this kit has no pieces that close a room. Walking found no way out.' % len(made)
     return out

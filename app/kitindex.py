@@ -505,10 +505,8 @@ class Tileset:
                 self.sockets.append(s)
             return interned[k]
         for p in kit.structural():
-            if p.foot != (-h, -h, h, h) or len(p.slots) != 4 or p.uses < min_uses or not p.open_slots() or not p.sound:
+            if p.foot != (-h, -h, h, h) or len(p.slots) != 4 or p.uses < min_uses or not p.open_slots() or not self.takes(p):
                 continue
-            if len({s['floor'] for s in p.slots if s['open']}) != 1:
-                continue                # (stairs and split levels: the levels' joins, not one floor's)
             if only and not only(p):
                 continue
             by_side = {s['side']: sock(s) for s in p.slots}
@@ -551,6 +549,10 @@ class Tileset:
                 for a in self.ok[sides[(d + 2) % 4]]:
                     self.allow[a][d] |= bit
         self.all = (1 << len(self.vars)) - 1
+
+    def takes(self, p):
+        """Which one-square pieces count. Not stairs and split levels: the levels' joins, not one floor's."""
+        return p.sound and len({s['floor'] for s in p.slots if s['open']}) == 1
 
     def walks(self, sock):
         return bool(sock) and self.sockets[sock]['open']
