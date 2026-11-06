@@ -3,7 +3,9 @@
 // first time FOLab runs in this browser.
 const HELP_DOCS = [['getting-started', 'Getting started'], ['the-world', 'The World page: moving, selecting, placing'], ['generated-places', 'Generated places: plans, vaults, growing'],
                    ['outside', 'Outside: land, water, worldspaces'], ['items-and-records', 'Items and records'],
-                   ['playing-and-your-mod', 'Playing, and your mod'], ['tools', 'Tools: health check, load order, sharing']];
+                   ['scripts', 'Scripts'],
+                   ['playing-and-your-mod', 'Playing, and your mod'],
+                   ['tools', 'Tools: health check, load order, sharing']];
 
 $('#b-help').onclick = e => {
   e.stopPropagation();

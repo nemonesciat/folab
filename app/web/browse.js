@@ -61,7 +61,7 @@ function bwLink(id, key){
 }
 
 function bwDraw(){
-  const d = BW.data, rec = d.record, ed = d.editable;
+  const d = BW.data, rec = d.record, ed = d.editable && rec.type !== 'SCPT';   // (a script is edited on its own page)
   const raw = rec.subs.filter(s => s.kind === 'raw').length;
   const state = {'': 'From ' + d.from, changed: 'Changed by your mod (from ' + d.from + ')', new: 'Your own record'}[d.state];
   const edid = (rec.subs.find(s => s.tag === 'EDID') || {}).value || d.key, name = (rec.subs.find(s => s.tag === 'FULL') || {}).value || '';
@@ -71,8 +71,9 @@ function bwDraw(){
       ${ed ? '<button class="btn primary" data-a="save" disabled>Save</button>' : ''}
       ${ed ? '<button class="btn" data-a="copy" title="Start a record of your own from this one">Make a copy</button>' : ''}
       ${d.state === 'changed' ? '<button class="btn" data-a="revert">Put back as the game has it</button>' : ''}
-      ${d.state === 'new' ? '<button class="btn" data-a="revert">Delete this record</button>' : ''}
+      ${d.state === 'new' && rec.type !== 'SCPT' ? '<button class="btn" data-a="revert">Delete this record</button>' : ''}
       ${placeable ? '<button class="btn" data-a="place">Place it</button>' : ''}
+      ${rec.type === 'SCPT' ? '<button class="btn primary" data-a="script">Open in Scripts</button>' : ''}
       <button class="btn" data-a="used">Where it's used</button>
       ${BW.back.length ? '<button class="btn" data-a="back">← Back</button>' : ''}
     </div>
@@ -98,6 +99,7 @@ $('#bw-detail').addEventListener('click', async e => {
   if (go){ e.preventDefault(); return bwOpen(go.dataset.go); }
   const a = e.target.dataset.a; if (!a) return;
   if (a === 'save') return bwSave();
+  if (a === 'script') return scrOpen(BW.key);
   if (a === 'back'){ BW.dirty = false; return bwOpen(BW.back.pop(), true); }
   if (a === 'copy'){ try { const r = await post('/api/record/copy', {key: BW.key}); setState(r.state); await bwList(); BW.dirty = false; bwOpen(r.made[0]); toast('Made a copy: your own record'); } catch (err){ fail(err); } return; }
   if (a === 'revert'){
