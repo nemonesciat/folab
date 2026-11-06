@@ -279,7 +279,7 @@ class Scripts:
             if problem:
                 raise problem
         except scriptc.CompileError as e:
-            return {'ok': False, 'error': {'line': e.line, 'message': e.message, 'text': e.text}, 'warnings': []}
+            return {'ok': False, 'problem': {'line': e.line, 'message': e.message, 'text': e.text}, 'warnings': []}
         return {'ok': True, 'name': c.name, 'size': len(c.data), 'warnings': self._warnings(text, c.script_type),
                 'vars': [[n, 'short' if i else 'float'] for _k, n, i in c.vars],
                 'refs': [self._ref_row(n, f, v) for n, f, v in c.refs]}
@@ -333,7 +333,7 @@ class Scripts:
         return pr
 
     def save(self, key, text, kind=None):
-        """Compile and keep it (one Undo step). A script that doesn't compile changes nothing: {'ok': False, 'error': ...}."""
+        """Compile and keep it (one Undo step). A script that doesn't compile changes nothing: {'ok': False, 'problem': ...}."""
         pr = self._need_mod()
         try:
             c = self.compile(text, key, kind)
@@ -341,7 +341,7 @@ class Scripts:
             if problem:
                 raise problem
         except scriptc.CompileError as e:
-            return {'ok': False, 'error': {'line': e.line, 'message': e.message, 'text': e.text}}
+            return {'ok': False, 'problem': {'line': e.line, 'message': e.message, 'text': e.text}}
         old = self.record(key)
         rec = self._record_of(c, c.name, old.get('flags', 0), old.get('src', ''))
         pr.apply('Script ' + c.name, [{'op': 'record', 'key': key, 'record': rec}])

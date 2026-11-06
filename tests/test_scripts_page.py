@@ -135,17 +135,17 @@ Begin GameMode
 End
 """
 c = s.check(BAD, key)
-check(not c['ok'] and c['error']['line'] == 5 and 'NotARealCommand' in c['error']['message'], 'an unknown command: the error is on line 5: ' + c['error']['message'])
+check(not c['ok'] and c['problem']['line'] == 5 and 'NotARealCommand' in c['problem']['message'], 'an unknown command: the error is on line 5: ' + c['problem']['message'])
 r = s.save(key, BAD)
-check(not r['ok'] and r['error']['line'] == 5, 'saving it says the same')
+check(not r['ok'] and r['problem']['line'] == 5, 'saving it says the same')
 check((pr.count(), s.one(key)['text'], len(pr.undo_stack)) == before, '...and nothing changed: no broken script is ever kept')
 for text, line in [('scn FOLabX\nshort folabnum\nBegin GameMode\n\tset folabother to 1\nEnd\n', 4),
                    ('scn FOLabX\n\n\n; a comment\nBegin GameMode\n\tif 1\nEnd\n', 6),
                    ('scn FOLabX\nBegin GameMode\nEnd\n\n\nset a to 1\n', 6)]:
     c = s.check(text)
-    check(not c['ok'] and c['error']['line'] == line, 'an error on line %d says line %d: %s' % (line, c['error'].get('line', 0), c['error'].get('message')))
+    check(not c['ok'] and c['problem']['line'] == line, 'an error on line %d says line %d: %s' % (line, c['problem'].get('line', 0), c['problem'].get('message')))
 c = s.check('scn GraveContScript\nBegin GameMode\nEnd\n', key)
-check(not c['ok'] and 'taken' in c['error']['message'] and c['error']['line'] == 1, 'a name another form has is refused')
+check(not c['ok'] and 'taken' in c['problem']['message'] and c['problem']['line'] == 1, 'a name another form has is refused')
 
 # ---- variables keep their numbers ----
 d = {n: i for i, n, _f in api_scripts.vars_of(s.record(key))}
@@ -175,9 +175,9 @@ recordio.set_field(qrec, 'EDID', 'FOLabTestQuest')
 api_scripts.set_script(qrec, q)
 pr.apply('quest', [{'op': 'record_new', 'record': qrec}])
 c = s.check('scn FOLabReader\n\nBegin GameMode\n\tset FOLabTestQuest.stageflag to 1\nEnd\n')
-check(c['ok'], 'FOLabTestQuest.stageflag compiles: the mod\'s quest, its script\'s variable (%s)' % c.get('error'))
+check(c['ok'], 'FOLabTestQuest.stageflag compiles: the mod\'s quest, its script\'s variable (%s)' % c.get('problem'))
 c = s.check('scn FOLabReader\n\nBegin GameMode\n\tset FOLabTestQuest.nosuch to 1\nEnd\n')
-check(not c['ok'] and c['error']['line'] == 4, '...a variable it hasn\'t, an error on its line')
+check(not c['ok'] and c['problem']['line'] == 4, '...a variable it hasn\'t, an error on its line')
 
 # ---- what the editor's comforts ask for ----
 hit = s.complete('FOLabTest')
