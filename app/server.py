@@ -19,6 +19,7 @@ import espwrite
 import gamedata
 import gameini
 import install
+import kitindex
 import nif
 import nvse
 import playtest
@@ -1064,6 +1065,79 @@ def edit(label, ops):
     return out
 
 
+# ---------- the building kits (kitindex.py): read once per game files, in the background ----------
+_kits = {'for': None, 'kits': None, 'error': None, 'tilesets': {}, 'walls': {}}
+
+
+def kits_state():
+    """The index if it's ready; otherwise starts reading it and returns None."""
+    if _kits['for'] is not GD:
+        game = GD
+        _kits.update({'for': game, 'kits': None, 'error': None, 'tilesets': {}, 'walls': {}})
+        folder = os.path.join(os.path.dirname(_tile_dir()), '..', 'kits', os.path.basename(_tile_dir()))
+
+        def run():
+            try:
+                got = kitindex.load(game, folder)
+                if _kits['for'] is game:
+                    _kits['kits'] = got
+            except Exception as e:
+                traceback.print_exc()
+                _kits['error'] = str(e)
+        threading.Thread(target=run, daemon=True).start()
+    return _kits['kits']
+
+
+def kits_list():
+    kits = kits_state()
+    if _kits['error']:
+        return {'error': _kits['error']}
+    if kits is None:
+        return {'building': True}
+    out = []
+    for name, k in kits.items():
+        ts = _kits['tilesets'].get(name)
+        if ts is None:
+            ts = _kits['tilesets'][name] = kitindex.Tileset(k)
+        if len(ts.slot_sock) >= kitindex.MIN_TILES:
+            out.append({'name': name, 'label': kitindex.label_of(name), 'step': k.step, 'tiles': len(ts.slot_sock)})
+    return {'kits': sorted(out, key=lambda k: k['label'])}
+
+
+def kit_piece(ckey, key):
+    """What can join a placed piece. {'kit': None} if it isn't a building piece (or the index is still being read)."""
+    kits = kits_state()
+    if not kits:
+        return {'kit': None}
+    things = [t for t in cell_things(ckey) if t['state'] != 'removed']
+    t = next((x for x in things if x['key'] == key), None)
+    if not t:
+        return {'kit': None}
+    kit, piece = kitindex.find_piece(kits, t['bkey'])
+    if not kit:
+        return {'kit': None}
+    turn = kitindex.quarter(t['p'][5])
+    square = turn is not None and abs(t['p'][3]) < 0.01 and abs(t['p'][4]) < 0.01 and abs(t['s'] - 1) < 0.001
+    out = {'kit': kit.name, 'label': kitindex.label_of(kit.name), 'step': kit.step, 'turned': not square, 'sides': []}
+    if square:
+        others = []
+        for x in things:
+            q = kit.pieces.get(x['bkey'])
+            tq = kitindex.quarter(x['p'][5]) if q else None
+            if x is not t and q and q.foot and tq is not None:
+                others.append((q, x['p'][0], x['p'][1], x['p'][2], tq))
+        out['sides'] = kitindex.piece_sides(kit, piece, t['p'][:3], turn, others)
+    return out
+
+
+def kit_layout(body):
+    kits = kits_state()
+    if not kits or body['kit'] not in kits:
+        return {'note': 'The kits are still being read: a moment.'}
+    w, h = max(2, min(40, int(body['w']))), max(2, min(40, int(body['h'])))
+    return kitindex.layout(GD, kits, body['kit'], w, h, int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'])
+
+
 def record_copy(key):
     """A new record of the mod's own, a copy of this one, with an editor ID of its own."""
     rec = BR.record(key)['record']
@@ -1237,6 +1311,12 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/cell':
                 with _lock:
                     return self.send(cell(q['id']))
+            if u.path == '/api/kits':
+                with _lock:
+                    return self.send(kits_list())
+            if u.path == '/api/kit/piece':
+                with _lock:
+                    return self.send(kit_piece(q['cell'], q['key']))
             if u.path == '/api/ref':
                 with _lock:
                     return self.send(ref(q['cell'], q['key']))
@@ -1370,6 +1450,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(prefab_save(body))
                 if u.path == '/api/place/new':
                     return self.send(new_place(body))
+                if u.path == '/api/kit/layout':
+                    return self.send(kit_layout(body))
                 if u.path == '/api/doors/link':
                     return self.send(link_doors(body['a'], body['b']))
                 if u.path == '/api/doors/unlink':

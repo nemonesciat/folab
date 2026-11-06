@@ -65,6 +65,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Navmesh (no UI yet): `navmesh.py` reads/writes NAVM and NAVI byte for byte and holds the rules (its docstring: what a
   plugin must do), `navgen.py` generates a cell's mesh, `hkshape.py` reads collision shapes. Run `py -3 app/navmesh.py`
   to recheck every game record. Collision triangle soups wind either way (they came from strips): don't trust facing.
+- Kits (`kitindex.py`): building pieces per mesh folder on each kit's grid; each side's section (cut just inside it from the
+  mesh) says if it's a way through and what it meets; `kit.seen` is every join the game built. `Tileset` + `build_area` fill any
+  squares with every side agreeing (one-square, one-level pieces so far: no stairs or big pieces yet); `can_walk_out` checks a
+  layout from the real meshes. Editor: `web/kits.js` (Joins under Selected, the Kit tab), `/api/kits`, `/api/kit/piece`, `/api/kit/layout`.
 - Tests: `py -3 tests/run.py` (each test_*.py in a fresh FOLAB_HOME, against the game's files; never the real game).
   Run it before committing changes to the readers, writer, project or schema.
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the

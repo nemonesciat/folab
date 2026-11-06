@@ -24,7 +24,7 @@ input:focus,select:focus{outline:none;border-color:var(--gold)}
 header{display:flex;align-items:center;gap:16px;padding:6px 18px;min-width:0;border-bottom:1px solid var(--line);background:linear-gradient(var(--bg3),var(--bg2));flex:none;box-shadow:inset 0 -2px 0 -1px var(--goldline)}
 .brand{display:flex;flex-direction:column;align-items:center;gap:0;flex:none;line-height:1;color:var(--gold)}
 .brand .mark{height:34px;width:auto;display:block}
-.brand b{font:600 20px Oswald,'Arial Narrow',sans-serif;color:var(--gold);letter-spacing:.42em;margin:0 0 0 .42em;line-height:1}
+.brand b{font:600 20px Oswald,'Arial Narrow',sans-serif;color:var(--gold);letter-spacing:.165em;margin:0 0 0 .2em;line-height:1}  /* (L starts under the wrench's head, B ends under the gear) */
 .brand small{font:500 10.5px Inter,sans-serif;color:var(--muted);letter-spacing:.18em}
 nav{display:flex;gap:3px;flex:none}
 nav button{min-width:78px;height:62px;padding:0 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
@@ -187,6 +187,11 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 .mm-bar button{background:none;border:1px solid transparent;border-radius:5px;color:var(--muted);padding:0 5px;cursor:pointer;line-height:18px}
 .mm-bar button:hover{border-color:var(--line2);color:var(--gold2)}
 #minimap{display:block;width:220px;height:220px;border-radius:5px;border:1px solid var(--line);cursor:crosshair}
+#tab-kit{padding:0 12px 12px;overflow-y:auto}.kit-go{display:flex;gap:6px;margin-top:8px}
+#kit-joins{padding:0 12px 12px}.kit-sides{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:4px;margin:2px 0 6px}
+.kit-sides button{display:flex;justify-content:space-between;gap:4px;padding:3px 6px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--text);cursor:pointer}
+.kit-sides button small{color:var(--muted)}.kit-sides button.on{border-color:var(--gold);color:var(--gold2)}.kit-sides button:disabled{opacity:.5;cursor:default}
+.kit-fit{cursor:pointer;display:flex;flex-direction:column;padding:3px 6px}.kit-fit:hover{background:var(--hover)}.kit-fit small{color:var(--muted)}
 #tab-view{padding:0 12px 12px;overflow-y:auto}.vt-grid{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center}
 .vt-grid label,.vt-row{color:var(--muted);font-size:13px}.vt-grid small{color:var(--faint)}
 .vt-row{display:flex;align-items:center;gap:8px;margin:5px 0}.vt-row input[type=range]{flex:1}
@@ -209,7 +214,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 #loading span{color:var(--muted)}#loading.gone{opacity:0;pointer-events:none}
 /* the theme's extras (theme.js) */
 .th-mono body,.th-mono .brand b,.th-mono h2,.th-mono h3,.th-mono .h,.th-mono .owtitle b{font-family:var(--mono)!important;letter-spacing:.04em}
-.th-mono .brand b{text-shadow:0 0 6px var(--gold)}
+.th-mono .brand b{text-shadow:0 0 6px var(--gold);letter-spacing:.2em;margin-left:.17em}
 .th-scan body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:500;background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px);mix-blend-mode:multiply}
 .th-scan.th-mono body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:499;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.35))}
 .th-calm *{transition:none!important;animation:none!important}
@@ -297,7 +302,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
     </div></div>
   </div>
   <div class="side" id="right">
-    <div class="tabs"><button data-tab="place" class="on">Place</button><button data-tab="selected">Selected</button><button data-tab="view" title="What shows, what's locked, how far it loads">View</button></div>
+    <div class="tabs"><button data-tab="place" class="on">Place</button><button data-tab="selected">Selected</button><button data-tab="kit" title="Generate a layout from the game's building kits">Kit</button><button data-tab="view" title="What shows, what's locked, how far it loads">View</button></div>
     <div class="pane on" id="tab-place">
       <input class="find" id="f-place" placeholder="Search things to place: chair, desk, lamp…">
       <select id="f-kind" style="margin:0 12px 6px"><option value="">Everything</option></select>
@@ -310,7 +315,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <div class="list" id="found"></div>
     </div>
     <div class="pane" id="tab-view"></div>
-    <div class="pane" id="tab-selected"><div id="selected"><div class="note">Click a thing in the view or in Objects.</div></div></div>
+    <div class="pane" id="tab-kit"></div>
+    <div class="pane" id="tab-selected"><div id="selected"><div class="note">Click a thing in the view or in Objects.</div></div><div id="kit-joins"></div></div>
   </div>
 </main>
 <main id="page-browse" style="display:none">
@@ -346,5 +352,6 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/gamepage.js"></script>
 <script src="/web/modelpick.js"></script>
 <script src="/web/create.js"></script>
+<script src="/web/kits.js"></script>
 </body>
 </html>
