@@ -634,8 +634,9 @@ def _usable(gd, r):
     return not (entry and entry[1].flags & INITIALLY_DISABLED)
 
 
-def _lay_refs(gd, field, refs, cache, report):
-    """Lay what stops actors, and return the doors and actors seen: (doors [(ref, pos)], seeds [pos])."""
+def _lay_refs(gd, field, refs, cache, report, any_door=False):
+    """Lay what stops actors, and return the doors and actors seen: (doors [(ref, pos)], seeds [pos]).
+    any_door: a door leading nowhere yet still stands where people walk, so it's a seed too (a place being built)."""
     doors, seeds = [], []
     for r in refs:
         if r['type'] in ('ACHR', 'ACRE'):
@@ -651,6 +652,7 @@ def _lay_refs(gd, field, refs, cache, report):
         if btype == DOOR_BASE:
             if r['leads']:
                 doors.append((r['ref'], r['pos']))
+            if r['leads'] or any_door:
                 seeds.append(r['pos'])
             continue
         if btype == 'TREE':
@@ -726,8 +728,9 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
     """A navmesh for one cell of a gamedata.GameData: (mesh or None, report). Links to doors are made by
     navmesh.link_doors, across cell edges by navmesh.link_edges. Form IDs in the mesh are gd's load-order ones.
     refs: what's in a place inside, if not the game's own (a mod's changes; cell may then be the mod's own key).
-    floors: inside, keep every area at floor level too, not only those a door or actor stands on: a place being built
-    may have neither yet, and the biggest surface is often its roof.
+    floors: inside, keep every area at floor level too, not only those a linked door or actor stands on, and any door's
+    area: a place being built may have nothing linked yet, the biggest surface is often its roof, and on several levels
+    "floor level" alone is only the lowest.
     Outside, a mod's changes come through refs_of(cell) (what stands in a cell), land_of(x, y) (a square's heights, None
     for the game's) and water (its height, None for no water; False: as the game has it)."""
     t0 = time.time()
@@ -756,7 +759,7 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
                     doors, seeds = d, s
     else:
         field = Field(voxel, cos)
-        doors, seeds = _lay_refs(gd, field, gd.refs(cell) if refs is None else refs, cache, report)
+        doors, seeds = _lay_refs(gd, field, gd.refs(cell) if refs is None else refs, cache, report, any_door=floors)
     report['triangles_in'] = field.tris
     t1 = time.time()
     g = Graph(_places(field, headroom), voxel, step, headroom)
