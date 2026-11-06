@@ -44,6 +44,7 @@ MIN_AREA2 = 32.0        # twice the area, seen from above, of the smallest trian
 MIN_SHAPE = 0.012       # ...and of the thinnest: twice its area over its longest side squared
 PROBE = 4               # every this many places (each way) the true surface is kept to check the mesh against
 MIN_REGION = 40         # places: outside, a piece with less ground than this isn't worth a mesh
+FLOOR_SPREAD = 96.0     # how far above the lowest floor still counts as the floor (kit rooms are 240 high)
 TREE_RADIUS = 20.0
 SEED_REACH = 256.0
 _GAP = 2.0              # spans this close are one span
@@ -705,10 +706,22 @@ def _water_of(gd, cell):
     return None
 
 
+def _floor_pieces(g, pieces):
+    """The pieces at floor level: as low as the lowest one big enough to walk about on, give or take a stair or two."""
+    big = [(sum(g.p[i][2] for i in piece) / len(piece), k) for k, piece in enumerate(pieces) if len(piece) >= MIN_REGION]
+    if not big:
+        return set()
+    low = min(z for z, _k in big)
+    return {k for z, k in big if z <= low + FLOOR_SPREAD}
+
+
 def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM, radius=RADIUS,
-             height_error=HEIGHT_ERROR, outline_error=None):
+             height_error=HEIGHT_ERROR, outline_error=None, refs=None, floors=False):
     """A navmesh for one cell of a gamedata.GameData: (mesh or None, report). Links to doors are made by
-    navmesh.link_doors, across cell edges by navmesh.link_edges. Form IDs in the mesh are gd's load-order ones."""
+    navmesh.link_doors, across cell edges by navmesh.link_edges. Form IDs in the mesh are gd's load-order ones.
+    refs: what's in a place inside, if not the game's own (a mod's changes; cell may then be the mod's own key).
+    floors: inside, keep every area at floor level too, not only those a door or actor stands on: a place being built
+    may have neither yet, and the biggest surface is often its roof."""
     t0 = time.time()
     report = {'collision': 0, 'drawn': 0, 'unread': 0, 'placed': 0, 'kept_pieces': 0, 'dropped_pieces': 0}
     outside = cell in gd.ext_cells
@@ -735,7 +748,7 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
                     doors, seeds = d, s
     else:
         field = Field(voxel, cos)
-        doors, seeds = _lay_refs(gd, field, gd.refs(cell), cache, report)
+        doors, seeds = _lay_refs(gd, field, gd.refs(cell) if refs is None else refs, cache, report)
     report['triangles_in'] = field.tris
     t1 = time.time()
     g = Graph(_places(field, headroom), voxel, step, headroom)
@@ -752,6 +765,8 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
             i = g.nearest(pos, SEED_REACH, keep)
             if i is not None:
                 wanted.add(label[i])
+        if floors:
+            wanted |= _floor_pieces(g, pieces)
         if not wanted and pieces:
             wanted.add(max(range(len(pieces)), key=lambda k: len(pieces[k])))
     report['kept_pieces'] = len(wanted)
@@ -768,7 +783,7 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
                   seconds=round(t3 - t0, 2), doors=doors, triangles=len(tris), vertices=len(verts))
     if not tris:
         return None, report
-    return mesh_from(cell, verts, tris, _water_of(gd, cell)), report
+    return mesh_from(cell, verts, tris, _water_of(gd, cell) if cell in gd.forms else None), report
 
 
 # --- measuring against the game ---

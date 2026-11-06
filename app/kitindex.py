@@ -730,7 +730,7 @@ def check(ts, placed, fixed=None):
 
 def as_placed(ts, placed, origin=(0.0, 0.0, 0.0)):
     """A layout as ops for the mod: position and rotation as the game stores them."""
-    return [{'op': 'add', 'base': ts.vars[v][0],
+    return [{'op': 'add', 'gen': True, 'base': ts.vars[v][0],
              'p': [origin[0] + i * ts.step, origin[1] + j * ts.step, origin[2], 0.0, 0.0, ts.vars[v][1] * math.pi / 2], 's': 1.0}
             for (i, j), v in sorted(placed.items())]
 

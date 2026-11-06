@@ -62,7 +62,7 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.
-- Navmesh (no UI yet): `navmesh.py` reads/writes NAVM and NAVI byte for byte and holds the rules (its docstring: what a
+- Navmesh: `navbuild.py` keeps a place's mesh in `project.navmesh` (op `navmesh`), `espwrite` writes NAVM + NAVI + each door's XNDP, Kit tab makes it. Inside only: outside needs its neighbours overridden. `navmesh.py` reads/writes NAVM and NAVI byte for byte and holds the rules (its docstring: what a
   plugin must do), `navgen.py` generates a cell's mesh, `hkshape.py` reads collision shapes. Run `py -3 app/navmesh.py`
   to recheck every game record. Collision triangle soups wind either way (they came from strips): don't trust facing.
 - Kits (`kitindex.py`): building pieces per mesh folder on each kit's grid; each side's section (cut just inside it from the

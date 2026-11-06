@@ -20,6 +20,7 @@ import gamedata
 import gameini
 import install
 import kitindex
+import navbuild
 import nif
 import nvse
 import playtest
@@ -229,6 +230,8 @@ def cell_things(ckey):
             t['cell'] = ckey
             if ch.get('sc'):
                 t['sc'] = True                   # (put down by the Scatter brush: it may take it back)
+            if ch.get('gen'):
+                t['gen'] = True                  # (from the Kit tab: generating again replaces it)
             if ch.get('tel'):
                 t['door'] = True
             out.append(t)
@@ -1130,6 +1133,18 @@ def kit_piece(ckey, key):
     return out
 
 
+def navmesh_make(ckey):
+    """Make a place's navmesh: one undo step."""
+    try:
+        data, report = navbuild.generate(GD, PR, ckey)
+    except navbuild.NavError as e:
+        return {'note': str(e)}
+    out = edit('Generate navmesh', [{'op': 'navmesh', 'cell': ckey, 'mesh': data}])
+    out['report'] = report
+    out['navmesh'] = navbuild.status(GD, PR, ckey)
+    return out
+
+
 def kit_layout(body):
     kits = kits_state()
     if not kits or body['kit'] not in kits:
@@ -1165,11 +1180,16 @@ def play(body):
     saved = save()
     out = {'install': install.install(GD.data_dir, saved['path'])}
     if body.get('cell'):
-        cell = GD.from_key(body['cell'])
         path = os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN)
-        f = GD.fields(cell)
-        place = tes4.zstr(f.get('FULL', b'')) or tes4.zstr(f.get('EDID', b''))
-        out['test'] = playtest.write_test_plugin(GD, cell, body['p'], path, place)
+        if body['cell'].startswith('+'):                # (a place of the mod's own: the test plugin builds on the mod)
+            rec = PR.records[body['cell']]
+            place = recordio.field(rec, 'FULL') or recordio.field(rec, 'EDID')
+            out['test'] = playtest.write_test_plugin(GD, None, body['p'], path, place, mod=PR.plugin, own_place=(body['cell'], rec))
+        else:
+            cell = GD.from_key(body['cell'])
+            f = GD.fields(cell)
+            place = tes4.zstr(f.get('FULL', b'')) or tes4.zstr(f.get('EDID', b''))
+            out['test'] = playtest.write_test_plugin(GD, cell, body['p'], path, place)
         out['test_install'] = install.install(GD.data_dir, path)      # (after the mod: newest, so it loads last)
         out['autoload'] = playtest.set_autoload(GD.data_dir, True)
     else:
@@ -1311,6 +1331,12 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/cell':
                 with _lock:
                     return self.send(cell(q['id']))
+            if u.path == '/api/navmesh/status':
+                with _lock:
+                    return self.send(navbuild.status(GD, PR, q['cell']) if PR else {'none': True})
+            if u.path == '/api/navmesh':
+                with _lock:
+                    return self.send(navbuild.shape(GD, PR, q['cell']) if PR else {'source': None})
             if u.path == '/api/kits':
                 with _lock:
                     return self.send(kits_list())
@@ -1450,6 +1476,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(prefab_save(body))
                 if u.path == '/api/place/new':
                     return self.send(new_place(body))
+                if u.path == '/api/navmesh/make':
+                    return self.send(navmesh_make(body['cell']))
+                if u.path == '/api/navmesh/remove':
+                    out = edit('Remove navmesh', [{'op': 'navmesh_revert', 'cell': body['cell']}])
+                    out['navmesh'] = navbuild.status(GD, PR, body['cell'])
+                    return self.send(out)
                 if u.path == '/api/kit/layout':
                     return self.send(kit_layout(body))
                 if u.path == '/api/doors/link':

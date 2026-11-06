@@ -310,6 +310,7 @@ async function edit(label, ops, selectNew){
     }
     for (const o of ops) if (o.op === 'remove' && o.ref.startsWith('+')){ dropThing(o.ref); A.things = A.things.filter(t => t.key !== o.ref); }
     drawObjects();
+    if (!A.outside && A.things) $('#s-load').textContent = `${A.things.length} things`;
     const p = A.places.find(p => p.id === A.cellId); if (p && !p.mine){ p.mine = true; drawPlaces(); }
     if (selectNew && d.made.length) select(d.made);
     else drawSelected(selThings());

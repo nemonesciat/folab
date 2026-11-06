@@ -187,7 +187,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 .mm-bar button{background:none;border:1px solid transparent;border-radius:5px;color:var(--muted);padding:0 5px;cursor:pointer;line-height:18px}
 .mm-bar button:hover{border-color:var(--line2);color:var(--gold2)}
 #minimap{display:block;width:220px;height:220px;border-radius:5px;border:1px solid var(--line);cursor:crosshair}
-#tab-kit{padding:0 12px 12px;overflow-y:auto}.kit-go{display:flex;gap:6px;margin-top:8px}
+#tab-kit{padding:0 12px 12px;overflow-y:auto;overflow-x:hidden}.kit-go{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+#tab-kit .btn:disabled{opacity:.45;cursor:default}#kit-pick{flex:1;min-width:0;width:100%}
 #kit-joins{padding:0 12px 12px}.kit-sides{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:4px;margin:2px 0 6px}
 .kit-sides button{display:flex;justify-content:space-between;gap:4px;padding:3px 6px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--text);cursor:pointer}
 .kit-sides button small{color:var(--muted)}.kit-sides button.on{border-color:var(--gold);color:var(--gold2)}.kit-sides button:disabled{opacity:.5;cursor:default}

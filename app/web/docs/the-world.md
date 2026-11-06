@@ -48,7 +48,9 @@ Drag the arrows to move (**G**), the rings to turn (**R**), any handle of **Scal
 
 Search in **Place** (right), then click a result and click where it goes, or drag it into the view. **Recently used** and **Prefabs** (groups you saved with *Save as a prefab*) are above the search. **Ctrl+C / Ctrl+V** copy and paste, **Ctrl+D** duplicates.
 
-**Building from the game's kits.** Select a building piece from a vault, an office, a cave and so on: **Selected** lists its open sides, with green panels in the view. Pick a side to see what can join there, with the joins the game itself built first. Hover over one to see it in place, click to put it there, and carry on from the new piece. The **Kit** tab generates a whole layout in the place you've got open, one you can walk with every way out closed off. It has no stairs, lights or furnishings yet, and no navmesh, so characters can't walk it in game yet.
+**Building from the game's kits.** Select a building piece from a vault, an office, a cave and so on: **Selected** lists its open sides, with green panels in the view. Pick a side to see what can join there, with the joins the game itself built first. Hover over one to see it in place, click to put it there, and carry on from the new piece. The **Kit** tab generates a whole layout in the place you've got open, one you can walk with every way out closed off. It has no stairs, lights or furnishings yet.
+
+**Navmesh** (the **Kit** tab) is what lets characters find their way round a place in game. **Make navmesh** builds one for the place you've got open from what's in it now, and Save puts it in your plugin. If you move things afterwards it says it's out of date: make it again. **Show it in the view** draws it, the game's own too. Places inside only so far.
 
 Right-click a thing: **Swap for…** replaces it, **Replace every one here…** replaces all of them.
 

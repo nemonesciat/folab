@@ -106,11 +106,12 @@ def _settings_counter():
     return n
 
 
-def write_test_plugin(gd, cell, p, path, place='', give=(), mod=None):
+def write_test_plugin(gd, cell, p, path, place='', give=(), mod=None, own_place=None):
     """FOLab Test.esp: an XMarkerHeading at p = [x, y, z, rz] in cell, and the quest and script that move the player
     there once. Its masters are every file the game loads before it (so every form ID reads the same in it).
     With no cell nothing moves you. give: [(form key, count, editor ID)], put in your inventory once; a key of the
-    mod's own ('+ID') needs mod, its plugin's file name (in the game before this one)."""
+    mod's own ('+ID') needs mod, its plugin's file name (in the game before this one). own_place: (key, CELL record) when
+    the place is the mod's own, not the game's (with mod too, and cell left out): its record is copied the same way."""
     n = _settings_counter()
     masters = [os.path.basename(pl.path) for pl in gd.plugins]
     if mod and mod.lower() not in [m.lower() for m in masters]:
@@ -128,13 +129,14 @@ def write_test_plugin(gd, cell, p, path, place='', give=(), mod=None):
     w = espwrite.Writer(gd, _P)
     w.masters = masters
     w.mindex = {m.lower(): k for k, m in enumerate(masters)}
+    moving = bool(cell or own_place)
 
     marker_base = next(fid for fid, (i, r) in gd.forms.items()
                        if r.tag == 'STAT' and tes4.zstr(gd.fields(fid).get('EDID', b'')) == 'XMarkerHeading')
     tree = plugintree.Plugin.empty(b'')
     order = gd.plugins[0].top_groups()
     # the script and its quest
-    if cell:
+    if moving:
         msg = 'FOLab: Play here%s' % (' (' + place + ')' if place else '')
     else:
         msg = 'FOLab: added %s' % ', '.join('%d %s' % (c, e) if c > 1 else e for _k, c, e in give)
@@ -145,11 +147,12 @@ def write_test_plugin(gd, cell, p, path, place='', give=(), mod=None):
         if key.startswith('+'):
             return (mod_i << 24) | int(key[1:], 16)
         return w.local(gd.from_key(key))
-    scda = compiled_script(msg, move=bool(cell), give=[(2 + bool(cell) + k, g[1]) for k, g in enumerate(give)])
-    refs = [PLAYER_REF] + ([marker_id] if cell else []) + [item_id(k) for k, _c, _e in give]
+    w.link = item_id                            # (the place's own record may name the mod's forms)
+    scda = compiled_script(msg, move=moving, give=[(2 + moving + k, g[1]) for k, g in enumerate(give)])
+    refs = [PLAYER_REF] + ([marker_id] if moving else []) + [item_id(k) for k, _c, _e in give]
     schr = struct.pack('<IIIIHH', 0, len(refs), len(scda), 1, SCRIPT_QUEST, 1)
     slsd = struct.pack('<I12sB7s', 1, b'\0' * 12, 1, b'\0' * 7)          # local 1: done (a short)
-    text = source(msg.decode('cp1252'), bool(cell), [(e, c) for _k, c, e in give])
+    text = source(msg.decode('cp1252'), moving, [(e, c) for _k, c, e in give])
     script = espwrite.join([('EDID', b'FOLabTestScript%d\0' % n), ('SCHR', schr), ('SCDA', scda),
                             ('SCTX', text.encode('cp1252', 'replace')), ('SLSD', slsd), ('SCVR', b'done\0')] +
                            [('SCRO', struct.pack('<I', r)) for r in refs])
@@ -157,14 +160,18 @@ def write_test_plugin(gd, cell, p, path, place='', give=(), mod=None):
     quest = espwrite.join([('EDID', b'FOLabTestQuest%d\0' % n), ('SCRI', struct.pack('<I', script_id)),
                            ('FULL', b'FOLab test\0'), ('DATA', struct.pack('<BBHf', QUEST_START_ENABLED, 0, 0, 0.5))])
     tree.top('QUST', order).kids.append(plugintree.Rec.new('QUST', 0, quest_id, quest))
-    if not cell:
+    if not moving:
         return _finish(tree, masters, own, base, path, 'FOLabTestQuest%d' % n)
     # the marker, in the place (a copy of its CELL record carries it, as every plugin that adds to a cell must)
     # (outside, a persistent thing lives in its world's persistent cell, as the game's own do)
-    cell = gd.world_persistent.get(gd.ext_cells[cell], cell) if cell in gd.ext_cells else cell
-    lid = w.local(cell)
     found = {}
-    _node, kids = w._cell_node(tree, found, cell, lid, order)
+    if own_place:
+        lid = item_id(own_place[0])
+        _node, kids = w._cell_node(tree, found, None, lid, order, own_place[1])
+    else:
+        cell = gd.world_persistent.get(gd.ext_cells[cell], cell) if cell in gd.ext_cells else cell
+        lid = w.local(cell)
+        _node, kids = w._cell_node(tree, found, cell, lid, order)
     ref = espwrite.join([('EDID', b'FOLabTestMarker\0'), ('NAME', struct.pack('<I', marker_base)),
                          ('DATA', struct.pack('<6f', p[0], p[1], p[2], 0.0, 0.0, p[3]))])
     w._ref_group(kids, lid, True).kids.append(plugintree.Rec.new('REFR', tes4.PERSISTENT, marker_id, ref))

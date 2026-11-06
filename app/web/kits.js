@@ -137,13 +137,15 @@ async function kitTab(){
     <div class="note" style="padding:0 0 6px">Fills an area with the game's own pieces, each side joining what's beside it, every way out closed off. Best in an empty place of your own (<b>+ New</b> under Places).</div>
     <label class="vt-row">Kit <select id="kit-pick">${d.kits.map(k => `<option value="${esc(k.name)}" ${k.name === was ? 'selected' : ''}>${esc(k.label)} (${k.tiles})</option>`).join('')}</select></label>
     <label class="vt-row">Size <input type="number" id="kit-w" min="2" max="40" value="${KIT.w || 10}" style="width:60px"> × <input type="number" id="kit-h" min="2" max="40" value="${KIT.h || 10}" style="width:60px"> squares</label>
-    <div class="kit-go"><button class="primary" id="kit-make">Generate</button> <button id="kit-again" ${KIT.last ? '' : 'disabled'} title="Undo that layout and try another">Try another</button></div>
+    <div class="kit-go"><button class="btn primary" id="kit-make">Generate</button> <button class="btn" id="kit-again" ${KIT.last ? '' : 'disabled'} title="Replace that layout with another">Try another</button></div>
     <div class="note" id="kit-said" style="padding:6px 0">${KIT.said || ''}</div>
-    <div class="note" style="padding:0">Not there yet: stairs and big pieces, lights and furnishings, and a navmesh, so characters can't walk it in game yet.</div>`;
+    <div class="note" style="padding:0">Generating again replaces the last layout here. Not there yet: stairs and big pieces, lights and furnishings.</div>
+    <div class="h" style="margin-top:10px">Navmesh</div>
+    <div id="nav-box"></div>`;
+  navDraw();
   box.querySelector('#kit-pick').onchange = e => { KIT.pick = e.target.value; };
   box.querySelector('#kit-make').onclick = () => kitMake();
   box.querySelector('#kit-again').onclick = async () => {
-    if (KIT.last && A.state.project && A.state.project.undo === KIT.last) await undoRedo('undo');
     kitMake();
   };
 }
@@ -161,13 +163,65 @@ async function kitMake(){
   if (!made) return (said.textContent = '');
   if (!made.ops){ KIT.said = said.textContent = made.note; return; }
   const label = `Generate ${info.label}`;
-  const d = await edit(label, made.ops.map(o => ({...o, cell: A.cellId})));
+  // (the last layout goes in the same step: two on one spot flicker where their surfaces meet)
+  const old = (A.things || []).filter(t => t.gen).map(t => ({op: 'remove', cell: A.cellId, ref: t.key}));
+  const d = await edit(label, old.concat(made.ops.map(o => ({...o, cell: A.cellId}))));
   if (!d) return (said.textContent = '');
   KIT.last = label;
   KIT.said = `${made.ops.length} pieces. A walker starting inside couldn't get out.`;
   W.cam.position.set(made.start[0], made.start[1], made.start[2] + 110);
   await kitTab();
+  navMake();
 }
+
+// ---------- the place's navmesh: where characters can walk ----------
+async function navDraw(){
+  const box = $('#nav-box'); if (!box) return;
+  if (!A.cellId || A.outside){ box.innerHTML = '<div class="note" style="padding:0">Open a place inside to make it a navmesh. Places outside aren\'t ready yet.</div>'; return; }
+  const cell = A.cellId;
+  const s = await api('/api/navmesh/status?cell=' + encodeURIComponent(cell)).catch(() => null);
+  if (!s || cell !== A.cellId) return;
+  const words = s.mine ? (s.current ? `Up to date, ${s.triangles} triangles.` : `<b>Out of date:</b> things have changed since it was made. Make it again.`)
+    : s.game ? `This place has the game's navmesh${s.game > 1 ? 'es' : ''}${s.can ? ', which yours would replace' : ': FOLab can\'t replace several yet'}.`
+    : 'None: characters can\'t find their way here in game.';
+  box.innerHTML = `<div class="note" style="padding:0 0 6px">${words}</div>
+    <div class="kit-go"><button class="btn" id="nav-make" ${s.can ? '' : 'disabled'}>${s.mine ? 'Make it again' : 'Make navmesh'}</button>
+    ${s.mine ? '<button class="btn" id="nav-off">Remove</button>' : ''}</div>
+    <label class="vt-row" style="margin-top:6px"><input type="checkbox" id="nav-show" ${KIT.navShow ? 'checked' : ''}> Show it in the view</label>
+    <div class="note" id="nav-said" style="padding:6px 0 0">${KIT.navSaid || ''}</div>`;
+  box.querySelector('#nav-make').onclick = navMake;
+  if (s.mine) box.querySelector('#nav-off').onclick = async () => { const d = await post('/api/navmesh/remove', {cell: A.cellId}).catch(fail); if (d){ setState(d.state); KIT.navSaid = ''; navDraw(); navOverlay(); } };
+  box.querySelector('#nav-show').onchange = e => { KIT.navShow = e.target.checked; navOverlay(); };
+  navOverlay();
+}
+
+async function navMake(){
+  if (!A.cellId || A.outside) return;
+  const said = $('#nav-said'); if (said) said.textContent = 'Making the navmesh…';
+  const d = await post('/api/navmesh/make', {cell: A.cellId}).catch(e => { fail(e); return null; });
+  if (!d) return;
+  if (d.note){ KIT.navSaid = d.note; toast(d.note, true); return navDraw(); }
+  setState(d.state);
+  const r = d.report;
+  KIT.navSaid = `Made in ${Math.round(r.seconds || 0)} s.` + (r.doors ? ` ${r.doors} door${r.doors > 1 ? 's' : ''} linked.` : '') + (r.doors_missed ? ` <b>${r.doors_missed} door${r.doors_missed > 1 ? 's' : ''} too far from any floor.</b>` : '') + (r.cut_off ? ` ${r.cut_off} cut-off area${r.cut_off > 1 ? 's' : ''} left out: nothing leads there.` : '');
+  navDraw();
+}
+
+// green over where it can walk
+async function navOverlay(){
+  if (KIT.navMesh){ W.scene.remove(KIT.navMesh); KIT.navMesh.geometry.dispose(); KIT.navMesh = null; }
+  if (!KIT.navShow || !A.cellId || A.outside) return;
+  const cell = A.cellId;
+  const d = await api('/api/navmesh?cell=' + encodeURIComponent(cell)).catch(() => null);
+  if (!d || !d.tris.length || cell !== A.cellId || !KIT.navShow) return;
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(d.verts.map((v, i) => i % 3 === 2 ? v + 4 : v), 3));
+  g.setIndex(d.tris);
+  const m = new T.Mesh(g, new T.MeshBasicMaterial({color: 0x3df27a, wireframe: true, transparent: true, opacity: 0.8, depthTest: true}));
+  m.raycast = () => {};
+  KIT.navMesh = m; W.scene.add(m);
+}
+{ const was = openPlace; openPlace = async (...a) => { const r = await was(...a); if ($('#tab-kit').classList.contains('on')) kitTab(); else navOverlay(); return r; }; }
 
 $('#right .tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.dataset.tab === 'kit') kitTab(); });
 
