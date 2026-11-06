@@ -340,6 +340,10 @@ _TYPE_ADD = {
                           'FNAM': ('Sun texture', 'z'), 'GNAM': ('Sun glare texture', 'z'),
                           'TNAM': ('Timing', [('B', 'Sunrise begin'), ('B', 'Sunrise end'), ('B', 'Sunset begin'), ('B', 'Sunset end'), ('B', 'Volatility'), ('B', 'Moons')])}),
     'ASPC': ('Acoustic spaces', {'WNAM': ('Unused', [('I', 'Value')]), 'RDAT': ('Region sound', 'F'), 'ANAM': ('Environment', [('I', 'Type')]), 'INAM': ('Is interior', [('I', 'Value')])}),
+    # (SCPT's compiled bytes and source, SCDA and SCTX, stay raw: they hold no form IDs, only numbers in its SCRO list)
+    'SCPT': ('Scripts', {'SCVR': ('Variable name', 'z')}),
+    'MESG': ('Messages', {'INAM': ('Icon', 'F'), 'DNAM': ('Flags', [('I', 'Flags')]), 'TNAM': ('Seconds shown', [('I', 'Seconds')]),
+                          'ITXT': ('Button text', 'z')}),
 }
 for _t, _d in _TYPE_ADD.items():
     if _t in TYPES:

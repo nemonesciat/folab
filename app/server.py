@@ -27,6 +27,7 @@ import playtest
 import project
 import actors
 import adopt
+import api_scripts
 import browse
 import recordio
 import base64
@@ -1285,6 +1286,9 @@ def save():
     return {'path': path, 'bytes': n, 'state': state()}
 
 
+api_scripts.setup(lambda: GD, lambda: PR, lambda: BR, lambda: state())
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -1317,6 +1321,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not p.startswith(WEB):
                     return self.send(b'no', 'text/plain', 403)
                 return self.file(p)
+            if u.path.startswith('/api/scripts'):
+                return self.send(api_scripts.get(u.path, q))
             if u.path == '/api/about':
                 return self.send(about())
             if u.path == '/api/report':
@@ -1432,6 +1438,8 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=SERVER.shutdown, daemon=True).start()
                 return
             with _lock:
+                if u.path.startswith('/api/scripts'):
+                    return self.send(api_scripts.post(u.path, body))
                 if u.path == '/api/nvse/download':
                     rel = nvse.latest()
                     return self.send({'version': nvse.download(rel), 'state': state()})
