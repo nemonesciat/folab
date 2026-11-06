@@ -377,3 +377,38 @@ wtTab('road', 'Roads & spots', {
     return false;
   },
 });
+
+// ---------- Distant land ----------
+const FL = {report: null, world: null, poll: null, said: ''};
+async function flDraw(box){
+  box.innerHTML = '<div class="note">Looking…</div>';
+  const r = await api('/api/w/lod?world=' + encodeURIComponent(wtWorld())).catch(e => { fail(e); return null; });
+  if (!r || !box.isConnected) return;
+  FL.report = r;
+  const j = r.job || {};
+  box.innerHTML = `<div class="note">What the game draws beyond the loaded cells. FOLab makes the <b>distant ground and its colours</b> in plain Python. It doesn't make <b>distant buildings or trees</b>: for those you still want xLODGen.</div>
+    <div class="note">${esc(r.world)}: ${r.settings ? `the game has ${r.game_terrain} chunks of ground and ${r.game_objects} of buildings for it.` : 'no distant land yet: from nearby it looks fine, from far off nothing shows.'}</div>
+    <div class="note">${r.settings ? (r.changed_cells ? `Your land changes ${r.changed_cells} cells: ${r.changed_chunks} chunks to make again.` : 'Your mod hasn\'t changed its land.') : `${r.all_chunks} chunks to make, at levels ${r.levels.join(', ')}, a few seconds each.`}</div>
+    <div class="wt-go"><button class="btn primary" id="fl-make" ${j.running || (r.settings && !r.changed_cells) ? 'disabled' : ''}>Make distant land</button>
+    <button class="btn" id="fl-in" ${r.made ? '' : 'disabled'} title="Copies the files into the game's Data folder">Put in game</button>
+    <button class="btn" id="fl-out" ${r.installed ? '' : 'disabled'} title="Takes out exactly what went in, putting back anything it replaced">Take out</button></div>
+    <div class="note" id="fl-said">${FL.said}</div><div class="note">Made files wait in <code style="word-break:break-all">${esc(r.folder)}</code> until you choose. New land shows in game only after making it again.</div>`;
+  box.querySelector('#fl-make').onclick = async () => {
+    const d = await wtPost('/api/w/lod/make', {world: wtWorld()});
+    if (d) flPoll();
+  };
+  box.querySelector('#fl-in').onclick = async () => { const d = await wtPost('/api/w/lod/install', {}); if (d){ FL.said = `${d.files} files put in the game.`; wtDraw(); } };
+  box.querySelector('#fl-out').onclick = async () => { const d = await wtPost('/api/w/lod/uninstall', {}); if (d){ FL.said = `${d.files} files taken out.`; wtDraw(); } };
+  if (j.running) flPoll();
+}
+function flPoll(){
+  if (FL.poll) return;
+  FL.poll = setInterval(async () => {
+    const j = await api('/api/w/lod/job').catch(() => null); if (!j) return;
+    if (j.running){ FL.said = `Making chunks: ${j.done} of ${j.total}…`; if ($('#fl-said')) $('#fl-said').textContent = FL.said; return; }
+    clearInterval(FL.poll); FL.poll = null;
+    FL.said = j.ok === false ? '<b>Could not make it:</b> ' + esc(j.error) : j.result ? (j.result.note || `Made ${j.result.chunks} chunks, ${j.result.files} files.`) : '';
+    if (WT.on && WT.tab === 'far') wtDraw();
+  }, 1200);
+}
+wtTab('far', 'Far land', {draw: flDraw});

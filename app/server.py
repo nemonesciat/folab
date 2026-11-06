@@ -1060,7 +1060,7 @@ def _world_apply(pr, label, ops):
     return state()
 
 
-WORLD_CTX = {'lock': _lock, 'apply': _world_apply}
+WORLD_CTX = {'lock': _lock, 'apply': _world_apply, 'not_playing': lambda: not_while_playing()}
 
 
 def edit(label, ops):

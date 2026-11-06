@@ -42,7 +42,8 @@ class Ground:
                 self.h[k] = mine['h']
             else:
                 e = self.gd.land_at(self.world, *k)
-                self.h[k] = land.heights_of(dict(land.tes4.iter_subrecords(self.gd.plugins[e[0]].data(e[1])))['VHGT']) if e else None
+                vh = dict(land.tes4.iter_subrecords(self.gd.plugins[e[0]].data(e[1]))).get('VHGT') if e else None
+                self.h[k] = land.heights_of(vh) if vh else None
         return self.h[k]
 
     def at(self, x, y):

@@ -62,13 +62,14 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.
-- Navmesh: `navbuild.py` keeps a place's mesh in `project.navmesh` (op `navmesh`), `espwrite` writes NAVM + NAVI + each door's XNDP, Kit tab makes it. Inside only: outside needs its neighbours overridden. `navmesh.py` reads/writes NAVM and NAVI byte for byte and holds the rules (its docstring: what a
+- Navmesh: `navbuild.py` keeps a place's mesh in `project.navmesh` (op `navmesh`; `others` for a place's further meshes), `espwrite` writes NAVM + NAVI + each door's XNDP, Kit tab makes it. Outside, `navbuild.Area`/`generate_area` joins cells to whatever is round them; neighbours are whole copies (`copy`, same triangles, links changed). Meshes that had to go become stubs (`navmesh.stub_mesh`). `navedit.py`: by hand, `web/navtool.js`. `navmesh.py` reads/writes NAVM and NAVI byte for byte and holds the rules (its docstring: what a
   plugin must do), `navgen.py` generates a cell's mesh, `hkshape.py` reads collision shapes. Run `py -3 app/navmesh.py`
   to recheck every game record. Collision triangle soups wind either way (they came from strips): don't trust facing.
 - Kits (`kitindex.py`): building pieces per mesh folder on each kit's grid; each side's section (cut just inside it from the
   mesh) says if it's a way through and what it meets; `kit.seen` is every join the game built. `Tileset` + `build_area` fill any
   squares with every side agreeing (one-square, one-level pieces so far: no stairs or big pieces yet); `can_walk_out` checks a
   layout from the real meshes. Editor: `web/kits.js` (Joins under Selected, the Kit tab), `/api/kits`, `/api/kit/piece`, `/api/kit/layout`.
+- World tools (`web/worldtools.js` panel + map hooks, `web/worldtabs.js` tabs, `worldapi.py` every `/api/w/`): `worldrec.py` regions, zones, markers, patrols, encounter spots (its docstring: the layouts); what changes on a CELL is `project.cellinfo` {cell: {tag: key}} (op `cellinfo`), extras on a ref are in its change (`marker`, `zone`, `link`, `patrol_wait`; op `place` for refs naming each other). `roadgen.py` roads, `lodgen.py` distant ground only (written to `build/<mod> distant land/`, copied in by choice; its chunks rebuilt byte for byte in `tests/test_lodgen.py`; distant objects and trees: xLODGen).
 - Tests: `py -3 tests/run.py` (each test_*.py in a fresh FOLAB_HOME, against the game's files; never the real game).
   Run it before committing changes to the readers, writer, project or schema.
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the

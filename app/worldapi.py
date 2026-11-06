@@ -3,15 +3,18 @@ markers, encounter zones, cell details, roads and distant land. server.py hands 
 
 Making navmeshes for many cells takes minutes, so it runs in a thread of its own and the page asks how it's going: it only
 reads while it works (the game's files are memory maps, the mod's changes plain dicts), and its result goes in as one Undo."""
+import os
 import threading
 
 import navbuild
+import lodgen
 import navedit
 import roadgen
 import scatter
 import worldrec as R
 
 JOB = {'running': False}
+LOD_JOB = {'running': False}
 _job_lock = threading.Lock()
 
 
@@ -57,6 +60,27 @@ def nav_status(gd, pr, world):
     return {'cells': navbuild.world_status(gd, pr, w) if pr else {}, 'job': {k: v for k, v in JOB.items() if k != 'state'}}
 
 
+def lod_job(gd, pr, world):
+    """Make a world's distant land in a thread of its own: it writes only into the mod's folder under build."""
+    with _job_lock:
+        if LOD_JOB.get('running'):
+            raise ValueError('Distant land is already being made.')
+        LOD_JOB.clear()
+        LOD_JOB.update(running=True, done=0, total=0)
+
+    def progress(n, total):
+        LOD_JOB.update(done=n, total=total)
+
+    def work():
+        try:
+            LOD_JOB.update(result=lodgen.generate(gd, pr, world, lodgen.out_folder(pr), progress=progress), ok=True)
+        except Exception as e:  # (whatever goes wrong, the page has to hear about it)
+            LOD_JOB.update(error=str(e), ok=False)
+        LOD_JOB['running'] = False
+    threading.Thread(target=work, daemon=True).start()
+    return dict(LOD_JOB)
+
+
 def scatter_found(gd, pr, world, x, y):
     """What the Scatter brush can put down here: what the game placed round here, and the objects of the regions it's in."""
     w = gd.from_key(world)
@@ -95,6 +119,14 @@ def get(path, q, gd, pr, ctx):
         return {'cell': R.ckey_of(gd, gd.from_key(q['world']), (int(q['x']), int(q['y'])))}
     if path == '/api/w/encounter/choices':
         return R.encounter_choices(gd, pr)
+    if path == '/api/w/lod':
+        out = lodgen.report_for(gd, pr, gd.from_key(q['world'])) if pr else {}
+        out['made'] = bool(pr and os.path.isdir(lodgen.out_folder(pr)))
+        out['installed'] = bool(pr and os.path.isfile(lodgen.manifest_path(pr)))
+        out['job'] = {k: v for k, v in LOD_JOB.items()}
+        return out
+    if path == '/api/w/lod/job':
+        return dict(LOD_JOB)
     return None
 
 
@@ -108,6 +140,14 @@ def post(path, body, gd, pr, ctx):
     if path == '/api/w/nav/edit':
         ops, label, cells = navedit.act(gd, pr, body)
         return {'state': ctx['apply'](pr, label, ops), 'cells': cells}
+    if path == '/api/w/lod/make':
+        return {'job': lod_job(gd, pr, gd.from_key(body['world']))}
+    if path == '/api/w/lod/install':
+        ctx['not_playing']()
+        return {'files': lodgen.install(pr, gd.data_dir)}
+    if path == '/api/w/lod/uninstall':
+        ctx['not_playing']()
+        return {'files': lodgen.uninstall(pr, gd.data_dir)}
     if path == '/api/w/region/save':
         ops, key = R.region_save(gd, pr, body)
         return {'state': ctx['apply'](pr, 'Region ' + body['region']['edid'], ops), 'key': key}
