@@ -27,6 +27,7 @@ import playtest
 import project
 import actors
 import adopt
+import api_characters
 import browse
 import recordio
 import base64
@@ -160,6 +161,8 @@ def light_of(bkey):
 def actor_parts(bkey):
     """The meshes a character or creature is drawn from (the game's form, or a record of the mod's own copied from
     one: drawn as the one it was copied from, by its editor ID's original)."""
+    if PR and bkey in PR.records:             # (one the mod has: as the mod has it)
+        return api_characters.look(GD, PR, bkey)
     if bkey not in _actors:
         try:
             if bkey.startswith('+'):
@@ -1372,6 +1375,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(BR.where_used(q['key']))
             if u.path == '/api/search':
                 return self.send(search(q.get('q', ''), q.get('kind', '')))
+            if u.path.startswith('/api/char/'):
+                with _lock:
+                    return self.send(api_characters.get(u.path, q, GD, PR, BR))
             if u.path == '/api/actor':
                 with _lock:
                     return self.send(actor_parts(q['key']))
@@ -1457,6 +1463,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(open_project(name))
                 if not PR:
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
+                if u.path.startswith('/api/char/'):
+                    return self.send(api_characters.post(u.path, body, GD, PR, BR, edit))
                 if u.path == '/api/world/new':
                     return self.send(new_world(body))
                 if u.path == '/api/shape/cells':

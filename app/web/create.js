@@ -253,16 +253,16 @@ function crSetModel(tag, path, bounds){
 
 function crDirty(){ CR.dirty = true; const b = $('#cr-detail [data-a="save"]'); if (b) b.disabled = false; }
 
-function crBind(){
-  const box = $('#cr-detail');
-  box.querySelectorAll('[data-in]').forEach(i => i.oninput = crDirty);
-  box.querySelectorAll('[data-fxn]').forEach(i => i.oninput = crDirty);
-  box.querySelectorAll('[data-entn]').forEach(i => i.oninput = crDirty);
-  box.querySelectorAll('[data-flag]').forEach(i => i.onchange = crDirty);
+// (the Characters page uses the inventory editor too: its own box, its own idea of what's unsaved)
+function crBind(box = $('#cr-detail'), dirty = crDirty){
+  box.querySelectorAll('[data-in]').forEach(i => i.oninput = dirty);
+  box.querySelectorAll('[data-fxn]').forEach(i => i.oninput = dirty);
+  box.querySelectorAll('[data-entn]').forEach(i => i.oninput = dirty);
+  box.querySelectorAll('[data-flag]').forEach(i => i.onchange = dirty);
   box.querySelectorAll('[data-ent]').forEach(i => {
     let timer;
     i.oninput = () => {
-      crDirty(); i._touched = true;
+      dirty(); i._touched = true;
       clearTimeout(timer);
       timer = setTimeout(async () => {
         const r = await api('/api/resolve?q=' + encodeURIComponent(i.value));
@@ -274,7 +274,7 @@ function crBind(){
   box.querySelectorAll('[data-pick],[data-fx]').forEach(i => {
     let timer;
     i.oninput = () => {
-      crDirty(); i._touched = true;
+      dirty(); i._touched = true;
       clearTimeout(timer);
       timer = setTimeout(async () => {
         const rows = await api(`/api/records?type=${i.dataset.type}&q=${encodeURIComponent(i.value)}`);
@@ -304,9 +304,8 @@ async function crResolve(i){
   return found.key;
 }
 
-function crRead(){
+function crRead(box = $('#cr-detail')){
   // the form's values into CR.rec (throws on a bad number or an unknown link)
-  const box = $('#cr-detail');
   return (async () => {
     for (const i of box.querySelectorAll('[data-in]')){
       const p = CR.picks[i.dataset.in], raw = i.value;

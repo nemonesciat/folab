@@ -59,6 +59,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
   `folab_running.json`, opens an Edge app window titled "FOLab", quits it with POST /api/quit (X-FOLab-Quit).
   `brand.py` draws the logo/icon (wrench F, gear O, LAB) into app/web/vendor. Themes: `web/theme.js` (CSS variables).
+- Characters page (`web/characters.js`, routes `/api/char/` in `api_characters.py`): NPC_, CREA, PACK, FACT in plain fields over the same records as Browse; the
+  inventory is `create.js`'s editor. A character's look comes from the mod's records (`look`; `actors.py` is for the game's). Packages start as copies of the game's
+  `Default*`. Faces copy FaceGen numbers only; the game's painted face files (`textures\characters\facemods`) can't be made yet: `warnings` says so. Levelled means
+  what the game does: an actor whose TPLT is the list, never a list placed. `populate.py` plans from a survey of who the game places where; a ref's `xlcm` is XLCM.
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.
@@ -83,7 +87,7 @@ the model for style, UI and approach. Python, standard library first, code in `a
   if every subrecord fits and encodes back byte for byte), `recordio.py` (a mod's records with links as keys),
   `browse.py` (Browse page data; its index builds in the background, ~20 s). Known limit: subrecords no layout reads are kept raw in their source file's numbering, so links inside them are only right
   for FalloutNV.esm records (and a DLC that ends up at the same master index). What's still raw and holds links: alternate
-  textures (MODS, MO2S..MO4S: a list with strings), PACK location/target unions (PLDT, PLD2, PTDT, PTD2), PERK EPFD, condition
+  textures (MODS, MO2S..MO4S: a list with strings), PERK EPFD, condition
   parameters (CTDA, which form they are depends on the function), owner COED's rank-or-global, CHAL parameters, and whole types
   not in `schema.TYPES`. Everything else raw is hash/geometry blobs (MODT, FGGS, NIFT, KFFZ, DMDT) or compiled script text.
 
