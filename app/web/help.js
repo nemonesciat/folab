@@ -1,10 +1,14 @@
 // ---------- Help: the guides, the controls, Report a problem, About ----------
 // The guides are Markdown files in web/docs, shown in a window over the page. Getting started opens by itself the
 // first time FOLab runs in this browser.
-const HELP_DOCS = [['getting-started', 'Getting started'], ['the-world', 'The World page: moving, selecting, placing'], ['generated-places', 'Generated places: plans, vaults, growing'],
-                   ['outside', 'Outside: land, water, worldspaces'], ['items-and-records', 'Items and records'],
+const HELP_DOCS = [['getting-started', 'Getting started'],
+                   ['the-world', 'The World page: moving, selecting, placing'],
+                   ['generated-places', 'Generated places: plans, vaults, growing'],
+                   ['outside', 'Outside: land, water, worldspaces'],
+                   ['items-and-records', 'Items and records'],
                    ['scripts', 'Scripts'],
                    ['quests-and-dialogue', 'Quests and dialogue'],
+                   ['characters', 'Characters, packages, factions, Populate'],
                    ['playing-and-your-mod', 'Playing, and your mod'],
                    ['tools', 'Tools: health check, load order, sharing']];
 

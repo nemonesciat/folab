@@ -174,6 +174,8 @@ class Project:
                     refs[key]['gen'] = True          # (generated in the Kit tab)
                 if o.get('sc'):
                     refs[key]['sc'] = True           # (scattered by the brush)
+                if o.get('xlcm') is not None:
+                    refs[key]['xlcm'] = int(o['xlcm'])   # (a levelled actor's difficulty: 0 easy .. 3 very hard)
                 made.append(key)
             elif o['op'] == 'move':
                 r = refs.setdefault(o['ref'], {})

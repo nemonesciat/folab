@@ -185,6 +185,8 @@ class Writer:
 
     def new_ref(self, rkey, r):
         subs = [('NAME', struct.pack('<I', self.link(r['base'])))]
+        if r.get('xlcm') is not None:                   # (a levelled actor's difficulty, straight after NAME as the game has it)
+            subs.append(('XLCM', struct.pack('<i', r['xlcm'])))
         if r.get('tel'):
             subs.append(('XTEL', self.tel(r)))
         if r.get('s', 1.0) != 1.0:

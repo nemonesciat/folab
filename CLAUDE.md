@@ -59,6 +59,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
   `folab_running.json`, opens an Edge app window titled "FOLab", quits it with POST /api/quit (X-FOLab-Quit).
   `brand.py` draws the logo/icon (wrench F, gear O, LAB) into app/web/vendor. Themes: `web/theme.js` (CSS variables).
+- Characters page (`web/characters.js`, routes `/api/char/` in `api_characters.py`): NPC_, CREA, PACK, FACT in plain fields over the same records as Browse; the
+  inventory is `create.js`'s editor. A character's look comes from the mod's records (`look`; `actors.py` is for the game's). Packages start as copies of the game's
+  `Default*`. Faces copy FaceGen numbers only; the game's painted face files (`textures\characters\facemods`) can't be made yet: `warnings` says so. Levelled means
+  what the game does: an actor whose TPLT is the list, never a list placed. `populate.py` plans from a survey of who the game places where; a ref's `xlcm` is XLCM.
 - Game settings: `gameini.py` edits Documents\My Games\FalloutNV\Fallout.ini + FalloutPrefs.ini line by line (backup
   first, read-only kept, never while the game runs; `FOLAB_NV_INI` points it elsewhere, which tests always do).
   Borderless is FOLab's own: windowed at the screen's size, frame taken off after FOLab starts the game.
