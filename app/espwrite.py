@@ -9,7 +9,9 @@ copied from the game are re-pointed from their file's own master list to this pl
 import os
 import struct
 
+import formlinks
 import land as landmod
+import masterlist
 import navbuild
 import navmesh
 import plugintree
@@ -22,17 +24,7 @@ INITIALLY_DISABLED = 0x00000800
 SUNK_Z = -30000.0
 ESM = 0x1
 
-# Subrecords holding form IDs, and where: a list of byte offsets, or 'all' for a plain list of form IDs
-FORMID_FIELDS = {
-    'REFR': {'NAME': [0], 'XEZN': [0], 'XTEL': [0], 'WMI1': [0], 'XTRG': [0], 'INAM': [0], 'XRDO': [12],
-             'XOWN': [0], 'XLOC': [4], 'XAMT': [0], 'XPWR': [0], 'XLTW': [0], 'XDCR': [0], 'XLKR': [0], 'XAPR': [0],
-             'XESP': [0], 'XEMI': [0], 'XMBR': [0], 'XNDP': [0], 'XPOD': 'all', 'XLRM': 'all', 'XORD': 'all'},
-    'CELL': {'XCLR': 'all', 'XCIM': [0], 'XEZN': [0], 'XCCM': [0], 'XCWT': [0], 'XOWN': [0], 'XCAS': [0],
-             'XCMO': [0], 'LTMP': [0]},
-}
-FORMID_FIELDS['WRLD'] = {'XEZN': [0], 'WNAM': [0], 'CNAM': [0], 'NAM2': [0], 'NAM3': [0], 'INAM': [0], 'ZNAM': [0],
-                         'IMPS': [4, 8]}
-FORMID_FIELDS['ACHR'] = FORMID_FIELDS['ACRE'] = FORMID_FIELDS['REFR']
+FORMID_FIELDS = formlinks.TABLE         # (where the form links are: formlinks.py has it all)
 
 
 class MasterError(ValueError):
@@ -64,8 +56,7 @@ class Writer:
         if name == self.own_name:
             return self.own(fid & 0xFFFFFF)
         if name not in self.mindex:
-            raise MasterError('%s uses something from %s, which is not one of its masters (%s). FOLab can\'t add '
-                              'masters to a plugin it opened yet.' % (self.pr.plugin, name, ', '.join(self.masters)))
+            raise MasterError('%s uses something from %s, which is not one of its masters (%s).' % (self.pr.plugin, name, ', '.join(self.masters)))
         return (self.mindex[name] << 24) | (fid & 0xFFFFFF)
 
     def own(self, objid):
@@ -77,22 +68,28 @@ class Writer:
 
     def remap_fields(self, plugin_i, tag, subs):
         """Form IDs inside a record copied from the game, from plugin plugin_i's numbering to ours."""
-        if self.gd.names[plugin_i] == self.own_name:
+        if self.gd.names[plugin_i] == self.own_name and self.masters == getattr(self, 'source_masters', None):
             return subs                         # (the opened plugin's own records already number as we do)
-        fields = FORMID_FIELDS.get(tag, {})
-        out = []
-        for st, sd in subs:
-            where = fields.get(st)
-            if where and sd:
-                b = bytearray(sd)
-                offs = range(0, len(b) - 3, 4) if where == 'all' else [o for o in where if o + 4 <= len(b)]
-                for o in offs:
-                    v = struct.unpack_from('<I', b, o)[0]
-                    if v:
-                        struct.pack_into('<I', b, o, self.local(self.gd.to_global(plugin_i, v)))
-                sd = bytes(b)
-            out.append((st, sd))
-        return out
+        own = len(self.gd.plugins[plugin_i].header['masters'])
+        return formlinks.repoint(tag, subs, own, lambda v: self.local(self.gd.to_global(plugin_i, v)))[0]
+
+    def record_subs(self, rec):
+        """A kept record's subrecords as we write it. Decoded links go through link(); the parts no layout reads are
+        still in the numbering of the file they came from, so their links are re-pointed from that file's."""
+        subs = recordio.to_bytes(rec, self.link)
+        src = (rec.get('src') or '').lower()
+        raw = {n for n, s in enumerate(rec['subs']) if s['kind'] == 'raw'}
+        if not raw or src not in self.gd.names:
+            return subs
+        if src == self.own_name and self.masters == getattr(self, 'source_masters', None):
+            return subs                         # (the opened plugin numbers as we do)
+        i = self.gd.names.index(src)
+        own = len(self.gd.plugins[i].header['masters'])
+        out = [bytearray(d) if n in raw else None for n, (_t, d) in enumerate(subs)]
+        for n, o, v in formlinks.values(rec['type'], subs, own):
+            if n in raw and v & 0xFFFFFF >= formlinks.BUILTIN_LIMIT:
+                struct.pack_into('<I', out[n], o, self.local(self.gd.to_global(i, v)))
+        return [(t, bytes(out[n]) if out[n] is not None else d) for n, (t, d) in enumerate(subs)]
 
     # --- what the plugin needs ---
 
@@ -100,10 +97,11 @@ class Writer:
         """The masters: an opened plugin keeps its own list as it was; a new mod names every game file whose forms it
         uses, in load order."""
         gd = self.gd
+        kept = None
         if self.source:
-            self.masters = list(tes4.PluginFile(self.source).header['masters'])
-            self.mindex = {m.lower(): k for k, m in enumerate(self.masters)}
-            return
+            pf = tes4.PluginFile(self.source)
+            kept = list(pf.header['masters'])
+            pf.close()
         used = {0}
         if getattr(self, 'force_all', False):
             used |= set(range(len(gd.plugins)))     # (every game file: a new world may use any of them later)
@@ -158,7 +156,15 @@ class Writer:
                 if m.lower() in gd.names:
                     used.add(gd.names.index(m.lower()))
         order = sorted(used)
-        self.masters = [gd.plugins[i].path.replace('\\', '/').rsplit('/', 1)[-1] for i in order]
+        file_name = lambda i: gd.plugins[i].path.replace('\\', '/').rsplit('/', 1)[-1]
+        if kept is not None:
+            # (what it had stays where it was; anything new it now uses goes after, every link re-pointed in build())
+            low = {m.lower() for m in kept} | {self.own_name}
+            self.source_masters = kept
+            self.masters = kept + [file_name(i) for i in order if gd.names[i] not in low]
+            self.mindex = {m.lower(): k for k, m in enumerate(self.masters)}
+            return
+        self.masters = [file_name(i) for i in order]
         self.mindex = {gd.names[i]: k for k, i in enumerate(order)}
 
     # --- records ---
@@ -190,7 +196,7 @@ class Writer:
         """A ref's subrecords and flags with the mod's change laid over: moved, rescaled, swapped, removed."""
         p, s = r.get('p'), r.get('s')
         if r.get('removed'):
-            flags |= INITIALLY_DISABLED
+            flags = (flags | INITIALLY_DISABLED) & ~tes4.DELETED    # (a deleted one, in an opened plugin, comes back sunk)
             old = next((d for t, d in subs if t == 'DATA'), None)
             if old:
                 v = list(struct.unpack_from('<6f', old))
@@ -219,6 +225,8 @@ class Writer:
         self.plan()
         gd = self.gd
         tree = plugintree.Plugin.read(self.source) if self.source else plugintree.Plugin.empty(b'')
+        if self.source and self.masters != self.source_masters:
+            masterlist.grow(tree, self.pr.plugin, self.masters)
         order = gd.plugins[0].top_groups()
         found = {r.formid: (r, parent) for r, parent, _path in tree.records()}
 
@@ -227,7 +235,7 @@ class Writer:
             if rec['type'] == 'CELL':
                 continue
             fid = self.link(key)
-            data = join(recordio.to_bytes(rec, self.link))
+            data = join(self.record_subs(rec))
             if fid in found:
                 found[fid][0].set_data(data, rec['flags'])
             else:
@@ -260,7 +268,7 @@ class Writer:
                 node, kids = self._cell_node(tree, found, cell, lid, order, mine)
                 nodes[cell] = (node, kids)
                 if mine:
-                    node.set_data(join(recordio.to_bytes(mine, self.link)), mine['flags'])
+                    node.set_data(join(self.record_subs(mine)), mine['flags'])
             # outside, what stays loaded (persistent) lives in the world's persistent cell
             keep = gd.world_persistent.get(gd.ext_cells[cell]) if outside else None
 
@@ -288,6 +296,8 @@ class Writer:
                     continue
                 if have:
                     subs = list(tes4.iter_subrecords(have[0].data()))
+                    if r.get('removed') and not any(t == 'DATA' for t, _d in subs):
+                        subs = self._restored_ref(fid, rlid) or subs    # (deleted with nothing left in it: from its master)
                     was = have[0].flags
                     subs, flags = self.changed_ref(subs, have[0].flags & ~tes4.COMPRESSED, r)
                     have[0].set_data(join(subs), flags)
@@ -344,6 +354,8 @@ class Writer:
             subs = set_water(subs, h)
             node.set_data(join(subs), node.flags & ~tes4.COMPRESSED)
 
+        self._drop(tree, found)
+
         # the header: an opened plugin's own, with its count and next ID brought up to date
         own_ids = [r.formid & 0xFFFFFF for r, _p, _path in tree.records() if r.formid >> 24 == len(self.masters)]
         next_id = self.own(max([self.pr.next_id] + [x + 1 for x in own_ids]))
@@ -353,6 +365,9 @@ class Writer:
             v, _n, nxt = struct.unpack_from('<fiI', old)
             hedr = struct.pack('<fiI', v, tree.count(), max(nxt, next_id)) + old[12:]
             subs = [(t, hedr if t == 'HEDR' else d) for t, d in subs]
+            # (only what you've changed on the Get ready to share page: an untouched plugin keeps its header)
+            subs = _set_text(subs, 'CNAM', self.pr.author)
+            subs = _set_text(subs, 'SNAM', self.pr.description)
         else:
             subs = [('HEDR', struct.pack('<fiI', HEDR_VERSION, tree.count(), next_id)),
                     ('CNAM', (self.pr.author or 'FOLab').encode('cp1252', 'replace')[:511] + b'\0')]
@@ -365,6 +380,38 @@ class Writer:
         if new_head != tree.header.raw or flags != tree.header.flags:
             tree.header.set_data(new_head, flags)
         return tree.bytes()
+
+    def _restored_ref(self, fid, rlid):
+        """A placed thing's subrecords as its own file has them, numbered as we write."""
+        i = fid >> 24
+        p = self.gd.plugins[i]
+        own = len(p.header['masters'])
+        low = fid & 0xFFFFFF
+        for rec, _g in p.walk():
+            if rec.formid == (own << 24) | low:
+                return self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(p.data(rec))))
+        return None
+
+    def _drop(self, tree, found):
+        """Records the mod has cleaned out of an opened plugin, and any groups that leaves empty."""
+        gone = False
+        for key in getattr(self.pr, 'drop', ()):
+            have = found.get(self.link(key))
+            if have and have[1] is not None and have[0] in have[1].kids:
+                have[1].kids.remove(have[0])
+                del found[self.link(key)]
+                gone = True
+        if gone:
+            def prune(kids):
+                keep = []
+                for k in kids:
+                    if isinstance(k, plugintree.Group):
+                        k.kids = prune(k.kids)
+                        if not k.kids:
+                            continue
+                    keep.append(k)
+                return keep
+            tree.tops = prune(tree.tops)
 
     def _write_navmesh(self, found, ckey, cell, kids, lid, nav, info, links):
         """A place's NAVM, first in its temporary group as the game has it, and its doors told which triangle they stand by."""
@@ -431,7 +478,7 @@ class Writer:
             parent.kids.insert(at + 1, kids)
             return node, kids
         if cell is None:                                # (a place of the mod's own: its record is all there is)
-            subs, flags = recordio.to_bytes(mine, self.link), mine['flags']
+            subs, flags = self.record_subs(mine), mine['flags']
         else:
             subs, flags = self.game_cell(cell)
         node = plugintree.Rec.new('CELL', flags, lid, join(subs), FORM_VERSION)
@@ -552,6 +599,21 @@ def set_water(subs, h):
         at = max([n + 1 for n, (t, _d) in enumerate(out) if t in WATER_AFTER] or [len(out)])
         out.insert(at, ('XCLW', v))
     return out
+
+
+def _set_text(subs, tag, text):
+    """A header's author or description, if the project has one that differs from it."""
+    have = next((d for t, d in subs if t == tag), None)
+    if not text or tes4.zstr(have or b'') == text:
+        return subs
+    data = text.encode('cp1252', 'replace')[:511] + b'\0'
+    if have is not None:
+        return [(t, data if t == tag else d) for t, d in subs]
+    at = 0
+    for n, (t, _d) in enumerate(subs):
+        if t in ('HEDR', 'OFST', 'DELE', 'CNAM'):
+            at = n + 1
+    return subs[:at] + [(tag, data)] + subs[at:]
 
 
 def write(gd, project, path):

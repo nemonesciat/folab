@@ -51,6 +51,7 @@ class Project:
         self.records = d.get('records', {})     # form key or '+ID' -> record (recordio.py): game records changed, new ones
         self.land = d.get('land', {})           # outside CELL key -> its ground as the mod has it (land.py's form)
         self.navmesh = d.get('navmesh', {})     # place's CELL key -> its navmesh as the mod has it (navbuild.py)
+        self.drop = d.get('drop', [])           # keys of records an opened plugin has that saving leaves out (cleaning it)
         self.water = d.get('water', {})         # outside CELL key -> its water's height (None: the world's own level)
         self.source = d.get('source')           # an opened plugin: its copy, under projects/ (adopt.py); None for a new mod
         self.esm = d.get('esm', False)          # saved as a master (.esm)
@@ -74,7 +75,7 @@ class Project:
 
     def to_dict(self):
         return {'name': self.name, 'plugin': self.plugin, 'author': self.author, 'description': self.description,
-                'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'navmesh': self.navmesh, 'next_id': self.next_id,
+                'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'navmesh': self.navmesh, 'drop': self.drop, 'next_id': self.next_id,
                 'source': self.source, 'esm': self.esm}
 
     def save(self):
@@ -91,12 +92,12 @@ class Project:
         return os.path.join(BUILD_DIR, self.plugin)
 
     def count(self):
-        return sum(len(c['refs']) for c in self.cells.values()) + len(self.records) + len(self.land) + len(self.water) + len(self.navmesh)
+        return sum(len(c['refs']) for c in self.cells.values()) + len(self.records) + len(self.land) + len(self.water) + len(self.navmesh) + len(self.drop)
 
     # --- edits: each one a single undo step ---
 
     def _step(self, label):
-        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh)))
+        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), list(self.drop)))
         del self.undo_stack[:-200]
         self.redo_stack.clear()
 
@@ -143,6 +144,13 @@ class Project:
                 continue
             if o['op'] == 'water_revert':
                 self.water.pop(o['cell'], None)
+                continue
+            if o['op'] == 'drop':                    # an opened plugin's own copy of a record, left out when saved
+                if o['key'] not in self.drop:
+                    self.drop.append(o['key'])
+                continue
+            if o['op'] == 'drop_revert':
+                self.drop = [k for k in self.drop if k != o['key']]
                 continue
             if o.get('cell') == '$new':                # (the place a record_new earlier in these ops just made)
                 o = dict(o, cell=new_record)
@@ -192,20 +200,20 @@ class Project:
     def undo(self):
         if not self.undo_stack:
             return None
-        label, cells, records, nid, land, water, nav = self.undo_stack.pop()
-        self.redo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh)))
+        label, cells, records, nid, land, water, nav, drop = self.undo_stack.pop()
+        self.redo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), list(self.drop)))
         self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)   # (an undone ID is never reused)
-        self.land, self.water, self.navmesh = land, water, nav
+        self.land, self.water, self.navmesh, self.drop = land, water, nav, drop
         self.save()
         return label
 
     def redo(self):
         if not self.redo_stack:
             return None
-        label, cells, records, nid, land, water, nav = self.redo_stack.pop()
-        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh)))
+        label, cells, records, nid, land, water, nav, drop = self.redo_stack.pop()
+        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), list(self.drop)))
         self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)
-        self.land, self.water, self.navmesh = land, water, nav
+        self.land, self.water, self.navmesh, self.drop = land, water, nav, drop
         self.save()
         return label
 

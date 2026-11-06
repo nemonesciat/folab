@@ -20,6 +20,7 @@ import gamedata
 import gameini
 import install
 import kitindex
+import modtools
 import navbuild
 import nif
 import nvse
@@ -972,6 +973,7 @@ def load_game(pr):
     data_dir = GD.data_dir if GD else gamedata.find_data_dir()
     want = [os.path.join(data_dir, n) for n in gamedata.OFFICIAL if os.path.isfile(os.path.join(data_dir, n))]
     if pr and pr.source:
+        want += adopt.extra_masters(data_dir, pr.source_path())
         want.append(pr.source_path())
     if GD and [p.path for p in GD.plugins] == want:
         return
@@ -1326,6 +1328,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.file(os.path.join(WEB, 'docs', name + '.md'))
             if u.path == '/api/state':
                 return self.send(state())
+            if u.path.startswith('/api/tools/'):
+                return self.send(modtools.get(u.path[11:], q, sys.modules[__name__]))
             if u.path == '/api/interiors':
                 return self.send(interiors())
             if u.path == '/api/cell':
@@ -1432,6 +1436,8 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=SERVER.shutdown, daemon=True).start()
                 return
             with _lock:
+                if u.path.startswith('/api/tools/'):
+                    return self.send(modtools.post(u.path[11:], body, sys.modules[__name__]))
                 if u.path == '/api/nvse/download':
                     rel = nvse.latest()
                     return self.send({'version': nvse.download(rel), 'state': state()})
