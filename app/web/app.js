@@ -68,6 +68,12 @@ async function undoRedo(which){
     const d = await post('/api/' + which);
     setState(d.state);
     if (d.label) toast((which === 'undo' ? 'Undid ' : 'Redid ') + d.label);
+    // (a place of your own may have come or gone with that step)
+    await loadPlaces();
+    if (!A.outside && A.cellId && !A.places.some(p => p.id === A.cellId)){
+      const next = A.places.find(p => p.own) || A.places[0];
+      if (next) return await openPlace(next.id);
+    }
     await resync();
   } catch (e){ fail(e); }
 }
@@ -76,20 +82,22 @@ async function undoRedo(which){
 async function loadPlaces(){ A.places = await api('/api/interiors'); drawPlaces(); }
 
 // ---------- a place of your own ----------
-function newPlaceDialog(){
+function newPlaceDialog(fromId){
   if (!A.state.project) return toast('Start a mod first.', true);
-  const cur = A.places.find(p => p.id === A.cellId);
+  const from = typeof fromId === 'string' ? fromId : A.cellId, copying = from !== A.cellId || typeof fromId === 'string';
+  const cur = A.places.find(p => p.id === from);
+  const startName = copying && cur ? `${cur.name || cur.edid} copy` : 'My Room';
   const box = document.createElement('div');
   box.className = 'owin'; box.style.cssText = 'left:50%;top:22%;transform:translateX(-50%);width:440px';
   box.innerHTML = `<div class="owtitle"><b>New place</b><button class="owx">✕</button></div>
     <div style="padding:10px 14px">
       <p class="note" style="padding:0">A place of your own in your mod. Link it to the world with a door afterwards.</p>
       <div class="fields" style="grid-template-columns:90px 1fr;padding:6px 0">
-        <label>Name</label><input id="np-name" value="My Room">
-        <label>Editor ID</label><input id="np-edid" value="MyRoom">
+        <label>Name</label><input id="np-name" value="${esc(startName)}">
+        <label>Editor ID</label><input id="np-edid" value="${esc(startName.replace(/[^A-Za-z0-9]/g, '') || 'MyRoom')}">
       </div>
-      <p><label><input type="radio" name="np-mode" value="empty" checked> Empty${cur ? ` (lit like ${esc(cur.name || cur.edid)})` : ''}</label><br>
-         <label><input type="radio" name="np-mode" value="copy" ${cur ? '' : 'disabled'}> A copy of ${cur ? esc(cur.name || cur.edid) + ', everything in it' : 'the place open now'}</label></p>
+      <p><label><input type="radio" name="np-mode" value="empty" ${copying ? '' : 'checked'}> Empty${cur ? ` (lit like ${esc(cur.name || cur.edid)})` : ''}</label><br>
+         <label><input type="radio" name="np-mode" value="copy" ${cur ? '' : 'disabled'} ${copying ? 'checked' : ''}> A copy of ${cur ? esc(cur.name || cur.edid) + ', everything in it' : 'the place open now'}</label></p>
     </div>
     <div class="owfoot"><button class="btn primary" id="np-go">Make it</button><button class="btn" id="np-cancel">Cancel</button></div>`;
   document.body.appendChild(box);
@@ -99,10 +107,10 @@ function newPlaceDialog(){
   name.oninput = () => { edid.value = name.value.replace(/[^A-Za-z0-9]/g, '') || 'MyRoom'; };
   name.focus(); name.select();
   box.querySelector('#np-go').onclick = async () => {
-    if (!A.cellId) return toast('Open any place first: the new one takes its lighting.', true);
+    if (!from) return toast('Open any place first: the new one takes its lighting.', true);
     const copy = box.querySelector('input[name="np-mode"]:checked').value === 'copy';
     try {
-      const d = await post('/api/place/new', {from: A.cellId, name: name.value.trim() || 'My Room', edid: edid.value.trim() || 'MyRoom', copy});
+      const d = await post('/api/place/new', {from, name: name.value.trim() || 'My Room', edid: edid.value.trim() || 'MyRoom', copy});
       close(); setState(d.state); await loadPlaces(); await openPlace(d.made[0]);
       toast(copy ? 'A copy of the place, all yours' : 'An empty place: place things on the grid, then link a door to it');
     } catch (e){ fail(e); }
@@ -131,11 +139,12 @@ async function unlinkDoor(t){
   try { const d = await post('/api/doors/unlink', {cell: A.cellId, ref: t.key}); setState(d.state); await resync(); toast('Unlinked'); }
   catch (e){ fail(e); }
 }
+const PLACE_PINS = (() => { try { return new Set(JSON.parse(localStorage.getItem('folab-pins') || '[]')); } catch (e) { return new Set(); } })();
 function drawPlaces(){
   const f = $('#f-places').value.toLowerCase(), list = $('#places');
   const rows = A.places.filter(c => !f || (c.edid + ' ' + c.name).toLowerCase().includes(f));
-  rows.sort((a, b) => (b.mine - a.mine) || a.edid.localeCompare(b.edid));
-  list.innerHTML = rows.map(c => `<div class="row${c.id === A.cellId ? ' on' : ''}" data-id="${esc(c.id)}"><div>${c.own ? '<span class="dot new" title="A place of your own"></span>' : c.mine ? '<span class="dot moved" title="Your mod changes this place"></span>' : ''}${esc(c.name || c.edid)}<small>${esc(c.edid)} · ${esc(c.plugin)}</small></div><span class="n">${c.refs}</span></div>`).join('');
+  rows.sort((a, b) => (PLACE_PINS.has(b.id) - PLACE_PINS.has(a.id)) || (b.mine - a.mine) || a.edid.localeCompare(b.edid));
+  list.innerHTML = rows.map(c => `<div class="row${c.id === A.cellId ? ' on' : ''}" data-id="${esc(c.id)}"><div>${PLACE_PINS.has(c.id) ? '<span title="Pinned to the top">📌 </span>' : ''}${c.own ? '<span class="dot new" title="A place of your own"></span>' : c.mine ? '<span class="dot moved" title="Your mod changes this place"></span>' : ''}${esc(c.name || c.edid)}<small>${esc(c.edid)} · ${esc(c.plugin)}</small></div><span class="n">${c.refs}</span></div>`).join('');
 }
 $('#places').addEventListener('click', e => { const r = e.target.closest('.row'); if (r) openPlace(r.dataset.id); });
 $('#f-places').addEventListener('input', drawPlaces);
@@ -432,20 +441,25 @@ function pickToPlace(e){
   document.querySelectorAll('#tab-place .row').forEach(x => x.classList.toggle('on', x === r));
   startPlacing(it);
   W.ren.domElement.focus();
-  const h = $('#hint'); h.textContent = `Click where ${it.edid} goes · Esc or right-click stops`; h.style.display = 'block';
 }
 for (const id of ['#found', '#recent']){
   $(id).addEventListener('click', pickToPlace);
   $(id).addEventListener('dragstart', e => { const r = e.target.closest('.row'); if (r){ e.dataTransfer.setData('text/x-folab', r.dataset.key); e.dataTransfer.effectAllowed = 'copy'; } });
 }
-W.onPlace = (item, p) => {
+W.onPlace = (item, p, size = 1) => {
   if (!item){ $('#hint').style.display = 'none'; document.querySelectorAll('#tab-place .row.on').forEach(x => x.classList.remove('on')); return; }
-  if (item.items){                                    // a prefab: every thing in it, as one step
-    return edit('Place ' + item.prefab, item.items.map(it => ({op: 'add', cell: A.cellId, base: it.base, s: it.s || 1,
-      p: [p[0] + it.p[0], p[1] + it.p[1], p[2] + it.p[2], it.p[3], it.p[4], it.p[5]].map(v => Math.round(v * 100) / 100)})), true);
+  if (item.items){                                    // a prefab: every thing in it, as one step, turned and sized as a whole
+    const yaw = p[5], c = Math.cos(yaw), n = Math.sin(yaw), r2 = v => Math.round(v * 100) / 100, r4 = v => Math.round(v * 10000) / 10000;
+    const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -yaw, 'XYZ'));
+    return edit('Place ' + item.prefab, item.items.map(it => {
+      const x = it.p[0] * size, y = it.p[1] * size;
+      const e = new THREE.Euler().setFromQuaternion(turn.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-it.p[3], -it.p[4], -it.p[5], 'XYZ'))), 'XYZ');
+      return {op: 'add', cell: A.cellId, base: it.base, s: r4((it.s || 1) * size),
+              p: [r2(p[0] + x * c + y * n), r2(p[1] - x * n + y * c), r2(p[2] + it.p[2] * size), r4(-e.x), r4(-e.y), r4(-e.z)]};
+    }), true);
   }
   remember(item);
-  edit('Place ' + item.edid, [{op: 'add', cell: A.cellId, base: item.key, p, s: 1}]);
+  edit('Place ' + item.edid, [{op: 'add', cell: A.cellId, base: item.key, p, s: size}]);
 };
 W.onDropItem = async (key, e) => {
   const it = findItem(key); if (!it || !A.cellId) return;
@@ -467,6 +481,7 @@ $('#t-removed').onchange = e => { setShow('removed', e.target.checked); drawObje
 $('#t-light').onchange = e => { setGameLight(e.target.checked); try { localStorage.setItem('folab-light', e.target.checked ? '1' : '0'); } catch (err) {} };
 function lightsRefresh(){ resync(); }
 $('#t-help').onclick = () => { const h = $('#help3d'); h.style.display = h.style.display === 'block' ? 'none' : 'block'; };
+$('#help3d-x').onclick = () => { $('#help3d').style.display = 'none'; };
 $('#b-undo').onclick = () => undoRedo('undo'); $('#b-redo').onclick = () => undoRedo('redo');
 $('#b-save').onclick = save; $('#b-install').onclick = install;
 $('#b-play').onclick = () => play();
@@ -520,7 +535,7 @@ addEventListener('keydown', e => {
   else if (ctrl && k === 'a'){ e.preventDefault(); select(visibleGroups().map(g => g.userData.thing.key)); }
   else if (e.key === 'Delete'){ delSel(); }
   else if (e.key === 'End'){ dropSel(); }
-  else if (e.key === 'Escape'){ if (cmClose() || owClose()) return; if (A.linking) linkEnd(); else if (A.swapping) swapEnd(); else if (W.placing) stopPlacing(); else select([]); }
+  else if (e.key === 'Escape'){ if (cmClose() || owClose()) return; if ($('#help3d').style.display === 'block'){ $('#help3d').style.display = 'none'; return; } if (A.linking) linkEnd(); else if (A.swapping) swapEnd(); else if (W.placing) stopPlacing(); else select([]); }
   else if (ctrl || e.altKey) return;
   else if (k === 'g' || k === '1') setTool('translate');
   else if (k === 'r' || k === '2') setTool('rotate');

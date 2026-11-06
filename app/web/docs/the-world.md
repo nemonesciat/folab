@@ -5,6 +5,7 @@
 ## Opening a place
 
 - **Places** (left): every interior, your own first. **＋ New** makes a place of your own, empty or a copy of the one open.
+- **Right-click a place**: open it, play there, copy it, rename or delete one of your own, put a game place back as it was, make its navmesh, copy its console line, or pin it to the top. Deleting or putting back asks first, and **Undo** takes it back. Other lists have right-click menus too: **Objects** gives the same menu as the 3D view.
 - **Outside**: the worldspaces (the Mojave, the Strip, the DLC lands) and the places on each one's map. **＋ New worldspace** makes land of your own.
 - **Go to a place** (Ctrl+K): a name, a cell's coordinates (*-18, 0*) or a spot in game units (*x y z*, as the console gives it).
 - Select a door, right-click, **Go where it leads**. **Alt+←** goes back to where you were.
@@ -47,6 +48,19 @@ Drag the arrows to move (**G**), the rings to turn (**R**), any handle of **Scal
 ## Placing
 
 Search in **Place** (right), then click a result and click where it goes, or drag it into the view. **Recently used** and **Prefabs** (groups you saved with *Save as a prefab*) are above the search. **Ctrl+C / Ctrl+V** copy and paste, **Ctrl+D** duplicates.
+
+While something's on the mouse, before you click it down:
+
+| Do | To |
+|---|---|
+| Wheel | Turn it by the **Angle** setting (Shift+wheel: 1°) |
+| R (Shift+R the other way) | A quarter turn |
+| Ctrl+wheel, or [ and ] | Make it bigger or smaller |
+| Alt+wheel, or Page Up / Page Down | Raise or lower it (Shift: 1 unit) |
+| 0 | Put all that back |
+| Esc or right-click | Stop placing |
+
+It stays on the mouse so you can put down several. The turn carries on to the next thing you pick, as a run of pieces usually faces one way; size and height start afresh. A prefab turns and sizes as a whole. A note at the bottom of the view shows where it stands.
 
 **Building from the game's kits.** Select a building piece from a vault, an office, a cave and so on: **Selected** lists its open sides, with green panels in the view. Pick a side to see what can join there, with the joins the game itself built first. Hover over one to see it in place, click to put it there, and carry on from the new piece. The **Kit** tab generates a whole layout in the place you've got open, one you can walk with every way out closed off. It has no stairs, lights or furnishings yet.
 

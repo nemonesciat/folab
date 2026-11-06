@@ -290,7 +290,14 @@ function controls(el){
     } else if (!d.shift) select(key ? [key] : []);
   });
   el.addEventListener('dblclick', e => { const h = hitThing(e); if (h && h.group) W.onOpen(h.group.userData.thing.key); });
-  el.addEventListener('wheel', e => { e.preventDefault(); W.cam.position.addScaledVector(dir(), -Math.sign(e.deltaY) * (W.keys.shift ? 800 : 200)); }, {passive: false});
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (W.placing) return placeWheel(e);                                // (placing: the wheel works on what's being placed)
+    W.cam.position.addScaledVector(dir(), -Math.sign(e.deltaY) * (W.keys.shift ? 800 : 200));
+  }, {passive: false});
+  addEventListener('keydown', e => {                                    // (heard first: R turns the piece, not the tool)
+    if (W.placing && !typing(e) && W.box.offsetParent && placeKey(e)){ e.preventDefault(); e.stopPropagation(); }
+  }, true);
   // things dragged in from the Place panel land where they're dropped
   el.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('text/x-folab')) e.preventDefault(); });
   el.addEventListener('drop', async e => {
@@ -693,8 +700,52 @@ function arrivalFor(g){
 
 // ---------- placing new things ----------
 // (item: one thing to place; or a prefab, {prefab: name, items: [{base, p (from the group's middle), s, model, type}]})
+// While placing: the wheel turns it (by the Angle setting, Shift 1°), R a quarter turn, Ctrl+wheel or [ ] its size, Alt+wheel or
+// Page Up/Down its height, 0 puts all that back. The turn stays for the next thing (a run of pieces usually faces one way);
+// size and height go back to normal with each new thing picked.
+W.place = {yaw: 0, scale: 1, raise: 0};
+function placeHint(){
+  const it = W.placing; if (!it) return;
+  const P = W.place, deg = Math.round(P.yaw * 180 / Math.PI * 10) / 10, h = $('#hint');
+  const now = [`${deg}°`];
+  if (P.scale !== 1) now.push(`size ${P.scale}`);
+  if (P.raise) now.push(`${P.raise > 0 ? 'up' : 'down'} ${Math.abs(P.raise)}`);
+  h.innerHTML = `<b>${esc(it.edid || it.prefab || it.name || 'Placing')}</b> · ${now.join(' · ')}<br><small><kbd>Click</kbd> put it down · <kbd>Wheel</kbd> turn (<kbd>Shift</kbd> 1°) · <kbd>R</kbd> 90° · <kbd>Ctrl+wheel</kbd> size · <kbd>Alt+wheel</kbd> height · <kbd>0</kbd> reset · <kbd>Esc</kbd> stop</small>`;
+  h.style.display = 'block';
+}
+function placeShape(){
+  if (W.ghost){
+    W.ghost.rotation.set(0, 0, -W.place.yaw);
+    W.ghost.scale.setScalar(W.ghostScale * W.place.scale);
+    if (W.mouse) placeGhost(W.mouse);
+  }
+  placeHint();
+}
+function placeTurn(deg){ const T2 = 2 * Math.PI; W.place.yaw = (((W.place.yaw + deg * Math.PI / 180) % T2) + T2) % T2; placeShape(); }
+function placeSize(times){ W.place.scale = Math.max(0.1, Math.min(10, Math.round(W.place.scale * times * 100) / 100)); placeShape(); }
+function placeRaise(by){ W.place.raise += by; placeShape(); }
+function placeWheel(e){
+  const d = e.deltaY || e.deltaX, up = d < 0 ? 1 : -1;       // (with Shift held, the browser reports the wheel as sideways)
+  if (e.ctrlKey) return placeSize(up > 0 ? 1.1 : 1 / 1.1);
+  if (e.altKey) return placeRaise(up * (e.shiftKey ? 1 : 8));
+  placeTurn(up * (e.shiftKey ? 1 : +$('#t-angle').value || 15));
+}
+function placeKey(e){
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  const k = e.key.toLowerCase();
+  if (k === 'r'){ if (!e.repeat) placeTurn(e.shiftKey ? -90 : 90); return true; }
+  if (k === ']'){ placeSize(1.1); return true; }
+  if (k === '['){ placeSize(1 / 1.1); return true; }
+  if (e.key === 'PageUp'){ placeRaise(e.shiftKey ? 1 : 8); return true; }
+  if (e.key === 'PageDown'){ placeRaise(e.shiftKey ? -1 : -8); return true; }
+  if (k === '0'){ W.place = {yaw: 0, scale: 1, raise: 0}; placeShape(); return true; }
+  return false;
+}
+
 async function startPlacing(item){
   W.placing = item;
+  W.place.scale = 1; W.place.raise = 0;
+  placeHint();
   select([]);
   if (W.ghost) W.scene.remove(W.ghost);
   const g = new T.Group();
@@ -707,16 +758,18 @@ async function startPlacing(item){
       g.add(sub);
     }
     W.ghostLift = 0;                                // (a prefab keeps its lowest point at its origin)
+    W.ghostScale = 1;
   } else {
     const {parts, scale} = await thingParts(item);
     for (const [geo, mat] of parts) g.add(new T.Mesh(geo, mat));
-    g.scale.setScalar(scale);
+    W.ghostScale = scale;
     W.ghostLift = await modelLift(item.model, item);
   }
   if (W.placing !== item) return;
   g.traverse(m => { if (m.isMesh) m.raycast = () => {}; });
   g.visible = false;
   W.ghost = g; W.scene.add(g);
+  placeShape();
 }
 
 function stopPlacing(){
@@ -730,7 +783,7 @@ function placeGhost(e){
   const hit = hitThing(e);
   if (!hit){ W.ghost.visible = false; return; }
   const grid = W.gridSnap || 0, s = v => grid ? Math.round(v / grid) * grid : v;
-  W.ghost.position.set(s(hit.point.x), s(hit.point.y), hit.point.z + (hit.normal && hit.normal.z > 0.5 ? W.ghostLift : 0));
+  W.ghost.position.set(s(hit.point.x), s(hit.point.y), hit.point.z + (hit.normal && hit.normal.z > 0.5 ? W.ghostLift * W.place.scale : 0) + W.place.raise);
   W.ghost.visible = true;
 }
 
@@ -738,5 +791,5 @@ function placeAt(e){
   placeGhost(e);
   if (!W.ghost || !W.ghost.visible) return;
   const p = W.ghost.position;
-  W.onPlace(W.placing, [p.x, p.y, p.z, 0, 0, 0].map(v => Math.round(v * 100) / 100));
+  W.onPlace(W.placing, [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100, Math.round(p.z * 100) / 100, 0, 0, Math.round(W.place.yaw * 10000) / 10000], W.place.scale);
 }

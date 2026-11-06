@@ -81,10 +81,13 @@ main{flex:1;display:flex;min-height:0}
 #view canvas{display:block}
 #status{display:flex;gap:16px;padding:4px 12px;border-top:1px solid var(--line);background:var(--bg2);color:var(--muted);font-size:12px;flex:none}
 #status .r{margin-left:auto}
-#hint{position:absolute;left:50%;top:54px;transform:translateX(-50%);background:#1b1813ee;border:1px solid var(--goldline);color:var(--gold2);
-  padding:5px 12px;border-radius:7px;font-size:13px;display:none;pointer-events:none}
-#help3d{position:absolute;left:12px;bottom:12px;max-width:min(720px,calc(100% - 24px));background:#1b1813f2;border:1px solid var(--line2);
-  border-radius:8px;padding:10px 14px;font-size:12.5px;line-height:1.75;color:var(--muted);display:none;z-index:4}
+#hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--goldline);color:var(--gold2);
+  padding:6px 14px;border-radius:7px;font-size:13px;display:none;pointer-events:none;text-align:center;width:max-content;max-width:calc(100% - 24px);line-height:1.7;z-index:3}
+#hint small{color:var(--muted);font-size:11.5px}
+#help3d{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(920px,calc(100% - 24px));max-height:calc(100% - 24px);display:none;overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:10px 16px 14px;font-size:12.5px;color:var(--muted);z-index:40;box-shadow:0 8px 28px #0008}
+.h3-top{display:flex;justify-content:space-between;align-items:center;font-size:14px}.h3-top button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
+.h3-body{columns:2 340px;column-gap:26px}.h3-body section{break-inside:avoid;margin-top:10px}.h3-body h4{margin:0 0 4px;color:var(--gold);font-size:12.5px}
+.h3-body dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;align-items:baseline}.h3-body dt{white-space:nowrap}.h3-body dd{margin:0}
 #help3d b{color:var(--gold2)}
 kbd{font:500 11.5px var(--mono);background:var(--bg2);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--text)}
 .btn.ico{min-width:32px;padding-left:0;padding-right:0;text-align:center}
@@ -214,8 +217,28 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 #loading div{display:flex;flex-direction:column;align-items:center;gap:10px}#loading b{font:600 56px Oswald,'Arial Narrow',sans-serif;color:var(--gold);letter-spacing:.42em;margin-left:.42em;line-height:1}
 #loading span{color:var(--muted)}#loading.gone{opacity:0;pointer-events:none}
 /* the theme's extras (theme.js) */
-.th-mono body,.th-mono .brand b,.th-mono h2,.th-mono h3,.th-mono .h,.th-mono .owtitle b{font-family:var(--mono)!important;letter-spacing:.04em}
-.th-mono .brand b{text-shadow:0 0 6px var(--gold);letter-spacing:.2em;margin-left:.17em}
+.th-font body,.th-font h2,.th-font h3,.th-font .h,.th-font .owtitle b,.th-font .mm-bar b{font-family:var(--ui-font)!important}
+.th-mono body,.th-mono h2,.th-mono h3,.th-mono .h,.th-mono .owtitle b{letter-spacing:.04em}
+.th-mono .brand b{font-family:var(--ui-font)!important;text-shadow:0 0 6px var(--gold);letter-spacing:.2em;margin-left:.17em}
+/* Pre-War Desktop: blue title bars, cream dialogs, glossy buttons, a green go button */
+.th-xp header{background:linear-gradient(#3b8cf0,#0a5bd6 30%,#0a4fc0 80%,#0a46ad);border-bottom:1px solid #003c9e;box-shadow:inset 0 1px 0 #7ab6ff}
+.th-xp .brand,.th-xp .brand b{color:#fff}
+.th-xp nav button{color:#eaf2ff}.th-xp nav button svg{stroke:#d5e6ff}
+.th-xp nav button:hover,.th-xp nav button.on{color:#fff;background:#ffffff2e;border-color:#ffffff59}
+.th-xp nav button:hover svg,.th-xp nav button.on svg{stroke:#fff}
+.th-xp header .pill{background:#f6f4e8}
+.th-xp .btn{background:linear-gradient(#fff,#ece9d8);border-color:#7f8fa3;border-radius:4px;box-shadow:inset 0 1px 0 #fff}
+.th-xp .btn:hover{border-color:#e8a33d;box-shadow:inset 0 0 0 1px #fbc761}
+.th-xp .btn.primary{background:linear-gradient(#63bd63,#37923a);border-color:#2a7a2d;color:#fff}
+.th-xp .btn.primary:hover{background:linear-gradient(#74cc74,#44a647);border-color:#2a7a2d}
+.th-xp .btn.on{background:linear-gradient(#dfeafa,#c1d2ee);border-color:#316ac5;color:#003399}
+.th-xp input,.th-xp select{border-color:#7f9db9;border-radius:3px}
+.th-xp .tabs button.on{color:#003399;border-bottom-color:#e8a33d}
+.th-xp .row.on{background:#316ac5;color:#fff;border-left-color:#0a246a}.th-xp .row.on small,.th-xp .row.on .n{color:#f0f5ff}
+.th-xp .tgrp{background:#ece9d8f2;border-color:#aca899;box-shadow:0 1px 4px #0004}
+.th-xp .owtitle{background:linear-gradient(#3b8cf0,#0a5bd6);color:#fff}.th-xp .owtitle b,.th-xp .owtitle button{color:#fff}
+.th-xp .mm-bar{background:linear-gradient(#3b8cf0,#0a5bd6);color:#fff}.th-xp .mm-bar b,.th-xp .mm-bar button,.th-xp .mm-bar .mm-where,.th-xp .mm-bar .tb-grip{color:#fff}
+.th-xp #status{background:linear-gradient(#f2f0e4,#ddd9c4)}
 .th-scan body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:500;background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px);mix-blend-mode:multiply}
 .th-scan.th-mono body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:499;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.35))}
 .th-calm *{transition:none!important;animation:none!important}
@@ -290,14 +313,13 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <div class="tgrp" data-grp="outside" title="" id="tg-outside" style="display:none"><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn" id="t-ground" title="Shape, paint and tint the ground outside">⛰ Ground</button><button class="btn" id="ls-btn" title="Shape many cells at once: ridges, valleys, plateaus, hills… drawn on the flat map">🗺⛰ Shape land</button></div>
     </div>
       <div id="hint"></div>
-      <div id="help3d"><b>3D view controls</b><br>
-        <kbd>Right-drag</kbd> look around · <kbd>W A S D</kbd> fly · <kbd>Q</kbd>/<kbd>E</kbd> down/up · <kbd>Shift</kbd> faster · tap <kbd>W A S D</kbd> twice and hold: sprint<br>
-        <kbd>Wheel</kbd> forward/back · <kbd>Middle-drag</kbd> slide · <kbd>Alt+drag</kbd> circle the selection<br>
-        <kbd>Click</kbd> select · <kbd>Shift+click</kbd> add · drag on empty space: select with a box · <kbd>Ctrl+A</kbd> everything you can see<br>
-        Drag the arrows to move, the rings to turn · <kbd>G</kbd> move · <kbd>R</kbd> turn · <kbd>F</kbd> look at it · <kbd>End</kbd> drop it onto what's below · <kbd>Shift+End</kbd> settle · <kbd>Ctrl+G</kbd> group · <kbd>Ctrl+click</kbd> one of a group<br>
-        <kbd>Ctrl+C</kbd>/<kbd>Ctrl+V</kbd> copy and paste where the mouse is · <kbd>Ctrl+D</kbd> duplicate · <kbd>Del</kbd> remove · <kbd>H</kbd> hide · <kbd>Shift+H</kbd> show hidden<br>
-        <kbd>Right-click</kbd> a menu · double-click: its window · <kbd>Esc</kbd> deselect · drag things from Place into the view<br>
-        <kbd>3</kbd> scale · <kbd>M</kbd> the flat map · <kbd>Ctrl+K</kbd> go to a place · <kbd>Alt+←</kbd> back · the View tab: what shows, locks, how far</div></div>
+      <div id="help3d"><div class="h3-top"><b>Controls in the 3D view</b><button class="owx" id="help3d-x" title="Close (Esc)">✕</button></div>
+        <div class="h3-body"><section><h4>Moving about</h4><dl><dt><kbd>Right-drag</kbd></dt><dd>look around</dd><dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>fly the way you look</dd><dt><kbd>Q</kbd> <kbd>E</kbd></dt><dd>down, up</dd><dt><kbd>Shift</kbd></dt><dd>faster; tap a move key twice and hold to sprint</dd><dt><kbd>Wheel</kbd></dt><dd>forward and back</dd><dt><kbd>Middle-drag</kbd></dt><dd>slide</dd><dt><kbd>Alt+drag</kbd></dt><dd>circle round the selection</dd><dt><kbd>F</kbd></dt><dd>look at what's selected</dd><dt><kbd>M</kbd></dt><dd>the flat map, and back</dd><dt><kbd>Ctrl+K</kbd></dt><dd>go to a place</dd><dt><kbd>Alt+←</kbd></dt><dd>back to where you were</dd></dl></section>
+        <section><h4>Selecting</h4><dl><dt><kbd>Click</kbd></dt><dd>select</dd><dt><kbd>Shift+click</kbd></dt><dd>add or take away</dd><dt>Drag on empty space</dt><dd>select with a box</dd><dt><kbd>Ctrl+A</kbd></dt><dd>everything you can see</dd><dt><kbd>Ctrl+click</kbd></dt><dd>one thing out of a group</dd><dt><kbd>Esc</kbd></dt><dd>deselect, or stop what you're doing</dd><dt><kbd>H</kbd> <kbd>Shift+H</kbd></dt><dd>hide it, show everything again</dd><dt><kbd>Right-click</kbd></dt><dd>a menu, here and on the lists</dd><dt>Double-click</dt><dd>its window</dd></dl></section>
+        <section><h4>Changing what's selected</h4><dl><dt><kbd>G</kbd> or <kbd>1</kbd></dt><dd>move: drag the arrows</dd><dt><kbd>R</kbd> or <kbd>2</kbd></dt><dd>turn: drag the rings</dd><dt><kbd>3</kbd></dt><dd>scale</dd><dt><kbd>End</kbd></dt><dd>drop it onto what's below</dd><dt><kbd>Shift+End</kbd></dt><dd>settle it, leaning as it lands</dd><dt><kbd>Del</kbd></dt><dd>remove</dd><dt><kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd></dt><dd>copy, paste where the mouse is</dd><dt><kbd>Ctrl+D</kbd></dt><dd>duplicate</dd><dt><kbd>Ctrl+G</kbd> <kbd>Ctrl+Shift+G</kbd></dt><dd>group, ungroup</dd></dl></section>
+        <section><h4>While placing</h4><dl><dt>Click a thing in Place</dt><dd>it comes to the mouse; or drag it into the view</dd><dt><kbd>Click</kbd></dt><dd>put it down; it stays on the mouse for another</dd><dt><kbd>Wheel</kbd> <kbd>Shift+wheel</kbd></dt><dd>turn by the Angle setting, by 1°</dd><dt><kbd>R</kbd> <kbd>Shift+R</kbd></dt><dd>a quarter turn, each way</dd><dt><kbd>Ctrl+wheel</kbd> or <kbd>[</kbd> <kbd>]</kbd></dt><dd>size</dd><dt><kbd>Alt+wheel</kbd> or <kbd>PgUp</kbd> <kbd>PgDn</kbd></dt><dd>height (Shift: 1 unit)</dd><dt><kbd>0</kbd></dt><dd>put turn, size and height back</dd><dt><kbd>Esc</kbd> or <kbd>Right-click</kbd></dt><dd>stop placing</dd></dl></section>
+        <section><h4>Your mod</h4><dl><dt><kbd>Ctrl+Z</kbd> <kbd>Ctrl+Y</kbd></dt><dd>undo, redo</dd><dt><kbd>Ctrl+S</kbd></dt><dd>save</dd></dl></section>
+        <section><h4>The ground brush, outside</h4><dl><dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>brush size</dd></dl></section></div></div></div>
     <div id="status"><span id="s-place">No place open</span><span id="s-load"></span>
       <span class="r">Right-drag look · WASD fly · ? all controls</span></div>
     <div id="welcome"><div class="card">
@@ -357,6 +379,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/help.js"></script>
 <script src="/web/toolbar.js"></script>
 <script src="/web/ctxmenu.js"></script>
+<script src="/web/listmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>
 <script src="/web/scripts.js"></script>

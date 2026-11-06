@@ -1,10 +1,24 @@
 // ---------- How FOLab looks: themes, text size, scanlines, calmer motion ----------
 // Each theme is a set of the page's colours (the CSS variables on :root). Kept in this browser (localStorage
 // "folab-theme") and put on by the small script at the top of index.html before the page shows, so there's no flash
-// of the old colours. Help > Appearance.
+// of the old colours. Help > Appearance. A font is its own choice: any font goes with any theme; a theme only says which it
+// starts with (only fonts FOLab carries, or that Windows has).
+const TH_FONTS = {
+  theme: {label: 'The theme\'s own'},
+  terminal: {label: 'Pip-Boy terminal', css: '"Share Tech Mono", ui-monospace, Consolas, monospace'},
+  inter: {label: 'Inter: clean and modern', css: 'Inter, "Segoe UI", system-ui, sans-serif'},
+  tahoma: {label: 'Tahoma: old Windows dialogs', css: 'Tahoma, Verdana, "Segoe UI", sans-serif'},
+  segoe: {label: 'Segoe UI: Windows today', css: '"Segoe UI", system-ui, sans-serif'},
+  verdana: {label: 'Verdana: wide and easy to read', css: 'Verdana, Tahoma, sans-serif'},
+  trebuchet: {label: 'Trebuchet: friendly', css: '"Trebuchet MS", Verdana, sans-serif'},
+  consolas: {label: 'Consolas: tidy code type', css: 'Consolas, "Cascadia Mono", ui-monospace, monospace'},
+  courier: {label: 'Courier: typewriter', css: '"Courier New", Courier, monospace'},
+  oswald: {label: 'Oswald: tall and narrow', css: 'Oswald, "Arial Narrow", sans-serif'},
+  cinzel: {label: 'Cinzel: carved capitals', css: 'Cinzel, Georgia, serif'},
+};
 const TH_THEMES = {
   mojave: {label: 'Mojave', about: 'Dusk over the desert: dark leather and gold', v: {}},
-  pipboy: {label: 'Pip-Boy', about: 'Phosphor green on a black screen, terminal type', mono: true, v: {
+  pipboy: {label: 'Pip-Boy', about: 'Phosphor green on a black screen, terminal type', font: 'terminal', v: {
     bg: '#050a06', panel: '#08110a', panel2: '#0c180f', line: '#163020', line2: '#1f4a2c', text: '#b7f5c4', muted: '#6fbf85', faint: '#5aa06f',
     gold: '#3df27a', gold2: '#8affac', goldline: '#1f7a3e', hover: '#0f2416', sel: '#123a1f', bg2: '#060d08', bg3: '#0a150c',
     'btn-primary': '#14522a', 'btn-primary-hover': '#1a6a36', red: '#ff7a5c', amber: '#e8f25a', green: '#6dff9a', blue: '#7ad7ff',
@@ -29,8 +43,12 @@ const TH_THEMES = {
     bg: '#efe8d8', panel: '#f8f3e8', panel2: '#fffaf0', line: '#dccfb4', line2: '#c9b893', text: '#2b2418', muted: '#6b5f4a', faint: '#7d7058',
     gold: '#9a6412', gold2: '#7a4c08', goldline: '#c9a361', hover: '#ece2cd', sel: '#e6d4ad', bg2: '#fffdf8', bg3: '#f4ecdb',
     'btn-primary': '#e3c27e', 'btn-primary-hover': '#d8b264', red: '#b8432e', amber: '#a87a10', green: '#4f8a3a', blue: '#3c6fa8'}},
+  desktop: {label: 'Pre-War Desktop', about: 'Bright blue title bars on a sunny morning, like a home PC from 2001', light: true, font: 'tahoma', cls: 'th-xp', view: 0x3a6ea5, v: {
+    bg: '#ece9d8', panel: '#f6f4e8', panel2: '#ffffff', line: '#c9c5b2', line2: '#aca899', text: '#000000', muted: '#3f3f3f', faint: '#5c5c5c',
+    gold: '#0a53c5', gold2: '#003399', goldline: '#7f9db9', hover: '#d6e3f8', sel: '#c1d2ee', bg2: '#ffffff', bg3: '#f2f0e4',
+    'btn-primary': '#37923a', 'btn-primary-hover': '#44a647', red: '#c01f1f', amber: '#996b00', green: '#1f7a22', blue: '#0a53c5'}},
 };
-const TH = {theme: 'pipboy', size: 14, scan: false, calm: false};      // (Pip-Boy green unless you pick another)
+const TH = {theme: 'pipboy', font: 'theme', size: 14, scan: false, calm: false};      // (Pip-Boy green unless you pick another)
 try { Object.assign(TH, JSON.parse(localStorage.getItem('folab-theme') || '{}')); } catch (e) {}
 
 function thApply(){
@@ -38,7 +56,11 @@ function thApply(){
   for (const k of new Set(Object.values(TH_THEMES).flatMap(x => Object.keys(x.v)))) root.style.removeProperty('--' + k);
   for (const [k, v] of Object.entries(t.v)) root.style.setProperty('--' + k, v);
   root.style.setProperty('--fs', TH.size + 'px');
-  root.classList.toggle('th-mono', !!t.mono);
+  const fontKey = TH_FONTS[TH.font] && TH.font !== 'theme' ? TH.font : t.font, font = TH_FONTS[fontKey];
+  if (font && font.css) root.style.setProperty('--ui-font', font.css); else root.style.removeProperty('--ui-font');
+  root.classList.toggle('th-font', !!(font && font.css));
+  root.classList.toggle('th-mono', fontKey === 'terminal');
+  root.classList.toggle('th-xp', t.cls === 'th-xp');
   root.classList.toggle('th-light', !!t.light);
   root.classList.toggle('th-scan', !!TH.scan);
   root.classList.toggle('th-calm', !!TH.calm);
@@ -47,18 +69,20 @@ function thApply(){
   if (typeof W !== 'undefined' && W.scene && !A.outside) W.scene.background = new T.Color(thView3d());
   if (typeof M !== 'undefined') M.dirty = true;
 }
-function thView3d(){ const t = TH_THEMES[TH.theme] || {}; return t.light ? 0x6f6656 : t.v && t.v.bg ? parseInt(t.v.bg.slice(1), 16) : 0x0e0c0a; }
+function thView3d(){ const t = TH_THEMES[TH.theme] || {}; return t.view ? t.view : t.light ? 0x6f6656 : t.v && t.v.bg ? parseInt(t.v.bg.slice(1), 16) : 0x0e0c0a; }
 
 function thWindow(){
   const box = helpWindow('Appearance', `<div class="th-grid">${Object.entries(TH_THEMES).map(([k, t]) => `
       <button class="th-card${TH.theme === k ? ' on' : ''}" data-theme="${k}" style="--c-bg:${t.v.bg || '#13110d'};--c-panel:${t.v.panel2 || '#221e18'};--c-gold:${t.v.gold || '#d2a85a'};--c-text:${t.v.text || '#ebe2cf'}">
         <span class="th-sw"><i></i><i></i><i></i></span><b>${esc(t.label)}</b><small>${esc(t.about)}</small></button>`).join('')}</div>
     <h3>Reading</h3>
+    <p><label>Font <select id="th-font">${Object.entries(TH_FONTS).map(([k, f]) => `<option value="${k}" ${(TH.font || 'theme') === k ? 'selected' : ''} ${f.css ? `style="font-family:${esc(f.css)}"` : ''}>${esc(f.label)}</option>`).join('')}</select></label> <span class="note" style="padding:0">Any font goes with any theme.</span></p>
     <p><label>Text size <select id="th-size">${[13, 14, 15, 16, 17].map(n => `<option ${n === TH.size ? 'selected' : ''}>${n}</option>`).join('')}</select></label></p>
     <p><label><input type="checkbox" id="th-scan" ${TH.scan ? 'checked' : ''}> Pip-Boy screen lines over the page</label><br>
        <label><input type="checkbox" id="th-calm" ${TH.calm ? 'checked' : ''}> Calmer: no fades or slides</label></p>
     <p class="note" style="padding:0">Kept in this browser. The 3D view and the map follow the theme.</p>`, true);
   box.addEventListener('click', e => { const c = e.target.closest('[data-theme]'); if (!c) return; TH.theme = c.dataset.theme; thApply(); box.querySelectorAll('.th-card').forEach(x => x.classList.toggle('on', x === c)); });
+  box.querySelector('#th-font').onchange = e => { TH.font = e.target.value; thApply(); };
   box.querySelector('#th-size').onchange = e => { TH.size = +e.target.value; thApply(); };
   box.querySelector('#th-scan').onchange = e => { TH.scan = e.target.checked; thApply(); };
   box.querySelector('#th-calm').onchange = e => { TH.calm = e.target.checked; thApply(); };

@@ -794,26 +794,90 @@ def ref_cell_key(rkey):
     return GD.key(c) if c is not None else None
 
 
+def _free_edid(want, mine=None):
+    """An editor ID nothing else has (the console's coc finds places by it); mine: one this record may keep."""
+    taken = set(BR.edids or {}) | {GD.edid(c).lower() for c in GD.interiors} | \
+        {recordio.field(r, 'EDID').lower() for r in PR.records.values()}
+    taken.discard((mine or '').lower())
+    edid, n = want, 1
+    while edid.lower() in taken:
+        n += 1
+        edid = '%s%d' % (want, n)
+    return edid
+
+
+def _doors_into(key):
+    """Doors in other places the mod has led to a door of this place, that would be left pointing at nothing if this
+    place's changes went: [(their cell, their ref)]."""
+    refs = (PR.cells.get(key) or {}).get('refs', {})
+    going = {k for k, r in refs.items() if k.startswith('+') or r.get('tel')}
+    return [(ck, rk) for ck, c in PR.cells.items() if ck != key
+            for rk, r in c['refs'].items() if (r.get('tel') or {}).get('door') in going]
+
+
+def _place_clear_ops(key):
+    """Everything the mod has in a place taken out: its things and changes, its navmesh, details and the doors led to it."""
+    ops = [{'op': 'tel', 'cell': ck, 'ref': rk, 'tel': None} for ck, rk in _doors_into(key)]
+    for rk in (PR.cells.get(key) or {}).get('refs', {}):
+        ops.append({'op': 'remove' if rk.startswith('+') else 'revert', 'cell': key, 'ref': rk})
+    if key in PR.navmesh:
+        ops.append({'op': 'navmesh_revert', 'cell': key})
+    if key in PR.cellinfo:
+        ops.append({'op': 'cellinfo_revert', 'cell': key})
+    return ops
+
+
+def place_check(key):
+    """What taking a place away would touch, for the question asked first."""
+    needle = '"%s"' % key
+    return {'things': len((PR.cells.get(key) or {}).get('refs', {})), 'doors': len(_doors_into(key)), 'navmesh': key in PR.navmesh,
+            'used_by': sorted(recordio.field(r, 'EDID') or k for k, r in PR.records.items() if k != key and needle in json.dumps(r))}
+
+
+def place_rename(body):
+    key = body['id']
+    rec = PR.records.get(key)
+    if not key.startswith('+') or not rec or rec.get('type') != 'CELL':
+        raise ValueError('Only a place of your own can be renamed here.')
+    rec = json.loads(json.dumps(rec))
+    edid = _free_edid(body['edid'], recordio.field(rec, 'EDID'))
+    recordio.set_field(rec, 'EDID', edid, label='Editor ID')
+    recordio.set_field(rec, 'FULL', body['name'], label='Name')
+    out = edit('Rename place ' + body['name'], [{'op': 'record', 'key': key, 'record': rec}])
+    out['edid'] = edid
+    return out
+
+
+def place_delete(key):
+    rec = PR.records.get(key)
+    if not key.startswith('+') or not rec or rec.get('type') != 'CELL':
+        raise ValueError('Only a place of your own can be deleted. A game place can only be put back as the game has it.')
+    return edit('Delete place ' + (recordio.field(rec, 'FULL') or recordio.field(rec, 'EDID')), _place_clear_ops(key) + [{'op': 'record_revert', 'key': key}])
+
+
+def place_put_back(key):
+    if key.startswith('+'):
+        raise ValueError('This place is your own: the game has nothing to put back.')
+    ops = _place_clear_ops(key)
+    if key in PR.records:
+        ops.append({'op': 'record_revert', 'key': key})
+    return edit('Put back ' + (GD.edid(GD.from_key(key)) or key), ops)
+
+
 def new_place(body):
     """A place of the mod's own: a copy of a place's record (its lighting, music, sound), empty or with copies of
     everything in it; and, in an empty one, a marker where the console's coc arrives."""
     src = body['from']
     rec = json.loads(json.dumps(BR.record(src)['record']))
     rec['type'], rec['src'] = 'CELL', rec.get('src', '')
-    # (an editor ID nothing else has: the console's coc finds places by it)
-    taken = set(BR.edids or {}) | {GD.edid(c).lower() for c in GD.interiors} | \
-        {recordio.field(r, 'EDID').lower() for r in PR.records.values()}
-    edid, n = body['edid'], 1
-    while edid.lower() in taken:
-        n += 1
-        edid = '%s%d' % (body['edid'], n)
+    edid = _free_edid(body['edid'])
     recordio.set_field(rec, 'EDID', edid, label='Editor ID')
     recordio.set_field(rec, 'FULL', body['name'], label='Name')
     ops = [{'op': 'record_new', 'record': rec}]
     if body.get('copy'):
         for t in cell_things(src):
             if t['state'] != 'removed':
-                ops.append({'op': 'add', 'cell': '$new', 'base': t['bkey'], 'p': t['p'], 's': t['s']})
+                ops.append({'op': 'add', 'cell': '$new', 'base': t['bkey'], 'p': t['p'], 's': t['s'], 'gen': t.get('gen')})
     else:
         coc = next((GD.key(f) for f, (i, r) in GD.forms.items() if r.tag == 'STAT' and GD.edid(f) == 'COCMarkerHeading'), None)
         if coc:
@@ -1425,6 +1489,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(ref(q['cell'], q['key']))
             if u.path == '/api/door':
                 return self.send(door(q['key']))
+            if u.path == '/api/place/check':
+                with _lock:
+                    return self.send(place_check(q['id']) if PR else {})
             if u.path == '/api/gamesettings':
                 return self.send(game_settings())
             if u.path == '/api/nvse/latest':
@@ -1568,6 +1635,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(prefab_save(body))
                 if u.path == '/api/place/new':
                     return self.send(new_place(body))
+                if u.path == '/api/place/rename':
+                    return self.send(place_rename(body))
+                if u.path == '/api/place/delete':
+                    return self.send(place_delete(body['id']))
+                if u.path == '/api/place/putback':
+                    return self.send(place_put_back(body['id']))
                 if u.path == '/api/navmesh/make':
                     return self.send(navmesh_make(body['cell']))
                 if u.path == '/api/navmesh/remove':

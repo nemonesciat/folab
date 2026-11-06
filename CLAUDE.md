@@ -58,7 +58,8 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
   `folab_running.json`, opens an Edge app window titled "FOLab", quits it with POST /api/quit (X-FOLab-Quit).
-  `brand.py` draws the logo/icon (wrench F, gear O, LAB) into app/web/vendor. Themes: `web/theme.js` (CSS variables).
+  `brand.py` draws the logo/icon (wrench F, gear O, LAB) into app/web/vendor. Themes: `web/theme.js` (CSS variables; `TH_FONTS` is a choice of its own, any font with any theme).
+- Right-click on lists: `web/listmenu.js` (rows of Places, Objects, Outside, Place, and any other `.row`); Edge's menu stays only in typing boxes and on selected text. Placing: `W.place` {yaw, scale, raise} in `world.js`.
 - Characters page (`web/characters.js`, routes `/api/char/` in `api_characters.py`): NPC_, CREA, PACK, FACT in plain fields over the same records as Browse; the
   inventory is `create.js`'s editor. A character's look comes from the mod's records (`look`; `actors.py` is for the game's). Packages start as copies of the game's
   `Default*`. Faces copy FaceGen numbers only; the game's painted face files (`textures\characters\facemods`) can't be made yet: `warnings` says so. Levelled means
