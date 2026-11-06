@@ -4,6 +4,7 @@
 const HELP_DOCS = [['getting-started', 'Getting started'], ['the-world', 'The World page: moving, selecting, placing'], ['generated-places', 'Generated places: plans, vaults, growing'],
                    ['outside', 'Outside: land, water, worldspaces'], ['items-and-records', 'Items and records'],
                    ['scripts', 'Scripts'],
+                   ['quests-and-dialogue', 'Quests and dialogue'],
                    ['playing-and-your-mod', 'Playing, and your mod'],
                    ['tools', 'Tools: health check, load order, sharing']];
 

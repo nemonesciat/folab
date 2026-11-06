@@ -51,7 +51,7 @@ COMMON = {
     'CNTO': ('Item', [('F', 'Item'), ('i', 'Count')]), 'SNAM': ('Sound', 'F'),
     # scripts, as they sit inside quests, dialogue, packages, perks, terminals and script records
     'SCHR': ('Script header', [('4x', ''), ('I', 'Reference count'), ('I', 'Compiled size'), ('I', 'Variable count'), ('H', 'Type'), ('H', 'Flags')]),
-    'SCRO': ('Script reference', 'F'), 'SCRV': ('Script variable', [('I', 'Index')]),
+    'SCRO': ('Script reference', 'F'), 'SCRV': ('Script variable', [('I', 'Index')]), 'SCVR': ('Script variable name', 'z'),
     'SLSD': ('Script variable data', [('I', 'Index'), ('12x', ''), ('B', 'Flags'), ('7x', '')]),
     # what a thing breaks into
     'DEST': ('Destruction', [('I', 'Health'), ('B', 'Stages'), ('B', 'Flags'), ('2x', '')]),
@@ -361,8 +361,35 @@ def _alts(rtype, tag):
     return [] if d is None else d if isinstance(d, list) else [d]
 
 
+_cond_params = None
+
+
+def condition_params():
+    """{condition function number: [(is it a form link, parameter's name)]}, from the game's own function table."""
+    global _cond_params
+    if _cond_params is None:
+        import scriptc
+        _cond_params = {e['code'] - 0x1000: [(p[0] in scriptc.PARAM_FORMS, p[2]) for p in e['params']]
+                        for e in scriptc.tables().by_code.values() if 0x1000 <= e['code'] < 0x2000}
+    return _cond_params
+
+
+def condition_fields(data):
+    """A condition's fields as its own bytes say: what its parameters are depends on the function (form links or plain
+    numbers), and its value is a global's link when flag 4 is set, otherwise a float."""
+    kind = data[0]
+    fn = struct.unpack_from('<H', data, 8)[0]
+    ps = condition_params().get(fn, [])
+    code = lambda n: 'F' if n < len(ps) and ps[n][0] else 'I'
+    fields = [('B', 'Type'), ('3x', ''), ('F' if kind & 4 else 'f', 'Value'), ('H', 'Function'), ('2x', ''),
+              (code(0), 'Parameter 1'), (code(1), 'Parameter 2'), ('I', 'Run on'), ('F', 'Reference')]
+    return fields[:{20: 7, 24: 8, 28: 9}[len(data)]]
+
+
 def layout(rtype, tag, data=None):
     """(label, kind) for a subrecord; with data, the alternative whose size fits it (None when none does)."""
+    if tag == 'CTDA' and data is not None and len(data) in (20, 24, 28):
+        return 'Condition', condition_fields(data)
     alts = _alts(rtype, tag)
     if data is None:
         return alts[0] if alts else None
@@ -427,6 +454,8 @@ def decode_record(rtype, subs):
 
 def _struct_for(rtype, tag, fields):
     """the struct alternative a decoded subrecord came from (its fields, padding included, line up)"""
+    if tag == 'CTDA':       # (a condition's own fields say what they are: see condition_fields)
+        return [(f['code'], f['name']) if 'code' in f else ('%dx' % (len(f['pad']) // 2), '') for f in fields]
     for d in _alts(rtype, tag):
         if isinstance(d[1], list) and len(d[1]) == len(fields):
             return d[1]

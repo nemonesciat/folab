@@ -237,6 +237,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>Create</button>
     <button id="nav-scripts" title="Read, write and fix scripts: what makes things happen in the game">
       <svg viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg>Scripts</button>
+    <button id="nav-quests" title="Quests, dialogue, and the board that shows how a quest moves on">
+      <svg viewBox="0 0 24 24"><path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6z"/><path d="M6 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2"/><path d="M9 8h7M9 12h7M9 16h4"/></svg>Quests</button>
     <button id="nav-world" class="on" title="The place you're working on, in 3D">
       <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>World</button>
     <button id="nav-mod" title="Your mod: save it, put it in the game, start another">
@@ -335,6 +337,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
   <div id="cr-detail"><div class="note" style="padding:24px">Pick an item. Change it, or start a new one of your own from it.</div></div>
 </main>
 <main id="page-scripts" style="display:none"></main>
+<main id="page-quests" style="display:none"></main>
 <div id="page-mod"></div>
 <main id="page-tools" style="display:none"></main>
 <div id="page-game"></div>
@@ -369,5 +372,8 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/mychanges.js"></script>
 <script src="/web/release.js"></script>
 <script src="/web/mergepage.js"></script>
+<script src="/web/quests.js"></script>
+<script src="/web/dialogue.js"></script>
+<script src="/web/questboard.js"></script>
 </body>
 </html>
