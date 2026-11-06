@@ -146,9 +146,9 @@ async function loWins(key){
 }
 function loWinsHtml(){
   return LO.wins.copies.map(c => `<pre class="tl-diff"><b>${esc(c.plugin)}</b>${c.wins ? ' (wins)' : ''}${c.game ? ' (the game)' : ''}${c.deleted ? ' (deleted)' : ''}
-${c.changes.map(chDiffLine).join('\n') || (c.game ? '' : 'the same as the one before')}</pre>`).join('');
+${c.changes.map(mcDiffLine).join('\n') || (c.game ? '' : 'the same as the one before')}</pre>`).join('');
 }
 // one difference: what it was, what it is
-function chDiffLine(c){
+function mcDiffLine(c){
   return `${esc(c.label)}: ${c.old !== null && c.old !== undefined ? `<del>${esc(c.old)}</del>` : ''}${c.old !== null && c.old !== undefined && c.new !== null && c.new !== undefined ? ' → ' : ''}${c.new !== null && c.new !== undefined ? `<ins>${esc(c.new)}</ins>` : '(gone)'}`;
 }

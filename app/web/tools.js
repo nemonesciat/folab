@@ -4,7 +4,7 @@
 const TL = {tab: 'health'};
 const TL_TABS = [['health', 'Health check', 'What\'s wrong with a plugin, and the safe fixes', () => healthDraw()],
                  ['loadorder', 'Load order', 'The plugins the game loads: on, off, in what order, who wins', () => loDraw()],
-                 ['changes', 'My changes', 'Every change your mod makes, by place and kind', () => chDraw()],
+                 ['changes', 'My changes', 'Every change your mod makes, by place and kind', () => mcDraw()],
                  ['share', 'Get ready to share', 'Clean it, gather its files, write a readme, make a zip', () => relDraw()],
                  ['merge', 'Merge a plugin', 'Bring another plugin into your mod', () => mergeDraw()]];
 
