@@ -1,6 +1,6 @@
 # Tools: looking after your mod
 
-*The **Tools** page: what's wrong with a plugin, the game's load order, every change you've made, getting a mod ready to share, and merging plugins.*
+*The **Tools** page: what's wrong with a plugin, the game's load order, where your mod clashes with it, every change you've made, getting a mod ready to share, and merging plugins.*
 
 ## Health check
 
@@ -30,6 +30,35 @@ The plugins the game loads, top to bottom. When two change the same thing, the l
 - **Look** opens a health check of that plugin.
 
 Close the game first: FOLab won't save the order while it runs.
+
+## Mod conflicts
+
+Where your mod clashes with the rest of your load order. For every record your mod has, it finds who else changes it and who wins, then says what you'd notice in the game and what to do. It only reads, until you press a Move button. Pick **A look at** in the list to check any plugin in Data.
+
+The game doesn't merge records: the last plugin's copy is used whole. So:
+
+- **Your change is overwritten**: a later plugin says something else about a field you changed. Compared field by field against the file your record was built on, so a later plugin that keeps your change, or differs only in fields you left alone, is listed as **harmless**, not as a clash.
+- **You undo someone else's change**: your copy wins, and it doesn't say what an earlier plugin changed. **Take the copy out** is offered when your copy changes nothing at all.
+
+Most serious first:
+
+| It finds | What you'd see in the game |
+|---|---|
+| Masters missing, switched off or loading too late | The game won't start, or crashes loading |
+| Records someone deleted (you change them, you bring them back, you delete what others change, or a link of yours points at one) | Crashes when the game reaches for them, or things missing |
+| Your change overwritten | Their numbers, look or position, not yours |
+| A navmesh in the same place | Characters stuck or walking through things; crashes |
+| Door links, at either end | The wrong place, or a door that doesn't work |
+| Ground that doesn't meet at a square's edge, ground both change | Cracks and cliffs; things floating or sunk |
+| Topics more than one mod adds to | Some lines may never be spoken. The game's own add-ons do this to each other |
+| Place settings overwritten | Their lighting, water and music, even if they only carried the place |
+| Plugins built on yours | Nothing wrong: a patch, most likely |
+
+**Side by side** shows every copy of a record in load order, the differing lines marked. **Load X after Y** moves a plugin: it gives files new dates, like the Load order page, keeps a copy of the old order first, and refuses if a plugin that needs yours would end up loading before it. **Put back an earlier order** on that page restores it. Moving settles every clash with that plugin one way, so read the **By plugin** table first; when neither way will do, a small patch loaded last can carry both changes.
+
+The first run reads each plugin's record headers and keeps them in FOLab's `cache/conflicts`, so later runs only read what changed. If you use a mod manager that keeps plugins outside Data, those plugins can't be seen unless FOLab is started through it; the page says how many weren't checked.
+
+Your unsaved edits count: the open mod is checked as it would be saved. If it isn't in Data yet, it's checked as if installed, loading last. The Health check shows the last result in one line, and **Get ready to share** has a step for it.
 
 ## My changes
 

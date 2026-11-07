@@ -7,6 +7,7 @@ import os
 import adopt
 import changes
 import gametest
+import conflicts
 import health
 import loadorder
 import merge
@@ -30,7 +31,9 @@ def get(name, q, S):
         if q.get('file'):
             return health.check_file(S.GD, os.path.join(S.GD.data_dir, os.path.basename(q['file'])))
         need_mod(S)
-        return health.check_mod(S)
+        out = health.check_mod(S)
+        out['conflicts'] = conflicts.short()
+        return out
     if name == 'plugins':
         return plugin_list(S)
     if name == 'loadorder':
@@ -39,6 +42,10 @@ def get(name, q, S):
         return loadorder.conflicts(S.GD.data_dir)
     if name == 'loadorder/wins':
         return loadorder.who_wins(S.GD.data_dir, q['key'], S.GD)
+    if name == 'conflicts/status':
+        return conflicts.status()
+    if name == 'conflicts/compare':
+        return conflicts.compare_last(S.GD.data_dir, q['key'])
     if name == 'changes':
         need_mod(S)
         return changes.everything(S)
@@ -66,6 +73,13 @@ def post(name, body, S):
     if name == 'health/fix':
         need_mod(S)
         return health.apply_fixes(S, body.get('fixes') or [])
+    if name == 'conflicts/start':
+        return conflicts.start(S, body.get('file') or None)
+    if name == 'conflicts/move':
+        S.not_while_playing()
+        out = conflicts.move(S.GD.data_dir, body['plugin'], body['after'])
+        out['state'] = S.state()
+        return out
     if name == 'loadorder/save':
         S.not_while_playing()
         out = loadorder.save(S.GD.data_dir, body['order'], body['active'])
