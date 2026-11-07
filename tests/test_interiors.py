@@ -211,8 +211,8 @@ check('… and the plan says so', next(r for r in back['plan']['rooms'] if r['n'
 rows = P.room_themes(G, kits, store, sv, room['n'])
 check('the real places a room could copy are listed, best first', rows['rows'] and rows['rows'] == sorted(rows['rows'], key=lambda r: -r['score']))
 pick = rows['rows'][-1]['cell']
-back = P.change_room(G, kits, store, {}, sv, room['n'], theme=pick, seed=3)
-check('… and one can be chosen', back.get('ops') and next(r for r in back['plan']['rooms'] if r['n'] == room['n'])['theme'] == pick)
+back = P.change_room(G, kits, store, {}, sv, room['n'], theme=str(pick), seed=3)
+check('… and one can be chosen, as the page sends it', back.get('ops') and next(r for r in back['plan']['rooms'] if r['n'] == room['n'])['theme'] == pick)
 check('a room not in the plan says so', P.change_room(G, kits, store, {}, sv, 9999).get('note'))
 check('… and with nothing made yet, it says that', P.change_room(G, kits, {}, {}, sv, 1).get('note'))
 

@@ -1399,8 +1399,13 @@ class Planner:
         return self.plan.add_room(spec.purpose, self.room_family(spec), cells, spec.main)
 
     def spots(self, n):
-        """Where something could leave an owner: (square, way out)."""
+        """Where something could leave an owner: (square, way out). Something placed whole has no doors but those it was given:
+        a tall room is left by the rooms standing against it."""
         o = self.plan.owners[n]
+        if o.get('whole'):
+            return []
+        if o.get('tall'):
+            return [s for m in o.get('sides', ()) for s in self.spots(m)]
         out = []
         if o['kind'] == ROOM:
             level = o['cells'][0][2]
@@ -1559,8 +1564,10 @@ class Planner:
                     if route and not self.clear(route):
                         continue
                 end = route[-1] if route else c
-                if spec.whole and route and self.whole_room(spec, c, route, way, fam):
-                    return True
+                if spec.whole and route and any(spec.whole in s.piece.edid.lower() for s in self.ts.set_pieces):
+                    if self.whole_room(spec, c, route, way, fam):
+                        return True
+                    continue
                 if tall and route:
                     if self.tall_room(spec, c, route, way, fam):
                         if opening:
@@ -1897,7 +1904,8 @@ class Planner:
                 return False
             plan.opens[(at(u, -1, l + 1), plus_v)] = tops[u]
         o['sides'] = [m]
-        return self.join(hall, m, fam, cost=40) or self.join(m, hall, fam, cost=40)
+        # (stairs up: off the way in, or from the room it came from)
+        return any(self.join(a, m, fam, cost=40) for a in (hall, plan.cells.get(c)) if a is not None)
 
     def join(self, a, b, fam, flights=True, cost=30, main=False):
         """A corridor between two owners, by any way the kit can go, stairs included. True if one was found and put in."""
@@ -2519,7 +2527,8 @@ def change_room(game, kits, store, cache, survey, n, purpose=None, theme=None, r
         o['purpose'] = purpose
         o.pop('pick', None)
     if theme:
-        o['pick'] = theme
+        # (the page sends it back as words)
+        o['pick'] = int(theme) if str(theme).isdigit() else theme
     rng = random.Random(seed)
     new_made = made
     if reroll and not (o.get('tall') or o.get('whole')):
