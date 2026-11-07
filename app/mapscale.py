@@ -218,7 +218,7 @@ class Grid:
         out = []
         for r in range(33):
             s = (j * PER_CELL + r) * a + i * PER_CELL
-            out += p[s:s + 33]
+            out += p[s:s + 33].tolist()
         return out
 
     def beyond(self, i, j):
@@ -247,7 +247,7 @@ def heights(plan, progress=None):
         progress('Reading the heights')
     v, rw, rh = reduced(plan.raster, fx, fy)
     across, down = plan.W * PER_CELL + 1, plan.H * PER_CELL + 1
-    pts = [0.0] * (across * down)
+    pts = array.array('f', bytes(4 * across * down))             # (a float32 holds every whole step the game's land reaches, in a tenth of a list's memory)
     # (where each column of land points falls in the reduced picture, worked out once)
     cols = []
     for gx in range(across):

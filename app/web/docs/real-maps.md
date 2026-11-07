@@ -79,4 +79,4 @@ Steep ground stays as the slope says, so grass doesn't climb cliffs. Textures go
 
 ## What's left to you
 
-Navmesh, distant land, regions and map markers are in **World tools**: FOLab offers them after the land changes. New worlds have no distant land until you make it (**World tools > Distant land**). Reach the world in game with a door, or the console: `cow <editor ID> 0 0`.
+Navmesh, distant land, regions and map markers are in **World tools**: FOLab offers them after the land changes. New worlds have no distant land until you make it (**World tools > Far land**). Reach the world in game with a door, or the console: `cow <editor ID> 0 0`.

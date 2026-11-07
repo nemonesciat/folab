@@ -313,11 +313,8 @@ def read_tiff(f, name='', progress=None):
             nodata = float(str(tags['nodata']).strip())
         except ValueError:
             nodata = None
-    if nodata is not None and nodata == nodata and 'f' in code + 'f':
-        try:
-            nodata = struct.unpack('f', struct.pack('f', nodata))[0] if abs(nodata) < 1e38 else nodata
-        except OverflowError:
-            pass
+    if nodata is not None and nodata == nodata and abs(nodata) < 1e38:
+        nodata = struct.unpack('f', struct.pack('f', nodata))[0]      # (as the float32s it's compared with have it)
     v = array.array('f', bytes(4 * w * h))
     total = across * down
     swap = (order == '<') != (sys.byteorder == 'little')
@@ -375,9 +372,8 @@ def lzw_decode(data):
     """TIFF's LZW: codes high bit first, 9 to 12 bits, 256 clear, 257 end, the code size growing one code early."""
     out = []
     table = [bytes((i,)) for i in range(256)] + [b'', b'']
-    bits, width, acc, nacc = 9, 9, 0, 0
+    width, acc, nacc = 9, 0, 0
     prev = None
-    _ = bits
     for byte in data:
         acc = (acc << 8) | byte
         nacc += 8
@@ -417,7 +413,6 @@ def lzw_decode(data):
 
 def _values(raw, tw, th, spp, width, code, swap, pred, order):
     """A chunk's first band as float32s, tw to a row."""
-    row_bytes = tw * spp * width
     if pred == 3:
         raw = _unpredict_float(raw, tw, spp, width)
         swap = sys.byteorder == 'little'       # (the float predictor always leaves the bytes highest first)
@@ -428,7 +423,6 @@ def _values(raw, tw, th, spp, width, code, swap, pred, order):
         a.byteswap()
     if pred == 2:
         a = _unpredict_int(a, tw, spp, width, code)
-    _ = row_bytes
     if spp > 1:
         a = a[::spp]
     return a if code == 'f' else array.array('f', a)

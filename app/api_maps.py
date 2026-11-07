@@ -341,6 +341,8 @@ def read_layers(pr):
 
 
 def _side_of(srv, world):
+    if not srv.PR:
+        raise ValueError('Start a mod first.')
     gd = srv.GD
     w = gd.from_key(world)
     side = read_sidecar(srv.PR).get(gd.edid(w))

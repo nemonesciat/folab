@@ -154,7 +154,6 @@ def tiff(w, h, values, kind='h', comp=1, order='<', tiled=None, rows=None, pred=
     if nodata is not None:
         add(42113, 2, str(nodata))
     entries.sort(key=lambda e: e[0])
-    sz = {3: 2, 4: 4, 12: 8, 2: 1}
     ifd_at = at + (at & 1)
     extra_at = ifd_at + 2 + 12 * len(entries) + 4
     ifd, extra = bytearray(struct.pack(order + 'H', len(entries))), bytearray()
@@ -166,7 +165,6 @@ def tiff(w, h, values, kind='h', comp=1, order='<', tiled=None, rows=None, pred=
             raw = struct.pack(order + '%d%s' % (len(vals), {3: 'H', 4: 'I', 12: 'd'}[typ]), *vals)
             n = len(vals)
         ifd += struct.pack(order + 'HHI', tag, typ, n)
-        _ = sz
         if len(raw) <= 4:
             ifd += raw + bytes(4 - len(raw))
         else:

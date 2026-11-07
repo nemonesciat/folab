@@ -46,7 +46,7 @@ async function mlPanel(){
     ${kept.length ? `<div class="ml-row"><span>Or one you've used</span><select id="ml-kept"><option value=""></option>${kept.map(f => `<option value="${esc(f.name)}" ${f.name === ML.file ? 'selected' : ''}>${esc(f.name)} (${mlSize(f.size)})</option>`).join('')}</select></div>` : ''}
     <div id="ml-work"></div>
     <div id="ml-rest">${I ? `
-      <div class="note" style="padding:3px 0">${esc(I.kind)}: ${I.w.toLocaleString()} × ${I.h.toLocaleString()} points${I.mpp ? `, ${I.mpp[0].toFixed(I.mpp[0] < 10 ? 2 : 0)} m each` : ''}${I.plain ? '' : `, ${Math.round(I.low * (I.folab ? 1 : 1)).toLocaleString()} to ${Math.round(I.high).toLocaleString()}${I.folab ? '' : ' m'}`}${I.where ? `, at ${esc(I.where)}` : ''}.</div>
+      <div class="note" style="padding:3px 0">${esc(I.kind)}: ${I.w.toLocaleString()} × ${I.h.toLocaleString()} points${I.mpp ? `, ${I.mpp[0].toFixed(I.mpp[0] < 10 ? 2 : 0)} m each` : ''}${I.plain || I.folab ? '' : `, ${Math.round(I.low).toLocaleString()} to ${Math.round(I.high).toLocaleString()} m`}${I.where ? `, at ${esc(I.where)}` : ''}.</div>
       ${I.notes.map(n => `<div class="ml-warn">${esc(n)}</div>`).join('')}
       <h4>Scale</h4>
       ${!I.placed && !I.folab ? `<div class="ml-row"><span>A pixel is (m)</span><input id="ml-mpp" type="number" min="0.1" step="any" value="${o.mpp ?? 30}"></div>` : ''}
@@ -352,6 +352,7 @@ async function mlMake(){
 }
 // Undo that takes a world away reopens the mod: the page starts over with it
 { const was = post; post = async (path, body) => {
+    if (path === '/api/maps/restore' || (path === '/api/undo' && A.state && A.state.project && A.state.project.undo === 'New world from a map')) toast('Taking the world away and opening your mod again: a moment…');
     const d = await was(path, body);
     if (d && d.world_gone && (path === '/api/undo' || path === '/api/maps/restore')){ setTimeout(() => location.reload(), 300); }
     return d;

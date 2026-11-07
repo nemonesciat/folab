@@ -128,12 +128,13 @@ def scatter_ops(gd, pr, world, cover, learn_world, learn_at, seed=1, limit=SCATT
     g = roadgen.Ground(gd, pr, world)
     rng = random.Random(seed)
     keys = sorted(grid)
-    # how many it comes to, to thin it evenly if it's too many
+    # how many it comes to (from a sample of the cells), to thin it evenly if it's too many
     rows = [r for r in cover.table.values() if r.get('scatter') in bags and float(r.get('density') or 0) > 0]
     if not rows:
         return [], {'things': 0, 'thinned': 1.0}
     top = max(float(r['density']) for r in rows)
-    want = sum(_estimate(cover, k, top) for k in keys[:: max(1, len(keys) // 200)]) * max(1, len(keys) // max(1, len(keys[:: max(1, len(keys) // 200)])))
+    sample = keys[:: max(1, len(keys) // 200)]
+    want = sum(_estimate(cover, k) for k in sample) * len(keys) / len(sample)
     thin = min(1.0, limit / want) if want else 1.0
     ops = []
     for n, k in enumerate(keys):
@@ -173,7 +174,7 @@ def _pick(items, rng):
     return items[-1]
 
 
-def _estimate(cover, k, top):
+def _estimate(cover, k):
     """About how many things this cell gets, from a few spots."""
     tot = 0.0
     for a in (0.25, 0.75):
