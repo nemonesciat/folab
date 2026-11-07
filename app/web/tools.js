@@ -1,5 +1,5 @@
 // ---------- The Tools page: looking after a mod and sharing it ----------
-// A column of tools on the left (Health check, Load order, My changes, Get ready to share, Merge), each drawn by its
+// A column of tools on the left (Health check, Load order, Mod conflicts, My changes, Get ready to share, Merge), each drawn by its
 // own file into #tl-body. Everything talks to /api/tools/... (modtools.py).
 const TL = {tab: 'health'};
 const TL_TABS = [['health', 'Health check', 'What\'s wrong with a plugin, and the safe fixes', () => healthDraw()],
