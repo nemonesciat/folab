@@ -29,8 +29,8 @@ SOFT_CELLS = 4096                     # the size of a whole DLC world: past it, 
 HARD_CELLS = 16384                    # the size of the game's own largest: past it, no
 MAX_SIDE = 256                        # cells across
 Z_LOW, Z_HIGH = -8000, 32000          # the game's own land stays within this
-PLUGIN_BYTES_CELL = 7000              # (measured: painted, compressed; see tests/test_mapworld.py)
-SECONDS_CELL = 0.013
+PLUGIN_BYTES_CELL = 5600              # (measured: painted, compressed; see tests/test_mapworld.py)
+SECONDS_CELL = 0.03
 COMPRESSIONS = [1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300, 500, 1000]
 DEFAULT_SIDE = 48                     # the whole file comes out about this many cells across by default
 
