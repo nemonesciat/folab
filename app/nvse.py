@@ -2,11 +2,12 @@
 
 xNVSE's own instructions: its .dll and .exe files go beside FalloutNV.exe (never in Data), and the game is started with
 nvse_loader.exe. Its default config goes in Data\\NVSE. FOLab keeps a copy of anything it replaces in its backups
-folder and remembers what it put in, so Take out removes exactly that. Downloads come only from xNVSE's own GitHub
-releases, unpacked into FOLab's downloads folder first."""
+folder and remembers what it put in, so Take out removes exactly that. FOLab fetches nothing: the user downloads it from
+xNVSE's page in their browser and FOLab installs it from their Downloads folder, unpacked into its own downloads first."""
 import json
 import os
 import shutil
+import subprocess
 import time
 
 import project
@@ -23,8 +24,7 @@ def status(data_dir):
     g = game_dir(data_dir)
     dll = os.path.join(g, 'nvse_1_4.dll')
     out = {'installed': os.path.isfile(dll), 'loader': os.path.isfile(os.path.join(g, 'nvse_loader.exe')),
-           'by_folab': os.path.isfile(RECORD), 'version': None, 'downloaded': sorted(
-               d for d in os.listdir(DOWNLOADS) if os.path.isdir(os.path.join(DOWNLOADS, d))) if os.path.isdir(DOWNLOADS) else []}
+           'by_folab': os.path.isfile(RECORD), 'version': None, 'page': PAGE}
     if os.path.isfile(RECORD):
         with open(RECORD, encoding='utf-8') as f:
             out['version'] = json.load(f).get('version')
@@ -46,45 +46,55 @@ def _files(unpacked):
     return out
 
 
-RELEASES = 'https://api.github.com/repos/xNVSE/NVSE/releases/latest'
+PAGE = 'https://github.com/xNVSE/NVSE/releases/latest'
+LOADER_DLL = 'nvse_1_4.dll'
 
 
-def latest():
-    """The newest xNVSE release on its GitHub: {'version', 'asset', 'size', 'url'}."""
-    import urllib.request
-    req = urllib.request.Request(RELEASES, headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'FOLab'})
-    with urllib.request.urlopen(req, timeout=20) as r:
-        rel = json.load(r)
-    a = next(a for a in rel['assets'] if a['name'].lower().endswith('.7z'))
-    return {'version': rel['tag_name'], 'asset': a['name'], 'size': a['size'], 'url': a['browser_download_url']}
-
-
-def download(rel):
-    """Fetch a release's archive from xNVSE's GitHub and unpack it into its own folder (Windows' tar reads .7z)."""
-    import subprocess
-    import urllib.request
-    if not rel['url'].startswith('https://github.com/xNVSE/NVSE/releases/download/'):
-        raise ValueError('Only xNVSE\'s own GitHub releases are downloaded.')
-    os.makedirs(DOWNLOADS, exist_ok=True)
-    archive = os.path.join(DOWNLOADS, rel['asset'])
-    req = urllib.request.Request(rel['url'], headers={'User-Agent': 'FOLab'})
-    with urllib.request.urlopen(req, timeout=120) as r, open(archive + '.part', 'wb') as f:
-        shutil.copyfileobj(r, f)
-    if os.path.getsize(archive + '.part') != rel['size']:
-        raise IOError('The download came out the wrong size; try again.')
-    os.replace(archive + '.part', archive)
-    out = os.path.join(DOWNLOADS, rel['version'])
-    os.makedirs(out, exist_ok=True)
+def _tar(*args):
+    """Windows' own tar, which reads .7z as well as .zip."""
     tar = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'tar.exe')
-    subprocess.run([tar, '-xf', archive, '-C', out], check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    return rel['version']
+    return subprocess.run([tar] + list(args), check=True, capture_output=True, text=True, errors='replace',
+                          creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout
 
 
-def install(data_dir, version):
-    unpacked = os.path.join(DOWNLOADS, version)
-    files = _files(unpacked)
-    if not any(r.lower() == 'nvse_1_4.dll' for _s, r in files):
-        raise FileNotFoundError('nvse_1_4.dll is not in %s' % unpacked)
+def find_xnvse():
+    """xNVSE archives in the user's Downloads folder, newest first. Many plugins have NVSE in their names too, so what
+    counts is what's inside: the extender's own DLL."""
+    d = os.path.join(os.path.expanduser('~'), 'Downloads')
+    out = []
+    for fn in os.listdir(d) if os.path.isdir(d) else []:
+        if not fn.lower().endswith(('.7z', '.zip')) or 'nvse' not in fn.lower():
+            continue
+        p = os.path.join(d, fn)
+        try:
+            names = _tar('-tf', p).splitlines()
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        if any(n.replace('\\', '/').rsplit('/', 1)[-1].lower() == LOADER_DLL for n in names):
+            out.append({'file': fn, 'path': p, 'modified': os.path.getmtime(p)})
+    return sorted(out, key=lambda x: -x['modified'])
+
+
+def _unpack(archive):
+    """Unpack into FOLab's downloads folder; the folder inside it that holds the extender's DLL."""
+    out = os.path.join(DOWNLOADS, os.path.splitext(os.path.basename(archive))[0])
+    if os.path.isdir(out):
+        shutil.rmtree(out)
+    os.makedirs(out)
+    _tar('-xf', archive, '-C', out)
+    for root, _dirs, files in os.walk(out):
+        if any(f.lower() == LOADER_DLL for f in files):
+            return root
+    raise FileNotFoundError('%s is not in %s' % (LOADER_DLL, os.path.basename(archive)))
+
+
+def install(data_dir, file):
+    """Put in the archive of this name from the user's Downloads folder."""
+    hit = next((a for a in find_xnvse() if a['file'] == file), None)
+    if not hit:
+        raise FileNotFoundError('%s is not an xNVSE archive in your Downloads folder.' % file)
+    version = os.path.splitext(file)[0]
+    files = _files(_unpack(hit['path']))
     g = game_dir(data_dir)
     stamp = time.strftime('%Y-%m-%d %H%M%S')
     backups, put = [], []
@@ -121,14 +131,12 @@ def find_archives(names=('nvtf', 'tick fix', 'jip')):
 def install_plugin_archive(data_dir, archive):
     """Install an xNVSE plugin from its archive: unpacked into FOLab's downloads first, then its NVSE folder (wherever
     it sits in the archive: at the top, or inside Data) copied into the game's Data\\NVSE. Records what went in."""
-    import subprocess
     name = os.path.splitext(os.path.basename(archive))[0]
     out = os.path.join(project.HOME, 'downloads', 'plugins', name)
     if os.path.isdir(out):
         shutil.rmtree(out)
     os.makedirs(out)
-    tar = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'tar.exe')
-    subprocess.run([tar, '-xf', archive, '-C', out], check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    _tar('-xf', archive, '-C', out)
     nvse_dir = None
     for root, dirs, _files in os.walk(out):
         hit = next((d for d in dirs if d.lower() == 'nvse'), None)

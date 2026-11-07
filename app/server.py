@@ -1494,8 +1494,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(place_check(q['id']) if PR else {})
             if u.path == '/api/gamesettings':
                 return self.send(game_settings())
-            if u.path == '/api/nvse/latest':
-                return self.send(nvse.latest())
+            if u.path == '/api/nvse/archives':
+                return self.send(nvse.find_xnvse())
             if u.path == '/api/plugins':
                 return self.send(adopt.candidates(GD.data_dir))
             if u.path == '/api/prefabs':
@@ -1585,12 +1585,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(api_scripts.post(u.path, body))
                 if u.path.startswith('/api/library/'):
                     return self.send(library.post(u.path[13:], body))
-                if u.path == '/api/nvse/download':
-                    rel = nvse.latest()
-                    return self.send({'version': nvse.download(rel), 'state': state()})
                 if u.path == '/api/nvse/install':
                     not_while_playing()
-                    return self.send({'install': nvse.install(GD.data_dir, body['version']), 'state': state()})
+                    return self.send({'install': nvse.install(GD.data_dir, body['file']), 'state': state()})
                 if u.path == '/api/nvse/uninstall':
                     not_while_playing()
                     return self.send({'removed': nvse.uninstall(GD.data_dir), 'state': state()})

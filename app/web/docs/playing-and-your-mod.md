@@ -10,7 +10,7 @@
 | **▶ Play here** | The same, then loads your newest save and moves you to where the view is looking (right-click a spot to pick it exactly). Works inside and outside. |
 | **Give it to me in game** (Create) | Puts an item in your inventory once your save loads. |
 
-Play here and Give need **xNVSE** and **JIP LN NVSE** (My mod page): FOLab can download and install xNVSE from its GitHub; JIP LN comes from its Nexus page. The game is started through xNVSE's loader, or through Steam if you prefer (My mod page).
+Play here and Give need **xNVSE** and **JIP LN NVSE** (My mod page): download xNVSE from its page and FOLab installs it from your Downloads folder; JIP LN comes from its Nexus page. The game is started through xNVSE's loader, or through Steam if you prefer (My mod page).
 
 Close New Vegas before saving into the game: it holds its plugins open while it runs.
 

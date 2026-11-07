@@ -110,7 +110,7 @@ async function helpAbout(){
     <table><tr><th>Game</th><td>${esc(a.game || 'not found')}</td></tr><tr><th>Loaded</th><td>${esc(a.plugins.join(', '))}</td></tr>
     <tr><th>FOLab's folder</th><td>${esc(a.home)}</td></tr><tr><th>Python</th><td>${esc(a.python)} · ${esc(a.system)}</td></tr></table>
     <h3>Made with</h3><p>three.js (MIT licence) for the 3D view, its DDS loader and transform handles; Oswald, Share Tech Mono, Cinzel and Inter fonts (SIL Open Font Licence).
-    xNVSE and JIP LN NVSE are their makers' own, downloaded from their pages when you ask.</p>
+    xNVSE and JIP LN NVSE are their makers' own: you get them from their pages. FOLab itself downloads nothing.</p>
     <p class="note" style="padding:0">Fallout: New Vegas is Bethesda Softworks' and Obsidian Entertainment's. FOLab isn't made or endorsed by them.</p>`);
 }
 

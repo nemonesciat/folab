@@ -32,7 +32,7 @@ what's needed).
   if it doesn't).
 - With the **portable download** (FOLab.exe), nothing else: Python comes with it. From the source: **Python 3.10 or newer** for Windows, from [python.org](https://www.python.org/downloads/) (tick "Add to PATH" and
   the "py launcher"). Nothing else to install.
-- For Play here and Give it to me in game: **xNVSE** (FOLab can download and install it for you, from its GitHub) and
+- For Play here and Give it to me in game: **xNVSE** (download it from its page and FOLab installs it from your Downloads folder) and
   **JIP LN NVSE** (from its Nexus page).
 
 ## Starting it

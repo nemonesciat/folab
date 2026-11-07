@@ -29,7 +29,7 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Play: `playtest.py` starts FalloutNV.exe; Play here writes `FOLab Test.esp` (marker + start-enabled quest + one
   hand-compiled script, bytes checked against the game's own scripts; a new quest ID each time). Never call
   `/api/play` in tests: it starts the user's real game.
-- xNVSE: `nvse.py` downloads only from github.com/xNVSE/NVSE releases into `downloads/`, installs its .dll/.exe
+- xNVSE: FOLab fetches nothing from the internet (Nexus's rule on tools that download): My mod links to xNVSE's page and `nvse.py` installs from the user's Downloads folder (an archive counts if nvse_1_4.dll is inside), unpacking into `downloads/`; its .dll/.exe go
   beside FalloutNV.exe (its config in Data\NVSE), records what it put in for Take out. The game starts through
   nvse_loader.exe when present (setting `launch_via`), else steam://rungameid/22380; never FalloutNV.exe directly
   (Steam's load error 5:0000065434).

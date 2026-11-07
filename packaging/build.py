@@ -185,9 +185,9 @@ NOTICES = """FOLab bundles these, each under its own licence:
 Python {py} (Python Software Foundation License) - python\\LICENSE.txt. https://www.python.org/
 three.js, its DDSLoader and TransformControls (MIT License, Copyright 2010-2021 three.js authors). https://threejs.org/
 Cinzel (Natanael Gama), Inter (Rasmus Andersson), Oswald (Vernon Adams and contributors) and Share Tech Mono (Carrois
-Type Design): SIL Open Font License 1.1 - app\web\vendor\OFL-*.txt.
+Type Design): SIL Open Font License 1.1 - app\\web\\vendor\\OFL-*.txt and app\\web\\vendor\\licenses.
 
-FOLab downloads xNVSE from its GitHub releases only when you ask it to; xNVSE, JIP LN NVSE and NVTF are their makers'.
+FOLab downloads nothing itself. xNVSE, JIP LN NVSE and NVTF are their makers' own: you get them from their pages.
 Fallout: New Vegas is Bethesda Softworks' and Obsidian Entertainment's. FOLab contains none of the game's files and
 isn't made or endorsed by them.
 """

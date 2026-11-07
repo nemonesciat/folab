@@ -578,8 +578,9 @@ function nvseCard(s){
   return `<div class="card"><h3>Script extender (xNVSE)</h3>
     <p>${n.installed ? `Installed${n.version ? ' (' + esc(n.version) + (n.by_folab ? ', by FOLab' : '') + ')' : ''}.` : 'Not installed.'}
        Most New Vegas mods need it; FOLab can start the game through it.</p>
-    <p>${n.installed ? '' : (n.downloaded || []).length ? `<button class="btn primary" id="m-nvse-install">Install xNVSE ${esc(n.downloaded.slice(-1)[0])}</button> ` : ''}
-       <button class="btn" id="m-nvse-get">Download the newest from xNVSE's GitHub</button>
+    ${n.installed ? '' : '<p>Download its archive from its page into your Downloads folder, then install it from there.</p>'}
+    <p><a class="btn" href="${esc(n.page || '')}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">Open xNVSE's download page</a>
+       <button class="btn${n.installed ? '' : ' primary'}" id="m-nvse-install">Install from my Downloads folder</button>
        ${n.by_folab ? '<button class="btn" id="m-nvse-out">Take it out of the game</button>' : ''}</p>
     <p><label><input type="radio" name="via" value="nvse" ${via === 'nvse' ? 'checked' : ''} ${n.loader ? '' : 'disabled'}> Start the game through xNVSE (no launcher window)</label><br>
        <label><input type="radio" name="via" value="steam" ${via !== 'nvse' || !n.loader ? 'checked' : ''}> Start it through Steam (the game's launcher opens: Play)</label></p></div>`;
@@ -621,18 +622,14 @@ function drawModPage(){
   on('#m-uninstall', async () => { try { const d = await post('/api/uninstall'); setState(d.state); toast('Taken out of the game.'); } catch (e){ fail(e); } });
   $('#page-mod').querySelectorAll('[data-open]').forEach(r => r.onclick = () => { openMod(r.dataset.open); page('world'); });
   const on2 = (id, f) => { const el = $(id); if (el) el.onclick = f; };
-  on2('#m-nvse-get', async () => {
-    try {
-      const r = await api('/api/nvse/latest');
-      if (!confirm(`Download ${r.asset} (${(r.size / 1048576).toFixed(1)} MB, xNVSE ${r.version}) from github.com/xNVSE/NVSE?`)) return;
-      toast('Downloading xNVSE ' + r.version + '…');
-      const d = await post('/api/nvse/download'); setState(d.state); toast('Downloaded xNVSE ' + d.version + ': Install puts it in the game.');
-    } catch (e){ fail(e); }
-  });
   on2('#m-nvse-install', async () => {
-    const v = A.state.nvse.downloaded.slice(-1)[0];
-    if (!confirm(`Put xNVSE ${v} in the game folder? (Its .dll and .exe files go beside FalloutNV.exe; anything replaced is kept in backups.)`)) return;
-    try { const d = await post('/api/nvse/install', {version: v}); setState(d.state); toast('xNVSE ' + v + ' is in the game.'); } catch (e){ fail(e); }
+    try {
+      const found = await api('/api/nvse/archives');
+      if (!found.length) return toast('No xNVSE archive in your Downloads folder yet: get it from its page first.', true);
+      const v = found[0].file;
+      if (!confirm(`Put ${v} from your Downloads folder in the game folder? (Its .dll and .exe files go beside FalloutNV.exe; anything replaced is kept in backups.)`)) return;
+      const d = await post('/api/nvse/install', {file: v}); setState(d.state); toast(v + ' is in the game.');
+    } catch (e){ fail(e); }
   });
   on2('#m-nvse-out', async () => {
     if (!confirm('Take xNVSE out of the game folder? (A copy goes to backups.)')) return;
