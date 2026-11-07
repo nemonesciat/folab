@@ -11,6 +11,7 @@ const HELP_DOCS = [['getting-started', 'Getting started'],
                    ['characters', 'Characters, packages, factions, Populate'],
                    ['library', 'The Library, styles and comforts'],
                    ['world-tools', 'World tools: navmesh, regions, markers, roads'],
+                   ['real-maps', 'Land from real maps: height files, OpenStreetMap'],
                    ['playing-and-your-mod', 'Playing, and your mod'],
                    ['tools', 'Tools: health check, load order, sharing']];
 

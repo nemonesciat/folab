@@ -2,6 +2,8 @@
 
 *Shaping and painting the ground by hand or over many cells at once, plants and rocks, water, height maps, and land of your own.*
 
+*For land from a real place, see Help > Land from real maps.*
+
 A worldspace is a grid of cells, each 4,096 units (about 58 m) across, with a point of ground every 128 units. FOLab loads the cells round you as you fly (the **View** tab sets how many) and draws the distant hills to the horizon.
 
 ## The Ground brush (3D)

@@ -25,6 +25,7 @@ import kitdress
 import kitplan
 import navbuild
 import worldapi
+import api_maps
 import nif
 import nvse
 import playtest
@@ -1039,6 +1040,7 @@ def state():
         built = os.path.join(project.BUILD_DIR, PR.plugin)
         s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= os.path.getmtime(PR.path)
         s['project']['masters'] = masters()
+        s['project']['undo'] = s['project']['undo'] or api_maps.undo_label(PR)
     return s
 
 
@@ -1050,7 +1052,7 @@ def load_game(pr):
     if pr and pr.source:
         want += adopt.extra_masters(data_dir, pr.source_path())
         want.append(pr.source_path())
-    if GD and [p.path for p in GD.plugins] == want:
+    if GD and [p.path for p in GD.plugins] == want and not getattr(GD, 'stale', False):
         return
     t = time.time()
     if BR:
@@ -1064,10 +1066,24 @@ def load_game(pr):
     print('loaded %d plugins (%.1fs)' % (len(GD.plugins), time.time() - t), flush=True)
 
 
-def new_world(body):
+def release_source():
+    """Let go of an opened mod's own plugin, so its file can be replaced (Windows won't while it's mapped). The game has to be loaded again after: load_game knows."""
+    src = PR.source_path() if PR else None
+    if not src:
+        return
+    if BR:
+        BR.close()
+    for p in GD.plugins:
+        if os.path.normcase(os.path.abspath(p.path)) == os.path.normcase(os.path.abspath(src)):
+            p.close()
+    GD.stale = True
+
+
+def new_world(body, shaped=None):
     """A new worldspace in the mod: the mod saved (naming every game file as a master, so the new land can use any of
     their things), the world added to that plugin (worldgen.py), and the plugin then opened as the mod, so the world
-    is part of the game FOLab shows and every tool works on it. The mod's undo history starts afresh."""
+    is part of the game FOLab shows and every tool works on it. The mod's undo history starts afresh. shaped: land
+    already worked out (mapworld.py): worldgen's options for it, and the mod as it was kept to go back to."""
     global PR
     if not PR:
         raise ValueError('Start a mod first.')
@@ -1082,6 +1098,8 @@ def new_world(body):
     ltex = body.get('ltex') or next((GD.key(f) for f, (i, r) in GD.forms.items() if r.tag == 'LTEX' and GD.edid(f) == 'DirtBarrenWastes01'), None)
     if not ltex:
         raise ValueError('Pick a ground texture.')
+    if shaped:
+        api_maps.keep_before(PR, edid)
     path = PR.plugin_path()
     w = espwrite.Writer(GD, PR)
     w.force_all = not PR.source
@@ -1090,7 +1108,7 @@ def new_world(body):
         f.write(data)
     tree = plugintree.Plugin.read(path)
     wid, nid = worldgen.add_world(GD, tree, w, PR.next_id, {'edid': edid, 'name': body.get('name') or '', 'template': tpl,
-                                                            'size': size, 'height': float(body.get('height', 4000)), 'ltex': ltex})
+                                                            'size': size, 'height': float(body.get('height', 4000)), 'ltex': ltex, **(shaped or {})})
     worldgen.fix_header(tree, w.own(nid))
     with open(path + '.tmp', 'wb') as f:
         f.write(tree.bytes())
@@ -1098,11 +1116,17 @@ def new_world(body):
     # the mod is now that plugin, opened
     folder = PR.name + ' source'
     os.makedirs(os.path.join(project.PROJECTS_DIR, folder), exist_ok=True)
-    shutil.copy2(path, os.path.join(project.PROJECTS_DIR, folder, PR.plugin))
+    release_source()
+    try:
+        shutil.copy2(path, os.path.join(project.PROJECTS_DIR, folder, PR.plugin))
+    except OSError:
+        load_game(PR)
+        raise
     d = PR.to_dict()
     d.update(cells={}, records={}, land={}, water={}, next_id=nid, source=folder + '/' + PR.plugin)
-    with open(PR.path, 'w', encoding='utf-8') as f:
+    with open(PR.path + '.tmp', 'w', encoding='utf-8') as f:
         json.dump(d, f, indent=1)
+    os.replace(PR.path + '.tmp', PR.path)
     name = PR.name
     PR = None
     out = open_project(name)
@@ -1457,6 +1481,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(about())
             if u.path == '/api/report':
                 return self.send(report().encode('utf-8'), 'text/plain; charset=utf-8')
+            if u.path.startswith('/api/maps/'):
+                return self.send(*api_maps.get(u.path, q, sys.modules[__name__]))
             if u.path == '/api/doc':
                 name = os.path.basename(q['name'])
                 return self.file(os.path.join(WEB, 'docs', name + '.md'))
@@ -1570,7 +1596,11 @@ class Handler(BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path)
         try:
             n = int(self.headers.get('Content-Length') or 0)
+            if u.path == '/api/maps/upload':
+                return self.send(api_maps.upload(self.rfile, n, urllib.parse.parse_qs(u.query).get('name', [''])[0]))
             body = json.loads(self.rfile.read(n) or b'{}')
+            if u.path.startswith('/api/maps/'):
+                return self.send(api_maps.post(u.path, body, sys.modules[__name__]))
             if u.path == '/api/quit':
                 # (FOLab.exe asks this when its window closes or Quit is picked: everything is saved as it's made)
                 if self.headers.get('X-FOLab-Quit') != '1':
@@ -1625,6 +1655,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(heightmap_import(body))
                 if u.path == '/api/edit':
                     return self.send(edit(body.get('label', 'Edit'), body['ops']))
+                if u.path == '/api/undo' and not PR.undo_stack and api_maps.undo_label(PR):
+                    return self.send(api_maps.undo_world(sys.modules[__name__]))
                 if u.path in ('/api/undo', '/api/redo'):
                     label = PR.undo() if u.path == '/api/undo' else PR.redo()
                     return self.send({'label': label, 'state': state()})
