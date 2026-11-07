@@ -13,7 +13,8 @@ const HELP_DOCS = [['getting-started', 'Getting started'],
                    ['world-tools', 'World tools: navmesh, regions, markers, roads'],
                    ['real-maps', 'Land from real maps: height files, OpenStreetMap'],
                    ['playing-and-your-mod', 'Playing, and your mod'],
-                   ['tools', 'Tools: health check, load order, sharing']];
+                   ['tools', 'Tools: health check, load order, sharing'],
+                   ['game-test', 'Test in game: letting the game walk a place']];
 
 $('#b-help').onclick = e => {
   e.stopPropagation();
