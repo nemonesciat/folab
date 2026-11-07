@@ -2191,8 +2191,8 @@ class Walk:
                 key = (q[0] + dy, q[1] + dx)
                 if wall(q, dx, dy, z):
                     continue
-                if any(g.p[p][2] < z for p in g.by.get(key, ())):
-                    continue            # (a drop, to floor below)
+                if any(g.p[p][2] < z for k in range(1, 4) for p in g.by.get((q[0] + k * dy, q[1] + k * dx), ())):
+                    continue            # (a drop, or the lip of a ledge, to floor below)
                 out.append(((q[1] + 0.5) * self.voxel, (q[0] + 0.5) * self.voxel, z, d))
         return out
 
@@ -2277,6 +2277,23 @@ def dress_place(game, ts, sv, plan, made, rng, cache, ruined=False):
     return items, kitdress.clear_ways(game, ts, plan, made, items, walk_check, cache)
 
 
+def _blame_edges(ts, plan, made, walk):
+    """Pieces standing where the floor ends on nothing: a wall that's drawn but has no collision. Every room with one has a hole in
+    it, so it's worth leaving out. Corridors and stairs built whole aren't blamed."""
+    if walk['missing'] or walk['escaped']:
+        return set()
+    by = {c: m for m in made if len(m.cells) == 1 for c in m.cells}
+    placed = {id(m) for b in plan.placed for m in b['pieces']}
+    out = set()
+    for x, y, z, _d in walk['edges']:
+        i, j = int(math.floor(x / ts.step + 0.5)), int(math.floor(y / ts.step + 0.5))
+        lv = int(round((z - ts.floor) / plan.rise))
+        m = by.get((i, j, lv))
+        if m and id(m) not in placed and m.key in ts.slot_sock:
+            out.add(m.key)
+    return out
+
+
 def generate(game, ts, area=150, seed=0, bounds=None, cache=None, tries=10, program=None, stairs=0.35, survey=None, ruined=False):
     """A whole place: plan, pieces and a clean walk, with doors, lights and things if there's a survey (kitdress.py).
     {'plan', 'made', 'items', 'walk', 'tries', 'wanted'} or None."""
@@ -2303,6 +2320,8 @@ def generate(game, ts, area=150, seed=0, bounds=None, cache=None, tries=10, prog
                         continue
             return {'plan': plan, 'made': made, 'items': items, 'walk': walk, 'tries': k + 1, 'wanted': len(prog)}
         for key, _n in _blame(ts, plan, made, walk).most_common(2):
+            ts.ban(key)
+        for key in _blame_edges(ts, plan, made, walk):
             ts.ban(key)
     return None
 

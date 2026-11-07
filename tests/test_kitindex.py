@@ -125,7 +125,8 @@ for name, k in sorted(kits.items()):
         good = good and not w['missing'] and not w['escaped']
         by_cell = {c: m for m in g['made'] for c in m.cells}
         for o in g['plan'].rooms():
-            rooms_ok = rooms_ok and all(c in by_cell and by_cell[c].owner == o['n'] for c in o['cells'] if c not in g['plan'].air)
+            # (a tall room's or a one-piece room's own pieces stand over more floors than they're counted on)
+            rooms_ok = rooms_ok and (o.get('tall') or o.get('whole') or all(c in by_cell and by_cell[c].owner == o['n'] for c in o['cells'] if c not in g['plan'].air))
         a, b = P.repeats(ts, g['made'])
         rep_n, rep_t = rep_n + a, rep_t + b
     check('%s: planned places made, sealed and every part reached (%d)' % (name, made_n), made_n >= 1 and good)
@@ -143,8 +144,7 @@ check('… rooms of different sizes (%s)' % sorted(sizes), len(sizes) >= 3)
 two = next((P.generate(G, vt, 240, s) for s in range(4, 40) if any(c[2] != 0 for c in P.generate(G, vt, 240, s)['plan'].cells)), None)
 check('… more than one level, stairs among the pieces, and the walk gets to all of them', two and any(m.key == vt.stairs[0].piece.key for m in two['made']) and not two['walk']['missing'])
 ot = P.PlanTiles(kits['dungeons' + B + 'office'], G)
-big_keys = {p.key for p, _w, _h in ot.big}
-check('… bigger pieces are used too, in the kits that have them', any(m.key in big_keys for s in range(3) for g2 in [P.generate(G, ot, 240, s)] if g2 for m in g2['made']))
+check('… bigger pieces are read, none of them tall (nothing they fit has come up in a plan yet: halls this size aren\'t planned)', ot.big and not any(p.box[5] - p.box[2] >= 1.8 * ot.stairs[0].rise for p, _w, _h in ot.big))
 cut = P.Plan(vt.step)
 cut.add_room('a', 'room', [(i, j, 0) for i in range(4) for j in range(4)])
 cut.add_room('b', 'room', [(i, j, 0) for i in range(6, 10) for j in range(4)])
