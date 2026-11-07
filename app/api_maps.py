@@ -14,6 +14,8 @@ import elevation
 import espwrite
 import mapscale as MS
 import mapworld
+import osm
+import osmplace
 import project
 
 CHUNK = 1 << 20
@@ -186,16 +188,12 @@ def make_job(body, srv):
                 raise
             d = read_sidecar(srv.PR)
             d[edid] = {'file': name, 'opts': opts, 'W': plan.W, 'H': plan.H, 'x0': plan.x0, 'y0': plan.y0, 'col0': plan.col0, 'row0': plan.row0, 'upx': plan.upx, 'upy': plan.upy,
-                       'base': plan.base, 'k': plan.k, 'compress': plan.compress, 'exag': plan.exag, 'bounds': bounds_of(r), 'geo': r.geo}
+                       'base': plan.base, 'k': plan.k, 'compress': plan.compress, 'exag': plan.exag, 'geo': r.geo, 'px_w': r.w, 'px_h': r.h}
             write_sidecar(srv.PR, d)
         stats = dict(grid.stats, cells=plan.count(), world=out['world'], z_low=min(grid.pts), z_high=max(grid.pts))
         stats['size'] = os.path.getsize(srv.PR.plugin_path())
         return {'state': out, 'world': out['world'], 'report': stats}
     return _start(work, kind='make')
-
-
-def bounds_of(r):
-    return None
 
 
 # ---------- going back to before the world ----------
@@ -275,6 +273,80 @@ def undo_world(srv):
     return {'label': 'New world from a map', 'state': state, 'world_gone': True}
 
 
+# ---------- OpenStreetMap on a world made from a map ----------
+
+OSM = {'file': None, 'data': None}
+
+
+def _layers_path(pr):
+    return os.path.join(project.PROJECTS_DIR, pr.name + ' map layers.json')
+
+
+def read_layers(pr):
+    try:
+        with open(_layers_path(pr), encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _side_of(srv, world):
+    gd = srv.GD
+    w = gd.from_key(world)
+    side = read_sidecar(srv.PR).get(gd.edid(w))
+    if not side:
+        raise ValueError('This world wasn\'t made from a height file, so FOLab doesn\'t know where it lies on Earth.')
+    return w, side
+
+
+def _osm_data(name):
+    if OSM['file'] != name or OSM['data'] is None:
+        OSM.update(file=name, data=osm.read(file_path(name), name, lambda n: _said('Reading the file: %s things so far' % format(n, ','))))
+    return OSM['data']
+
+
+def osm_read_job(body, srv):
+    name = body['file']
+    file_path(name)
+    _w, side = _side_of(srv, body['world'])
+
+    def work():
+        _said('Reading the file')
+        data = _osm_data(name)
+        _said('Laying it on the world')
+        out = osmplace.summary(osmplace.layout(data, side))
+        out['skipped'] = data.skipped
+        out['file'] = name
+        return out
+    return _start(work, kind='osm_read')
+
+
+def osm_lay_job(body, srv):
+    name = body['file']
+    file_path(name)
+    srv.not_while_playing()
+    w, side = _side_of(srv, body['world'])
+    want = body.get('want') or {}
+
+    def work():
+        _said('Reading the file')
+        data = _osm_data(name)
+        lay = osmplace.layout(data, side)
+        with srv._lock:
+            ops, report, layer = osmplace.ops_for(srv.GD, srv.PR, w, lay, want, side['compress'], int(body.get('seed', 1)), _said)
+            _said('Putting it in the mod')
+            if not ops and not layer['buildings'] and not layer['places']:
+                raise ValueError('Nothing in the file falls on this world.')
+            state = srv.edit('OpenStreetMap: %s' % name, ops) if ops else srv.state()
+            all_layers = read_layers(srv.PR)
+            all_layers[srv.GD.edid(w)] = layer
+            with open(_layers_path(srv.PR) + '.tmp', 'w', encoding='utf-8') as f:
+                json.dump(all_layers, f)
+            os.replace(_layers_path(srv.PR) + '.tmp', _layers_path(srv.PR))
+        return {'state': state, 'report': report}
+    return _start(work, kind='osm_lay')
+
+
 # ---------- routes ----------
 
 def get(path, q, srv):
@@ -289,6 +361,9 @@ def get(path, q, srv):
     if path == '/api/maps/worlds':
         with srv._lock:
             return (read_sidecar(srv.PR) if srv.PR else {},)
+    if path == '/api/maps/layers':
+        with srv._lock:
+            return (read_layers(srv.PR).get(q.get('edid'), {}) if srv.PR else {},)
     raise ValueError('No such thing to ask: ' + path)
 
 
@@ -308,6 +383,10 @@ def post(path, body, srv):
         return out
     if path == '/api/maps/make':
         return {'job': make_job(body, srv)}
+    if path == '/api/maps/osm/read':
+        return {'job': osm_read_job(body, srv)}
+    if path == '/api/maps/osm/lay':
+        return {'job': osm_lay_job(body, srv)}
     if path == '/api/maps/restore':
         with srv._lock:
             if not srv.PR or not os.path.isfile(os.path.join(_before(srv.PR.name), 'project.json')):

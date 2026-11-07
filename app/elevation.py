@@ -68,17 +68,19 @@ class Raster:
 
     def to_pixel(self, lat, lon):
         """(col, row) of a spot on Earth, or None when the file doesn't say where it is or its projection isn't one FOLab knows."""
-        g = self.geo
-        if not g:
+        return pixel_of(self.geo, lat, lon) if self.geo else None
+
+
+def pixel_of(g, lat, lon):
+    """(col, row) of a spot on Earth in a file with this place; None when its projection isn't one FOLab knows."""
+    if g['kind'] == 'deg':
+        x, y = lon, lat
+    else:
+        xy = project(g.get('epsg'), lat, lon, g['unit'])
+        if xy is None:
             return None
-        if g['kind'] == 'deg':
-            x, y = lon, lat
-        else:
-            xy = project(g.get('epsg'), lat, lon, g['unit'])
-            if xy is None:
-                return None
-            x, y = xy
-        return (x - g['x0']) / g['dx'], (g['y0'] - y) / g['dy']
+        x, y = xy
+    return (x - g['x0']) / g['dx'], (g['y0'] - y) / g['dy']
 
 
 # ---------- projections (only what height files commonly come in) ----------

@@ -165,10 +165,22 @@ def shape_all(plan, base, marked, buildings=()):
                 prof.append((t, lo))
             levels[i] = prof
     water = {}
+    # (a long river: each cell only looks at the stretches near it)
+    stretches = {}
+    for i, s in enumerate(shapes):
+        if s['kind'] == 'river' and isinstance(levels.get(i), list):
+            run, segs = 0.0, []
+            for a, b in zip(s['pts'], s['pts'][1:]):
+                segs.append((a, b, run))
+                run += math.hypot(b[0] - a[0], b[1] - a[1])
+            stretches[i] = (segs, max(64.0, float(s.get('width', 800))) + CELL)
     for (cx, cy) in sorted(marked):
         b = base(cx, cy)
         if not b:
             continue
+        mx, my = (cx + 0.5) * CELL, (cy + 0.5) * CELL
+        for i, (segs, far) in stretches.items():
+            levels[('near', i)] = [g for g in segs if _seg_dist(mx, my, g[0][0], g[0][1], g[1][0], g[1][1]) <= far]
         new = []
         for r in range(SIDE):
             for c in range(SIDE):
@@ -220,9 +232,18 @@ def _along(pts, t):
     return pts[-1][0], pts[-1][1]
 
 
-def _nearest(pts, p):
-    """(distance, how far along) to the nearest point of a line."""
+def _nearest(pts, p, near=None):
+    """(distance, how far along) to the nearest point of a line; near: just these of its stretches, each (a, b, how far along a is)."""
     best, along, run = 1e18, 0.0, 0.0
+    if near is not None:
+        for a, b, start in near:
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            L2 = dx * dx + dy * dy
+            f = 0.0 if not L2 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2))
+            d = math.hypot(p[0] - a[0] - f * dx, p[1] - a[1] - f * dy)
+            if d < best:
+                best, along = d, start + f * math.sqrt(L2)
+        return best, along
     for a, b in zip(pts, pts[1:]):
         dx, dy = b[0] - a[0], b[1] - a[1]
         L2 = dx * dx + dy * dy
@@ -295,7 +316,7 @@ def _one(s, i, levels, p, h):
         if not isinstance(prof, list):
             return h, 0.0
         w = max(64.0, float(s.get('width', 800)))
-        d, t = _nearest(s['pts'], p)
+        d, t = _nearest(s['pts'], p, levels.get(('near', i)))
         if d >= w:
             return h, 0.0
         j = min(len(prof) - 1, max(0, int(round(t / max(1e-6, prof[-1][0]) * (len(prof) - 1)))))

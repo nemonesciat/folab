@@ -202,8 +202,13 @@ def lay(gd, pr, world, a, b, settle=True, seed=1):
         raise RoadError('The game\'s road pieces aren\'t in its files.')
     g = Ground(gd, pr, world)
     line = smooth(find_way(g, a, b))
+    out, centre_z = lay_line(g, line, kit, random.Random(seed))
+    return out, line, (settled(gd, pr, world, g, centre_z) if settle else {})
+
+
+def lay_line(g, line, kit, rng, caps=(True, True), dry=None):
+    """Pieces along a line that's already worked out: (things to place, spans for settled). caps: an end cap at its first and last ends. dry(x, y, z): whether a piece may stand there."""
     f, total = along(line)
-    rng = random.Random(seed)
     stride = PIECE - OVERLAP
     n = max(1, int(round(total / stride)))
     stride = total / n
@@ -218,20 +223,24 @@ def lay(gd, pr, world, a, b, settle=True, seed=1):
         if None in (z0, z1, zm):
             raise RoadError('The way runs off the land.')
         z = max(zm, (z0 + z1) / 2) + LIFT
+        if dry and not dry(mx, my, z):
+            continue
         rot = turn_along(p1[0] - p0[0], p1[1] - p0[1], z1 - z0)
         base = kit['b'] if 'b' in kit and rng.random() < 0.6 else kit['a']
         out.append({'base': base, 'p': [round(mx, 2), round(my, 2), round(z, 2)] + [round(v, 4) for v in rot]})
         centre_z.append((p0, p1, z0 + LIFT, z1 + LIFT))
     # an end cap at each end, facing away along the road
-    if 'capr' in kit:
-        p0, p1 = out[-1]['p'], f(total)
-        rot = out[-1]['p'][3:]
-        out.append({'base': kit['capr'], 'p': [round(p1[0], 2), round(p1[1], 2), round(g.at(*p1) + LIFT, 2)] + rot})
-        p2 = f(0.0)
-        p3 = f(min(total, stride))
-        back = turn_along(p2[0] - p3[0], p2[1] - p3[1], g.at(*p2) - g.at(*p3))
-        out.append({'base': kit['capr'], 'p': [round(p2[0], 2), round(p2[1], 2), round(g.at(*p2) + LIFT, 2)] + [round(v, 4) for v in back]})
-    return out, line, (settled(gd, pr, world, g, centre_z) if settle else {})
+    if 'capr' in kit and out:
+        if caps[1]:
+            p0, p1 = out[-1]['p'], f(total)
+            rot = out[-1]['p'][3:]
+            out.append({'base': kit['capr'], 'p': [round(p1[0], 2), round(p1[1], 2), round(g.at(*p1) + LIFT, 2)] + rot})
+        if caps[0]:
+            p2 = f(0.0)
+            p3 = f(min(total, stride))
+            back = turn_along(p2[0] - p3[0], p2[1] - p3[1], g.at(*p2) - g.at(*p3))
+            out.append({'base': kit['capr'], 'p': [round(p2[0], 2), round(p2[1], 2), round(g.at(*p2) + LIFT, 2)] + [round(v, 4) for v in back]})
+    return out, centre_z
 
 
 def settled(gd, pr, world, g, spans):
@@ -248,6 +257,13 @@ def settled(gd, pr, world, g, spans):
         touched.update((a, b) for a in range(x0, x1 + 1) for b in range(y0, y1 + 1))
     out = {}
     tex = {}
+    # (only the spans that can reach a cell are looked at for it: a world's worth of road would otherwise take hours)
+    by_cell = {}
+    for sp in spans:
+        p0, p1 = sp[0], sp[1]
+        for a in range(int((min(p0[0], p1[0]) - reach) // 4096), int((max(p0[0], p1[0]) + reach) // 4096) + 1):
+            for b in range(int((min(p0[1], p1[1]) - reach) // 4096), int((max(p0[1], p1[1]) + reach) // 4096) + 1):
+                by_cell.setdefault((a, b), []).append(sp)
     for k in sorted(touched):
         c = g.grid.get(k)
         if c is None or c not in gd.land:
@@ -263,7 +279,7 @@ def settled(gd, pr, world, g, spans):
             for col in range(33):
                 x = k[0] * 4096 + col * 128.0
                 best, bz = None, None
-                for p0, p1, z0, z1 in spans:
+                for p0, p1, z0, z1 in by_cell.get(k, ()):
                     dx, dy = p1[0] - p0[0], p1[1] - p0[1]
                     ln = dx * dx + dy * dy
                     t = max(0.0, min(1.0, ((x - p0[0]) * dx + (y - p0[1]) * dy) / ln)) if ln else 0.0

@@ -169,7 +169,8 @@ function mlPicture(){
   if (key === ML.imgKey) return;
   ML.imgKey = key;
   const img = new Image();
-  img.onload = () => { if (ML.imgKey === key){ ML.img = img; M.dirty = true; } };
+  mlWork('Drawing the picture');
+  img.onload = () => { if (ML.imgKey === key){ ML.img = img; M.dirty = true; if (!ML.busy) mlWork(''); } };
   img.src = '/api/maps/picture?' + key;
 }
 // (a pixel centre to map units: the middle of the file is the origin)
@@ -319,3 +320,135 @@ async function mlMake(){
     b.onclick = () => { const c = $('#nw-cancel'); if (c) c.click(); mlOpen(); };
     foot.appendChild(b);
   }; }
+
+// ---------- World tools > Real map: OpenStreetMap over a world made from a height file, and the way back ----------
+const MO = {world: null, side: null, file: null, read: null, layer: null, showLayer: true, want: {roads: ['major'], rivers: true, streams: false, lakes: true, buildings: true}, said: '', poll: null};
+const MO_ROADS = [['major', 'Motorways to tertiary roads'], ['minor', 'Residential and service roads'], ['track', 'Tracks']];
+async function moLoad(){
+  if (MO.world === OUT.world) return;
+  MO.world = OUT.world; MO.read = null; MO.layer = null; MO.said = '';
+  const all = await api('/api/maps/worlds').catch(() => ({}));
+  const edid = OUT.info && OUT.info.edid;
+  MO.side = all[edid] || null;
+  MO.layer = edid ? await api('/api/maps/layers?edid=' + encodeURIComponent(edid)).catch(() => null) : null;
+  M.dirty = true;
+}
+async function moDraw(box){
+  await moLoad();
+  if (!MO.side){
+    box.innerHTML = `<div class="note">This world wasn't made from a height file. Make one under Outside: ＋ New worldspace, 🗺 From a real map.</div>`;
+    return;
+  }
+  const S = MO.side, kept = (await mlFiles()).filter(f => /\.osm(\.bz2|\.gz)?$/i.test(f.name)), R = MO.read;
+  box.innerHTML = `<div class="note">From <b>${esc(S.file)}</b>, 1 : ${S.compress}, height × ${S.exag}, base level ${S.base} m.</div>
+    <h4>OpenStreetMap</h4>
+    <div class="note">Your own .osm file (or .osm.bz2, .gz) of the same place. <a href="#" id="mo-help">Where to get one</a>.</div>
+    <div class="wt-row"><span>File</span><input type="file" id="mo-pick" accept=".osm,.bz2,.gz,.xml"></div>
+    ${kept.length ? `<div class="wt-row"><span>Or one you've used</span><select id="mo-kept"><option value=""></option>${kept.map(f => `<option value="${esc(f.name)}" ${f.name === MO.file ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>` : ''}
+    <div id="mo-work" class="note"></div>
+    ${R ? moChoices(R) : ''}
+    ${MO.layer && MO.layer.buildings ? `<h4>Marker layer</h4><label><input type="checkbox" id="mo-layer" ${MO.showLayer ? 'checked' : ''}> Show ${MO.layer.buildings.length} building outlines, ${MO.layer.places.length} places, ${MO.layer.bridges.length} bridges on the map</label>` : ''}
+    <h4>Going back</h4>
+    <div class="wt-go"><button class="btn" id="mo-back" title="The mod as it was before this world, everything since gone with it">Go back to before this world…</button></div>`;
+  box.querySelector('#mo-help').onclick = e => { e.preventDefault(); helpDoc('real-maps'); };
+  box.querySelector('#mo-pick').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    moWork(`Copying ${f.name} to FOLab`);
+    try {
+      const r = await fetch('/api/maps/upload?name=' + encodeURIComponent(f.name), {method: 'POST', body: f});
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || r.status);
+      moRead(d.file);
+    } catch (err){ moWork(''); fail(err); }
+  };
+  const k = box.querySelector('#mo-kept'); if (k) k.onchange = () => { if (k.value) moRead(k.value); };
+  const lay = box.querySelector('#mo-layer'); if (lay) lay.onchange = () => { MO.showLayer = lay.checked; M.dirty = true; };
+  box.querySelector('#mo-back').onclick = async () => {
+    if (!confirm('Take this world out of your mod, and everything you have done since it was made? This can\'t be undone.')) return;
+    try { await post('/api/maps/restore'); } catch (err){ fail(err); }
+  };
+  if (R) moChoiceEvents(box);
+  moNote();
+}
+function moChoices(R){
+  const W_ = MO.want, roads = R.roads || {}, riv = R.rivers || {};
+  const tick = (id, on, label, disabled) => `<label style="display:block;margin:2px 0;${disabled ? 'opacity:.5' : ''}"><input type="checkbox" id="${id}" ${on && !disabled ? 'checked' : ''} ${disabled ? 'disabled' : ''}> ${label}</label>`;
+  return `<h4>On this world</h4>
+    ${MO_ROADS.map(([c, l]) => tick('mo-r-' + c, W_.roads.includes(c), `${l}: ${roads[c] ? roads[c].n.toLocaleString() + ' (about ' + roads[c].pieces.toLocaleString() + ' pieces)' : 'none'}`, !roads[c])).join('')}
+    ${tick('mo-rivers', W_.rivers, `Rivers and canals: ${riv.river || 0}`, !riv.river)}
+    ${tick('mo-streams', W_.streams, `Streams: ${riv.stream || 0}`, !riv.stream)}
+    ${tick('mo-lakes', W_.lakes, `Lakes: ${R.lakes}`, !R.lakes)}
+    ${tick('mo-pads', W_.buildings, `Flat pads for ${R.buildings.toLocaleString()} buildings`, !R.buildings)}
+    <div class="note">${R.bridges ? `${R.bridges} bridge${R.bridges === 1 ? '' : 's'} left out and listed in the layer. ` : ''}${R.places ? `${R.places} place name${R.places === 1 ? '' : 's'} in the layer. ` : ''}${R.note ? esc(R.note) : ''}</div>
+    <div class="wt-go"><button class="btn primary" id="mo-lay">Lay it</button></div>
+    <div class="note">One Undo. No towns or buildings are put up.</div>`;
+}
+function moChoiceEvents(box){
+  for (const [c] of MO_ROADS){
+    const el = box.querySelector('#mo-r-' + c); if (!el) continue;
+    el.onchange = () => { MO.want.roads = MO.want.roads.filter(x => x !== c); if (el.checked) MO.want.roads.push(c); M.dirty = true; };
+  }
+  for (const [id, key] of [['#mo-rivers', 'rivers'], ['#mo-streams', 'streams'], ['#mo-lakes', 'lakes'], ['#mo-pads', 'buildings']]){
+    const el = box.querySelector(id); if (el) el.onchange = () => { MO.want[key] = el.checked; M.dirty = true; };
+  }
+  box.querySelector('#mo-lay').onclick = moLay;
+}
+function moNote(){ const b = $('#mo-work'); if (b) b.innerHTML = MO.said; }
+function moWork(text){ MO.said = esc(text || ''); moNote(); }
+function moJob(start, done){
+  clearInterval(MO.poll);
+  start.then(() => {
+    MO.poll = setInterval(async () => {
+      const j = await api('/api/maps/job').catch(() => null);
+      if (!j) return;
+      moWork(j.said + (j.total ? ` (${j.done.toLocaleString()} of ${j.total.toLocaleString()})` : '…'));
+      if (j.running) return;
+      clearInterval(MO.poll); MO.said = '';
+      if (j.ok) await done(j.result); else { toast(j.error, true); MO.said = '<b>Could not:</b> ' + esc(j.error); }
+      if (WT.on && WT.tab === 'realmap') wtDraw();
+    }, 500);
+  }).catch(e => { MO.said = ''; moNote(); fail(e); });
+}
+function moRead(file){
+  MO.file = file; MO.read = null; moWork('Reading the file');
+  moJob(post('/api/maps/osm/read', {file, world: OUT.world}), r => { MO.read = r; M.dirty = true; });
+}
+function moLay(){
+  const b = $('#mo-lay'); if (b) b.disabled = true;
+  moJob(post('/api/maps/osm/lay', {file: MO.file, world: OUT.world, want: MO.want}), async r => {
+    if (r.state) setState(r.state);
+    const t = r.report;
+    MO.said = `Laid ${t.pieces.toLocaleString()} road pieces, ${t.rivers} river${t.rivers === 1 ? '' : 's'}, ${t.lakes} lake${t.lakes === 1 ? '' : 's'}, ${t.pads.toLocaleString()} pads${t.pads_too_small ? ` (${t.pads_too_small.toLocaleString()} buildings too small to show)` : ''}.${t.roads_skipped ? ` ${t.roads_skipped} road${t.roads_skipped === 1 ? '' : 's'} left out: off the land.` : ''} The ground changed in ${t.land_cells.toLocaleString()} cells.`;
+    MO.layer = await api('/api/maps/layers?edid=' + encodeURIComponent(OUT.info.edid)).catch(() => null);
+    MO.read = null;
+    if (typeof mapLandChanged === 'function') mapLandChanged();
+    if (typeof reloadOutside === 'function') reloadOutside();
+    if (t.cell_xy && t.cell_xy.length && t.cell_xy.length <= 200) wnOffer(t.cell_xy);
+  });
+}
+function moPath(g, line, closed){
+  g.beginPath();
+  line.forEach((p, i) => { const [x, y] = mapScreen(p[0], p[1]); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
+  if (closed) g.closePath();
+}
+function moMap(g){
+  if (MO.world !== OUT.world){ moLoad(); return; }
+  const D = MO.read && MO.read.draw, L = MO.layer;
+  const color = {major: '#f0cd87', minor: '#c9b48a', track: '#927f5e'};
+  if (D){
+    g.lineWidth = 1.5;
+    g.strokeStyle = '#4aa6e0';
+    for (const r of D.lakes){ moPath(g, r, true); g.fillStyle = 'rgba(74,166,224,0.3)'; g.fill(); g.stroke(); }
+    for (const r of D.rivers){ if (r.c === 'stream' && !MO.want.streams) continue; if (r.c === 'river' && !MO.want.rivers) continue; g.lineWidth = r.c === 'river' ? 2.5 : 1; moPath(g, r.l); g.stroke(); }
+    for (const r of D.roads){ const on = MO.want.roads.includes(r.c); g.globalAlpha = on ? 1 : 0.3; g.lineWidth = on ? 2 : 1; g.strokeStyle = color[r.c]; moPath(g, r.l); g.stroke(); }
+    g.globalAlpha = 1; g.strokeStyle = '#e0705b'; g.lineWidth = 2; for (const r of D.bridges){ moPath(g, r); g.stroke(); }
+    if (4096 * M.z > 3){ g.strokeStyle = 'rgba(240,240,240,0.7)'; g.lineWidth = 1; for (const r of D.buildings){ moPath(g, r, true); g.stroke(); } }
+    g.fillStyle = '#fff'; g.font = '12px Inter, sans-serif'; for (const p of D.places){ const [x, y] = mapScreen(p.p[0], p.p[1]); g.fillText(p.n, x + 4, y); }
+  }
+  if (L && L.buildings && MO.showLayer && !D){
+    if (4096 * M.z > 3){ g.lineWidth = 1; for (const b of L.buildings){ g.strokeStyle = b.pad ? 'rgba(240,240,240,0.75)' : 'rgba(240,205,135,0.5)'; moPath(g, b.ring, true); g.stroke(); } }
+    g.strokeStyle = '#e0705b'; g.lineWidth = 2; for (const b of L.bridges){ moPath(g, b.line); g.stroke(); }
+    g.fillStyle = '#fff'; g.font = '12px Inter, sans-serif'; for (const p of L.places){ const [x, y] = mapScreen(p.p[0], p.p[1]); g.fillText(p.name, x + 4, y); }
+  }
+}
+wtTab('realmap', 'Real map', {draw: moDraw, map: moMap});
