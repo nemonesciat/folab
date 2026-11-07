@@ -33,7 +33,8 @@ TAGS = {'sleep': ('bed', 'bunk', 'mattress', 'cot', 'pillow', 'sleep', 'locker',
         'care': ('medical', 'doctor', 'stimpak', 'surgery', 'gurney', 'clinic', 'autodoc', 'bandage', 'bloodpack')}
 PURPOSE_TAGS = {'quarters': ('sleep',), 'small room': ('sleep', 'store'), 'office': ('desk',), 'workroom': ('machine', 'desk'), 'reactor': ('machine',),
                 'far end': ('machine', 'store'), 'long room': ('eat', 'store', 'care'), 'atrium': ('eat',), 'hall': ('eat', 'desk'), 'entrance': ('store', 'machine'),
-                'store': ('store',), 'mess': ('eat',), 'clinic': ('care',), 'corridor': ()}
+                'store': ('store',), 'mess': ('eat',), 'clinic': ('care',), 'corridor': (),
+                'under a balcony': ('store', 'eat'), 'over a balcony': ('desk', 'sleep')}
 
 
 def tags_of(edid):
@@ -421,7 +422,7 @@ def _even_out_lights(ts, sv, plan, made, items, rng):
     for o in plan.owners:
         if o['kind'] == VOID_KIND:
             continue
-        n = len(o['cells'])
+        n = sum(1 for c in o['cells'] if c not in plan.air)
         least, most = max(1, n // LIGHTS_PER), max(1, n // LIGHTS_MAX)
         have = per[o['n']]
         while len(have) > most:
