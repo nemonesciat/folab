@@ -6,6 +6,7 @@ import os
 
 import adopt
 import changes
+import gametest
 import health
 import loadorder
 import merge
@@ -23,6 +24,8 @@ def plugin_list(S):
 
 
 def get(name, q, S):
+    if name.startswith('gametest/'):
+        return gametest.get(name[9:], q, S)
     if name == 'health':
         if q.get('file'):
             return health.check_file(S.GD, os.path.join(S.GD.data_dir, os.path.basename(q['file'])))
@@ -58,6 +61,8 @@ def get(name, q, S):
 
 
 def post(name, body, S):
+    if name.startswith('gametest/'):
+        return gametest.post(name[9:], body, S)
     if name == 'health/fix':
         need_mod(S)
         return health.apply_fixes(S, body.get('fixes') or [])

@@ -12,7 +12,8 @@ const HELP_DOCS = [['getting-started', 'Getting started'],
                    ['library', 'The Library, styles and comforts'],
                    ['world-tools', 'World tools: navmesh, regions, markers, roads'],
                    ['playing-and-your-mod', 'Playing, and your mod'],
-                   ['tools', 'Tools: health check, load order, sharing']];
+                   ['tools', 'Tools: health check, load order, sharing'],
+                   ['game-test', 'Test in game: letting the game walk a place']];
 
 $('#b-help').onclick = e => {
   e.stopPropagation();

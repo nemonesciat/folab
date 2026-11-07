@@ -1714,6 +1714,7 @@ def main():
     args = sys.argv[1:]
     port = next((int(a) for a in args if a.isdigit()), PORT)
     t = time.time()
+    modtools.gametest.on_start()        # (a game test cut off last time: the user's files back first)
     last = load_settings().get('project')
     if last:
         try:
