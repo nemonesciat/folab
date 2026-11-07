@@ -1279,6 +1279,35 @@ def kit_vault(body):
     return kitplan.vault(GD, kits, int(body['size']), int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits), bool(body.get('ruined')))
 
 
+def kit_room(body):
+    """One room of the last place generated: what it's for, which real place it takes after, or new pieces."""
+    kits = kits_state()
+    if not kits:
+        return {'note': 'The kits are still being read: a moment.'}
+    return kitplan.change_room(GD, kits, _kits['tilesets'], _kits['walls'], kit_survey(kits), int(body['n']), body.get('purpose'), body.get('theme'), bool(body.get('reroll')), int(body.get('seed', 0)))
+
+
+def kit_themes(body):
+    kits = kits_state()
+    if not kits:
+        return {'rows': []}
+    return kitplan.room_themes(GD, kits, _kits['tilesets'], kit_survey(kits), int(body['n']), body.get('purpose'))
+
+
+def kit_drawn(body):
+    kits = kits_state()
+    if not kits or body['kit'] not in kits:
+        return {'note': 'The kits are still being read: a moment.'}
+    return kitplan.drawn(GD, kits, body['kit'], body['rooms'], body.get('links', []), int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits))
+
+
+def kit_click(body):
+    kits = kits_state()
+    if not kits:
+        return {'note': 'The kits are still being read: a moment.'}
+    return kitplan.one_click(GD, kits, body['what'], int(body['size']), int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits))
+
+
 def kit_grow(body):
     """More of the place you're in, from the kit most of it is built from."""
     kits = kits_state()
@@ -1682,6 +1711,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(kit_vault(body))
                 if u.path == '/api/kit/grow':
                     return self.send(kit_grow(body))
+                if u.path == '/api/kit/room':
+                    return self.send(kit_room(body))
+                if u.path == '/api/kit/themes':
+                    return self.send(kit_themes(body))
+                if u.path == '/api/kit/drawn':
+                    return self.send(kit_drawn(body))
+                if u.path == '/api/kit/click':
+                    return self.send(kit_click(body))
+                if u.path == '/api/kit/oneclicks':
+                    return self.send({'kinds': kitplan.one_click_list(_kits['kits'] or {}), 'purposes': sorted(p for p in kitdress.PURPOSE_TAGS if p != 'corridor')})
                 if u.path == '/api/doors/link':
                     return self.send(link_doors(body['a'], body['b']))
                 if u.path == '/api/doors/unlink':

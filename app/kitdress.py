@@ -14,6 +14,7 @@ import json
 import math
 import os
 import random
+import re
 
 import kitindex as K
 
@@ -25,20 +26,36 @@ LOOT_KEPT = 0.25        # (weapons, ammo and aid: the game's rooms were balanced
 MAX_ITEMS = 14          # (a set with more than this is a room's whole contents heaped on one piece: not copied)
 VOID_KIND, ROOM_KIND = 'void', 'room'
 RUBBLE_WORDS = ('rubble', 'debris', 'rock', 'wreck', 'pile', 'junk', 'trash', 'scrap', 'plank', 'collapsed', 'chunk', 'brick')
-TAGS = {'sleep': ('bed', 'bunk', 'mattress', 'cot', 'pillow', 'sleep', 'locker', 'dresser', 'nightstand', 'wardrobe'),
-        'desk': ('desk', 'terminal', 'computer', 'filing', 'file', 'paper', 'clipboard', 'typewriter', 'folder', 'office', 'chairswivel', 'chair'),
-        'eat': ('table', 'food', 'plate', 'fork', 'knife', 'spoon', 'cup', 'mug', 'kitchen', 'stove', 'fridge', 'nuka', 'can', 'cooking', 'sink', 'tray'),
-        'machine': ('machin', 'reactor', 'generator', 'pipe', 'console', 'control', 'panel', 'gauge', 'tank', 'conduit', 'turbine', 'valve', 'fuse', 'pump', 'tool', 'wrench'),
-        'store': ('crate', 'shelf', 'shelves', 'box', 'barrel', 'cabinet', 'storage', 'ammo', 'chest', 'safe', 'rack'),
-        'care': ('medical', 'doctor', 'stimpak', 'surgery', 'gurney', 'clinic', 'autodoc', 'bandage', 'bloodpack')}
+# (whole words of an editor ID: "can" is a tin, not the middle of "scanner"; a chair says nothing about what a room is for)
+TAGS = {'sleep': ('bed', 'bunk', 'mattress', 'cot', 'pillow', 'sleep', 'dresser', 'nightstand', 'wardrobe', 'bedroll', 'footlocker'),
+        'desk': ('desk', 'terminal', 'computer', 'filing', 'file', 'paper', 'papers', 'clipboard', 'typewriter', 'folder', 'office', 'swivel'),
+        'eat': ('food', 'plate', 'fork', 'knife', 'spoon', 'cup', 'mug', 'kitchen', 'stove', 'fridge', 'nuka', 'cola', 'can', 'cans', 'cooking', 'sink', 'tray', 'diner', 'cafeteria', 'lunch', 'oven'),
+        'machine': ('machine', 'machinery', 'reactor', 'generator', 'pipe', 'console', 'panel', 'gauge', 'tank', 'conduit', 'turbine', 'valve', 'fuse', 'pump', 'wrench', 'toolbox', 'workbench'),
+        'store': ('crate', 'crates', 'shelf', 'shelves', 'box', 'boxes', 'barrel', 'barrels', 'cabinet', 'storage', 'chest', 'safe', 'rack', 'ammo', 'locker'),
+        'care': ('medical', 'doctor', 'stimpak', 'surgery', 'gurney', 'clinic', 'autodoc', 'bandage', 'bloodpack', 'firstaid', 'hospital')}
+WORD_RE = re.compile('[A-Z]+(?![a-z])|[A-Z]?[a-z]+')
+SAME_THING = 6          # (of one big thing, one for this many squares of a room: a room isn't a showroom)
+BIG_KINDS = ('furn', 'cont', 'stat', 'term', 'act')
+DOOR_FRONT = 150        # (how far into a room from a doorway stays clear...)
+DOOR_SIDE = 96          # (...and how far to each side of its middle)
+HUNG = 150              # (something this far above the floor is overhead: no one walks into it)
 PURPOSE_TAGS = {'quarters': ('sleep',), 'small room': ('sleep', 'store'), 'office': ('desk',), 'workroom': ('machine', 'desk'), 'reactor': ('machine',),
                 'far end': ('machine', 'store'), 'long room': ('eat', 'store', 'care'), 'atrium': ('eat',), 'hall': ('eat', 'desk'), 'entrance': ('store', 'machine'),
-                'store': ('store',), 'mess': ('eat',), 'clinic': ('care',), 'corridor': ()}
+                'store': ('store',), 'mess': ('eat',), 'clinic': ('care',), 'corridor': (),
+                'under a balcony': ('store', 'eat'), 'over a balcony': ('desk', 'sleep'), 'over the hall': ('desk',)}
+
+
+def words_of(edid):
+    """An editor ID's words: 'NVVaultFoodCan01' -> nv, vault, food, can."""
+    return [w.lower() for w in WORD_RE.findall(edid)]
 
 
 def tags_of(edid):
-    e = edid.lower()
-    return sorted(t for t, words in TAGS.items() if any(w in e for w in words))
+    """What a thing says about what a room is for. A word of six letters or more may also be part of a longer one (they're
+    not always written with capitals); a short one must be a word in itself."""
+    words = words_of(edid)
+    plain = (edid or '').lower()
+    return sorted(t for t, ws in TAGS.items() if any(w in words or (len(w) >= 6 and w in plain) for w in ws))
 
 
 class Survey:
@@ -155,7 +172,10 @@ def survey(game, kits, only=None):
                 best['items'].append((bk2, round(dx, 1), round(dy, 1), round(dz, 1), round(r['rot'][0], 3), round(r['rot'][1], 3), round(rz, 3), round(r['scale'], 3)))
         for pl in placed:
             s = out.setdefault(pl['kit'], Survey())
-            s.sets[pl['p'].key].append(pl['items'] if len(pl['items']) <= MAX_ITEMS else [])
+            # (a piece that's a whole room may hold a whole room's things)
+            foot = pl['p'].foot
+            squares = max(1, int((foot[2] - foot[0]) * (foot[3] - foot[1]) / (k_step(kits, pl['kit']) ** 2)))
+            s.sets[pl['p'].key].append(pl['items'] if len(pl['items']) <= MAX_ITEMS * squares else [])
             s.src[pl['p'].key].append(cell)
     rng = random.Random(1)
     for s in out.values():
@@ -166,6 +186,10 @@ def survey(game, kits, only=None):
                 del both[MAX_SETS:]
                 s.sets[k], s.src[k] = [b[0] for b in both], [b[1] for b in both]
     return out
+
+
+def k_step(kits, name):
+    return kits[name].step
 
 
 def to_json(data):
@@ -179,7 +203,8 @@ def from_json(d):
         s = out[n] = Survey()
         s.sets = collections.defaultdict(list, {k: [[tuple(i) for i in st] for st in sets] for k, sets in v['sets'].items()})
         s.src = collections.defaultdict(list, v['src'])
-        s.info = {k: tuple(i) for k, i in v['info'].items()}
+        # (what a thing is for is worked out afresh: its words may be read better than when this was made)
+        s.info = {k: (i[0], tags_of(i[2] or ''), i[2]) for k, i in v['info'].items()}
         s.doors = collections.defaultdict(collections.Counter, {k: collections.Counter({tuple(p[:5]): p[5] for p in rows}) for k, rows in v['doors'].items()})
         s.exits = collections.defaultdict(collections.Counter, {k: collections.Counter({tuple(p[:5]): p[5] for p in rows}) for k, rows in v['exits'].items()})
     return out
@@ -187,7 +212,7 @@ def from_json(d):
 
 def load(game, kits, folder):
     """The survey for these game files: from folder if it was made before."""
-    path = os.path.join(folder, 'dressing.json')
+    path = os.path.join(folder, 'dressing2.json')
     if os.path.exists(path):
         with open(path, encoding='utf-8') as f:
             return from_json(json.load(f))
@@ -346,27 +371,44 @@ LIGHTS_PER = 7          # (a room gets at least a light for this many squares...
 LIGHTS_MAX = 5          # (...and no more than one for this many: overlapping lights flicker in the game)
 
 
+def theme_scores(sv, pieces, wanted, unwanted):
+    """How well each real place suits a room, judged as a room: how many of the room's kinds of piece it has things for, how
+    much of what's there is what this room is for, and how little of it is for something else. [(score, cell)], best first."""
+    kinds = {m.key for m in pieces}
+    seen = collections.defaultdict(set)
+    good, bad, total = collections.Counter(), collections.Counter(), collections.Counter()
+    for key in kinds:
+        for cell, items in zip(sv.src.get(key, ()), sv.sets.get(key, ())):
+            seen[cell].add(key)
+            for it in items:
+                tags = set(sv.info.get(it[0], ('', ()))[1])
+                total[cell] += 1
+                good[cell] += bool(tags & wanted)
+                bad[cell] += bool(tags & unwanted)
+    out = []
+    for cell, have in seen.items():
+        cover = len(have) / max(1, len(kinds))
+        fit = (good[cell] - 0.5 * bad[cell]) / max(4, total[cell])
+        # (somewhere with nothing in it isn't much to take after, and if the room's for something, what's for it counts most)
+        out.append((cover + (3 * fit if wanted else 0) + 0.2 * min(1, total[cell] / 6), cell))
+    out.sort(key=lambda r: (-r[0], r[1]))
+    return out
+
+
 def _theme(sv, pieces, wanted, unwanted, rng):
     """A real place for a room to take after: a place where these same pieces stood, with what the room is for in them.
     Everything in a room coming from one place is what makes it a room and not a heap."""
-    scores = collections.defaultdict(float)
-    for key in {m.key for m in pieces}:
-        for cell, items in zip(sv.src.get(key, ()), sv.sets.get(key, ())):
-            good = bad = 0
-            for it in items:
-                tags = set(sv.info.get(it[0], ('', ()))[1])
-                good += bool(tags & wanted)
-                bad += bool(tags & unwanted)
-            scores[cell] += 1 + 4 * good - 1.5 * bad
-    best = sorted(((v, c) for c, v in scores.items() if v > 0), reverse=True)[:6]
+    best = [r for r in theme_scores(sv, pieces, wanted, unwanted) if r[0] > 0][:6]
     if not best:
         return None
-    return _pick([(c, v) for v, c in best], rng)
+    return _pick([(c, v * v) for v, c in best], rng)
 
 
-def dress(ts, sv, plan, made, rng, purposes=None, ruined=False):
+def dress(ts, sv, plan, made, rng, purposes=None, ruined=False, only=None):
     """Lights and things for every piece: each room takes after one real place, and each of its pieces gets what that piece
-    had there (or nothing, as often as it had nothing). [Item]"""
+    had there (or nothing, as often as it had nothing). Then the room is looked at as a whole: not too many of one big thing,
+    and nothing solid in a doorway or in front of it. [Item]. only: just this owner. An owner's 'pick' is a real place chosen
+    for it by hand."""
     purposes = purposes or PURPOSE_TAGS
     out = []
     every = set(t for ws in PURPOSE_TAGS.values() for t in ws)
@@ -374,10 +416,10 @@ def dress(ts, sv, plan, made, rng, purposes=None, ruined=False):
     for m in made:
         pieces[m.owner].append(m)
     for o in plan.owners:
-        if o['kind'] == VOID_KIND or not pieces[o['n']]:
+        if o['kind'] == VOID_KIND or not pieces[o['n']] or (only is not None and o['n'] != only):
             continue
         wanted = set(purposes.get(o.get('dress') or o['purpose'], ()))
-        cell = _theme(sv, pieces[o['n']], wanted, every - wanted, rng)
+        cell = o.get('pick') or _theme(sv, pieces[o['n']], wanted, every - wanted, rng)
         o['theme'] = cell
         for m in pieces[o['n']]:
             here = [st for c, st in zip(sv.src.get(m.key, ()), sv.sets.get(m.key, ())) if c == cell]
@@ -390,8 +432,61 @@ def dress(ts, sv, plan, made, rng, purposes=None, ruined=False):
                 out.append(Item(it[0], _world(m, it[1], it[2], it[3], it[4], it[5], it[6]), it[7], what, m.owner, m))
     if ruined:
         _rubble(sv, plan, made, out, rng)
-    _even_out_lights(ts, sv, plan, made, out, rng)
+    _even_out_lights(ts, sv, plan, made, out, rng, only)
+    _not_a_showroom(ts, plan, out, rng)
+    keep_fronts(ts, plan, out)
     return out
+
+
+def _not_a_showroom(ts, plan, items, rng):
+    """The same big thing on every square looks like a mistake: a real room's one pool table stood on each piece that was like
+    the one it stood on. As many of a thing as the room has squares for, the rest out."""
+    per = collections.defaultdict(list)
+    for it in items:
+        if it.what in BIG_KINDS and it.owner is not None:
+            per[(it.owner, it.key)].append(it)
+    gone = set()
+    for (owner, _key), rows in per.items():
+        squares = sum(1 for c in plan.owners[owner]['cells'] if c not in plan.air)
+        most = max(1, squares // SAME_THING)
+        if len(rows) > most:
+            rng.shuffle(rows)
+            gone |= {id(it) for it in rows[most:]}
+    if gone:
+        items[:] = [it for it in items if id(it) not in gone]
+
+
+def keep_fronts(ts, plan, items):
+    """Nothing solid in a doorway or just inside one: the way into a room is what it's judged by, and it's what a follower
+    gets stuck on. Things overhead are no trouble."""
+    step = ts.step
+    zones = []
+    for link in plan.links:
+        a, b = tuple(link)
+        x, y = plan.cells.get(a), plan.cells.get(b)
+        if x == y or x is None or y is None or a[2] != b[2]:
+            continue
+        for c, n in ((a, b), (b, a)):
+            dx, dy = n[0] - c[0], n[1] - c[1]
+            mx, my = (c[0] + dx * 0.5) * step, (c[1] + dy * 0.5) * step
+            zones.append((mx, my, dx, dy, c[2] * plan.rise + ts.floor))
+    if not zones:
+        return
+    keep = []
+    for it in items:
+        hit = False
+        if it.what in SOLID:
+            for mx, my, dx, dy, floor in zones:
+                if it.p[2] - floor >= HUNG or it.p[2] < floor - 64:
+                    continue
+                ahead = (mx - it.p[0]) * dx + (my - it.p[1]) * dy     # (how far back from the doorway, into the room)
+                side = abs((it.p[0] - mx) * dy) + abs((it.p[1] - my) * dx)
+                if -32 <= ahead <= DOOR_FRONT and side <= DOOR_SIDE:
+                    hit = True
+                    break
+        if not hit:
+            keep.append(it)
+    items[:] = keep
 
 
 def _rubble(sv, plan, made, out, rng):
@@ -409,7 +504,7 @@ def _rubble(sv, plan, made, out, rng):
         out.append(Item(it[0], spot, it[7], 'rubble', m.owner, m))
 
 
-def _even_out_lights(ts, sv, plan, made, items, rng):
+def _even_out_lights(ts, sv, plan, made, items, rng, only=None):
     """Every room and corridor lit, none blazing: the game's lights from the game's sets for these same pieces."""
     per = collections.defaultdict(list)
     for it in items:
@@ -419,9 +514,9 @@ def _even_out_lights(ts, sv, plan, made, items, rng):
     for m in made:
         pieces[m.owner].append(m)
     for o in plan.owners:
-        if o['kind'] == VOID_KIND:
+        if o['kind'] == VOID_KIND or (only is not None and o['n'] != only):
             continue
-        n = len(o['cells'])
+        n = sum(1 for c in o['cells'] if c not in plan.air)
         least, most = max(1, n // LIGHTS_PER), max(1, n // LIGHTS_MAX)
         have = per[o['n']]
         while len(have) > most:

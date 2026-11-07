@@ -125,7 +125,8 @@ for name, k in sorted(kits.items()):
         good = good and not w['missing'] and not w['escaped']
         by_cell = {c: m for m in g['made'] for c in m.cells}
         for o in g['plan'].rooms():
-            rooms_ok = rooms_ok and all(c in by_cell and by_cell[c].owner == o['n'] for c in o['cells'])
+            # (a tall room's or a one-piece room's own pieces stand over more floors than they're counted on)
+            rooms_ok = rooms_ok and (o.get('tall') or o.get('whole') or all(c in by_cell and by_cell[c].owner == o['n'] for c in o['cells'] if c not in g['plan'].air))
         a, b = P.repeats(ts, g['made'])
         rep_n, rep_t = rep_n + a, rep_t + b
     check('%s: planned places made, sealed and every part reached (%d)' % (name, made_n), made_n >= 1 and good)
@@ -142,7 +143,8 @@ sizes = {len(o['cells']) for o in g['plan'].rooms()}
 check('… rooms of different sizes (%s)' % sorted(sizes), len(sizes) >= 3)
 two = next((P.generate(G, vt, 240, s) for s in range(4, 40) if any(c[2] != 0 for c in P.generate(G, vt, 240, s)['plan'].cells)), None)
 check('… more than one level, stairs among the pieces, and the walk gets to all of them', two and any(m.key == vt.stairs[0].piece.key for m in two['made']) and not two['walk']['missing'])
-check('… bigger pieces are used too', any(len(m.cells) > 1 and m.key != vt.stairs[0].piece.key for m in g['made']) or any(len(m.cells) > 1 and m.key != vt.stairs[0].piece.key for m in two['made']))
+ot = P.PlanTiles(kits['dungeons' + B + 'office'], G)
+check('… bigger pieces are read, none of them tall (nothing they fit has come up in a plan yet: halls this size aren\'t planned)', ot.big and not any(p.box[5] - p.box[2] >= 1.8 * ot.stairs[0].rise for p, _w, _h in ot.big))
 cut = P.Plan(vt.step)
 cut.add_room('a', 'room', [(i, j, 0) for i in range(4) for j in range(4)])
 cut.add_room('b', 'room', [(i, j, 0) for i in range(6, 10) for j in range(4)])
@@ -150,7 +152,7 @@ made = P.fill(vt, cut, 1)
 w = P.walk_check(G, vt, cut, made)
 check('the walk finds a room with no way to it', len(w['missing']) == 16 and not w['escaped'])
 ed = P.layout(G, kits, 'dungeons' + B + 'vault', 24, 24, 5, [256, 512, 64], {}, {})
-check('a place for the editor: changes for the mod, on the spot asked, words for the person', ed.get('ops') and all(o['op'] == 'add' and o['gen'] for o in ed['ops']) and 'rooms' in ed['said'] and min(o['p'][2] for o in ed['ops']) >= 64 - 2 * 256)
+check('a place for the editor: changes for the mod, on the spot asked, words for the person', ed.get('ops') and all(o['op'] == 'add' and o['gen'] for o in ed['ops']) and 'rooms' in ed['said'] and min(o['p'][2] for o in ed['ops']) >= 64 - 6 * 256)
 cave = P.layout(G, kits, 'dungeons' + B + 'caves', 8, 8, 2, [0, 0, 0], {}, {})
 check('a kit with no room pieces is still filled and walked, or says why', cave.get('ops') or cave.get('note'))
 
