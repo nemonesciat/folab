@@ -35,6 +35,10 @@ def loops(plan):
         x, y = plan.cells.get(a), plan.cells.get(b)
         if x != y and x in live and y in live:
             edges.add(frozenset((x, y)))
+    for (c, d) in getattr(plan, 'opens', {}):
+        x, y = plan.cells.get(c), plan.cells.get((c[0] + K.DX[d][0], c[1] + K.DX[d][1], c[2]))
+        if x != y and x in live and y in live:
+            edges.add(frozenset((x, y)))
     seen, parts = set(), 0
     near = collections.defaultdict(set)
     for e in edges:

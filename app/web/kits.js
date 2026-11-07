@@ -134,14 +134,14 @@ async function kitTab(){
   KIT.list = d.kits;
   const was = KIT.pick || (d.kits.find(k => k.name === 'dungeons\\vault') || d.kits[0] || {}).name;
   box.innerHTML = `<div class="h">Generate a layout</div>
-    <div class="note" style="padding:0 0 6px">Plans rooms and corridors with a main route and side branches, then builds them from the game's own pieces, each side joining what's beside it, and walks it from the first room to every square. Best in an empty place of your own (<b>+ New</b> under Places).</div>
+    <div class="note" style="padding:0 0 6px">Plans rooms and corridors with a main route, side branches and ways round, stairs and tall rooms where the kit has them, then builds them from the game's own pieces, each side joining what's beside it, and walks it from the first room to every square. Best in an empty place of your own (<b>+ New</b> under Places).</div>
     <label class="vt-row">Kit <select id="kit-pick">${d.kits.map(k => `<option value="${esc(k.name)}" ${k.name === was ? 'selected' : ''}>${esc(k.label)} (${k.tiles})</option>`).join('')}</select></label>
     <label class="vt-row">Size <input type="number" id="kit-w" min="3" max="80" value="${KIT.w || 24}" style="width:60px"> × <input type="number" id="kit-h" min="3" max="80" value="${KIT.h || 24}" style="width:60px"> squares</label>
     <div class="kit-go"><button class="btn primary" id="kit-make">Generate</button> <button class="btn" id="kit-again" ${KIT.last ? '' : 'disabled'} title="Replace that layout with another">Try another</button></div>
     <div class="note" id="kit-said" style="padding:6px 0">${KIT.said || ''}</div>
     <div class="note" style="padding:0">Generating again replaces the last layout here.</div>
     <div class="h" style="margin-top:10px">A vault in one click</div>
-    <div class="note" style="padding:0 0 6px">An entrance, an atrium, living quarters, an overseer's office and a reactor, joined up, with doors, lights and furnishings from the game's own vaults.</div>
+    <div class="note" style="padding:0 0 6px">An entrance, a two-storey atrium with balconies, living quarters, the overseer's office and a reactor, joined up, with doors, lights and furnishings from the game's own vaults.</div>
     <label class="vt-row">Size <input type="range" id="kit-vault-size" min="1" max="10" value="${KIT.vaultSize || 4}" style="flex:1"> <span id="kit-vault-n">${KIT.vaultSize || 4}</span></label>
     <label class="vt-row"><input type="checkbox" id="kit-vault-ruin" ${KIT.ruined ? 'checked' : ''}> Ruined, with rubble</label>
     <div class="kit-go"><button class="btn primary" id="kit-vault">Make a vault</button></div>
@@ -211,18 +211,7 @@ async function kitMake(){
   KIT.seed = (KIT.seed || 0) + 1;
   const said = $('#kit-said'); said.textContent = 'Building…';
   const made = await post('/api/kit/layout', {kit, w, h, seed: KIT.seed + (Date.now() % 100000), at}).catch(e => { fail(e); return null; });
-  if (!made) return (said.textContent = '');
-  if (!made.ops){ KIT.said = said.textContent = made.note; return; }
-  const label = `Generate ${info.label}`;
-  // (the last layout goes in the same step: two on one spot flicker where their surfaces meet)
-  const old = (A.things || []).filter(t => t.gen).map(t => ({op: 'remove', cell: A.cellId, ref: t.key}));
-  const d = await edit(label, old.concat(made.ops.map(o => ({...o, cell: A.cellId}))));
-  if (!d) return (said.textContent = '');
-  KIT.last = label;
-  KIT.said = made.said;
-  W.cam.position.set(made.start[0], made.start[1], made.start[2] + 110);
-  await kitTab();
-  navMake();
+  await kitPut(made, `Generate ${info.label}`, true);
 }
 
 // ---------- the place's navmesh: where characters can walk ----------

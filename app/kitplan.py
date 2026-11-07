@@ -19,6 +19,10 @@ kitindex.build_area, with far less left to chance) picks pieces.
     made = fill(tiles, plan, seed)              [Placed], or None if the plan can't be built from this kit
     place = generate(game, tiles, area, seed)   all of it, with the walk: {'plan', 'made', 'walk', ...} or None
 
+Beyond flat rooms: a Galley is a room two storeys high with balconies, placed whole with ordinary rooms open against it above and
+below; a SetPiece is a room made in one piece, joined as the game joined it; Planner.find_way routes a corridor between any two
+owners, stairs included, which is what the ways round (add_loops) and the ways up to balconies are made with.
+
 Variety isn't noise: each room gets a small palette (one wall piece mostly, an accent or two), so a room looks of a piece
 and the next room looks different, and the game's own join counts (kit.seen) lean each choice towards joins it built.
 Pieces bigger than a square go in after the solver, wherever their whole outline agrees with what's round them."""
@@ -47,7 +51,7 @@ ROOM, HALL, VOID = 'room', 'hall', 'void'
 
 def side_word(s, step):
     """A side as a word: F, A, P or . (see the top of the file)."""
-    if not s or not s['open'] or not s.get('span') or s['width'] < NICHE * step:
+    if not s or not s['open'] or not s.get('span') or s['width'] < s.get('niche', NICHE) * step:
         return '.'
     a, b = s['span']
     edge = step / 2 / K.SECTION_BIN - 2
@@ -79,9 +83,10 @@ def folder_of(model):
     return chr(92).join(parts[lead + 2:-1])
 
 
-def not_walkable(game, kit, keys, step):
+def not_walkable(game, kit, keys, step, floor=None):
     """Of these pieces, those whose ways through don't really join up when walked on their collision shapes alone. (A mesh
-    can draw a doorway that its collision closes: the sections read what's drawn.)"""
+    can draw a doorway that its collision closes: the sections read what's drawn.) floor: the kit's floor, for pieces that
+    stand on one floor: a low doorway's section can read its lintel as the floor, and the top of the lintel is a roof."""
     bad = set()
     for key in keys:
         p = kit.pieces[key]
@@ -96,7 +101,7 @@ def not_walkable(game, kit, keys, step):
         parts = set()
         for s in ways:
             x, y = {0: (p.foot[2] - 24, s['u']), 1: (s['u'], p.foot[3] - 24), 2: (p.foot[0] + 24, s['u']), 3: (s['u'], p.foot[1] + 24)}[s['side']]
-            parts.add(w._start_piece((x, y, s['floor'] + 8)) if w.pieces else None)
+            parts.add(w._start_piece((x, y, (s['floor'] if floor is None else floor) + 8)) if w.pieces else None)
         if len(parts) > 1 or None in parts:
             bad.add(key)
     return bad
@@ -107,10 +112,41 @@ def _word_key(w):
 
 
 class Stair:
-    """A flight of stairs: one square wide, two long, ports on its short sides."""
+    """A flight of stairs: one square wide, two long, ports on its short sides. Or (kind 'turn') a stairwell that comes back on
+    itself: two squares by two, both ports on one side."""
 
-    def __init__(self, piece, low, high, rise):
-        self.piece, self.low, self.high, self.rise = piece, low, high, rise
+    def __init__(self, piece, low, high, rise, kind='straight'):
+        self.piece, self.low, self.high, self.rise, self.kind = piece, low, high, rise, kind
+
+    def turned(self, way, entering):
+        """Coming along way into this stairwell's port (slot number entering): (its turn, the way across to the other port)."""
+        slots = self.piece.slots
+        other = self.high if entering == self.low else self.low
+        t = (slots[entering]['side'] - (way + 2)) % 4
+        x0, y0, _f = K.slot_world(self.piece, entering, t)
+        x1, y1, _f = K.slot_world(self.piece, other, t)
+        dx, dy = x1 - x0, y1 - y0
+        return t, ((dx > 0) - (dx < 0), (dy > 0) - (dy < 0))
+
+
+def _read_niche(kit):
+    """What's too narrow to be a way through, in this kit. Mostly what NICHE says, but pipes along the walls leave the service
+    tunnels' corridors a quarter as wide as a vault's: there, the width of the kit's own commonest straight corridor is a way
+    through, and only what's narrower than that isn't."""
+    h = kit.step / 2
+    best = None
+    for p in kit.structural():
+        if p.foot != (-h, -h, h, h) or len(p.slots) != 4:
+            continue
+        ways = [s for s in p.slots if s['open']]
+        if len(ways) == 2 and (ways[0]['side'] + 2) % 4 == ways[1]['side'] and abs(ways[0]['width'] - ways[1]['width']) <= 16 and ways[0]['width'] < 0.8 * kit.step:
+            if best is None or p.uses > best[0]:
+                best = (p.uses, min(s['width'] for s in ways))
+    niche = min(NICHE, (best[1] - 8) / kit.step) if best else NICHE
+    for p in kit.structural():
+        for s in p.slots:
+            s['niche'] = niche
+    return niche
 
 
 class PlanTiles(K.Tileset):
@@ -118,6 +154,7 @@ class PlanTiles(K.Tileset):
     unless the game did, knows the kit's stairs and bigger pieces, and has tried out what the kit can build."""
 
     def __init__(self, kit, game=None, min_uses=1):
+        niche = _read_niche(kit)
         super().__init__(kit, min_uses)
         self.game = game
         self._walk_cache = {}
@@ -125,6 +162,8 @@ class PlanTiles(K.Tileset):
         self.ceil = [ceiling(s) if s else None for s in self.sockets]
         # (a niche reads as an opening at the side's own slice: it's a closed side, like any other)
         self.sides = [tuple(0 if self.sockets[s] and self.sockets[s]['open'] and self.word[s] == '.' else s for s in sides) for sides in self.sides]
+        if niche < NICHE:
+            self._trust_game()
         self._tighten()
         self.piece_of = [v[0] for v in self.vars]
         self.vwords = [''.join(self.word[s] for s in sides) for sides in self.sides]
@@ -136,7 +175,7 @@ class PlanTiles(K.Tileset):
         self.masks = {}
         self.banned = set()
         if game is not None:
-            self.banned |= not_walkable(game, kit, self.slot_sock, self.step)
+            self.banned |= not_walkable(game, kit, self.slot_sock, self.step, self.floor)
         self.same_piece = collections.defaultdict(int)
         for v, k in enumerate(self.piece_of):
             if k:
@@ -156,6 +195,21 @@ class PlanTiles(K.Tileset):
         self.can, self.families, self.door_pairs, self.hall_pairs, self.hall_words = {}, {}, set(), set(), {}
         self.exit_widths = set()
         self._probe()
+
+    def _trust_game(self):
+        """In a kit whose corridors are narrow and crowded with pipes, the clear part of a section is off to one side, and can't
+        be told from a seam: there, a join the game built between two passages stands, and the walk has the last word."""
+        step = self.kit.step
+        for (a, b, dx, dy, dz, t), c in self.kit.seen.items():
+            if dz or (abs(dx), abs(dy)) not in ((step, 0), (0, step)) or a not in self.slot_sock or b not in self.slot_sock or c < 2:
+                continue
+            side = {(1, 0): 0, (0, 1): 1, (-1, 0): 2, (0, -1): 3}[(int(dx / step), int(dy / step))]
+            sa, sb = self.slot_sock[a][side], self.slot_sock[b][(side + 2 + t) % 4]
+            if sa and sb and side_word(self.sockets[sa], step) == 'P' == side_word(self.sockets[sb], step):
+                self.ok[sa].add(sb)
+                self.ok[sb].add(sa)
+                self.times[(sa, sb)] += c
+                self.times[(sb, sa)] += c
 
     def _tighten(self):
         """A ceiling step isn't a join, however alike the floors are, unless the game built it."""
@@ -264,6 +318,28 @@ class PlanTiles(K.Tileset):
         out.sort(key=lambda s: -s.piece.uses)
         return out
 
+    def _find_turns(self):
+        """Stairwells two squares by two whose ports are side by side, at the plan's rise: a flight that comes back on itself."""
+        out = []
+        step = self.step
+        rise = self.stairs[0].rise if self.stairs else None
+        for p in self.kit.structural():
+            if not p.foot or (p.foot[2] - p.foot[0], p.foot[3] - p.foot[1]) != (2 * step, 2 * step):
+                continue
+            ports = [i for i, s in enumerate(p.slots) if side_word(s, step) == 'P']
+            if len(ports) != 2:
+                continue
+            a, b = sorted(ports, key=lambda i: p.slots[i]['floor'])
+            if p.slots[a]['side'] != p.slots[b]['side'] or p.slots[b]['floor'] - p.slots[a]['floor'] < STAIR_MIN:
+                continue
+            if rise is not None and abs(p.slots[b]['floor'] - rise) > 48:
+                continue
+            if abs(p.slots[a]['u'] - p.slots[b]['u']) != step or abs(p.slots[a]['floor'] - self.floor) > 40:
+                continue
+            out.append(Stair(p, a, b, rise or int(p.slots[b]['floor']), 'turn'))
+        out.sort(key=lambda s: -s.piece.uses)
+        return out
+
     def _find_big(self):
         """Bigger pieces whose footprint is whole squares, with one floor: [(piece, width, depth)]."""
         out = []
@@ -272,11 +348,21 @@ class PlanTiles(K.Tileset):
             if not p.foot or not p.sound or len(p.slots) <= 4:
                 continue
             w, h = (p.foot[2] - p.foot[0]) / step, (p.foot[3] - p.foot[1]) / step
-            if w != int(w) or h != int(h) or w * h < 2 or w * h > 16:
-                continue
+            if w != int(w) or h != int(h) or w * h < 2 or w * h > 16 or p.box[5] - p.box[2] >= TALL_SHARE * (self.stairs[0].rise if self.stairs else 256):
+                continue            # (not too big, and not tall: tall pieces stand up through the room over them)
             if any(abs(s['floor'] - self.floor) > 40 for s in p.slots if s['open']) or not any(side_word(s, step) != '.' for s in p.slots):
                 continue
             out.append((p, int(w), int(h)))
+        return out
+
+    def same_sides(self, key, t):
+        """Every variant that shows the same on all sides as this piece turned t: as a mask."""
+        want = tuple(K_side(self, key, t, d) for d in range(4))
+        want = tuple(0 if self.sockets[s] and self.sockets[s]['open'] and self.word[s] == '.' else s for s in want)
+        out = 0
+        for v in range(1, len(self.vars)):
+            if self.sides[v] == want:
+                out |= 1 << v
         return out
 
     def ban(self, key):
@@ -381,9 +467,13 @@ class PlanTiles(K.Tileset):
         if self.game is not None:
             self.stairs = [st for st in self.stairs[:4] if self._stair_walks(st)]
         self.can['stairs'] = bool(self.stairs and hall_fams)
+        self.turns = self._find_turns() if hall_fams else []
+        self.stair_kinds = self._proven_stairs()
         self.galleys = self._find_galleys() if self.can['stairs'] else []
         self.galleys = [g for g in self.galleys if self._galley_walks(g)]
         self.can['tall'] = bool(self.galleys)
+        self.set_pieces = self._find_set_pieces() if self.game is not None and hall_fams else []
+        self.can['set'] = bool(self.set_pieces)
 
     def _stair_walks(self, st):
         """A room, a corridor, this flight, a corridor, a room, built and walked. A flight that doesn't get anyone up it is
@@ -404,8 +494,71 @@ class PlanTiles(K.Tileset):
                 return not w['missing'] and not w['escaped']
         return False
 
+    def _proven_stairs(self):
+        """The kinds of stairs this kit can really do. Each is built between two rooms and walked before anything uses it."""
+        if not self.hall_pairs:
+            return []
+        kinds = (['straight', 'long', 'back'] if self.stairs else []) + (['turn'] if self.turns else [])
+        if self.game is None:
+            return kinds
+        out = []
+        for kind in kinds:
+            done = False
+            for room, fam in sorted(self.hall_pairs):
+                for up in (True, False):
+                    if self._stairs_walk(kind, room, fam, up):
+                        done = True
+                        break
+                if done:
+                    out.append(kind)
+                    break
+        self.turns = self.turns if 'turn' in out else []
+        return out
+
+    def _stairs_walk(self, kind, room, fam, up):
+        """A room, stairs of this kind, a room, built and walked."""
+        for seed in (1, 2, 3, 4, 5, 6):
+            pl = Planner(self, random.Random(seed))
+            pl.plan.rise = self.stairs[0].rise if self.stairs else self.turns[0].rise
+            n = pl.plan.add_room('test', room, [(i, j, 0) for i in range(4) for j in range(3)])
+            c, d = (1, 2, 0), 1
+            got = pl.stair_moves(c, d, kind, up)
+            if not got:
+                continue
+            moves, end, way = got
+            first = (end[0] + DX[way][0], end[1] + DX[way][1], end[2])
+            a, b = DX[way], DX[(way + 1) % 4]
+            cells = [(first[0] + a[0] * i + b[0] * j, first[1] + a[1] * i + b[1] * j, first[2]) for i in range(3) for j in range(-1, 2)]
+            if not pl.clear(cells):
+                continue
+            pl.plan.add_room('test', room, cells)
+            if not pl.lay_way((c, moves, first), fam):
+                continue
+            made = fill(self, pl.plan, seed, budget=60, big=False)
+            if made:
+                w = walk_check(self.game, self, pl.plan, made, self._walk_cache)
+                if not w['missing'] and not w['escaped'] and not w['edges']:
+                    return True
+        return False
+
     def hall_can(self, fam, word):
         return word in self.hall_words.get(fam, ())
+
+    def _find_set_pieces(self):
+        """Whole rooms made in one piece, used as the game used them (see SetPiece). Any that really seal and walk."""
+        out = []
+        for p in self.kit.structural():
+            sx, sy = (p.foot[2] - p.foot[0]) / self.step, (p.foot[3] - p.foot[1]) / self.step
+            if sx * sy < 9 or sx * sy > 42 or p.box[5] - p.box[2] < 150:
+                continue
+            for (a, b, dx, dy, dz, t), _n in self.kit.seen.items():
+                if a != p.key or dz or b not in self.slot_sock or b in self.banned:
+                    continue
+                sp = SetPiece.read(self, p, b, dx, dy, t)
+                if sp:
+                    out.append(sp)
+                    break
+        return out
 
     def _find_galleys(self):
         """Tall rooms of the vault's kind, read from the sections (see Galley). A family counts if it has every part."""
@@ -505,6 +658,115 @@ def pick_row(rows, rng):
     return max(rows, key=lambda r: r[0].uses * rng.uniform(0.3, 1.0))
 
 
+class SetPiece:
+    """A room made in one piece (the overseer's office), used just as the game used it. Its doorway needn't be on the kit's grid
+    by its own measure, so what's asked of it comes from a join the game built: this corridor piece, this far from it, turned so.
+    That join is kept exactly, which puts the room off the grid by whatever it was and the corridor on it.
+
+    Walking the piece with that corridor piece finds where it's really open and where you can really stand. Any other way out
+    gets a dead end stood in it: a piece that's a way out in the game's cell may lead nowhere in ours."""
+
+    def __init__(self, piece, join_key, dx, dy, t, in_way):
+        self.piece, self.join_key, self.dx, self.dy, self.t, self.in_way = piece, join_key, dx, dy, t, in_way
+        self.plugs = []         # (key, x, y, z, turn), from the piece's origin
+        self.floors = []        # (i, j, level) squares from the joining piece's, where you can stand
+        self.cells = []         # (i, j, level) squares it takes up
+
+    @classmethod
+    def read(cls, ts, p, b, dx, dy, t):
+        step = ts.step
+        kit, game = ts.kit, ts.game
+        q = kit.pieces[b]
+        d = 0 if dx >= p.foot[2] else 2 if dx <= p.foot[0] else 1 if dy >= p.foot[3] else 3 if dy <= p.foot[1] else None
+        if d is None:
+            return None
+        side = (((d + 2) % 4) + t) % 4     # (the joining piece's side that faces the room)
+        if side_word(next(s for s in q.slots if s['side'] == side), step) != 'P' or len([s for s in q.slots if side_word(s, step) == 'P']) != 2:
+            return None
+        sp = cls(p, b, dx, dy, t, (d + 2) % 4)
+
+        def walk_with(plugs):
+            refs = [{'ref': 1, 'type': 'REFR', 'base': game.from_key(p.key), 'pos': (0.0, 0.0, 0.0), 'rot': (0.0, 0.0, 0.0), 'scale': 1.0, 'leads': False, 'bkey': p.key},
+                    {'ref': 2, 'type': 'REFR', 'base': game.from_key(b), 'pos': (float(dx), float(dy), 0.0), 'rot': (0.0, 0.0, t * math.pi / 2), 'scale': 1.0, 'leads': False, 'bkey': b}]
+            for n, (k, x, y, z, u) in enumerate(plugs):
+                refs.append({'ref': 3 + n, 'type': 'REFR', 'base': game.from_key(k), 'pos': (float(x), float(y), float(z)), 'rot': (0.0, 0.0, u * math.pi / 2), 'scale': 1.0, 'leads': False, 'bkey': k})
+            return Walk(game, refs, (float(dx), float(dy), ts.floor + 8.0), cache=ts._walk_cache, erode=True)
+
+        def far(e):
+            # (the joining piece's own far end: that's where the corridor goes on)
+            return abs(e[0] - dx) <= step * 0.7 and abs(e[1] - dy) <= step * 0.7
+        w = walk_with([])
+        if len(w.reached) < 400:
+            return None
+        for _try in range(3):
+            left = [e for e in w.open_edges() if not far(e)]
+            if not left:
+                break
+            plug = sp._plug(ts, left, walk_with, far)
+            if not plug:
+                return None
+            sp.plugs.append(plug)
+            w = walk_with(sp.plugs)
+        else:
+            return None
+        # (where you can stand, and what it takes up, in squares from the joining piece)
+        rise = ts.stairs[0].rise if ts.stairs else 256
+        counts = collections.Counter()
+        for x, y, z in w.where():
+            counts[(int(math.floor((x - dx) / step + 0.5)), int(math.floor((y - dy) / step + 0.5)), int(math.floor((z - ts.floor + rise * 0.3) / rise)))] += 1
+        sp.floors = [c for c, n in counts.items() if n >= 12 and c[:2] != (0, 0)]
+        low = int(math.floor((p.box[2] + rise * 0.3) / rise))
+        cells = set(sp.floors)
+        boxes = [(p, 0.0, 0.0, 0, 0)] + [(kit.pieces[k], x, y, z, u) for k, x, y, z, u in sp.plugs]
+        for piece, x, y, z, u in boxes:
+            bx = K._footprint_world(piece, x, y, u)
+            for i in range(int(math.floor((bx[0] - dx) / step + 0.5 + 0.15)), int(math.ceil((bx[2] - dx) / step + 0.5 - 0.15))):
+                for j in range(int(math.floor((bx[1] - dy) / step + 0.5 + 0.15)), int(math.ceil((bx[3] - dy) / step + 0.5 - 0.15))):
+                    for lv in range(int(math.floor((z + piece.box[2] + rise * 0.3) / rise)), int(math.floor((z + piece.box[5] - 16) / rise)) + 1):
+                        cells.add((i, j, lv))
+        cells.discard((0, 0, 0))
+        sp.cells = sorted(cells)
+        _ = low
+        return sp if len([c for c in sp.floors if c[2] == 0]) >= 4 else None
+
+    def _plug(self, ts, edges, walk_with, far):
+        """A dead-end corridor piece that closes the way out these edges are part of: (key, x, y, z, turn) or None."""
+        d = edges[0][3]
+        row = [e for e in edges if e[3] == d and abs(e[2] - edges[0][2]) < 40]
+        along = 1 if d % 2 == 0 else 0
+        mid = (min(e[along] for e in row) + max(e[along] for e in row)) / 2
+        front = max(e[1 - along] * DX[d][1 - along] for e in row) * DX[d][1 - along] + DX[d][1 - along] * 8
+        z = edges[0][2] - ts.floor
+        step = ts.step
+        ends = [v for v in range(1, len(ts.vars)) if ts.vwords[v].count('P') == 1 and ts.vwords[v].count('.') == 3 and ts.piece_of[v] not in ts.banned]
+        ends.sort(key=lambda v: -ts.kit.pieces[ts.piece_of[v]].uses)
+        tried = set()
+        for v in ends:
+            key, t = ts.vars[v]
+            for t2 in range(4):
+                # (turned so its way through faces back the way the edge looks)
+                if ts.word[K_side(ts, key, t2, (d + 2) % 4)] != 'P' or (key, t2) in tried:
+                    continue
+                tried.add((key, t2))
+                slot = next(s for s in ts.kit.pieces[key].slots if s['side'] == ((d + 2) % 4 + t2) % 4)
+                if abs(slot['width'] - max(e[along] for e in row) + min(e[along] for e in row) - 16) > 90:
+                    continue
+                for off, deep in ((0, 16), (0, 8), (0, 0), (0, 24), (-16, 16), (16, 16)):
+                    x, y = front + DX[d][0] * (step / 2 - deep), mid + off
+                    if along == 0:
+                        x, y = mid + off, front + DX[d][1] * (step / 2 - deep)
+                    plug = (key, x, y, z, t2)
+                    w = walk_with(self.plugs + [plug])
+                    if not [e for e in w.open_edges() if not far(e)]:
+                        return plug
+        return None
+
+
+def K_side(ts, key, t, d):
+    """The socket a piece turned t shows on world side d."""
+    return ts.slot_sock[key][(d + t) % 4]
+
+
 # ---------- the plan: no pieces yet ----------
 
 class Plan:
@@ -523,6 +785,7 @@ class Plan:
         self.air = set()        # squares in a tall room with nothing to stand on
         self.opens = {}         # (square, way): the slot of a tall piece that this room stands open against
         self.placed = []        # things placed whole, a tall room: {'owner', 'pieces': [Placed]}
+        self.forced = {}        # square -> mask of the variants it may be: what's joined just as the game joined it
 
     def add_exit(self, c, d):
         """A doorway in this square's side d that leads out of the place: what's beyond it stays empty."""
@@ -556,7 +819,26 @@ class Plan:
     def add_void(self, cells, what='stairs'):
         return self._own({'kind': VOID, 'purpose': what, 'fam': None, 'main': False}, cells)
 
-    def add_flight(self, stair, low, way, lvl):
+    def add_turn(self, stair, a, way, lvl, up, kind='turn'):
+        """A stairwell that comes back on itself, entered along way at square a of level lvl (from below, or from above: then
+        a is on lvl + 1). Returns the square you come out on, going back the other way."""
+        entering = stair.low if up else stair.high
+        t, across = stair.turned(way, entering)
+        b = (a[0] + across[0], a[1] + across[1])
+        ahead = DX[way]
+        cells = [(q[0], q[1], lvl) for q in (a, b, (a[0] + ahead[0], a[1] + ahead[1]), (b[0] + ahead[0], b[1] + ahead[1]))]
+        n = self.add_void(cells + [(c[0], c[1], lvl + 1) for c in cells])
+        low, high = (a, b) if up else (b, a)
+        slots = stair.piece.slots
+        ports = []
+        for q, slot, lv in ((low, slots[stair.low], lvl), (high, slots[stair.high], lvl + 1)):
+            out = (q[0] - ahead[0], q[1] - ahead[1], lv)
+            ports.append((out, way, slot, (q[0], q[1], lv)))
+            self.link(out, (q[0], q[1], lv))
+        self.flights.append({'stair': stair, 'turn': t, 'owner': n, 'level': lvl, 'cells': cells, 'ports': ports, 'kind': kind})
+        return (b[0] - ahead[0], b[1] - ahead[1], lvl + 1 if up else lvl)
+
+    def add_flight(self, stair, low, way, lvl, kind='straight'):
         """Stairs going up along way from the square low (at level lvl): its two squares at lvl and lvl + 1 are taken."""
         a = low
         b = (a[0] + DX[way][0], a[1] + DX[way][1])
@@ -566,7 +848,7 @@ class Plan:
         t = (slots[stair.low]['side'] - (way + 2)) % 4
         before = (a[0] - DX[way][0], a[1] - DX[way][1], lvl)
         after = (b[0] + DX[way][0], b[1] + DX[way][1], lvl + 1)
-        self.flights.append({'stair': stair, 'turn': t, 'owner': n, 'level': lvl, 'cells': cells,
+        self.flights.append({'stair': stair, 'turn': t, 'owner': n, 'level': lvl, 'cells': cells, 'kind': kind,
                              'ports': [(before, way, slots[stair.low], cells[0]), (after, (way + 2) % 4, slots[stair.high], (b[0], b[1], lvl + 1))]})
         self.link(before, cells[0])
         self.link(after, (b[0], b[1], lvl + 1))
@@ -612,10 +894,10 @@ class Plan:
 
     def mark(self):
         """Where the plan stands now, to go back to if what's being tried doesn't work out."""
-        return (dict(self.cells), len(self.owners), set(self.links), len(self.flights), len(self.ports), set(self.air), dict(self.opens), len(self.placed))
+        return (dict(self.cells), len(self.owners), set(self.links), len(self.flights), len(self.ports), set(self.air), dict(self.opens), len(self.placed), dict(self.forced))
 
     def back_to(self, m):
-        self.cells, self.links, self.air, self.opens = m[0], m[2], m[5], m[6]
+        self.cells, self.links, self.air, self.opens, self.forced = m[0], m[2], m[5], m[6], m[8]
         del self.owners[m[1]:]
         del self.flights[m[3]:]
         del self.ports[m[4]:]
@@ -663,6 +945,8 @@ def fill(ts, plan, seed=0, budget=SOLVE_BUDGET, big=True):
     boundary = collections.defaultdict(lambda: -1)
     for (c, d), slot in plan.opens.items():
         boundary[c] &= ts.port_mask(slot, d)
+    for c, m in plan.forced.items():
+        boundary[c] &= m
     for f in plan.flights:
         for outside, way, slot, _inner in f['ports']:
             boundary[outside] &= ts.port_mask(slot, way)
@@ -898,7 +1182,8 @@ def _outline_agrees(ts, plan, solved, piece, t, cells):
 class Spec:
     """A room wanted: what it's for, its size range in squares, whether it's on the main route."""
 
-    def __init__(self, purpose, w, h, main=False, fam=None, shape=None, wing=None, stairs=False, tall=None):
+    def __init__(self, purpose, w, h, main=False, fam=None, shape=None, wing=None, stairs=False, tall=None, whole=None):
+        self.whole = whole                      # (a word in a set piece's name: a room made in one piece, if there is one and it fits)
         self.purpose, self.w, self.h, self.main, self.fam, self.shape = purpose, w, h, main, fam, shape
         self.wing, self.stairs = wing, stairs   # (rooms of one wing keep together; stairs: gets there up or down a flight if it can)
         self.tall = tall                        # (a Galley, or True for whichever the kit has: two storeys with balconies if it can be)
@@ -927,12 +1212,29 @@ def program_for(area, rng):
     return out
 
 
+SHAPES = ('notch', 'bay', 'L', 'L', 'T', 'cross', 'U')
+
+
 def _shape(spec, w, h, rng, can_outer):
     """A room's squares, from (0, 0): a rectangle, or (if the kit has outer corners) one with a corner out of it or a bay on
     it, so rooms don't all come out as boxes."""
     cells = {(i, j) for i in range(w) for j in range(h)}
-    k = spec.shape or ('box' if not can_outer or min(w, h) < 4 or rng.random() < 0.45 else rng.choice(('notch', 'notch', 'bay')))
-    if k == 'notch':
+    k = spec.shape or ('box' if not can_outer or min(w, h) < 4 or rng.random() < 0.35 else rng.choice(SHAPES))
+    if k == 'L' and min(w, h) >= 4:
+        nw, nh = w // 2, h // 2
+        fx, fy = rng.random() < 0.5, rng.random() < 0.5
+        cells -= {(w - 1 - i if fx else i, h - 1 - j if fy else j) for i in range(nw) for j in range(nh)}
+    elif k == 'T' and w >= 5 and h >= 4:
+        leg = max(2, w // 3)
+        at = (w - leg) // 2
+        bar = max(2, h // 2)
+        cells -= {(i, j) for i in range(w) for j in range(h - bar) if not at <= i < at + leg}
+    elif k == 'cross' and w >= 5 and h >= 5:
+        cw, ch = (w - max(2, w // 3)) // 2, (h - max(2, h // 3)) // 2
+        cells -= {(i, j) for i in range(w) for j in range(h) if (i < cw or i >= w - cw) and (j < ch or j >= h - ch)}
+    elif k == 'U' and w >= 6 and h >= 4:
+        cells -= {(i, j) for i in range(2, w - 2) for j in range(h - max(1, h // 2), h)}
+    elif k == 'notch':
         nw, nh = rng.randint(1, max(1, w // 2 - 1)), rng.randint(1, max(1, h // 2 - 1))
         cx, cy = rng.random() < 0.5, rng.random() < 0.5
         for i in range(nw):
@@ -978,6 +1280,9 @@ class Planner:
         self.bounds = bounds    # (i0, j0, i1, j1), squares allowed
         self.stair_share = stairs if ts.can.get('stairs') else 0
         self.stair = ts.stairs[0] if ts.stairs else None
+        self.can_stairs = bool(self.stair_share and getattr(ts, 'stair_kinds', None))
+        self.straight = False   # (the corridor being laid keeps straight: the way in from the entrance)
+        self.first_way = None
         if self.stair and plan is None:
             self.plan.rise = self.stair.rise
 
@@ -1041,38 +1346,97 @@ class Planner:
         out = []
         x, y, l = c
         way = d
-        turn_at = self.rng.randint(2, length - 2) if length >= 4 and self.ts.hall_can(fam, '..PP') and self.rng.random() < 0.4 else None
+        bends = self.ts.hall_can(fam, '..PP') and not self.straight
+        turn_at = self.rng.randint(2, length - 2) if length >= 4 and bends and self.rng.random() < 0.5 else None
+        # (and a long one, back on its first line further along: a dog-leg)
+        back_at = turn_at + self.rng.randint(1, 2) if turn_at and length >= turn_at + 3 and self.rng.random() < 0.5 else None
+        turned = None
         for k in range(length):
             if k == turn_at:
-                way = (way + self.rng.choice((1, 3))) % 4
+                turned = self.rng.choice((1, 3))
+                way = (way + turned) % 4
+            elif k == back_at:
+                way = (way + 4 - turned) % 4
             x, y = x + DX[way][0], y + DX[way][1]
             out.append((x, y, l))
         return out, way
 
-    def stair_route(self, c, d):
-        """A corridor with a flight in it, up or down: one or two squares, the flight, one to three squares.
-        (squares before, the flight's low square and level, way up, squares after, level it ends on) or None."""
+    def stair_moves(self, c, d, kind='straight', up=None):
+        """A corridor with stairs in it going up or down from a doorway at (c, d): (moves as find_way gives them, square it
+        ends on, way it ends going), or None if there's no room. One or two squares, the stairs, one to three squares:
+
+            straight   one flight, one storey
+            long       a flight, a landing, a flight: two storeys in one long line
+            back       a flight, a landing that turns round, a flight back above the first: two storeys in little floor
+            turn       a stairwell made in one piece that comes back on itself: one storey"""
         r = self.rng
+        up = r.random() < 0.6 if up is None else up
+        s = 1 if up else -1
+        moves, taken = [], set()
         x, y, l = c
-        before = []
+        way = d
+
+        def go(w=None):
+            nonlocal x, y, way
+            way = way if w is None else w
+            x, y = x + DX[way][0], y + DX[way][1]
+
+        def square():
+            taken.add((x, y, l))
+            moves.append(('s', (x, y, l)))
+
+        def flight(label):
+            nonlocal x, y, l
+            a = (x + DX[way][0], y + DX[way][1])
+            b = (a[0] + DX[way][0], a[1] + DX[way][1])
+            lvl = l if up else l - 1
+            taken.update((q[0], q[1], k) for q in (a, b) for k in (lvl, lvl + 1))
+            moves.append(('f', a if up else b, way if up else (way + 2) % 4, lvl, label))
+            x, y = b
+            l = l + s
         for _ in range(r.randint(1, 2)):
-            x, y = x + DX[d][0], y + DX[d][1]
-            before.append((x, y, l))
-        s1 = (x + DX[d][0], y + DX[d][1])
-        s2 = (s1[0] + DX[d][0], s1[1] + DX[d][1])
-        if r.random() < 0.6:
-            low, way_up, lvl, ends = s1, d, l, l + 1
-        else:
-            low, way_up, lvl, ends = s2, (d + 2) % 4, l - 1, l - 1
-        taken = [(s[0], s[1], k) for s in (s1, s2) for k in (lvl, lvl + 1)]
-        after = []
-        x, y = s2
+            go()
+            square()
+        if kind == 'straight':
+            flight('straight')
+        elif kind == 'long':
+            flight('long')
+            for _ in range(r.randint(1, 2)):
+                go()
+                square()
+            flight('long')
+        elif kind == 'back':
+            side = r.choice((1, 3))
+            flight('back')
+            go()
+            square()
+            go()
+            square()
+            turn = (way + side) % 4
+            go(turn)
+            square()
+            go((turn + side) % 4)
+            square()
+            flight('back')
+        elif kind == 'turn':
+            st = self.ts.turns[0]
+            entering = st.low if up else st.high
+            _t, across = st.turned(way, entering)
+            a = (x + DX[way][0], y + DX[way][1])
+            lvl = l if up else l - 1
+            b = (a[0] + across[0], a[1] + across[1])
+            ahead = DX[way]
+            taken.update((q[0], q[1], k) for q in (a, b, (a[0] + ahead[0], a[1] + ahead[1]), (b[0] + ahead[0], b[1] + ahead[1])) for k in (lvl, lvl + 1))
+            moves.append(('u', st, a, way, lvl, up))
+            x, y = b
+            l = l + s
+            way = (way + 2) % 4
         for _ in range(r.randint(1, 3)):
-            x, y = x + DX[d][0], y + DX[d][1]
-            after.append((x, y, ends))
-        if not self.clear(before + taken + after):
+            go()
+            square()
+        if len(taken) != sum(1 if m[0] == 's' else 4 if m[0] == 'f' else 8 for m in moves) or not self.clear(sorted(taken)):
             return None
-        return before, low, lvl, way_up, after, ends
+        return moves, (x, y, l), way
 
     def attach(self, spec, parent, long_way=False, opening=None):
         """One new room, from an owner: through a corridor, up or down stairs, or straight through a wall. True if it went in.
@@ -1085,6 +1449,11 @@ class Planner:
         else:
             spots = [s for s in self.spots(parent) if not self.door_near(s[0])]
             self.rng.shuffle(spots)
+            if self.straight and self.first_way is not None:
+                # (straight on from the way in: the middle of the far wall first)
+                far = [s for s in spots if s[1] == (self.first_way + 2) % 4]
+                far.sort(key=lambda s: abs(sum(s[0][:2]) - sum(q[0] + q[1] for q, _d in far) / max(1, len(far))))
+                spots = far + [s for s in spots if s[1] != (self.first_way + 2) % 4]
         hall_fams = [f for f in self.ts.families['halls'] if po['kind'] == HALL and f == po['fam'] or po['kind'] == ROOM and (po['fam'], f) in self.ts.hall_pairs]
         tall = spec.tall and self.ts.galleys
         for c, d in spots[:12]:
@@ -1093,16 +1462,19 @@ class Planner:
                 if length and fam is None:
                     continue
                 flight = None
-                if length and self.stair and po['kind'] == ROOM and not tall and (spec.stairs or self.rng.random() < self.stair_share):
-                    flight = self.stair_route(c, d)
+                if length and self.can_stairs and po['kind'] == ROOM and not tall and not (spec.whole and self.ts.set_pieces) and (spec.stairs or self.rng.random() < self.stair_share):
+                    kinds = self.ts.stair_kinds
+                    flight = self.stair_moves(c, d, self.rng.choice([k for k in kinds for _ in range(1 if k in ('long', 'back') else 3)]))
                     if not flight:
                         continue
-                    route, way = flight[4], d
+                    route, way = [flight[1]], flight[2]
                 else:
                     route, way = self.route(c, d, length, fam) if length else ([], d)
                     if route and not self.clear(route):
                         continue
                 end = route[-1] if route else c
+                if spec.whole and route and self.whole_room(spec, c, route, way, fam):
+                    return True
                 if tall and route:
                     if self.tall_room(spec, c, route, way, fam):
                         if opening:
@@ -1115,12 +1487,14 @@ class Planner:
                 if not spot_list:
                     continue
                 si, sj, _d = self.rng.choice(spot_list)
+                if self.straight:
+                    # (the door in the middle of the wall: you see straight down the room as you come in)
+                    mx = sum(s[0] for s in spot_list) / len(spot_list)
+                    si, sj, _d = min(spot_list, key=lambda s: abs(s[0] - mx))
                 turned = _turned({(a - si, b - sj) for a, b in shape}, way)
                 first = (end[0] + DX[way][0], end[1] + DX[way][1], end[2])
                 cells = [(first[0] + a, first[1] + b, first[2]) for a, b in turned]
-                used = route + (flight[0] if flight else [])
-                if flight:
-                    used = used + [(s[0], s[1], k) for s in (flight[1], (flight[1][0] + DX[flight[3]][0], flight[1][1] + DX[flight[3]][1])) for k in (flight[2], flight[2] + 1)]
+                used = self._way_cells(flight[0]) if flight else route
                 if not self.clear(cells) or set(cells) & set(used):
                     continue
                 room_fam = self.room_family(spec, None if length or po['kind'] != ROOM else po['fam'],
@@ -1128,21 +1502,59 @@ class Planner:
                 if room_fam is None:
                     continue
                 if flight:
-                    before, low, lvl, way_up, after, _ends = flight
-                    plan.owners[plan.add_hall(fam, before, spec.main)]['wing'] = spec.wing
-                    plan.link(c, before[0])
-                    plan.owners[plan.add_hall(fam, after, spec.main)]['wing'] = spec.wing
-                    plan.add_flight(self.stair, low, way_up, lvl)
+                    self.lay_way((c, flight[0], first), fam, spec.main, spec.wing)
                 elif route:
                     plan.owners[plan.add_hall(fam, route, spec.main)]['wing'] = spec.wing
                     plan.link(c, route[0])
                 n = plan.add_room(spec.purpose, room_fam, cells, spec.main)
                 plan.owners[n]['wing'] = spec.wing
-                plan.link(end, first)
+                if not flight:
+                    plan.link(end, first)
                 if opening:
                     plan.ports.append(((route[0] if route else first), (opening[1] + 2) % 4, opening[3]))
                 return True
         return False
+
+    def whole_room(self, spec, c, route, way, fam):
+        """A room made in one piece at the end of this corridor, the last square of which is the piece the game joined to it."""
+        plan = self.plan
+        ts = self.ts
+        rows = [s for s in ts.set_pieces if spec.whole in s.piece.edid.lower()]
+        if not rows:
+            return False
+        sp = self.rng.choice(rows)
+        end = route[-1]
+        turn = (sp.in_way - way) % 4     # (turn the room so the way into it is the way the corridor's going)
+
+        def square(c2):
+            a, b = K.turn_xy(c2[0], c2[1], turn)
+            return (end[0] + int(round(a)), end[1] + int(round(b)), end[2] + c2[2])
+        cells = [square(q) for q in sp.cells]
+        floors = {square(q) for q in sp.floors}
+        if not self.clear(route + cells) or set(route) & set(cells):
+            return False
+        mark = plan.mark()
+        plan.owners[plan.add_hall(fam, route, spec.main)]['wing'] = spec.wing
+        plan.link(c, route[0])
+        n = plan.add_room(spec.purpose, spec.fam, cells)
+        plan.owners[n].update(wing=spec.wing, whole=True, main=spec.main)
+        plan.air |= set(cells) - floors
+        ox, oy = K.turn_xy(-sp.dx, -sp.dy, turn)
+        x0, y0 = end[0] * ts.step + ox, end[1] * ts.step + oy
+        z0 = end[2] * plan.rise
+        pieces = [Placed(sp.piece.key, turn, x0, y0, z0, n, cells[0], cells)]
+        for key, x, y, z, u in sp.plugs:
+            a, b = K.turn_xy(x, y, turn)
+            pieces.append(Placed(key, (u + turn) % 4, x0 + a, y0 + b, z0 + z, n, cells[0], [cells[0]]))
+        plan.placed.append({'owner': n, 'pieces': pieces})
+        # (the corridor's last square is the very piece the game joined to it, turned as it was)
+        plan.forced[end] = ts.same_sides(sp.join_key, (sp.t + turn) % 4)
+        door = next((q for q in floors if abs(q[0] - end[0]) + abs(q[1] - end[1]) == 1 and q[2] == end[2] and (q[0] - end[0], q[1] - end[1]) == DX[way]), None)
+        plan.link(end, door or (end[0] + DX[way][0], end[1] + DX[way][1], end[2]))
+        if door is None and (end[0] + DX[way][0], end[1] + DX[way][1], end[2]) not in cells:
+            plan.back_to(mark)
+            return False
+        return True
 
     def tall_room(self, spec, c, route, way, fam):
         """A tall room at the end of this corridor, its door in the middle of its end wall, so you come in looking along it.
@@ -1240,6 +1652,86 @@ class Planner:
                 return False
         return True
 
+    def add_loops(self, want):
+        """More than one way round: corridors between parts of the plan that are near on the plan but a long walk apart now, by
+        stairs if they're on different levels. How many went in."""
+        plan = self.plan
+        if not fill(self.ts, plan, 1, budget=120, big=False):
+            return 0                # (this plan's no good as it is: nothing added can help)
+        near = collections.defaultdict(set)
+        for link in plan.links:
+            a, b = tuple(link)
+            x, y = plan.cells.get(a), plan.cells.get(b)
+            if x is not None and y is not None and x != y:
+                near[x].add(y)
+                near[y].add(x)
+        for (c, d) in plan.opens:
+            x, y = plan.cells.get(c), plan.cells.get((c[0] + DX[d][0], c[1] + DX[d][1], c[2]))
+            if x is not None and y is not None:
+                near[x].add(y)
+                near[y].add(x)
+
+        def walk_from(s):
+            dist, todo = {s: 0}, [s]
+            while todo:
+                q = todo.pop(0)
+                for n in near[q]:
+                    if n not in dist:
+                        dist[n] = dist[q] + 1
+                        todo.append(n)
+            return dist
+        live = [o['n'] for o in plan.owners if o['kind'] == ROOM and not o.get('tall') and o['purpose'] != 'test'] + \
+               [o['n'] for o in plan.owners if o['kind'] == HALL]
+        pairs = []
+        for a in live:
+            da = walk_from(a)
+            ca = plan.owners[a]['cells']
+            for b in live:
+                if b <= a or da.get(b, 99) < 3:
+                    continue
+                gap = min(abs(p[0] - q[0]) + abs(p[1] - q[1]) + 2 * abs(p[2] - q[2]) for p in ca[:40] for q in plan.owners[b]['cells'][:40])
+                if gap <= 10:
+                    pairs.append((gap - 2 * da.get(b, 99) + self.rng.random() * 4, a, b))
+        pairs.sort()
+        added = 0
+        for _k, a, b in pairs[:30]:
+            if added >= want:
+                break
+            if plan.owners[a]['kind'] == HALL:
+                a, b = b, a
+            fam = self._hall_between(a, b)
+            if fam is None:
+                continue
+            da = walk_from(a)
+            if da.get(b, 99) < 3:
+                continue            # (an earlier loop already brought them near)
+            mark = plan.mark()
+            # (it must still be a plan the kit can build: a loop is a nice thing to have, not worth losing the place over)
+            if self.join(a, b, fam, cost=16) and fill(self.ts, plan, 1, budget=120, big=False):
+                added += 1
+                for link in plan.links - mark[2]:
+                    x, y = tuple(link)
+                    p, q = plan.cells.get(x), plan.cells.get(y)
+                    if p is not None and q is not None and p != q:
+                        near[p].add(q)
+                        near[q].add(p)
+                plan.owners[-1]['loop'] = True
+            else:
+                plan.back_to(mark)
+        return added
+
+    def _hall_between(self, a, b):
+        """A corridor family that can leave one owner and arrive at the other."""
+        ok = []
+        for f in self.ts.families['halls']:
+            for n in (a, b):
+                o = self.plan.owners[n]
+                if not (o['fam'] == f if o['kind'] == HALL else (o['fam'], f) in self.ts.hall_pairs):
+                    break
+            else:
+                ok.append(f)
+        return self.rng.choice(ok) if ok else None
+
     def join(self, a, b, fam, flights=True, cost=30, main=False):
         """A corridor between two owners, by any way the kit can go, stairs included. True if one was found and put in."""
         goals = {}
@@ -1292,6 +1784,8 @@ class Planner:
                     nexts.append(((s3[0], s3[1], l + 1, way, True), cost + 5.0, (f, way, l)))
                 if self.clear([(q[0], q[1], lv) for q in (f, s2) for lv in (l - 1, l)] + [(s3[0], s3[1], l - 1)]):
                     nexts.append(((s3[0], s3[1], l - 1, way, True), cost + 5.0, (s2, (way + 2) % 4, l - 1)))
+            for st2 in (self.ts.turns[:1] if flights else ()):
+                nexts += self._turn_moves(st2, x, y, l, way, cost)
             for t, c2, how in nexts:
                 if c2 < best.get(t, 1e9):
                     best[t] = c2
@@ -1309,35 +1803,64 @@ class Planner:
             if before is None:
                 return how, moves[::-1], target
             if how:
-                moves.append(('f', how[0], how[1], how[2]))
+                moves.append(how if how[0] == 'u' else ('f', how[0], how[1], how[2]))
             st = before
 
-    def lay_way(self, way, fam, main=False):
-        """Puts a route in the plan: runs of corridor with flights between them. False if it would cross itself."""
-        start, moves, target = way
-        taken = set()
+    def _turn_moves(self, st, x, y, l, way, cost):
+        """The ways a stairwell made in one piece could go from here, up or down, for find_way."""
+        out = []
+        a = (x + DX[way][0], y + DX[way][1])
+        ahead = DX[way]
+        for up in (True, False):
+            _t, across = st.turned(way, st.low if up else st.high)
+            b = (a[0] + across[0], a[1] + across[1])
+            lvl = l if up else l - 1
+            end = (b[0] - ahead[0], b[1] - ahead[1], l + 1 if up else l - 1)
+            cells = [(q[0], q[1], k) for q in (a, b, (a[0] + ahead[0], a[1] + ahead[1]), (b[0] + ahead[0], b[1] + ahead[1])) for k in (lvl, lvl + 1)]
+            if self.clear(cells + [end]):
+                out.append(((end[0], end[1], end[2], (way + 2) % 4, True), cost + 4.0, ('u', st, a, way, lvl, up)))
+        return out
+
+    @staticmethod
+    def _way_cells(moves):
+        out = []
         for m in moves:
             if m[0] == 's':
-                cells = [m[1]]
-            else:
+                out.append(m[1])
+            elif m[0] == 'f':
                 a, w, lv = m[1], m[2], m[3]
                 b = (a[0] + DX[w][0], a[1] + DX[w][1])
-                cells = [(q[0], q[1], k) for q in (a, b) for k in (lv, lv + 1)]
-            if taken & set(cells):
-                return False
-            taken |= set(cells)
+                out += [(q[0], q[1], k) for q in (a, b) for k in (lv, lv + 1)]
+            else:
+                st, a, way, lvl, up = m[1], m[2], m[3], m[4], m[5]
+                across = st.turned(way, st.low if up else st.high)[1]
+                b = (a[0] + across[0], a[1] + across[1])
+                ahead = DX[way]
+                out += [(q[0], q[1], k) for q in (a, b, (a[0] + ahead[0], a[1] + ahead[1]), (b[0] + ahead[0], b[1] + ahead[1])) for k in (lvl, lvl + 1)]
+        return out
+
+    def lay_way(self, way, fam, main=False, wing=None):
+        """Puts a route in the plan: runs of corridor with stairs between them. False if it would cross itself."""
+        start, moves, target = way
+        cells = self._way_cells(moves)
+        if len(set(cells)) != len(cells):
+            return False
         run, before = [], start
         for m in moves + [None]:
             if m and m[0] == 's':
                 run.append(m[1])
                 continue
             if run:
-                self.plan.add_hall(fam, run, main)
+                n = self.plan.add_hall(fam, run, main)
+                self.plan.owners[n]['wing'] = wing
                 if before is not None:
                     self.plan.link(before, run[0])
                 run = []
-            if m:
-                self.plan.add_flight(self.stair, m[1], m[2], m[3])
+            if m and m[0] == 'f':
+                self.plan.add_flight(self.stair, m[1], m[2], m[3], m[4] if len(m) > 4 else 'straight')
+                before = None
+            elif m:
+                self.plan.add_turn(m[1], m[2], m[3], m[4], m[5])
                 before = None
         self.plan.link(next(m[1] for m in reversed(moves) if m[0] == 's'), target)
         return True
@@ -1346,6 +1869,8 @@ class Planner:
         r = self.rng
         if not has_halls:
             return [0]
+        if self.straight:
+            return [r.randint(2, 3), 2, 0]
         if long_way:
             return [r.randint(4, 8), r.randint(2, 4), 2, 0]
         k = [r.randint(2, 5), 2, 0]
@@ -1354,7 +1879,7 @@ class Planner:
         return k
 
 
-def make_plan(ts, program, seed=0, bounds=None, plan=None, start=None, level=0, stairs=0.35, with_exit=False, opening=None):
+def make_plan(ts, program, seed=0, bounds=None, plan=None, start=None, level=0, stairs=0.35, with_exit=False, opening=None, loops=None):
     """Rooms for this program, joined up: the main route first, one room after another, then the rest off whatever's already
     there, corridors first. A Plan. (plan and start: grow an existing plan from that owner.)"""
     rng = random.Random(seed)
@@ -1370,23 +1895,32 @@ def make_plan(ts, program, seed=0, bounds=None, plan=None, start=None, level=0, 
                 if pl.clear([(c[0] + DX[d][0], c[1] + DX[d][1], c[2])]):
                     pl.plan.add_exit(c, d)
                     break
+        # (the first impression: a small room, a short straight corridor, and the biggest thing there is, straight ahead,
+        # all in a line from the door you came in by)
+        pl.first_way = pl.plan.exit[1] if pl.plan.exit else None
     else:
         last = start
     owners_of = pl.plan.owners
+    leading = plan is None
     for s in [s for s in program if s.main]:
         if opening:
             if not pl.attach(s, 0, True, opening):
                 return pl.plan
             opening = None
             last = len(owners_of) - 1
-        elif pl.attach(s, last, True):
-            last = len(owners_of) - 1
+            continue
+        pl.straight = leading
+        went = pl.attach(s, last, True)
+        pl.straight = False
+        leading = False
+        if went:
+            last = _main_room(pl.plan)
         else:
             owners = [o['n'] for o in owners_of if o['kind'] != VOID]
             rng.shuffle(owners)
             for n in owners:
                 if pl.attach(s, n, True):
-                    last = len(owners_of) - 1
+                    last = _main_room(pl.plan)
                     break
     for s in [s for s in program if not s.main]:
         # (off a corridor if there is one: rooms along a corridor are what makes it a corridor)
@@ -1399,7 +1933,15 @@ def make_plan(ts, program, seed=0, bounds=None, plan=None, start=None, level=0, 
         for n in owners:
             if pl.attach(s, n, long_way):
                 break
+    if loops is None:
+        loops = 0 if plan is not None else 1 + len(pl.plan.rooms()) // 6
+    pl.plan.loops = pl.add_loops(loops) if loops else 0
     return pl.plan
+
+
+def _main_room(plan):
+    """The last big room put in: what the main route goes on from (not the rooms round a tall room, nor a corridor)."""
+    return next(o['n'] for o in reversed(plan.owners) if o['kind'] == ROOM and not o.get('part_of'))
 
 
 # ---------- walking it: the honest check ----------
@@ -1459,8 +2001,9 @@ class Walk:
         out = []
         cols = self.field.cols
 
-        def wall(key, z):
-            return any(s[0] <= z + 110 and s[1] >= z + 12 for s in cols.get(key, ()))
+        def wall(q, dx, dy, z):
+            # (a thin wall can fall between one column's cuts, and a floor can stop short of the wall: nobody's narrow enough for this gap)
+            return any(s[0] <= z + 110 and s[1] >= z + 12 for k in range(1, 7) for s in cols.get((q[0] + k * dy, q[1] + k * dx), ()))
         for i in here:
             q = g.p[i]
             z = q[2]
@@ -1469,12 +2012,11 @@ class Walk:
                     continue
                 dx, dy = DX[d]
                 key = (q[0] + dy, q[1] + dx)
-                # (two columns out: a thin wall can fall between one column's cuts)
-                if wall(key, z) or wall((q[0] + 2 * dy, q[1] + 2 * dx), z):
+                if wall(q, dx, dy, z):
                     continue
-                if any(g.p[p][2] < z and p in here for p in g.by.get(key, ())):
-                    continue            # (a drop to floor that's part of the place)
-                out.append(((q[1] + 0.5) * self.voxel, (q[0] + 0.5) * self.voxel, z))
+                if any(g.p[p][2] < z for p in g.by.get(key, ())):
+                    continue            # (a drop, to floor below)
+                out.append(((q[1] + 0.5) * self.voxel, (q[0] + 0.5) * self.voxel, z, d))
         return out
 
     def where(self):
@@ -1524,7 +2066,13 @@ def walk_check(game, ts, plan, made, cache=None, extra=(), start=None, offset=(0
     # (a square counts as walked once a good part of it has been)
     need = 8 if step >= 256 else 2
     missing = [c for c in plan.squares() if covered[c] < need]
-    return {'missing': missing, 'escaped': escaped, 'squares': len(plan.squares()), 'reached': len(w.reached), 'edges': w.open_edges()}
+    edges = w.open_edges()
+    if plan.exit:
+        # (the way out has its door stood in it later on)
+        c, d = plan.exit
+        ex, ey = (c[0] + DX[d][0] * 0.5) * step + ox, (c[1] + DX[d][1] * 0.5) * step + oy
+        edges = [e for e in edges if abs(e[0] - ex) > step * 0.6 or abs(e[1] - ey) > step * 0.6]
+    return {'missing': missing, 'escaped': escaped, 'squares': len(plan.squares()), 'reached': len(w.reached), 'edges': edges}
 
 
 def _blame(ts, plan, made, walk):
@@ -1545,13 +2093,20 @@ def _blame(ts, plan, made, walk):
     return out
 
 
+def dress_place(game, ts, sv, plan, made, rng, cache, ruined=False):
+    """Doors, lights and things, and whatever stands in the way out again: (items, the walk)."""
+    import kitdress
+    items = kitdress.place_doors(ts, sv, plan, made, rng) + kitdress.dress(ts, sv, plan, made, rng, ruined=ruined)
+    return items, kitdress.clear_ways(game, ts, plan, made, items, walk_check, cache)
+
+
 def generate(game, ts, area=150, seed=0, bounds=None, cache=None, tries=10, program=None, stairs=0.35, survey=None, ruined=False):
     """A whole place: plan, pieces and a clean walk, with doors, lights and things if there's a survey (kitdress.py).
     {'plan', 'made', 'items', 'walk', 'tries', 'wanted'} or None."""
     for k in range(tries):
         rng = random.Random(seed + k * 7919)
         prog = program or program_for(area, rng)
-        plan = make_plan(ts, prog, seed + k * 104729, bounds, stairs=stairs, with_exit=survey is not None and k < tries // 2)
+        plan = make_plan(ts, prog, seed + k * 104729, bounds, stairs=stairs, with_exit=survey is not None and k < tries - 2)
         made = None
         for f in range(3):
             made = fill(ts, plan, seed + k + f * 31)
@@ -1566,8 +2121,7 @@ def generate(game, ts, area=150, seed=0, bounds=None, cache=None, tries=10, prog
                 import kitdress
                 sv = survey.get(ts.kit.name)
                 if sv is not None:
-                    items = kitdress.place_doors(ts, sv, plan, made, rng) + kitdress.dress(ts, sv, plan, made, rng, ruined=ruined)
-                    walk = kitdress.clear_ways(game, ts, plan, made, items, walk_check, cache)
+                    items, walk = dress_place(game, ts, sv, plan, made, rng, cache, ruined)
                     if walk['missing'] or walk['escaped']:
                         continue
             return {'plan': plan, 'made': made, 'items': items, 'walk': walk, 'tries': k + 1, 'wanted': len(prog)}
@@ -1663,7 +2217,7 @@ def layout(game, kits, name, w, h, seed, at, store, cache, survey=None):
         g = generate(game, ts, max(30, int(w * h * 0.55)), seed, bounds=(0, 0, w - 1, h - 1), cache=cache, survey=survey)
         if not g:
             return {'note': 'No plan passed the walk in this size: try another size or kit.'}
-        return _report(ts, g['plan'], g['made'], origin, 'a', g['items'])
+        return _keep(store, ts, g, origin, _report(ts, g['plan'], g['made'], origin, 'a', g['items']))
     got = filled(game, kits, name, w, h, seed, store, cache)
     if not got:
         return {'note': 'This kit has too few pieces that fit on one square to fill an area, or nothing walked out right: try another.'}
@@ -1689,9 +2243,351 @@ def _report(ts, plan, made, origin, how, items=()):
             sum(kinds.values()) - kinds['door'] - kinds['exit'] - kinds['light'],
             ' The way out is a door in the first room: select it to link it to another place.' if kinds['exit'] else '')
         out['exit'] = next(([round(c, 2) for c in it.p[:3]] for it in items if it.what == 'exit'), None)
+        out['plan'] = plan_summary(plan)
     else:
         out['said'] = '%d pieces, no rooms planned: this kit has no pieces that close a room. Walking found no way out.' % len(made)
     return out
+
+
+def plan_summary(plan):
+    """The plan as the Kit tab shows it: rooms, what each is for, which real place it takes after, and where."""
+    rooms = []
+    for o in plan.rooms():
+        cells = [c for c in o['cells'] if c not in plan.air]
+        rooms.append({'n': o['n'], 'purpose': o['purpose'], 'theme': o.get('theme'), 'tall': bool(o.get('tall')), 'whole': bool(o.get('whole')), 'fixed': bool(o.get('tall') or o.get('whole')),
+                      'levels': sorted({c[2] for c in cells}), 'squares': len(cells), 'main': bool(o.get('main')), 'cells': [list(c) for c in cells[:200]]})
+    return {'rooms': rooms, 'flights': [{'kind': f.get('kind', 'straight'), 'level': f['level'], 'cells': [list(c) for c in f['cells']]} for f in plan.flights],
+            'halls': [[list(c) for c in o['cells']] for o in plan.owners if o['kind'] == HALL],
+            'loops': getattr(plan, 'loops', 0)}
+
+
+def _keep(store, ts, g, origin, out):
+    """The last place made, so one room of it can be changed after."""
+    store['last'] = {'name': ts.kit.name, 'plan': g['plan'], 'made': g['made'], 'items': g['items'], 'origin': origin, 'ruined': bool(g.get('ruined'))}
+    return out
+
+
+def _variant_of(ts, m):
+    """The variant a one-square placed piece is, or None."""
+    sides = tuple(K_side(ts, m.key, m.turn, d) for d in range(4)) if m.key in ts.slot_sock else None
+    if sides is None:
+        return None
+    sides = tuple(0 if ts.sockets[s] and ts.sockets[s]['open'] and ts.word[s] == '.' else s for s in sides)
+    for v in range(1, len(ts.vars)):
+        if ts.piece_of[v] == m.key and ts.sides[v] == sides:
+            return v
+    return None
+
+
+def reroll_room(ts, plan, made, n, seed):
+    """New pieces for one room, everything round it kept as it is: the new [Placed] for the whole place, or None if nothing
+    else fits. (Doors in its walls stay where the plan has them.)"""
+    rng = random.Random(seed)
+    palette = _palette(ts, plan, rng)
+    by = {}
+    for m in made:
+        for c in m.cells:
+            by[c] = m
+    mine = [c for c in plan.owners[n]['cells'] if c not in plan.air]
+    boundary = collections.defaultdict(lambda: -1)
+    near = set()
+    for c in mine:
+        for d in range(4):
+            q = (c[0] + DX[d][0], c[1] + DX[d][1], c[2])
+            if q in by and plan.cells.get(q) != n:
+                near.add(q)
+    for q in near:
+        m = by[q]
+        v = _variant_of(ts, m) if len(m.cells) == 1 else None
+        if v is None:
+            continue
+        boundary[q] &= 1 << v
+    for f in plan.flights:
+        for outside, way, slot, _inner in f['ports']:
+            if plan.cells.get(outside) == n:
+                boundary[outside] &= ts.port_mask(slot, way)
+    for (c, d), slot in plan.opens.items():
+        if plan.cells.get(c) == n:
+            boundary[c] &= ts.port_mask(slot, d)
+    for c, mask in plan.forced.items():
+        if plan.cells.get(c) == n:
+            boundary[c] &= mask
+    if plan.exit and plan.exit[0] in mine and ts.exit_widths:
+        boundary[plan.exit[0]] &= ts.width_mask(plan.exit[1], ts.exit_widths)
+    cells = mine + [q for q in near if boundary[q] != -1]
+    # (a piece bigger than a square that's only partly this room's would be left with a hole: that's not a room to re-roll)
+    if any(len(by[c].cells) > 1 and any(plan.cells.get(q) != n for q in by[c].cells) for c in mine if c in by):
+        return None
+    levels = collections.defaultdict(list)
+    for c in cells:
+        levels[c[2]].append(c)
+    got = {}
+    for _lv, row in levels.items():
+        s = _solve(ts, plan, row, palette, rng, SOLVE_BUDGET, boundary)
+        if s is None:
+            return None
+        got.update(s)
+    out = [m for m in made if m.owner != n or m in [b for pl in plan.placed for b in pl['pieces']]]
+    for c in mine:
+        key, t = ts.vars[got[c]]
+        out.append(Placed(key, t, c[0] * ts.step, c[1] * ts.step, c[2] * plan.rise, n, c))
+    return out
+
+
+def change_room(game, kits, store, cache, survey, n, purpose=None, theme=None, reroll=False, seed=0):
+    """One room of the last place made: what it's for, which real place it takes after, or new pieces and things altogether;
+    the rest stays. The whole place again as changes for the mod, or {'note'}."""
+    import kitdress
+    last = store.get('last')
+    if not last:
+        return {'note': 'This needs a place generated since FOLab started: generate one first.'}
+    ts = tiles_for(game, kits, last['name'], store, survey)
+    sv = (survey or {}).get(last['name'])
+    plan, made = last['plan'], last['made']
+    if not 0 <= n < len(plan.owners) or plan.owners[n]['kind'] != ROOM:
+        return {'note': 'No such room.'}
+    o = plan.owners[n]
+    was = (o['purpose'], o.get('pick'))
+    if purpose:
+        o['purpose'] = purpose
+        o.pop('pick', None)
+    if theme:
+        o['pick'] = theme
+    rng = random.Random(seed)
+    new_made = made
+    if reroll and not (o.get('tall') or o.get('whole')):
+        got = reroll_room(ts, plan, made, n, seed)
+        if got is None:
+            o['purpose'], o['pick'] = was
+            return {'note': 'Nothing else fits in that room as it stands: its doors and neighbours leave no choice.'}
+        new_made = got
+    if new_made is not made:
+        # (the pieces alone: the tops of tables have edges too)
+        bare = walk_check(game, ts, plan, new_made, cache)
+        if bare['missing'] or bare['escaped'] or bare['edges']:
+            o['purpose'], o['pick'] = was
+            return {'note': 'That one didn\'t walk, so the room is as it was. Try again.'}
+    items = [it for it in last['items'] if it.owner != n or it.what in ('door', 'exit')]
+    if sv is not None:
+        placed = [m for m in new_made if m.owner == n]
+        items += kitdress.dress(ts, sv, plan, placed, rng, ruined=last['ruined'], only=n)
+    walk = kitdress.clear_ways(game, ts, plan, new_made, items, walk_check, cache)
+    if walk['missing'] or walk['escaped']:
+        o['purpose'], o['pick'] = was
+        return {'note': 'That one didn\'t walk, so the room is as it was. Try again.'}
+    last['made'], last['items'] = new_made, items
+    out = _report(ts, plan, new_made, last['origin'], 'a', items)
+    out['said'] = 'Changed one room, the rest kept. ' + out['said']
+    return out
+
+
+def room_themes(game, kits, store, survey, n, purpose=None, limit=10):
+    """The real places a room of the last place could take after, best first: {'rows': [{'cell', 'name', 'score'}], 'purposes'}."""
+    import kitdress
+    last = store.get('last')
+    if not last:
+        return {'rows': [], 'purposes': sorted(kitdress.PURPOSE_TAGS)}
+    plan, made = last['plan'], last['made']
+    sv = (survey or {}).get(last['name'])
+    o = plan.owners[n] if 0 <= n < len(plan.owners) else None
+    if sv is None or not o:
+        return {'rows': [], 'purposes': sorted(kitdress.PURPOSE_TAGS)}
+    every = {t for ws in kitdress.PURPOSE_TAGS.values() for t in ws}
+    wanted = set(kitdress.PURPOSE_TAGS.get(purpose or o['purpose'], ()))
+    rows = kitdress.theme_scores(sv, [m for m in made if m.owner == n], wanted, every - wanted)[:limit]
+    out = []
+    for score, cell in rows:
+        try:
+            name = game.edid(game.from_key(cell) if isinstance(cell, str) else cell)
+        except (KeyError, ValueError):
+            name = str(cell)
+        out.append({'cell': cell, 'name': name, 'score': round(score, 2)})
+    return {'rows': out, 'purposes': sorted(p for p in kitdress.PURPOSE_TAGS if p != 'corridor'), 'purpose': o['purpose'], 'theme': o.get('theme')}
+
+
+# ---------- a floor plan drawn by hand ----------
+
+def plan_from_drawing(ts, rooms, links, seed=0):
+    """A plan from a rough drawing: rooms [{'x', 'y', 'w', 'h', 'level', 'purpose'}], links [[a, b], ...] between them by number.
+    Touching rooms that are linked get a door between them, the rest a corridor, by stairs if their levels differ.
+    (plan, []) or (None, [what couldn't be done, in words])."""
+    rng = random.Random(seed)
+    pl = Planner(ts, rng)
+    plan = pl.plan
+    fams = ts.families['rooms']
+    fam = max(fams, key=lambda f: fams[f]) if fams else None
+    if fam is None:
+        return None, ['This kit can\'t close a room.']
+    if ts.stairs:
+        plan.rise = ts.stairs[0].rise
+    ids = []
+    for k, r in enumerate(rooms):
+        w, h = int(r['w']), int(r['h'])
+        l = int(r.get('level', 0))
+        if w < 2 or h < 2:
+            return None, ['Room %d is too narrow: rooms are at least 2 squares across.' % (k + 1)]
+        cells = [(int(r['x']) + i, int(r['y']) + j, l) for i in range(w) for j in range(h)]
+        if not plan.free(cells):
+            return None, ['Room %d overlaps another.' % (k + 1)]
+        ids.append(plan.add_room(r.get('purpose') or ('entrance' if k == 0 else 'workroom'), fam, cells, k == 0))
+    problems = []
+    for a, b in links:
+        if not (0 <= a < len(ids) and 0 <= b < len(ids)) or a == b:
+            continue
+        if _door_between(pl, ids[a], ids[b], fam):
+            continue
+        hall = pl._hall_between(ids[a], ids[b])
+        if hall is None or not pl.join(ids[a], ids[b], hall, cost=60):
+            problems.append('No way could be found from room %d to room %d: try moving them apart or further along.' % (a + 1, b + 1))
+    reach = {ids[0]}
+    near = collections.defaultdict(set)
+    for link in plan.links:
+        x, y = tuple(link)
+        p, q = plan.cells.get(x), plan.cells.get(y)
+        if p is not None and q is not None and p != q:
+            near[p].add(q)
+            near[q].add(p)
+    todo = [ids[0]]
+    while todo:
+        for m in near[todo.pop()]:
+            if m not in reach:
+                reach.add(m)
+                todo.append(m)
+    for k, n in enumerate(ids):
+        if n not in reach:
+            problems.append('Nothing joins room %d to the first room.' % (k + 1))
+    if problems:
+        return None, problems
+    spots = [s for s in pl.spots(ids[0]) if pl.clear([(s[0][0] + DX[s[1]][0], s[0][1] + DX[s[1]][1], s[0][2])]) and not pl.door_near(s[0])]
+    if spots:
+        rng.shuffle(spots)
+        plan.add_exit(*spots[0])
+    return plan, []
+
+
+def _door_between(pl, a, b, fam):
+    """A door straight through the wall between two rooms that touch, if they do. True if one went in."""
+    plan = pl.plan
+    if (fam, fam) not in pl.ts.door_pairs:
+        return False
+    sa, sb = _door_spots({c[:2] for c in plan.owners[a]['cells']}), _door_spots({c[:2] for c in plan.owners[b]['cells']})
+    level = plan.owners[a]['cells'][0][2]
+    if plan.owners[b]['cells'][0][2] != level:
+        return False
+    there = {(i, j): d for i, j, d in sb}
+    rows = []
+    for i, j, d in sa:
+        n = (i + DX[d][0], j + DX[d][1])
+        if there.get(n) == (d + 2) % 4:
+            rows.append(((i, j, level), (n[0], n[1], level)))
+    if not rows:
+        return False
+    x, y = rows[len(rows) // 2]
+    plan.link(x, y)
+    return True
+
+
+def drawn(game, kits, name, rooms, links, seed, at, store, cache, survey=None):
+    """A place from a floor plan drawn by hand: {'ops', ...} like layout, or {'note'}."""
+    ts = tiles_for(game, kits, name, store, survey)
+    if not ts.can['rooms']:
+        return {'note': 'This kit has no pieces that close a room, so it can\'t build a drawn plan.'}
+    if not rooms:
+        return {'note': 'Draw at least one room.'}
+    origin = (float(at[0]), float(at[1]), float(at[2]))
+    last = 'nothing fitted'
+    for k in range(12):
+        plan, problems = plan_from_drawing(ts, rooms, links, seed + k)
+        if not plan:
+            return {'note': ' '.join(problems)}
+        made = fill(ts, plan, seed + k)
+        if not made:
+            last = 'the kit has no pieces for that shape of room or door'
+            continue
+        walk = walk_check(game, ts, plan, made, cache)
+        if walk['missing'] or walk['escaped'] or walk['edges']:
+            last = 'it didn\'t walk'
+            continue
+        rng = random.Random(seed + k)
+        items = []
+        sv = (survey or {}).get(name)
+        if sv is not None:
+            items, walk = dress_place(game, ts, sv, plan, made, rng, cache)
+            if walk['missing'] or walk['escaped']:
+                last = 'it didn\'t walk with things in it'
+                continue
+        return _keep(store, ts, {'plan': plan, 'made': made, 'items': items}, origin, _report(ts, plan, made, origin, 'a', items))
+    return {'note': 'That plan couldn\'t be built: %s. Try larger rooms or fewer doors.' % last}
+
+
+# ---------- other places in one click ----------
+
+def works_program(size, rng):
+    """Service tunnels: a way in, plant rooms along narrow corridors, a big pump hall at the far end."""
+    size = max(1, min(10, int(size)))
+    out = [Spec('entrance', (3, 4), (3, 4), True), Spec('workroom', (5, 7), (4, 6), True)]
+    for k in range(1 + size):
+        out.append(Spec('store' if k % 3 == 0 else 'workroom', (3, 5), (3, 5), wing='plant' if k % 2 else 'stores'))
+    if size >= 4:
+        out.append(Spec('quarters', (3, 4), (3, 4), wing='stores'))
+    out.append(Spec('reactor', (6, 9), (5, 7), True, tall=True))
+    return out
+
+
+def block_program(size, rng):
+    """An office block: a lobby, a big hall, offices off corridors on more than one floor, stores and a mess."""
+    size = max(1, min(10, int(size)))
+    out = [Spec('entrance', (4, 5), (4, 4), True), Spec('hall', (6, 8), (5, 7), True, tall=True)]
+    for k in range(2 + size):
+        out.append(Spec('office', (3, 5), (3, 4), wing='offices' if k % 3 else 'more offices', stairs=k % 3 == 0))
+    out.append(Spec('mess', (4, 6), (4, 5), wing='services'))
+    for _ in range(size // 3):
+        out.append(Spec('store', (3, 4), (3, 4), wing='services'))
+    out.append(Spec('far end', (5, 7), (4, 6), True))
+    return out
+
+
+ONE_CLICK = {
+    'tunnels': {'label': 'Service tunnels', 'kit': 'dungeons' + chr(92) + 'utility', 'program': works_program, 'stairs': 0.25, 'said': 'Service tunnels: '},
+    'office': {'label': 'Office block', 'kit': 'dungeons' + chr(92) + 'office', 'program': block_program, 'stairs': 0.3, 'said': 'An office block: '},
+    'facility': {'label': 'Research facility', 'kit': 'dungeons' + chr(92) + 'facility', 'program': block_program, 'stairs': 0.3, 'said': 'A research facility: '},
+}
+
+
+def one_click_list(kits):
+    return [{'id': k, 'label': v['label']} for k, v in ONE_CLICK.items() if v['kit'] in kits]
+
+
+def one_click_place(game, kits, what, size, seed, store, cache, survey=None):
+    """The best of a few of this kind of place: as generate gives it, or None."""
+    d = ONE_CLICK[what]
+    ts = tiles_for(game, kits, d['kit'], store, survey)
+    if not ts.can['rooms']:
+        return None
+    best = None
+    for k in range(6):
+        prog = d['program'](size, random.Random(seed + k * 271))
+        g = generate(game, ts, seed=seed + k, cache=cache, program=prog, stairs=d['stairs'], survey=survey, tries=4)
+        if g and (not best or len(g['plan'].rooms()) > len(best['plan'].rooms())):
+            best = g
+            if len(g['plan'].rooms()) >= len(prog) - 1:
+                break
+    return best
+
+
+def one_click(game, kits, what, size, seed, at, store, cache, survey=None):
+    """A kind of place in one click, as changes for the mod: {'ops', ...} or {'note'}."""
+    if what not in ONE_CLICK or ONE_CLICK[what]['kit'] not in kits:
+        return {'note': 'This game doesn\'t have that kit.'}
+    d = ONE_CLICK[what]
+    best = one_click_place(game, kits, what, size, seed, store, cache, survey)
+    if not best:
+        return {'note': 'None passed the walk this time: try again.'}
+    ts = tiles_for(game, kits, d['kit'], store, survey)
+    origin = (float(at[0]), float(at[1]), float(at[2]))
+    out = _report(ts, best['plan'], best['made'], origin, 'a', best['items'])
+    out['said'] = d['said'] + out['said']
+    return _keep(store, ts, best, origin, out)
 
 
 # ---------- a vault in one click ----------
@@ -1706,7 +2602,7 @@ def vault_program(size, rng):
         out.append(Spec('quarters', (3, 4), (3, 4), wing='living', fam='room'))
     if size >= 3:
         out.append(Spec('mess', (5, 7), (4, 6), wing='living', fam='room'))
-    out.append(Spec('office', (4, 5), (3, 4), wing='overseer', fam='room', stairs=True))
+    out.append(Spec('office', (4, 5), (3, 4), wing='overseer', fam='room', stairs=True, whole='overseer'))
     if size >= 2:
         out.append(Spec('clinic', (3, 5), (3, 4), wing='services', fam='room'))
     for _ in range(size // 2):
@@ -1732,7 +2628,8 @@ def vault(game, kits, size, seed, at, store, cache, survey=None, ruined=False):
         return {'note': 'No vault passed the walk this time: try again.'}
     out = _report(ts, best['plan'], best['made'], origin, 'a', best['items'])
     out['said'] = ('A ruined vault: ' if ruined else 'A vault: ') + out['said']
-    return out
+    best['ruined'] = ruined
+    return _keep(store, ts, best, origin, out)
 
 
 def vault_place(game, kits, size, seed, store, cache, survey=None, ruined=False):
