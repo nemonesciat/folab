@@ -182,6 +182,8 @@ check('a vault: a tall atrium, with the real office if it fits', vault and any(o
 # ---------- other kits ----------
 ut = P.tiles_for(G, kits, UTILITY, store, sv)
 check('the service tunnels can plan rooms and corridors now (they read as too narrow)', ut.can['rooms'] and ut.can['halls'] and ut.step == 256)
+stepped = [P.generate(G, ut, 180, s * 37 + 1, survey=sv) for s in range(8)]
+check('… tunnels generate on every seed with furnishings on, on one level: its only readable stairs are open catwalks', all(stepped) and not ut.stair_kinds, '%d of 8' % sum(1 for g in stepped if g))
 for what in ('tunnels', 'office'):
     made = sum(1 for seed in (1, 2, 3) if P.one_click_place(G, kits, what, 4, seed, store, {}, sv))
     check('in one click, %s: walks (%d of 3)' % (what, made), made == 3)

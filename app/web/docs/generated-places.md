@@ -39,7 +39,7 @@ The overseer's office is the game's own room made in one piece. Its doorway isn'
 
 ## Other places in one click
 
-**Service tunnels** (the utility kit), an **Office block** and a **Research facility** are made the same way, with rooms that suit each. Metro tunnels and sewer pipes aren't offered. Their kits have a straight tunnel and a few curves, with nothing that closes the ends of a tunnel, so nothing built from them would be sealed.
+**Service tunnels** (the utility kit), an **Office block** and a **Research facility** are made the same way, with rooms that suit each. Metro tunnels and sewer pipes aren't offered. Their kits have a straight tunnel and a few curves, with nothing that closes the ends of a tunnel, so nothing built from them would be sealed. Service tunnels stay on one level, as the only stairs FOLab can read in that kit are catwalks with open sides.
 
 ## One room at a time
 

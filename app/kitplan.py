@@ -465,7 +465,9 @@ class PlanTiles(K.Tileset):
             self.hall_words[f] = {_word_key(w) for v, w in enumerate(self.vwords) if v and self.family[v] == f and self.level_floor[v]}
         self.can['outer'] = any(_word_key(w) == 'AAFF' for v, w in enumerate(self.vwords) if v and self.family[v] in rooms_ok)
         if self.game is not None:
-            self.stairs = [st for st in self.stairs[:4] if self._stair_walks(st)]
+            # (stairs of the kit's corridors: a catwalk's flight has open sides, and needs a great hall round it)
+            self.stairs = [st for st in self.stairs if folder_of(st.piece.model) in hall_fams][:4]
+            self.stairs = [st for st in self.stairs if self._stair_walks(st)]
         self.can['stairs'] = bool(self.stairs and hall_fams)
         self.turns = self._find_turns() if hall_fams else []
         self.stair_kinds = self._proven_stairs()
