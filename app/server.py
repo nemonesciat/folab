@@ -51,6 +51,8 @@ import maptiles
 import re
 import refinfo
 import scatter
+import loadout
+import mo2write
 import tes4
 from version import VERSION
 
@@ -80,6 +82,8 @@ _painter = None
 _markers = None                         # every worldspace's map markers, for Go to a place
 _actors = {}                            # base key -> parts (actors.py)
 _lock = threading.RLock()
+LOADOUT_NOTE = ''                       # why the setup isn't the one asked for
+GD_LEFT_OUT = []                        # plugins a loadout has on that can't be loaded
 
 
 def load_settings():
@@ -1034,9 +1038,11 @@ def state():
     s = {'game': GD.data_dir, 'interiors': len(GD.interiors), 'project': PR.state() if PR else None,
          'projects': project.list_projects(), 'kinds': PLACEABLE}
     s['nvse'] = nvse.status(GD.data_dir)
+    s['loadout'] = loadout.current().title if loadout.current() else None
+    s['from_mo2'] = loadout.started_from_mo2()
     s['launch_via'] = load_settings().get('launch_via', 'nvse')
     if PR:
-        s['installed'] = install.status(GD.data_dir, PR.plugin)
+        s['installed'] = mo2write.status(loadout.current(), os.path.join(project.BUILD_DIR, PR.plugin), PR.name) if loadout.current() else install.status(GD.data_dir, PR.plugin)
         built = os.path.join(project.BUILD_DIR, PR.plugin)
         s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= os.path.getmtime(PR.path)
         s['project']['masters'] = masters()
@@ -1047,23 +1053,112 @@ def state():
 def load_game(pr):
     """The game as FOLab shows it: the official files, and an opened mod's own plugin on top of them."""
     global GD, CATALOGUE, BR
-    data_dir = GD.data_dir if GD else gamedata.find_data_dir()
-    want = [os.path.join(data_dir, n) for n in gamedata.OFFICIAL if os.path.isfile(os.path.join(data_dir, n))]
+    global GD_LEFT_OUT
+    lo = loadout.current()
+    if lo:
+        data_dir = lo.data_dir
+        want, GD_LEFT_OUT = lo.for_lab(pr.plugin if pr else None)
+    else:
+        data_dir = GD.data_dir if GD and not GD.view else gamedata.find_data_dir()
+        want, GD_LEFT_OUT = [os.path.join(data_dir, n) for n in gamedata.OFFICIAL if os.path.isfile(os.path.join(data_dir, n))], []
     if pr and pr.source:
-        want += adopt.extra_masters(data_dir, pr.source_path())
+        own = os.path.basename(pr.source_path()).lower()
+        want = [p for p in want if os.path.basename(p).lower() != own]      # (an opened mod's copy stands in for the loadout's own)
+        have = {os.path.basename(p).lower() for p in want}
+        want += [p for p in adopt.extra_masters(data_dir, pr.source_path()) if os.path.basename(p).lower() not in have]
         want.append(pr.source_path())
-    if GD and [p.path for p in GD.plugins] == want and not getattr(GD, 'stale', False):
+    need = mod_needs(pr, want)
+    if need:
+        raise ValueError('The mod %s uses things from %s, which %s. Open it in a setup that has them.'
+                         % (pr.name, ', '.join(need), 'this loadout doesn\'t have on' if lo else 'the plain game doesn\'t have'))
+    if GD and [p.path for p in GD.plugins] == want and GD.view is lo and not getattr(GD, 'stale', False):
         return
     t = time.time()
     if BR:
         BR.close()
     GD = gamedata.GameData(data_dir, want)
     GD.overlay = library.Overlay(lambda: PR)
+    GD.view = lo
     CATALOGUE = build_catalogue()
     BR = browse.Browse(GD, lambda: PR)
     _meshes.clear()
     _actors.clear()
     print('loaded %d plugins (%.1fs)' % (len(GD.plugins), time.time() - t), flush=True)
+
+
+def mod_needs(pr, paths):
+    """The plugins a mod's changes name that wouldn't be loaded. Its links would point nowhere, so it mustn't be opened like that."""
+    if not pr:
+        return []
+    have = {os.path.basename(p).lower() for p in paths} | {pr.plugin.lower()}
+    names = {m.group(1) for m in re.finditer(r'"([^"\\\\:/]+\.es[mp]):[0-9A-Fa-f]{6}"', json.dumps(pr.to_dict()))}
+    return sorted(n for n in names if n.lower() not in have)
+
+
+def use_loadout(folder, profile):
+    """Make an MO2 profile what the lab works in, or with none the plain game. If the mod that's open can't go with it, nothing changes."""
+    global LOADOUT_NOTE
+    not_while_playing()
+    if loadout.started_from_mo2():
+        raise ValueError('FOLab was started from MO2, so it works in the profile MO2 has on. Change the profile in MO2, or start FOLab by itself.')
+    was = loadout.current()
+    new = loadout.Loadout(loadout.Instance(folder), profile) if folder else None
+    if new and not new.instance.is_nv:
+        raise ValueError('That instance is for %s, not New Vegas.' % (new.instance.game_name or 'another game'))
+    if new and not os.path.isfile(new.plugin_path('FalloutNV.esm') or ''):
+        raise ValueError('FalloutNV.esm wasn\'t found: the instance names this game folder: %s' % (new.data_dir or 'none'))
+    loadout.activate(new)
+    try:
+        load_game(PR)
+    except ValueError:
+        loadout.activate(was)
+        raise
+    save_settings(loadout={'folder': folder, 'profile': profile} if folder else None)
+    LOADOUT_NOTE = ''
+    return {'state': state(), 'page': modtools.loadout_page(sys.modules[__name__])}
+
+
+def _read_loadout_again(lo):
+    """MO2's files changed: the loadout as they now are. The open mod's own plugin isn't loaded either way, so the plugins stand."""
+    new = loadout.Loadout(lo.instance, lo.profile)
+    loadout.activate(new)
+    GD.view = new
+
+
+def put_in_mo2(saved):
+    out = {'install': mo2write.install_mod(loadout.current(), saved['path'], PR.name)}
+    _read_loadout_again(loadout.current())
+    out['state'] = state()
+    return out
+
+
+def take_out_of_mo2():
+    out = {'install': mo2write.uninstall_mod(loadout.current(), PR.plugin, PR.name)}
+    _read_loadout_again(loadout.current())
+    out['state'] = state()
+    return out
+
+
+def restore_loadout():
+    """The loadout MO2 started FOLab in, or the one the lab was last in if it's still there."""
+    global LOADOUT_NOTE
+    if loadout.under_mo2():
+        try:
+            lo, why = loadout.running_setup()
+            if lo:
+                loadout.activate_from_mo2(lo)
+                return
+            LOADOUT_NOTE = why + ' This is the plain game for now.'
+        except (OSError, ValueError) as e:
+            LOADOUT_NOTE = 'MO2 started FOLab, but its setup couldn\'t be read, so this is the plain game: %s' % e
+        return
+    s = load_settings().get('loadout')
+    if not s:
+        return
+    try:
+        loadout.activate(loadout.Loadout(loadout.Instance(s['folder']), s['profile']))
+    except (OSError, ValueError, KeyError) as e:
+        LOADOUT_NOTE = 'The MO2 loadout FOLab was last in couldn\'t be read, so this is the plain game: %s' % e
 
 
 def release_source():
@@ -1137,6 +1232,9 @@ def new_world(body, shaped=None):
 
 def open_project(name, create=False):
     global PR
+    lo = loadout.current()
+    if create and lo and project.safe_name(name).lower() + '.esp' in lo.plugin_files():
+        raise ValueError('This loadout already has a plugin called %s.esp. Give your mod another name.' % project.safe_name(name))
     pr = project.Project.create(name) if create else project.Project.open(name)
     load_game(pr)
     PR = pr
@@ -1354,6 +1452,8 @@ def not_while_playing():
 def play(body):
     """Save, put the mod in the game, and start it; with a place and a spot, Play here."""
     not_while_playing()
+    if loadout.started_from_mo2() and not body.get('cell'):     # (the game as this loadout has it: MO2's folder can't take new mods while it runs)
+        return {'via': start_game(), 'from_mo2': True, 'state': state()}
     saved = save()
     out = {'install': install.install(GD.data_dir, saved['path'])}
     if body.get('cell'):
@@ -1662,7 +1762,7 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path == '/api/project/open':
                     return self.send(open_project(body['name']))
                 if u.path == '/api/project/adopt':
-                    name = adopt.adopt(GD, os.path.join(GD.data_dir, os.path.basename(body['file'])))
+                    name = adopt.adopt(GD, loadout.plugin_path(GD.data_dir, os.path.basename(body['file'])))
                     return self.send(open_project(name))
                 if not PR:
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
@@ -1747,9 +1847,13 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path == '/api/install':
                     not_while_playing()
                     saved = save()
+                    if loadout.current():
+                        return self.send(put_in_mo2(saved))
                     return self.send({'install': install.install(GD.data_dir, saved['path']), 'state': state()})
                 if u.path == '/api/uninstall':
                     not_while_playing()
+                    if loadout.current():
+                        return self.send(take_out_of_mo2())
                     playtest.take_out_test(GD.data_dir)
                     playtest.set_autoload(GD.data_dir, False)
                     return self.send({'install': install.uninstall(GD.data_dir, PR.plugin), 'state': state()})
@@ -1781,7 +1885,7 @@ def _running_here():
 
 
 def main():
-    global GD, CATALOGUE, PR, BR
+    global GD, CATALOGUE, PR, BR, LOADOUT_NOTE
     args = sys.argv[1:]
     port = next((int(a) for a in args if a.isdigit()), PORT)
     t = time.time()
@@ -1792,7 +1896,13 @@ def main():
             PR = project.Project.open(last)
         except (OSError, ValueError):
             PR = None
-    load_game(PR)
+    restore_loadout()
+    try:
+        load_game(PR)
+    except ValueError as e:         # (the last mod needs what this setup hasn't got: start without it)
+        PR = None
+        load_game(None)
+        LOADOUT_NOTE = str(e)
     print('%s: %d interiors, %d placeable objects (%.1fs)' % (GD.data_dir, len(GD.interiors), len(CATALOGUE),
                                                                time.time() - t), flush=True)
     # (on Windows, address reuse lets a second FOLab bind the same port, and the browser then talks to whichever

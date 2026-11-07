@@ -34,9 +34,12 @@ function setState(s){
   if (!p || !i){ g.style.display = 'none'; }
   else {
     g.style.display = '';
-    if (i.installed && i.active && i.current && p.built){ g.className = 'pill ok'; g.textContent = '● In game'; }
-    else if (i.installed){ g.className = 'pill warn'; g.textContent = '● In game, out of date'; }
-    else { g.className = 'pill'; g.textContent = 'Not in game'; }
+    const where = s.loadout ? 'MO2' : 'game';
+    if (i.installed && i.active && i.current && p.built){ g.className = 'pill ok'; g.textContent = '● In ' + where; }
+    else if (i.installed){ g.className = 'pill warn'; g.textContent = '● In ' + where + ', out of date'; }
+    else { g.className = 'pill'; g.textContent = 'Not in ' + where; }
+    $('#b-install').textContent = 'Put in ' + where;
+    $('#b-install').title = s.loadout ? 'Save, then add the plugin to this MO2 profile as a mod of its own, switched on and loading last' : 'Save, then put the plugin in the game and switch it on';
   }
   if ($('#page-mod').style.display === 'block') drawModPage();
 }
@@ -60,6 +63,8 @@ async function save(){
 async function install(){
   try {
     const d = await post('/api/install'); setState(d.state);
+    if (d.install.switch_on) return toast(`Saved into MO2 as "${d.install.mod}". Close FOLab, then in MO2 press Refresh and tick it in both panes.`);
+    if (d.state.loadout) return toast(`It's in MO2 as "${d.install.mod}": on in ${d.install.profile}, and loading last.`);
     toast('In the game: start or load a save, open the console (~) and type  coc ' + (A.cellEdid || 'TheCellName'));
   } catch (e){ fail(e); }
 }
@@ -595,11 +600,11 @@ function drawModPage(){
     ${p ? `<div class="card"><h3>${esc(p.plugin)}</h3>
       <p>${p.changes} change${p.changes === 1 ? '' : 's'} in ${mine.length} place${mine.length === 1 ? '' : 's'}${mine.length ? ': ' + mine.map(c => esc(c.name || c.edid)).join(', ') : ''}.</p>
       <p>${p.built ? 'The saved plugin is up to date.' : 'Changes since the last save: <b>Save</b> writes the plugin.'}
-         ${i.installed ? (i.current && p.built ? ' It is in the game and switched on.' : ' The game has an older copy: <b>Put in game</b> updates it.') : ' It is not in the game yet.'}</p>
-      <p><button class="btn primary" id="m-save">Save</button> <button class="btn" id="m-install">Put in game</button>
-         ${i.installed ? '<button class="btn" id="m-uninstall">Take out of game</button>' : ''}</p></div>
+         ${i.installed ? (i.current && p.built ? ` It is in ${s.loadout ? 'MO2' : 'the game'} and switched on.` : ` ${s.loadout ? 'MO2' : 'The game'} has an older copy: <b>Put in ${s.loadout ? 'MO2' : 'game'}</b> updates it.`) : ` It is not in ${s.loadout ? 'MO2' : 'the game'} yet.`}</p>
+      <p><button class="btn primary" id="m-save">Save</button> <button class="btn" id="m-install">Put in ${s.loadout ? 'MO2' : 'game'}</button>
+         ${i.installed ? `<button class="btn" id="m-uninstall">Take out of ${s.loadout ? 'MO2' : 'game'}</button>` : ''}</p></div>
     <div class="card"><h3>Trying it in the game</h3>
-      <p>After <b>Put in game</b>, start New Vegas and load a save. Open the console with <code>~</code> and type
+      <p>${s.from_mo2 ? 'After <b>Put in MO2</b>, close FOLab, press Refresh in MO2 and tick your mod in both panes. Then run the game from MO2, or from FOLab with <b>Open in game</b>, and load a save.' : s.loadout ? 'After <b>Put in MO2</b>, start the game from MO2 with its <b>Run</b> button and load a save.' : 'After <b>Put in game</b>, start New Vegas and load a save.'} Open the console with <code>~</code> and type
          <code>coc ${esc(A.cellEdid || 'CellEditorID')}</code> to go to the place you're working on.</p>
       <p>Changes to a place you've already visited in that save can stay hidden until the place resets. A new save, or one from before you went there, shows them straight away.</p></div>` : ''}
     ${p ? `<div class="card"><h3>Plugin</h3>
@@ -608,7 +613,7 @@ function drawModPage(){
       <p><label><input type="checkbox" id="m-esm" ${p.esm ? 'checked' : ''}> Save as a master (other mods can build on it; the game loads it before plugins)</label></p></div>` : ''}
     ${nvseCard(s)}
     <div class="card"><h3>Open a plugin as your mod</h3>
-      <p>Mods in the game's Data folder. FOLab works on a copy; <b>Put in game</b> writes it back over the original (the old one goes to backups first).</p>
+      <p>${s.loadout ? 'The plugins in this loadout. FOLab works on a copy and won\'t put it back over another mod\'s plugin: to change a mod and leave it as it is, start a patch.' : 'Mods in the game\'s Data folder. FOLab works on a copy; <b>Put in game</b> writes it back over the original (the old one goes to backups first).'}</p>
       <div id="m-plugins"><div class="note">Looking…</div></div></div>
     <div class="card"><h3>Start another mod</h3>
       <p><input id="m-name" placeholder="Name" style="width:280px"> <button class="btn" id="m-new">Start</button></p>
@@ -619,7 +624,7 @@ function drawModPage(){
       <p>FOLab keeps a copy of anything it replaces in its <code>backups</code> folder.</p></div>`;
   const on = (id, f) => { const el = $(id); if (el) el.onclick = f; };
   on('#m-save', save); on('#m-install', install); on('#m-new', () => newMod($('#m-name').value));
-  on('#m-uninstall', async () => { try { const d = await post('/api/uninstall'); setState(d.state); toast('Taken out of the game.'); } catch (e){ fail(e); } });
+  on('#m-uninstall', async () => { try { const d = await post('/api/uninstall'); setState(d.state); toast(d.state.loadout ? 'Taken out of MO2.' : 'Taken out of the game.'); } catch (e){ fail(e); } });
   $('#page-mod').querySelectorAll('[data-open]').forEach(r => r.onclick = () => { openMod(r.dataset.open); page('world'); });
   const on2 = (id, f) => { const el = $(id); if (el) el.onclick = f; };
   on2('#m-nvse-install', async () => {

@@ -11,6 +11,7 @@ import shutil
 
 import gamedata
 import project
+import loadout
 import tes4
 
 
@@ -18,9 +19,9 @@ def candidates(data_dir):
     """Plugins in the game's Data folder that aren't the game's own."""
     out = []
     official = {n.lower() for n in gamedata.OFFICIAL}
-    for fn in sorted(os.listdir(data_dir)):
-        if fn.lower().endswith(('.esp', '.esm')) and fn.lower() not in official:
-            p = os.path.join(data_dir, fn)
+    for fn in loadout.plugin_names(data_dir):
+        if fn.lower() not in official:
+            p = loadout.plugin_path(data_dir, fn)
             try:
                 h = tes4.PluginFile(p).header
             except (ValueError, OSError) as e:
@@ -41,7 +42,7 @@ def check(gd, path):
     except (ValueError, OSError) as e:
         return 'Not a plugin FOLab can read: %s' % e
     folder = os.path.dirname(path)
-    missing = [m for m in h['masters'] if m.lower() not in gd.names and not os.path.isfile(os.path.join(gd.data_dir, m))
+    missing = [m for m in h['masters'] if m.lower() not in gd.names and not os.path.isfile(loadout.plugin_path(gd.data_dir, m))
                and not os.path.isfile(os.path.join(folder, m))]
     if missing:
         return '%s needs %s, which isn\'t in the game\'s Data folder.' % (name, ', '.join(missing))
@@ -58,7 +59,7 @@ def extra_masters(data_dir, path):
         masters = list(pf.header['masters'])
         pf.close()
         for m in masters:
-            q = os.path.join(data_dir, m)
+            q = loadout.plugin_path(data_dir, m)
             if m.lower() in official or m.lower() in seen or not os.path.isfile(q):
                 continue
             seen.add(m.lower())

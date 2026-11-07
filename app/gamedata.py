@@ -71,6 +71,7 @@ class GameData:
             self._index(i, p)
         self._archives = None
         self.overlay = None         # the open mod's own files, looked for first (library.Overlay)
+        self.view = None            # an MO2 loadout: loose files and archives come through it (loadout.py)
 
     def to_global(self, i, formid):
         """A form ID as plugin i wrote it, re-based on the load order (its high byte names the owning file)."""
@@ -246,6 +247,18 @@ class GameData:
 
     def archives(self):
         """BSAs in the order the game searches them: later ones win, like plugins."""
+        if self._archives is None and self.view:
+            found = self.view.archives_like('fallout - *.bsa')
+            for n in self.names:
+                stem = os.path.splitext(n)[0]
+                found += self.view.archives_like(glob.escape(stem) + '.bsa') + self.view.archives_like(glob.escape(stem) + ' - *.bsa')
+            found += self.view.archives_like('update.bsa')
+            self._archives = []
+            for p in dict.fromkeys(found):
+                try:                    # (one mod's broken archive mustn't stop the rest of a loadout loading)
+                    self._archives.append(bsa.Archive(p))
+                except (OSError, ValueError, struct.error) as e:
+                    print('archive left out: %s: %s' % (p, e), flush=True)
         if self._archives is None:
             found = sorted(glob.glob(os.path.join(self.data_dir, 'Fallout - *.bsa')))
             for n in self.names:
@@ -255,12 +268,19 @@ class GameData:
             self._archives = [bsa.Archive(p) for p in dict.fromkeys(found)]
         return self._archives
 
+    def loose_path(self, rel):
+        """The loose file the game would use for a path under Data, or None."""
+        if self.view:
+            return self.view.path(rel)
+        p = os.path.join(self.data_dir, rel)
+        return p if os.path.isfile(p) else None
+
     def find_file(self, rel):
         """Where a game file comes from: 'loose', an archive's file name, or None."""
         rel = bsa.norm(rel)
         if self.overlay and self.overlay.path(rel):
             return 'your mod'
-        if os.path.isfile(os.path.join(self.data_dir, rel)):
+        if self.loose_path(rel):
             return 'loose'
         for a in reversed(self.archives()):
             if rel in a.files:
@@ -274,8 +294,10 @@ class GameData:
             found = set()
             for a in self.archives():
                 found.update(f[7:] for f in a.files if f.startswith('meshes\\') and f.endswith('.nif'))
+            if self.view:
+                found.update(rel[7:] for rel, _p in self.view.under('meshes') if rel.endswith('.nif'))
             root = os.path.join(self.data_dir, 'meshes')
-            for d, _dirs, files in os.walk(root):
+            for d, _dirs, files in os.walk(root) if not self.view else ():
                 for f in files:
                     if f.lower().endswith('.nif'):
                         found.add(bsa.norm(os.path.relpath(os.path.join(d, f), root)))
@@ -284,8 +306,8 @@ class GameData:
 
     def read_file(self, rel):
         rel = bsa.norm(rel)
-        p = (self.overlay.path(rel) if self.overlay else None) or os.path.join(self.data_dir, rel)
-        if os.path.isfile(p):
+        p = (self.overlay.path(rel) if self.overlay else None) or self.loose_path(rel)
+        if p and os.path.isfile(p):
             with open(p, 'rb') as f:
                 return f.read()
         for a in reversed(self.archives()):

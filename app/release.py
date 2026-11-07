@@ -109,7 +109,7 @@ def gather(S, scan):
             return True
         where = gd.find_file(rel)
         if where == 'loose':
-            files[rel] = {'rel': rel, 'from': os.path.join(gd.data_dir, rel), 'kind': kind, 'replaces': _is_loose_game_file(gd, rel)}
+            files[rel] = {'rel': rel, 'from': gd.loose_path(rel), 'kind': kind, 'replaces': _is_loose_game_file(gd, rel)}
             return True
         if where and not _official_archive(where):
             archives.add(where)

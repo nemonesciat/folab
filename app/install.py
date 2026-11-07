@@ -11,6 +11,7 @@ import os
 import shutil
 import time
 
+import loadout
 import project
 
 BACKUPS = os.path.join(project.HOME, 'backups')
@@ -134,6 +135,7 @@ def status(data_dir, plugin):
 
 
 def install(data_dir, built):
+    loadout.refuse_writes('Putting a plugin in the game')
     plugin = os.path.basename(built)
     dest = os.path.join(data_dir, plugin)
     backed = []
@@ -156,6 +158,7 @@ def install(data_dir, built):
 
 def uninstall(data_dir, plugin):
     """Take the plugin out of plugins.txt and Data (a copy goes to backups first)."""
+    loadout.refuse_writes('Taking a plugin out of the game')
     lines = _lines()
     keep = [l for l in lines if l.strip().lower() != plugin.lower()]
     backed = []

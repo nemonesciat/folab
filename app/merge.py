@@ -20,6 +20,7 @@ import navmesh
 import plugintree
 import project
 import schema
+import loadout
 import tes4
 
 CHILD_GROUPS = {tes4.G_WORLD_CHILDREN, tes4.G_CELL_CHILDREN, tes4.G_TOPIC_CHILDREN}
@@ -45,8 +46,7 @@ def candidates(S):
 
 def path_of(S, item):
     base = os.path.basename(item['file'])
-    d = project.BUILD_DIR if item.get('where') == 'build' else S.GD.data_dir
-    return os.path.join(d, base)
+    return os.path.join(project.BUILD_DIR, base) if item.get('where') == 'build' else loadout.plugin_path(S.GD.data_dir, base)
 
 
 def _edid(rec):
@@ -135,7 +135,7 @@ def preview(S, item):
 def _missing_masters(S, path):
     pf = tes4.PluginFile(path)
     try:
-        return [m for m in pf.header['masters'] if m.lower() not in S.GD.names and not os.path.isfile(os.path.join(S.GD.data_dir, m)) and m.lower() != S.PR.plugin.lower()]
+        return [m for m in pf.header['masters'] if m.lower() not in S.GD.names and not os.path.isfile(loadout.plugin_path(S.GD.data_dir, m)) and m.lower() != S.PR.plugin.lower()]
     finally:
         pf.close()
 

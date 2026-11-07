@@ -28,6 +28,7 @@ import loadorder
 import navbuild
 import project
 import refinfo
+import loadout
 import tes4
 
 CONFIRM = 'START THE GAME'
@@ -970,6 +971,7 @@ def post(name, body, S):
             plan = make_plan(S.GD, S.PR, body['cell'], run='')
         return make_report(plan, body.get('text', ''), body.get('ending'))
     if name == 'start':
+        loadout.refuse_writes('A game test')
         try:
             check_unlocked(body.get('confirmation'))
         except Locked as e:

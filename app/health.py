@@ -22,6 +22,7 @@ import project as projectmod
 import recordio
 import schema
 import scriptc
+import loadout
 import tes4
 
 ERROR, WARN, INFO = 'error', 'warn', 'info'
@@ -98,7 +99,7 @@ class SideFiles:
     def forms(self, name):
         low = name.lower()
         if low not in self.seen:
-            p = os.path.join(self.data_dir or '', name)
+            p = loadout.plugin_path(self.data_dir or '', name)
             if not os.path.isfile(p):
                 self.seen[low] = None
             else:
@@ -325,7 +326,7 @@ class Scan:
         for m in self.masters:
             if m.lower() in self.gd.names:
                 continue
-            if not data_dir or not os.path.isfile(os.path.join(data_dir, m)):
+            if not data_dir or not os.path.isfile(loadout.plugin_path(data_dir, m)):
                 self.add('master', '%s needs %s, which isn\'t in the game\'s Data folder.' % (self.name, m))
 
     def _field_word(self, tag, st, data):
@@ -421,7 +422,7 @@ class Scan:
                 if low in self.gd.names:
                     pf = self.gd.plugins[self.gd.names.index(low)]
                 else:
-                    p = os.path.join(self.side.data_dir or '', m)
+                    p = loadout.plugin_path(self.side.data_dir or '', m)
                     if not os.path.isfile(p):
                         continue
                     pf = tes4.PluginFile(p)

@@ -27,6 +27,7 @@ import espwrite
 import install
 import plugintree
 import project
+import loadout
 import tes4
 
 TEST_PLUGIN = 'FOLab Test.esp'
@@ -53,10 +54,15 @@ def launch(data_dir, via='nvse'):
     """Start the game: through xNVSE's nvse_loader.exe when it's there (no launcher window; how xNVSE says to start
     it), else the way Steam's Play button does (the game's launcher opens first). Never FalloutNV.exe directly: the
     Steam copy then fails with Steam's "Application load error 5:0000065434"."""
+    inside = loadout.started_from_mo2()         # (what FOLab starts inside MO2's virtual folder sees the loadout's mods)
+    if not inside:
+        loadout.refuse_writes('Starting the game from here')
     exe = game_exe(data_dir)
     if not os.path.isfile(exe):
         raise FileNotFoundError('FalloutNV.exe not found beside the Data folder (%s)' % exe)
     loader = os.path.join(os.path.dirname(exe), 'nvse_loader.exe')
+    if inside and not os.path.isfile(loader):
+        raise ValueError('xNVSE isn\'t beside the game: started through Steam, the game wouldn\'t see your MO2 mods. Use MO2\'s Run button.')
     if via == 'nvse' and os.path.isfile(loader):
         flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
         subprocess.Popen([loader], cwd=os.path.dirname(exe), creationflags=flags, close_fds=True)
@@ -207,6 +213,7 @@ def newest_save():
 def set_autoload(data_dir, on):
     """With JIP LN NVSE in the game, a gr_ text script runs once when the game reaches its main menu: FOLab's loads the
     newest save there, so Play here goes straight in. Off (Open in game, Take out): the file is removed."""
+    loadout.refuse_writes('Setting up Play here')
     path = os.path.join(data_dir, AUTOLOAD)
     has_jip = os.path.isfile(os.path.join(data_dir, 'NVSE', 'plugins', 'jip_nvse.dll'))
     save = newest_save()

@@ -10,6 +10,7 @@ import os
 import struct
 
 import formlinks
+import gamedata
 import land as landmod
 import masterlist
 import navbuild
@@ -109,7 +110,9 @@ class Writer:
             pf.close()
         used = {0}
         if getattr(self, 'force_all', False):
-            used |= set(range(len(gd.plugins)))     # (every game file: a new world may use any of them later)
+            # (every game file: a new world may use any of them later. Not a loadout's mods: it'd need them all.)
+            official = {n.lower() for n in gamedata.OFFICIAL}
+            used |= {i for i, n in enumerate(gd.names) if n in official}
         for ckey, c in self.pr.cells.items():
             cell = None if ckey.startswith('+') else gd.from_key(ckey)
             if cell is not None:

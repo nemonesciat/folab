@@ -26,6 +26,21 @@ what's needed).
 - **Play**: Open in game, Play here (arrive where the view looks), Give it to me in game; the game's own settings
   (resolution, borderless, field of view…).
 
+## Mod Organizer 2
+
+FOLab can work inside an MO2 profile, so your mods are what you edit against. **Tools → MO2 loadout** finds your New Vegas
+instances and shows each profile's mods and plugins.
+
+- **Work in this loadout**: the whole lab uses that profile's plugins in its order, and each mod's files. MO2's files aren't changed.
+- **New patch**: a mod of your own that loads last, built on whichever mod wins for each thing you edit. The mods it changes stay as they are.
+- **Put in MO2**: adds your mod to the profile as a mod folder of its own, switched on. MO2 must be closed, and a copy of its lists is kept.
+- **Start FOLab from MO2**: **Add FOLab to MO2's list**, then choose it beside MO2's Run button. FOLab opens in the profile that's on,
+  and **Open in game** starts the game with your mods. MO2 is locked meanwhile, so Put in MO2 only saves the folder: close FOLab,
+  press Refresh in MO2 and tick your mod in both panes.
+
+While you're in a loadout, Play here, Give it to me, the load order page's saving, xNVSE and Test in game are switched off. This is
+new and has only been tried on a small setup. Big mod lists may take a while to load.
+
 ## What you need
 
 - **Fallout: New Vegas** from Steam (FOLab finds it in your Steam libraries; set `FOLAB_NV_DATA` to its Data folder

@@ -35,6 +35,7 @@ import loadorder
 import project
 import recdiff
 import schema
+import loadout
 import tes4
 
 FORMAT = 1
@@ -317,7 +318,7 @@ class Order:
         self.me = None
         for n, r in enumerate(todo):
             mine = r is self.row
-            p = path if mine else os.path.join(data_dir, r['name'])
+            p = path if mine else loadout.plugin_path(data_dir, r['name'])
             if progress:
                 progress('reading', n, len(todo), r['name'])
             try:
@@ -1359,7 +1360,7 @@ def start(S, file=None, data_dir=None):
     scratch = None
     try:
         if file:
-            path = os.path.join(data_dir, os.path.basename(file))
+            path = loadout.plugin_path(data_dir, os.path.basename(file))
             if not os.path.isfile(path):
                 raise ValueError('%s isn\'t in the Data folder.' % os.path.basename(file))
         else:

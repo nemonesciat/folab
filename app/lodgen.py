@@ -20,6 +20,7 @@ import struct
 
 import land
 import maptiles
+import loadout
 import project
 import roadgen
 
@@ -411,6 +412,7 @@ def manifest_path(pr):
 
 def install(pr, data_dir, out=None):
     """Copy the made files into Data, noting what went in. Any file already there is kept in backups first."""
+    loadout.refuse_writes('Putting distant land in the game')
     out = out or out_folder(pr)
     if not os.path.isdir(out):
         raise LodError('Make the distant land first.')
@@ -436,6 +438,7 @@ def install(pr, data_dir, out=None):
 
 def uninstall(pr, data_dir):
     """Take out exactly what install put in, putting back what it replaced."""
+    loadout.refuse_writes('Taking distant land out of the game')
     try:
         with open(manifest_path(pr), encoding='utf-8') as f:
             m = json.load(f)

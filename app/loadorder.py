@@ -15,6 +15,7 @@ import time
 import gamedata
 import install
 import recdiff
+import loadout
 import tes4
 
 OFFICIAL = {n.lower() for n in gamedata.OFFICIAL}
@@ -31,7 +32,8 @@ def backups_dir():
 
 
 def _txt_lines():
-    return install._lines()
+    lo = loadout.current()
+    return lo.active() if lo else install._lines()
 
 
 def active_names(lines=None):
@@ -49,23 +51,25 @@ def _header(path):
 def scan_files(data_dir):
     """{lower name: row} for every plugin in the Data folder."""
     out = {}
-    for fn in os.listdir(data_dir):
-        if not fn.lower().endswith(('.esp', '.esm')):
-            continue
-        p = os.path.join(data_dir, fn)
+    lo = loadout.current()
+    at = lo.order_of() if lo else {}
+    for fn in loadout.plugin_names(data_dir):
+        p = loadout.plugin_path(data_dir, fn)
         row = {'name': fn, 'official': fn.lower() in OFFICIAL, 'mtime': os.path.getmtime(p), 'size': os.path.getsize(p), 'found': True}
         try:
             h = _header(p)
             row.update(esm=bool(h['flags'] & 1) or fn.lower().endswith('.esm'), masters=h['masters'], author=h['author'], description=h['description'], records=h['records'])
         except (ValueError, OSError) as e:
             row.update(esm=fn.lower().endswith('.esm'), masters=[], author='', description='', records=0, error=str(e))
+        if lo:
+            row.update(order=at[fn.lower()], mod=lo.who(fn))      # (a loadout's order is its profile's, not the files' dates)
         out[fn.lower()] = row
     return out
 
 
 def _rank(row):
     """Where the game puts a plugin: masters first, oldest first; the game's own master before everything."""
-    return (row['name'].lower() != BASE, not row['esm'], row['mtime'], row['name'].lower())
+    return (row['name'].lower() != BASE, not row['esm'], row.get('order', row['mtime']), row['name'].lower())
 
 
 def in_game_order(rows):
@@ -121,9 +125,12 @@ def read(data_dir, mod=None):
     notes = []
     if n > TOO_MANY:
         notes.append('%d plugins are on. New Vegas tends to crash when it\'s loading many more than about %d, however good they are.' % (n, TOO_MANY))
-    if not os.path.isfile(install.plugins_txt()):
+    lo = loadout.current()
+    if lo:
+        notes.append('This is the MO2 profile %s, read only: change it in MO2.' % lo.title)
+    elif not os.path.isfile(install.plugins_txt()):
         notes.append('The game hasn\'t written its list of plugins yet: run its launcher once. Saving here makes the list.')
-    return {'rows': rows, 'plugins_txt': install.plugins_txt(), 'data': data_dir, 'on': n, 'notes': notes, 'backups': backups()}
+    return {'rows': rows, 'plugins_txt': os.path.join(lo.folder, 'plugins.txt') if lo else install.plugins_txt(), 'loadout': lo.title if lo else None, 'data': data_dir, 'on': n, 'notes': notes, 'backups': backups()}
 
 
 # ---------- a change, at the user's asking ----------
@@ -197,6 +204,7 @@ def _dates(files, final):
 def save(data_dir, order, active):
     """Write the load order: active (names) goes in plugins.txt, order (names) into the files' dates. A copy of how
     things were is kept first. Nothing is written when nothing changes."""
+    loadout.refuse_writes('Saving the load order')
     if not order:
         raise ValueError('There\'s no load order to save: nothing was read yet.')     # (never an empty list by accident)
     files = scan_files(data_dir)
@@ -231,6 +239,7 @@ def _write_txt(lines):
 
 def restore(data_dir, name):
     """Put back a load order FOLab kept a copy of (keeping a copy of how things are now first)."""
+    loadout.refuse_writes('Putting back a load order')
     path = os.path.join(backups_dir(), os.path.basename(name))
     with open(path, encoding='utf-8') as f:
         data = json.load(f)
@@ -309,7 +318,7 @@ def mods_on(data_dir):
     out = []
     for r in read(data_dir)['rows']:
         if r['active'] and r['found'] and not r['official'] and not r['helper'] and not r.get('error'):
-            out.append(os.path.join(data_dir, r['name']))
+            out.append(loadout.plugin_path(data_dir, r['name']))
     return out
 
 
@@ -363,7 +372,7 @@ def conflicts(data_dir, paths=None):
 
 
 def _real_name(low, data_dir):
-    for fn in os.listdir(data_dir):
+    for fn in loadout.plugin_names(data_dir):
         if fn.lower() == low:
             return fn
     return low

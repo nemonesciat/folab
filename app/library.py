@@ -74,7 +74,13 @@ class Index:
                 if k:
                     kinds.setdefault(k, set()).add(f)
                     self.where[f] = (src, size)
-        for top in LOOSE:
+        for top in LOOSE if gd.view else ():
+            for rel, full in gd.view.under(top):
+                k = self._kind(rel)
+                if k:
+                    kinds.setdefault(k, set()).add(rel)
+                    self.where[rel] = (gd.view.who(rel), os.path.getsize(full))
+        for top in LOOSE if not gd.view else ():
             root = os.path.join(gd.data_dir, top)
             for d, _dirs, files in os.walk(root):
                 for fn in files:
@@ -513,8 +519,8 @@ def thumb_path(gd, rel, size):
     if own:
         tag += '|%d' % os.path.getmtime(own)
     else:
-        p = os.path.join(gd.data_dir, rel)
-        if os.path.isfile(p):
+        p = gd.loose_path(rel)
+        if p:
             tag += '|%d' % os.path.getmtime(p)
     h = hashlib.md5(tag.encode('utf-8', 'replace')).hexdigest()
     return os.path.join(_cache_root(gd), h[:2], h + '.png')

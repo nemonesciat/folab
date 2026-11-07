@@ -31,6 +31,24 @@ The plugins the game loads, top to bottom. When two change the same thing, the l
 
 Close the game first: FOLab won't save the order while it runs.
 
+## MO2 loadout
+
+If you manage your mods with Mod Organizer 2, this is where FOLab meets them. It finds your New Vegas instances, reads a profile, and shows its mods, plugins and what replaces what. If yours is somewhere unusual, give FOLab its folder (the one with `ModOrganizer.ini` in it).
+
+**Work in this loadout** makes that profile what the whole lab loads: its plugins in its order, and each mod's meshes, textures and archives, the same way MO2's virtual folder lays them out. You don't need to start FOLab through MO2. Browse, the 3D view, the Library, the Health check and Mod conflicts all see your mods, and a mod you make can use their things. FOLab remembers the loadout next time; **Back to the plain game** leaves it.
+
+Plugins that are on but can't load are listed with the reason, usually a missing file or a master that's switched off.
+
+**Make a patch:** name it under **Make a patch for this loadout** and press **New patch**, then edit what you like in Browse. What you edit starts from the winning mod's version of it, and your patch needs that mod as a master. The original mods aren't touched.
+
+**Put in MO2** (where the button says Put in game otherwise) saves your patch and adds it to this profile as a mod folder of its own, switched on and loading last. MO2 has to be closed, because it rewrites these lists when it closes. A copy of the profile's lists goes to FOLab's `backups` first. **Take out of MO2** on the My mod page removes it again. FOLab only ever replaces or removes mod folders it made.
+
+**Start FOLab from MO2:** on this page, **Add FOLab to MO2's list** (with MO2 closed) puts it beside MO2's Run button. Close FOLab, choose it there and press **Run**. It opens in the profile MO2 has on, with **Open in game** starting the game with your mods. MO2 is locked while FOLab runs, so **Put in MO2** only saves your patch's folder: close FOLab, press Refresh in MO2 and tick it in both panes.
+
+While you're in a loadout, Play here, saving the load order, xNVSE and Test in game are refused, because they'd change the real game, not your MO2 setup. Change your mods and their order in MO2, then choose the loadout again to see the changes.
+
+A mod that uses another mod's things only opens where that mod is on, and FOLab says which plugin it's missing.
+
 ## Mod conflicts
 
 Where your mod clashes with the rest of your load order. For every record your mod has, it finds who else changes it and who wins, then says what you'd notice in the game and what to do. It only reads, until you press a Move button. Pick **A look at** in the list to check any plugin in Data.

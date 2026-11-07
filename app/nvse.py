@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import time
 
+import loadout
 import project
 
 DOWNLOADS = os.path.join(project.HOME, 'downloads', 'xnvse')
@@ -90,6 +91,7 @@ def _unpack(archive):
 
 def install(data_dir, file):
     """Put in the archive of this name from the user's Downloads folder."""
+    loadout.refuse_writes('Installing xNVSE')
     hit = next((a for a in find_xnvse() if a['file'] == file), None)
     if not hit:
         raise FileNotFoundError('%s is not an xNVSE archive in your Downloads folder.' % file)
@@ -131,6 +133,7 @@ def find_archives(names=('nvtf', 'tick fix', 'jip')):
 def install_plugin_archive(data_dir, archive):
     """Install an xNVSE plugin from its archive: unpacked into FOLab's downloads first, then its NVSE folder (wherever
     it sits in the archive: at the top, or inside Data) copied into the game's Data\\NVSE. Records what went in."""
+    loadout.refuse_writes('Installing an xNVSE plugin')
     name = os.path.splitext(os.path.basename(archive))[0]
     out = os.path.join(project.HOME, 'downloads', 'plugins', name)
     if os.path.isdir(out):
@@ -191,6 +194,7 @@ def plugins(data_dir):
 
 def uninstall(data_dir):
     """Take out what FOLab put in (a copy of each goes to backups first)."""
+    loadout.refuse_writes('Taking out xNVSE')
     if not os.path.isfile(RECORD):
         raise ValueError('FOLab did not install the script extender here, so it leaves it alone.')
     with open(RECORD, encoding='utf-8') as f:
