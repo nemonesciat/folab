@@ -575,6 +575,23 @@ class PlanTiles(K.Tileset):
                 g.read(p)
             if g.complete():
                 out.append(g)
+        out += self._find_pits(rise)
+        return out
+
+    def _find_pits(self, rise):
+        """Tall rooms of the other kits' kind (see Pit), by family of pieces that have a floor a storey up behind them."""
+        h = self.step / 2
+        fams = collections.defaultdict(list)
+        for p in self.kit.structural():
+            if p.foot == (-h, -h, h, h) and len(p.slots) == 4 and p.box[5] - p.box[2] >= TALL_SHARE * rise:
+                fams[folder_of(p.model)].append(p)
+        out = []
+        for fam, pieces in fams.items():
+            g = Pit(fam, rise, self.step, self.kit)
+            for p in pieces:
+                g.read(p)
+            if g.complete():
+                out.append(g)
         return out
 
     def _galley_walks(self, g):
@@ -584,10 +601,10 @@ class PlanTiles(K.Tileset):
             g.back = room
             if self.game is None:
                 return True
-            for seed in (1, 2, 3):
+            for seed in range(1, 9):
                 pl = Planner(self, random.Random(seed))
                 pl.first_room(Spec('entrance', (4, 4), (4, 4), True, fam=room))
-                if not pl.attach(Spec('atrium', (6, 6), (3, 3), True, fam=room, tall=g), 0, True) or not any(o.get('tall') for o in pl.plan.owners):
+                if not pl.attach(Spec('atrium', (6, 6), (3, 4), True, fam=room, tall=g), 0, True) or not any(o.get('tall') for o in pl.plan.owners):
                     continue
                 made = fill(self, pl.plan, seed, budget=120, big=False)
                 if not made:
@@ -651,6 +668,75 @@ class Galley:
             return None
         p, c, _b = pick_row(rows, rng)
         return p, (c - closed_d) % 4
+
+
+class Pit:
+    """A tall room as most kits build one (offices, the Lucky 38, hotels): a sunken hall, its walls two storeys high. One wall
+    stops at the upper floor with a railing stood on it, and the room behind that wall, a storey up, looks over the hall. The
+    other walls go all the way. Reached by its own door below, and stairs to the room above."""
+
+    def __init__(self, fam, rise, step, kit):
+        self.fam, self.rise, self.step, self.kit = fam, rise, step, kit
+        self.back = None
+        self.bridge = self.end_door = None
+        self.mid, self.open_wall, self.tall_wall, self.door_wall, self.corner_tall, self.corner_open = [], [], [], [], [], []
+        self.rails = {}
+
+    def read(self, p):
+        by = {s['side']: s for s in p.slots}
+        low = {d: (by[d]['open'] and by[d]['floor'] is not None and by[d]['floor'] <= 40) for d in range(4)}
+        word = {d: side_word(by[d], self.step) for d in range(4)}
+        high = {d: bool(by[d]['open'] and by[d]['floor'] is not None and self.rise - 80 <= by[d]['floor'] <= self.rise + 80) for d in range(4)}
+        if p.box[2] > -8 or p.box[2] < -64:
+            return                  # (all of a pit's pieces stand a little below their own origin, so its floor meets the corridors')
+        if all(low[d] and word[d] == 'F' for d in range(4)):
+            self.mid.append(p)
+            return
+        fronts = [d for d in range(4) if low[d] and word[d] == 'F' and low[(d + 1) % 4] and low[(d + 3) % 4] and word[(d + 1) % 4] == 'A' and word[(d + 3) % 4] == 'A']
+        if len(fronts) == 1:
+            f = fronts[0]
+            b = (f + 2) % 4
+            if high[b] and word[b] == 'F':
+                self.open_wall.append((p, f))
+                rail = self._rail_for(p)
+                if rail:
+                    self.rails[p.key] = rail
+            elif by[b]['open'] and word[b] == 'P' and by[b]['floor'] == by[f]['floor']:
+                self.door_wall.append((p, f))
+            elif not high[b]:
+                # (a doorway's top read as a floor at the side of the pit's own floor is still a wall)
+                self.tall_wall.append((p, f))
+            return
+        lows = [d for d in range(4) if low[d] and word[d] == 'A']
+        if len(lows) == 2 and (lows[0] + 1) % 4 == lows[1] or len(lows) == 2 and (lows[1] + 1) % 4 == lows[0]:
+            a, b = lows if (lows[0] + 1) % 4 == lows[1] else lows[::-1]
+            # (the sides facing out are the other two: clockwise of b, and of that)
+            o1, o2 = (b + 1) % 4, (b + 2) % 4
+            highs = [d for d in (o1, o2) if high[d]]
+            if low[o1] or low[o2]:
+                return
+            if not highs:
+                self.corner_tall.append((p, a, b, None))
+            elif len(highs) == 1 and word[highs[0]] == 'A':
+                self.corner_open.append((p, a, b, highs[0]))
+
+    def _rail_for(self, p):
+        """The railing the game stands on top of this wall."""
+        rows = [q for q in self.kit.pieces.values() if not q.foot and q.edid.lower().startswith(p.edid.lower() + 'rail')]
+        return max(rows, key=lambda q: q.uses) if rows else None
+
+    def complete(self):
+        return bool(self.mid and self.tall_wall and self.door_wall and self.corner_tall and any(p.key in self.rails for p, _f in self.open_wall) and self.corner_open)
+
+    def corner(self, rows, rng, faces, up=None):
+        """A corner whose two low sides face these ways (the room's inside), and whose side with a floor a storey up faces up:
+        (piece, turn, that side or None), or None."""
+        got = []
+        for p, a, b, h in rows:
+            t = (a - faces[0]) % 4
+            if (b - t) % 4 == faces[1] and (up is None or (h is not None and (h - t) % 4 == up)):
+                got.append((p, t, h))
+        return pick_row(got, rng) if got else None
 
 
 def pick_row(rows, rng):
@@ -1565,6 +1651,12 @@ class Planner:
             return False
         sizes = spec.tall if isinstance(spec.tall, tuple) else (spec.w, spec.h)
         W, H = self.rng.randint(*sizes[0]), self.rng.randint(*sizes[1])
+        if isinstance(g, Pit):
+            mark = self.plan.mark()
+            if self._lay_pit(g, spec, c, route, way, fam, max(4, W), max(3, H)):
+                return True
+            self.plan.back_to(mark)
+            return False
         bridged = H <= 2 and bool(g.bridge and g.end_door)
         H = 2 if bridged else max(3, H)
         mark = self.plan.mark()
@@ -1731,6 +1823,81 @@ class Planner:
             else:
                 ok.append(f)
         return self.rng.choice(ok) if ok else None
+
+    def _lay_pit(self, g, spec, c, route, way, fam, W, H):
+        plan, rng = self.plan, self.rng
+        step = self.ts.step
+        l = route[-1][2]
+        vm = H // 2
+        ux, uy = DX[way]
+        vx, vy = DX[(way + 1) % 4]
+        ox, oy = route[-1][0] + ux - vm * vx, route[-1][1] + uy - vm * vy
+
+        def at(u, v, lv=l):
+            return (ox + u * ux + v * vx, oy + u * uy + v * vy, lv)
+        depth = 2
+        foot = [at(u, v) for u in range(W) for v in range(H)]
+        back = [at(u, v, l + 1) for u in range(W) for v in range(-depth, 0)]
+        if not self.clear(route + foot + [(x, y, l + 1) for x, y, _z in foot] + back) or set(route) & set(foot):
+            return False
+        plan.owners[plan.add_hall(fam, route, spec.main)]['wing'] = spec.wing
+        hall = len(plan.owners) - 1
+        plan.link(c, route[0])
+        air = [at(u, v, l + 1) for u in range(W) for v in range(H)]
+        n = plan.add_room(spec.purpose, g.back, foot + air)
+        o = plan.owners[n]
+        o.update(wing=spec.wing, tall=True, main=spec.main)
+        plan.air |= set(air)
+        rise = plan.rise
+        pieces, tops = [], {}
+        minus_u, plus_u, minus_v, plus_v = (way + 2) % 4, way, (way + 3) % 4, (way + 1) % 4
+
+        def put(cell, piece, t):
+            pieces.append(Placed(piece.key, t, cell[0] * step, cell[1] * step, l * rise - piece.box[2], n, cell))
+        for u in range(W):
+            for v in range(H):
+                cell = at(u, v)
+                # (which ways the room's inside lies from here)
+                on_u = minus_u if u == W - 1 else plus_u if u == 0 else None
+                on_v = minus_v if v == H - 1 else plus_v if v == 0 else None
+                if on_u is not None and on_v is not None:
+                    a, b = (on_u, on_v) if (on_u + 1) % 4 == on_v else (on_v, on_u)
+                    got = g.corner(g.corner_open if v == 0 else g.corner_tall, rng, (a, b), minus_v if v == 0 else None)
+                    if not got:
+                        return False
+                    put(cell, got[0], got[1])
+                    if v == 0:
+                        tops[u] = next(s for s in got[0].slots if s['side'] == got[2])
+                elif on_v is not None or on_u is not None:
+                    front = on_v if on_v is not None else on_u
+                    if v == 0:
+                        rows = [r for r in g.open_wall if r[0].key in g.rails]
+                        p, f = pick_row(rows, rng)
+                        t = (f - front) % 4
+                        put(cell, p, t)
+                        rail = g.rails[p.key]
+                        pieces.append(Placed(rail.key, t, cell[0] * step, cell[1] * step, l * rise - p.box[2], n, cell))
+                        tops[u] = next(s for s in p.slots if s['side'] == ((f + 2) % 4))
+                    elif cell == at(0, vm):
+                        p, f = pick_row(g.door_wall, rng)
+                        t = (f - front) % 4
+                        put(cell, p, t)
+                        plan.ports.append((route[-1], way, next(s for s in p.slots if s['side'] == (f + 2) % 4)))
+                        plan.link(route[-1], cell)
+                    else:
+                        p, f = pick_row(g.tall_wall, rng)
+                        put(cell, p, (f - front) % 4)
+                else:
+                    put(cell, pick_row([(q,) for q in g.mid], rng)[0], 0)
+        plan.placed.append({'owner': n, 'pieces': pieces})
+        m = plan.add_room('over the hall', g.back, back)
+        plan.owners[m].update(wing=spec.wing, part_of=n)
+        for u in range(W):
+            if u not in tops:
+                return False
+            plan.opens[(at(u, -1, l + 1), plus_v)] = tops[u]
+        o['sides'] = [m]
+        return self.join(hall, m, fam, cost=40) or self.join(m, hall, fam, cost=40)
 
     def join(self, a, b, fam, flights=True, cost=30, main=False):
         """A corridor between two owners, by any way the kit can go, stairs included. True if one was found and put in."""

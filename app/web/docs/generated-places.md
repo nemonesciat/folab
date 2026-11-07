@@ -17,7 +17,10 @@ Kits with no pieces that close a room (caves, for example) are filled the old wa
 
 ## Tall rooms, stairs and ways round
 
-**Tall rooms.** Where a kit has them (the vault kits' galley pieces), a main room can go up two storeys, with a balcony along each long side. It's built the way the game's own vaults build theirs: a room stands under each balcony, open to the hall, and another stands over it, which is how you get out onto the balcony. Stairs lead up from the room below to the room above. With only two rows of squares, a bridge joins the two balconies.
+**Tall rooms.** Where a kit has the pieces, a main room can go up two storeys:
+
+- **Vaults** (the galley pieces) have a balcony along each long side. It's built the way the game's own vaults build theirs: a room stands under each balcony, open to the hall, and another stands over it, which is how you get out onto the balcony. Stairs lead up from the room below to the room above. With only two rows of squares, a bridge joins the two balconies.
+- **Offices** (the pit pieces) have a hall sunk two storeys, with a room on the upper floor behind a railing that looks over it. Stairs lead up from the corridor outside.
 
 **Stairs.** A kit can use any of these, but only after FOLab has built each kind between two rooms and walked it:
 

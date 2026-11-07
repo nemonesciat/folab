@@ -80,6 +80,23 @@ big = [p for p, _w, _h in vt.big]
 check('bigger pieces going in over ordinary squares aren\'t tall ones', not any(p.box[5] - p.box[2] >= 400 for p in big))
 
 
+ot0 = P.tiles_for(G, kits, OFFICE, store, sv)
+pit = next((g for g in ot0.galleys if isinstance(g, P.Pit)), None)
+check('the office kit has tall rooms of its own kind: a hall sunk two storeys, a room over it behind a railing', pit is not None and pit.rails)
+good = 0
+for seed in range(1, 8):
+    pl = P.Planner(ot0, random.Random(seed))
+    pl.first_room(P.Spec('entrance', (4, 4), (4, 4), True, fam=pit.back))
+    pl.attach(P.Spec('hall', (6, 6), (4, 4), True, fam=pit.back, tall=pit), 0, True)
+    tall = next((o for o in pl.plan.owners if o.get('tall')), None)
+    made = P.fill(ot0, pl.plan, seed, budget=120, big=False) if tall else None
+    if made:
+        w = P.walk_check(G, ot0, pl.plan, made, ot0._walk_cache)
+        up = [c for o in pl.plan.rooms() if o['purpose'] == 'over the hall' for c in o['cells']]
+        good += clean(w) and bool(up) and not set(up) & set(w['missing'])
+check('… built and walked, on both floors, sealed (%d)' % good, good >= 2)
+
+
 # ---------- stairs ----------
 check('the vault proves a straight flight, a long one and one that doubles back', {'straight', 'long', 'back'} <= set(vt.stair_kinds), str(vt.stair_kinds))
 ot = P.tiles_for(G, kits, OFFICE, store, sv)

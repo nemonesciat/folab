@@ -42,7 +42,7 @@ HUNG = 150              # (something this far above the floor is overhead: no on
 PURPOSE_TAGS = {'quarters': ('sleep',), 'small room': ('sleep', 'store'), 'office': ('desk',), 'workroom': ('machine', 'desk'), 'reactor': ('machine',),
                 'far end': ('machine', 'store'), 'long room': ('eat', 'store', 'care'), 'atrium': ('eat',), 'hall': ('eat', 'desk'), 'entrance': ('store', 'machine'),
                 'store': ('store',), 'mess': ('eat',), 'clinic': ('care',), 'corridor': (),
-                'under a balcony': ('store', 'eat'), 'over a balcony': ('desk', 'sleep')}
+                'under a balcony': ('store', 'eat'), 'over a balcony': ('desk', 'sleep'), 'over the hall': ('desk',)}
 
 
 def words_of(edid):
