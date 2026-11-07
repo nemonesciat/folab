@@ -1052,7 +1052,7 @@ def load_game(pr):
     if pr and pr.source:
         want += adopt.extra_masters(data_dir, pr.source_path())
         want.append(pr.source_path())
-    if GD and [p.path for p in GD.plugins] == want:
+    if GD and [p.path for p in GD.plugins] == want and not getattr(GD, 'stale', False):
         return
     t = time.time()
     if BR:
@@ -1064,6 +1064,19 @@ def load_game(pr):
     _meshes.clear()
     _actors.clear()
     print('loaded %d plugins (%.1fs)' % (len(GD.plugins), time.time() - t), flush=True)
+
+
+def release_source():
+    """Let go of an opened mod's own plugin, so its file can be replaced (Windows won't while it's mapped). The game has to be loaded again after: load_game knows."""
+    src = PR.source_path() if PR else None
+    if not src:
+        return
+    if BR:
+        BR.close()
+    for p in GD.plugins:
+        if os.path.normcase(os.path.abspath(p.path)) == os.path.normcase(os.path.abspath(src)):
+            p.close()
+    GD.stale = True
 
 
 def new_world(body, shaped=None):
@@ -1103,7 +1116,12 @@ def new_world(body, shaped=None):
     # the mod is now that plugin, opened
     folder = PR.name + ' source'
     os.makedirs(os.path.join(project.PROJECTS_DIR, folder), exist_ok=True)
-    shutil.copy2(path, os.path.join(project.PROJECTS_DIR, folder, PR.plugin))
+    release_source()
+    try:
+        shutil.copy2(path, os.path.join(project.PROJECTS_DIR, folder, PR.plugin))
+    except OSError:
+        load_game(PR)
+        raise
     d = PR.to_dict()
     d.update(cells={}, records={}, land={}, water={}, next_id=nid, source=folder + '/' + PR.plugin)
     with open(PR.path + '.tmp', 'w', encoding='utf-8') as f:

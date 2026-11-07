@@ -12,18 +12,25 @@ import mapscale as MS
 PICTURE_SIDE = 1024
 PLAIN = 'ff' * (33 * 33 * 3)
 BANDS = autopaint.BANDS
-BLEND = 2.5                   # degrees either side of a steepness band's edge in which it fades into the next
+FADE = 2.5                    # degrees either side of a steepness band's edge in which it fades into the next
+BLEND = 0.25                  # how much of the slope's own mix stays under a ground type's texture
 
 
 # ---------- what to paint with ----------
 
+def middle_of(gd, tpl):
+    """The cell halfway through a world's land, whichever way it's measured: where to learn it from. None if it has no land."""
+    have = sorted(k for k in gd.grid(tpl) if gd.land_at(tpl, *k))
+    if not have:
+        return None
+    return sorted(k[0] for k in have)[len(have) // 2], sorted(k[1] for k in have)[len(have) // 2]
+
+
 def learn_style(gd, tpl, ltex=None, tex_cache=None):
     """[{texture key: share} for each steepness band], learnt from the template world's land round its middle."""
-    have = sorted(k for k in gd.grid(tpl) if gd.land_at(tpl, *k))
-    if have:
-        cx = sorted(k[0] for k in have)[len(have) // 2]
-        cy = sorted(k[1] for k in have)[len(have) // 2]
-        model, _pics = autopaint.learn(gd, tpl, cx, cy, reach=5, tex_cache=tex_cache if tex_cache is not None else {})
+    mid = middle_of(gd, tpl)
+    if mid:
+        model, _pics = autopaint.learn(gd, tpl, mid[0], mid[1], reach=5, tex_cache=tex_cache if tex_cache is not None else {})
         if any(model):
             return model
     if ltex:
@@ -42,16 +49,24 @@ class Painter:
 
     def mix_at(self, gx, gy):
         """{texture: share} at a land point."""
-        if self.cover:
-            m = self.cover.mix(gx, gy, self.grid.slope(gx, gy))
-            if m:
-                return m
         deg = self.grid.slope(gx, gy)
+        by_slope = self.slope_mix(gx, gy, deg)
+        m = self.cover.mix(gx, gy, deg) if self.cover else None
+        if not m:
+            return by_slope
+        # (a class's texture over a little of what the slope shows, so it isn't all one colour)
+        out = {t: v * BLEND for t, v in by_slope.items()}
+        tot = sum(m.values())
+        for t, v in m.items():
+            out[t] = out.get(t, 0.0) + v / tot * (1 - BLEND)
+        return out
+
+    def slope_mix(self, gx, gy, deg):
         b = autopaint.band(deg)
         n = self.noise.value(gx / 24.0, gy / 24.0) * 1.3
         out = {}
-        far = deg - BANDS[b] + BLEND
-        take = min(1.0, far / (2 * BLEND)) if far > 0 and b + 1 < len(BANDS) else 0.0
+        far = deg - BANDS[b] + FADE
+        take = min(1.0, far / (2 * FADE)) if far > 0 and b + 1 < len(BANDS) else 0.0
         for k, (t, v) in enumerate(self.ordered[b]):
             out[t] = v * (1 + (n if k % 2 else -n)) * (1 - take)
         if take:

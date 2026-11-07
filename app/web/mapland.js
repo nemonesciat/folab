@@ -58,6 +58,10 @@ async function mlPanel(){
       <div class="note" style="padding:0">Drag on the map to choose a rectangle, drag inside it to move it. Right-drag pans, the wheel zooms.</div>
       <div class="ml-go"><button class="btn" id="ml-whole">The whole file</button><button class="btn" id="ml-seen">Fit to view</button></div>
       <div class="ml-nums" id="ml-nums"></div>
+      <h4>Ground types (if you have a land-cover file)</h4>
+      <div class="ml-row"><span>File</span><input type="file" id="ml-cpick" accept=".tif,.tiff,.png,.zip,.gz"></div>
+      ${kept.length > 1 ? `<div class="ml-row"><span>Or one you've used</span><select id="ml-ckept"><option value=""></option>${kept.filter(f => f.name !== ML.file && !/\.osm/i.test(f.name)).map(f => `<option value="${esc(f.name)}" ${ML.cover && f.name === ML.cover.file ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>` : ''}
+      <div id="ml-ctable">${mlCoverTable()}</div>
       <h4>The new worldspace</h4>
       <div class="ml-row"><span>Name</span><input id="ml-name" value="${esc(ML.name ?? I.name.replace(/\.[^.]*$/, ''))}"></div>
       <div class="ml-row"><span>Editor ID</span><input id="ml-edid" value="${esc(ML.edid ?? mlEdid(ML.name ?? I.name.replace(/\.[^.]*$/, '')))}"></div>
@@ -70,6 +74,9 @@ async function mlPanel(){
   box.querySelector('#ml-pick').onchange = e => { if (e.target.files[0]) mlUpload(e.target.files[0]); };
   const k = box.querySelector('#ml-kept'); if (k) k.onchange = () => { if (k.value) mlOpenFile(k.value); };
   if (!I) return;
+  box.querySelector('#ml-cpick').onchange = e => { if (e.target.files[0]) mlCoverUpload(e.target.files[0]); };
+  const ck = box.querySelector('#ml-ckept'); if (ck) ck.onchange = () => { if (ck.value) mlCoverOpen(ck.value); else { ML.cover = null; mlPanel(); } };
+  mlCoverEvents(box);
   for (const [id, key] of [['#ml-mpp', 'mpp'], ['#ml-low', 'low_m'], ['#ml-high', 'high_m'], ['#ml-comp', 'compress'], ['#ml-exag', 'exag'], ['#ml-base', 'base']]){
     const el = box.querySelector(id); if (!el) continue;
     el.onchange = () => {
@@ -138,6 +145,46 @@ function mlJob(start, done){
       resolve();
     }, 400);
   })).catch(e => { ML.busy = false; mlWork(''); fail(e); });
+}
+
+// ---------- ground types: a land-cover file and which class gets what ----------
+function mlCoverTable(){
+  const C = ML.cover; if (!C) return '';
+  return `<div class="note" style="padding:3px 0">${C.scheme ? 'Looks like <b>' + esc(C.scheme) + '</b>.' : 'FOLab doesn\'t know these numbers: say what each one gets.'} ${C.placed ? '' : 'It doesn\'t say where it is on Earth, so it will be stretched over the whole height file.'} Blank texture leaves it to the slope. Things are how many a cell.</div>
+    <div style="max-height:210px;overflow-y:auto">${C.rows.map((r, i) => `<div class="ml-row" style="flex-wrap:wrap;border-top:1px solid var(--line2);padding-top:3px"><span style="flex:1 0 100%;opacity:1">${esc(r.label)} <small style="opacity:.65">${r.value}, ${(r.share * 100).toFixed(r.share < 0.1 ? 1 : 0)}%</small></span>
+      <select data-c="${i}" data-f="tex" style="flex:2 1 120px;min-width:0"><option value="">(by slope)</option>${C.textures.map(t => `<option value="${esc(t.key)}" ${t.key === r.tex ? 'selected' : ''}>${esc(t.edid)}</option>`).join('')}</select>
+      <select data-c="${i}" data-f="scatter" style="flex:1 1 70px;min-width:0">${C.sets.map(([k, l]) => `<option value="${k}" ${k === r.scatter ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <input data-c="${i}" data-f="density" type="number" min="0" max="100" step="1" value="${r.density}" style="flex:0 0 46px;min-width:0" title="How many a cell"></div>`).join('')}</div>
+    <div class="ml-go"><button class="btn" id="ml-cclear">Leave out ground types</button></div>`;
+}
+function mlCoverEvents(box){
+  const t = box.querySelector('#ml-ctable'); if (!t) return;
+  t.onchange = e => {
+    const el = e.target.closest('[data-c]'); if (!el || !ML.cover) return;
+    ML.cover.rows[+el.dataset.c][el.dataset.f] = el.dataset.f === 'density' ? +el.value : el.value;
+    try { localStorage.setItem('folab-cover-' + (ML.cover.scheme || 'other'), JSON.stringify(ML.cover.rows)); } catch (err) {}
+  };
+  t.onclick = e => { if (e.target.id === 'ml-cclear'){ ML.cover = null; mlPanel(); } };
+}
+async function mlCoverUpload(file){
+  mlWork(`Copying ${file.name} to FOLab (${mlSize(file.size)})`);
+  try {
+    const r = await fetch('/api/maps/upload?name=' + encodeURIComponent(file.name), {method: 'POST', body: file});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || r.status);
+    await mlCoverOpen(d.file);
+  } catch (e){ mlWork(''); fail(e); }
+}
+async function mlCoverOpen(name){
+  await mlJob(post('/api/maps/cover/open', {file: name}), r => {
+    ML.cover = r;
+    // (what was chosen last time for this kind of file, by class)
+    try {
+      const was = JSON.parse(localStorage.getItem('folab-cover-' + (r.scheme || 'other')) || '[]');
+      for (const row of r.rows){ const w = was.find(x => x.value === row.value); if (w) Object.assign(row, {tex: w.tex, scatter: w.scatter, density: w.density}); }
+    } catch (e) {}
+    mlPanel();
+  });
 }
 
 // ---------- the numbers and the picture ----------
@@ -281,6 +328,7 @@ function mlMouse(kind, e){
 async function mlMake(){
   const R = ML.rep; if (!R || R.stop || ML.busy) return;
   const body = Object.assign(mlBody(), {name: $('#ml-name').value.trim(), edid: $('#ml-edid').value.trim(), template: $('#ml-tpl').value});
+  if (ML.cover) body.cover = {file: ML.cover.file, rows: ML.cover.rows};
   if (!body.edid) return toast('Give it an editor ID: letters and digits, no spaces.', true);
   $('#ml-make').disabled = true;
   await mlJob(post('/api/maps/make', body), async r => {
@@ -298,7 +346,7 @@ async function mlMake(){
     M.dirty = true;
     if (typeof mlAfter === 'function') mlAfter(r);
     const s = r.report;
-    toast(`${info.name || info.edid}: ${s.cells.toLocaleString()} cells, ${mlSize(s.size)}, heights ${s.z_low.toLocaleString()} to ${s.z_high.toLocaleString()}.`);
+    toast(`${info.name || info.edid}: ${s.cells.toLocaleString()} cells, ${mlSize(s.size)}, heights ${s.z_low.toLocaleString()} to ${s.z_high.toLocaleString()}${s.things ? `, ${s.things.toLocaleString()} things scattered` : ''}${s.too_steep ? `. ${s.too_steep.toLocaleString()} land points came down, too steep for the game to store` : ''}${s.holes_sea ? `. ${s.holes_sea.toLocaleString()} points with no data became sea bed` : ''}${s.note ? '. ' + s.note : ''}.`);
   });
   const b = $('#ml-make'); if (b) b.disabled = false;
 }
@@ -421,8 +469,9 @@ function moLay(){
     MO.said = `Laid ${t.pieces.toLocaleString()} road pieces, ${t.rivers} river${t.rivers === 1 ? '' : 's'}, ${t.lakes} lake${t.lakes === 1 ? '' : 's'}, ${t.pads.toLocaleString()} pads${t.pads_too_small ? ` (${t.pads_too_small.toLocaleString()} buildings too small to show)` : ''}.${t.roads_skipped ? ` ${t.roads_skipped} road${t.roads_skipped === 1 ? '' : 's'} left out: off the land.` : ''} The ground changed in ${t.land_cells.toLocaleString()} cells.`;
     MO.layer = await api('/api/maps/layers?edid=' + encodeURIComponent(OUT.info.edid)).catch(() => null);
     MO.read = null;
-    if (typeof mapLandChanged === 'function') mapLandChanged();
-    if (typeof reloadOutside === 'function') reloadOutside();
+    for (const c of OUT.cells.values()) (OUT.touched = OUT.touched || new Set()).add(c);
+    await outsideResync();
+    mapLandChanged(); if (typeof farLandChanged === 'function') farLandChanged();
     if (t.cell_xy && t.cell_xy.length && t.cell_xy.length <= 200) wnOffer(t.cell_xy);
   });
 }

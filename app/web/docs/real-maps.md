@@ -48,7 +48,7 @@ Rule of thumb: a town is 1 : 1 to 1 : 3; a valley 1 : 5 to 1 : 15; a whole SRTM 
 
 ## How the land is made
 
-- **Heights** are in whole 8-unit steps, on one grid shared by the whole world, so cells meet exactly. Slopes the game's land can't store (a rise of more than 1,016 units in 128 across, nearly a wall) come down from the top; the numbers tell you how many points that was.
+- **Heights** are in whole 8-unit steps, on one grid shared by the whole world, so cells meet exactly. Slopes the game's land can't store (a rise of more than 1,016 units in 128 across, nearly a wall) come down from the top; a message says how many points that was when the world is made.
 - **Pictures smaller than the land:** where the file has several points to a land point, they're averaged. Where it has fewer, the land is drawn straight between them, so a coarse file looks faceted at real size.
 - **Holes in the file:** small ones are filled from the ground round them. Big ones (some files mark the sea this way) become sea bed.
 - **Paint:** each slope gets the mix of ground textures the game itself shows at that steepness, learnt from the world you choose under *Weather, paint like*. That world also gives the climate, water and music.
@@ -60,13 +60,22 @@ With the new world open, press **🧭 World tools > Real map**, pick the `.osm` 
 
 - **Roads** are the game's own road pieces following the real line, the ground settled under them. Motorways down to tertiary roads are on by default; lesser roads and tracks are a tick away. A road piece stays 9 m wide at any scale. Tunnels are left out; bridges are left out too and listed for you, since FOLab doesn't build them.
 - **Rivers and lakes** go through the same shaping as **Shape land**: a channel that runs downhill, a basin under its lowest shore. Streams are a tick away. Remember **one water level a cell**: a river steps down cell by cell, and at heavy compression anything else in that cell low enough is under water too. Coastlines aren't used: that's what the base level is for.
-- **Buildings** become flat pads at the ground's middle height under them, and a **marker layer**: the outlines, kept in `projects/<mod> map layers.json` and shown on the map under **Real map**, for you to build to later. No building is put up. Places too small to see at this scale (less than a land point across) go in the layer without a pad.
+- **Buildings** become flat pads at the ground's middle height under them, and a **marker layer**: the outlines, kept in `projects/<mod> maps/layers.json` and shown on the map under **Real map**, for you to build to later. No building is put up. Places too small to see at this scale (less than a land point across) go in the layer without a pad.
 
 FOLab needs to know where the height file is on Earth to line this up. SRTM names and most GeoTIFFs say so; GeoTIFFs in degrees, UTM (WGS84, NAD83, ETRS89) or web mercator work. A plain PNG doesn't, so the OSM file's own bounds are taken as the whole picture.
 
 ## Ground types
 
-**World tools > Real map > Ground types** paints from a land-cover file, such as ESA WorldCover or the USGS NLCD: a GeoTIFF of class numbers in the same place as your heights. Each class has a row saying which of the game's textures it gets, and which set of plants and rocks may be scattered there. The defaults are guesses you can change, and FOLab remembers your table for each mod.
+Before you make the world, the panel's **Ground types** section takes a land-cover file: a GeoTIFF of class numbers lying over the same ground as your heights.
+
+| Where to get one | Notes |
+|---|---|
+| **ESA WorldCover** (esa-worldcover.org) | The whole world, 10 m, in degrees: it lines up with SRTM. |
+| **USGS NLCD** (mrlc.gov) | The USA, 30 m, in its own projection. Turn it into your height file's first: `gdalwarp -t_srs EPSG:4326 nlcd.tif out.tif`. |
+
+FOLab recognises these two by their numbers; any other file just shows its numbers, for you to say what each gets. Each class has a row: a **ground texture** from the game's (blank leaves it to the slope), a **set of things** to scatter (plants, rocks, trees or junk: what the game itself placed in the world you take after), and how many a cell. The defaults are guesses, so look through them. FOLab remembers your choices for that kind of file on this computer.
+
+Steep ground stays as the slope says, so grass doesn't climb cliffs. Textures go into the world as it's made; scatter comes straight after as its own Undo, at most 30,000 things (thinned evenly if it would be more). Nothing stands in water.
 
 ## What's left to you
 

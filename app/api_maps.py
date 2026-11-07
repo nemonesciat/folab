@@ -2,8 +2,9 @@
 and the way back. server.py hands every /api/maps/ request here (with itself as srv), outside its lock: reading a file or making a world takes minutes,
 and the page has to be able to ask how it's going.
 
-The person's files are copied to maps/ under FOLab's home when they pick them. FOLab fetches nothing. What a world was made from is kept in projects/<mod> maps.json, so
-OpenStreetMap can be laid on it later, and the mod as it was in projects/<mod> before map/, so that it can be put back."""
+The person's files are copied to maps/ under FOLab's home when they pick them. FOLab fetches nothing. What a world was made from is kept in projects/<mod> maps/made.json, so
+OpenStreetMap can be laid on it later (its marker layer beside it, layers.json), and the mod as it was in projects/<mod> before map/, so that it can be put back. (In folders: every .json directly
+in projects/ is listed as a mod.)"""
 import json
 import os
 import re
@@ -12,6 +13,7 @@ import threading
 
 import elevation
 import espwrite
+import landcover
 import mapscale as MS
 import mapworld
 import osm
@@ -140,8 +142,14 @@ def picture(name, q):
 
 # ---------- the new world ----------
 
+def _mod_folder(pr):
+    d = os.path.join(project.PROJECTS_DIR, pr.name + ' maps')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def _sidecar(pr):
-    return os.path.join(project.PROJECTS_DIR, pr.name + ' maps.json')
+    return os.path.join(_mod_folder(pr), 'made.json')
 
 
 def read_sidecar(pr):
@@ -176,22 +184,39 @@ def make_job(body, srv):
         grid = MS.heights(plan, _said)
         tpl = srv.GD.from_key(body['template']) if body.get('template') else next(w for w in srv.GD.worlds() if srv.GD.edid(w) == 'WastelandNV')
         _said('Learning how the game paints its land')
+        cover = None
+        if body.get('cover'):
+            _said('Reading the ground types')
+            cover = landcover.Cover(_cover_raster(body['cover']['file']), body['cover']['rows'], r.geo, r.w, r.h, plan.pixel_of, (plan.x0, plan.y0))
         with srv._lock:
-            shaped = mapworld.options(plan, grid, srv.GD, tpl, body.get('ltex'), int(body.get('seed', 1)), lambda n, m: _said('Painting and packing the land', n, m))
+            shaped = mapworld.options(plan, grid, srv.GD, tpl, body.get('ltex'), int(body.get('seed', 1)), lambda n, m: _said('Painting and packing the land', n, m), cover)
             _said('Painting and packing the land', 0, plan.count())
             edid = re.sub(r'[^A-Za-z0-9_]', '', body.get('edid') or '')
+            name_now = srv.PR.name
             try:
                 out = srv.new_world({'name': body.get('name') or '', 'edid': edid, 'template': body.get('template'), 'height': shaped['height'],
                                      'ltex': body.get('ltex')}, shaped)
             except Exception:
-                _put_back_after_failure(srv)
+                _put_back_after_failure(srv, name_now)
                 raise
+            _commit_before(name_now)
             d = read_sidecar(srv.PR)
             d[edid] = {'file': name, 'opts': opts, 'W': plan.W, 'H': plan.H, 'x0': plan.x0, 'y0': plan.y0, 'col0': plan.col0, 'row0': plan.row0, 'upx': plan.upx, 'upy': plan.upy,
                        'base': plan.base, 'k': plan.k, 'compress': plan.compress, 'exag': plan.exag, 'geo': r.geo, 'px_w': r.w, 'px_h': r.h}
+            if cover:
+                d[edid]['cover'] = {'file': body['cover']['file'], 'rows': body['cover']['rows']}
             write_sidecar(srv.PR, d)
-        stats = dict(grid.stats, cells=plan.count(), world=out['world'], z_low=min(grid.pts), z_high=max(grid.pts))
-        stats['size'] = os.path.getsize(srv.PR.plugin_path())
+            stats = dict(grid.stats, cells=plan.count(), world=out['world'], z_low=min(grid.pts), z_high=max(grid.pts))
+            stats['size'] = os.path.getsize(srv.PR.plugin_path())
+            if cover and any(row.get('scatter') != 'none' and float(row.get('density') or 0) > 0 for row in body['cover']['rows']):
+                w = srv.GD.from_key(out['world'])
+                ops, rep = landcover.scatter_ops(srv.GD, srv.PR, w, cover, tpl, mapworld.middle_of(srv.GD, tpl), int(body.get('seed', 1)), progress=_said)
+                stats.update(rep)
+                if ops:
+                    _said('Putting it in the mod')
+                    out = dict(srv.edit('Scatter by ground types', ops)['state'], world=out['world'])
+            if cover and cover.note:
+                stats['note'] = cover.note
         return {'state': out, 'world': out['world'], 'report': stats}
     return _start(work, kind='make')
 
@@ -203,8 +228,8 @@ def _before(name):
 
 
 def keep_before(pr, edid):
-    """The mod as it is, kept before a world is made from a map, to go back to."""
-    d = _before(pr.name)
+    """The mod as it is, kept before a world is made from a map, to go back to. It only takes the place of the last one kept once the new world has been made."""
+    d = _before(pr.name) + ' new'
     shutil.rmtree(d, ignore_errors=True)
     os.makedirs(d)
     src = pr.source_path()
@@ -212,6 +237,11 @@ def keep_before(pr, edid):
         shutil.copy2(src, os.path.join(d, 'source.esp'))
     with open(os.path.join(d, 'project.json'), 'w', encoding='utf-8') as f:
         json.dump({'edid': edid, 'project': pr.to_dict()}, f)
+
+
+def _commit_before(name):
+    shutil.rmtree(_before(name), ignore_errors=True)
+    os.replace(_before(name) + ' new', _before(name))
 
 
 def undo_label(pr):
@@ -224,8 +254,8 @@ def undo_label(pr):
     return 'New world from a map'
 
 
-def _restore(pr):
-    d = _before(pr.name)
+def _restore(pr, d=None):
+    d = d or _before(pr.name)
     with open(os.path.join(d, 'project.json'), encoding='utf-8') as f:
         kept = json.load(f)
     old = kept['project']
@@ -246,23 +276,20 @@ def _restore(pr):
     return pr.name
 
 
-def _put_back_after_failure(srv):
-    """A world that failed part-way: the plugin wasn't changed unless it got as far as opening it, so make sure of the mod."""
-    if srv.PR is not None:
-        return
-    # (new_world had let go of the mod and couldn't open it again: the kept copy is the truth)
-    names = [n[:-len(' before map')] for n in os.listdir(project.PROJECTS_DIR) if n.endswith(' before map')]
-    for n in names:
-        pr = project.Project.open(n)
-        if pr.source and os.path.isfile(os.path.join(_before(n), 'project.json')):
-            _restore(pr)
-            srv.open_project(n)
-            return
+def _put_back_after_failure(srv, name):
+    """A world that failed part-way. Up to the last step nothing of the mod has changed but its plugin being saved, so what was kept goes; if it got as far as letting go of the mod and couldn't
+    open it again, the kept copy is the truth."""
+    new = _before(name) + ' new'
+    if srv.PR is None and os.path.isfile(os.path.join(new, 'project.json')):
+        _restore(project.Project.open(name), new)
+        srv.open_project(name)
+    shutil.rmtree(new, ignore_errors=True)
 
 
 def undo_world(srv):
     """Back to the mod as it was before the world from a map: the plugin written again without it."""
     srv.not_while_playing()
+    srv.release_source()
     name = _restore(srv.PR)
     state = srv.open_project(name)
     pr = srv.PR
@@ -276,10 +303,33 @@ def undo_world(srv):
 # ---------- OpenStreetMap on a world made from a map ----------
 
 OSM = {'file': None, 'data': None}
+COVER = {'file': None, 'raster': None}
+
+
+def _cover_raster(name):
+    if COVER['file'] != name or COVER['raster'] is None:
+        COVER.update(file=name, raster=elevation.read_file(file_path(name), lambda n, m: _said('Reading the file', n, m)))
+    return COVER['raster']
+
+
+def cover_open_job(name, srv):
+    file_path(name)
+
+    def work():
+        _said('Reading the file')
+        r = _cover_raster(name)
+        counts = landcover.classes_in(r)
+        scheme = landcover.detect(counts)
+        with srv._lock:
+            rows = landcover.default_table(srv.GD, counts, scheme)
+            tex = [{'key': srv.GD.key(f), 'edid': srv.GD.edid(f)} for f, (_i, x) in srv.GD.forms.items() if x.tag == 'LTEX']
+        tex.sort(key=lambda t: t['edid'].lower())
+        return {'file': name, 'scheme': scheme, 'rows': rows, 'textures': tex, 'sets': landcover.SCATTER_SETS, 'placed': bool(r.geo)}
+    return _start(work, kind='cover')
 
 
 def _layers_path(pr):
-    return os.path.join(project.PROJECTS_DIR, pr.name + ' map layers.json')
+    return os.path.join(_mod_folder(pr), 'layers.json')
 
 
 def read_layers(pr):
@@ -337,7 +387,7 @@ def osm_lay_job(body, srv):
             _said('Putting it in the mod')
             if not ops and not layer['buildings'] and not layer['places']:
                 raise ValueError('Nothing in the file falls on this world.')
-            state = srv.edit('OpenStreetMap: %s' % name, ops) if ops else srv.state()
+            state = srv.edit('OpenStreetMap: %s' % name, ops)['state'] if ops else srv.state()
             all_layers = read_layers(srv.PR)
             all_layers[srv.GD.edid(w)] = layer
             with open(_layers_path(srv.PR) + '.tmp', 'w', encoding='utf-8') as f:
@@ -383,6 +433,8 @@ def post(path, body, srv):
         return out
     if path == '/api/maps/make':
         return {'job': make_job(body, srv)}
+    if path == '/api/maps/cover/open':
+        return {'job': cover_open_job(body['file'], srv)}
     if path == '/api/maps/osm/read':
         return {'job': osm_read_job(body, srv)}
     if path == '/api/maps/osm/lay':

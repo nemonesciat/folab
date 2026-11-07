@@ -163,7 +163,36 @@ check('Undo: the world is gone', d['world_gone'] and not any(server.GD.edid(x) =
 now = server.PR.to_dict()
 check('Undo: the mod is as it was', json.dumps(now, sort_keys=True) == before)
 check('Undo: nothing kept to go back to now', server.PR.undo_stack == [] and not os.path.isdir(api_maps._before('Map World')) and 'FOLabMapTest' not in api_maps.read_sidecar(server.PR))
+check('Undo: the mod opens as it was, its thing in it', sum(len(c['refs']) for c in server.PR.cells.values()) == 1)
 check('Undo: the mod\'s plugin has no world', b'FOLabMapTest' not in open(server.PR.plugin_path(), 'rb').read())
+# a world on a mod that already has one: Undo takes back only the second
+api_maps.post('/api/maps/make', {'file': 'test area.tif', 'opts': opts, 'name': 'First', 'edid': 'FOLabMapFirst'}, server)
+j = wait(); print(j.get('error')); check('a first world', j.get('ok') is True)
+api_maps.post('/api/maps/make', {'file': 'test area.tif', 'opts': dict(opts, compress=12), 'name': 'Second', 'edid': 'FOLabMapSecond'}, server)
+check('a second, in the same mod', wait().get('ok') is True)
+names = {server.GD.edid(x) for x in server.GD.worlds()}
+check('both are there', {'FOLabMapFirst', 'FOLabMapSecond'} <= names)
+check('each knows what it was made from', set(api_maps.read_sidecar(server.PR)) == {'FOLabMapFirst', 'FOLabMapSecond'})
+api_maps.undo_world(server)
+names = {server.GD.edid(x) for x in server.GD.worlds()}
+check('Undo: the second is gone, the first stays', 'FOLabMapFirst' in names and 'FOLabMapSecond' not in names)
+check('the first still has its land', land.decode(server.GD, server.GD.land_at(next(x for x in server.GD.worlds() if server.GD.edid(x) == 'FOLabMapFirst'), 0, 0), {})['h'] is not None)
+check('and only one world can be taken back', api_maps.undo_label(server.PR) is None)
+# a world that fails part-way leaves the mod as it was, and the last way back in place
+api_maps.post('/api/maps/make', {'file': 'test area.tif', 'opts': opts, 'name': 'Third', 'edid': 'FOLabMapThird'}, server)
+check('a third', wait().get('ok') is True)
+kept_before = open(os.path.join(api_maps._before('Map World'), 'project.json')).read()
+state_before = json.dumps(server.PR.to_dict(), sort_keys=True)
+real = server.worldgen.add_world
+def broken(*a, **k):
+    raise RuntimeError('out of disk')
+server.worldgen.add_world = broken
+api_maps.post('/api/maps/make', {'file': 'test area.tif', 'opts': opts, 'name': 'Fourth', 'edid': 'FOLabMapFourth'}, server)
+j = wait()
+server.worldgen.add_world = real
+check('it fails in words', j.get('ok') is False and 'out of disk' in j['error'])
+check('the mod is as it was', json.dumps(server.PR.to_dict(), sort_keys=True) == state_before and server.PR is not None)
+check('the way back is still the last world\'s', open(os.path.join(api_maps._before('Map World'), 'project.json')).read() == kept_before and not os.path.isdir(api_maps._before('Map World') + ' new'))
 # a stop is a stop
 try:
     api_maps.post('/api/maps/make', {'file': 'nosuch.tif', 'opts': opts, 'name': 'x', 'edid': 'x'}, server); check('a missing file is refused', False)

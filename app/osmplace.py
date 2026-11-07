@@ -195,6 +195,7 @@ class Work:
         self.gd, self.world = gd, world
         self.over = _Over(pr)
         self.grid = gd.grid(world)
+        self.pr = pr
         self.changed = set()
         self.tex = {}
 
@@ -365,10 +366,13 @@ def lay_roads(gd, w, lay, want, seed, progress):
     for ck, form in settled.items():
         w.over.land[ck] = {n: form[n] for n in ('h', 'c', 'q')}
         w.changed.add(ck)
+    # (laying the same file again, or with more ticked, adds only what isn't there yet: a piece's place comes out the same each time)
+    keys = {gd.key(c) for c in w.grid.values()}
+    have = {(round(r['p'][0]), round(r['p'][1])) for ck, c in w.pr.cells.items() if ck in keys for r in c['refs'].values() if r.get('p')}
     ops = []
     for t in things:
         c = w.grid.get((int(t['p'][0] // CELL), int(t['p'][1] // CELL)))
-        if c is not None:
+        if c is not None and (round(t['p'][0]), round(t['p'][1])) not in have:
             ops.append({'op': 'add', 'cell': gd.key(c), 'base': t['base'], 'p': t['p'], 's': 1})
     return ops, total, skipped
 

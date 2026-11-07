@@ -155,6 +155,8 @@ if not j.get('ok'):
 rep = j['result']['report']
 print('   %.1f s: %s' % (time.time() - t0, json.dumps({k: v for k, v in rep.items() if k != 'cell_xy'})))
 pr = server.PR
+check('what comes back is FOLab\'s state, for the page', j['result']['state']['project']['undo'] == 'OpenStreetMap: test.osm')
+check('nothing of this shows up as a mod of its own', [p['name'] for p in project.list_projects()] == ['Osm World'])
 check('one Undo', len(pr.undo_stack) == 1 and pr.undo_stack[0][0] == 'OpenStreetMap: test.osm')
 # roads
 refs = [r for c in pr.cells.values() for r in c['refs'].values()]
@@ -249,6 +251,12 @@ placed = gd2.refs(g2[(0, 0)])
 check('read back: road pieces in the world', any(gd2.edid(r['base']).startswith('WastelandRoad') for r in placed))
 for pl in gd2.plugins:
     pl.close()
+# laid again: nothing doubled
+n0 = sum(len(c['refs']) for c in pr.cells.values())
+api_maps.post('/api/maps/osm/lay', {'file': 'test.osm', 'world': world_key, 'want': want}, server)
+j = wait()
+check('laid a second time: no road piece doubled', j.get('ok') is True and sum(len(c['refs']) for c in pr.cells.values()) == n0)
+pr.undo()
 # undo
 n = pr.undo()
 check('Undo takes all of it away at once', n == 'OpenStreetMap: test.osm' and pr.count() == before_state)
