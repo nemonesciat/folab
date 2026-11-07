@@ -66,11 +66,13 @@ COMMANDS = {
     'WriteStringToFile': ('jip', 23, False), 'ReadStringFromFile': ('jip', 3, False), 'FileExists': ('jip', 2, False),
     'GetRayCastPos': ('jip', 7, True), 'GetRayCastRef': ('jip', 2, True), 'SetPosEx': ('jip', 4, True),
     'GetFormFromMod': ('jip', 2, False), 'SetGameMainLoopCallback': ('jip', 4, False), 'IsInAir': ('jip', 0, True), 'IsInWater': ('jip', 0, True),
-    'SetGlobalRef': ('jip', 2, False), 'GetGlobalRef': ('jip', 1, False),
+    'SetGlobalRef': ('jip', 2, False), 'GetGlobalRef': ('jip', 1, False), 'CloseActiveMenu': ('jip', 1, False),
     'CompileScript': ('nvse', 2, False), 'GetTeleportCell': ('nvse', 0, True), 'IsLoadDoor': ('nvse', 0, True), 'GetParentCell': ('nvse', 0, True),
-    'sv_Split': ('nvse', 3, False), 'ToNumber': ('nvse', 3, False), 'sv_Construct': ('nvse', 21, False),
+    'sv_Split': ('nvse', 3, False), 'ToNumber': ('nvse', 3, False), 'BuildRef': ('nvse', 2, False), 'GetModIndex': ('nvse', 1, False),
 }
-# The game's own commands it calls, by the name in scriptfuncs.json's tables. The console ones go through xNVSE's con_ prefix.
+# The game's own commands it calls, by the name in scriptfuncs.json's tables. xNVSE gives only some console commands a con_
+# name (SCOF and QuitGame do, CenterOnCell doesn't: the first real run's compile error), so the rest go through its Console
+# (not in COMMANDS: read_table can't find its entry in the DLL, but nvse.log lists it as registered, opcode 2326).
 GAME_COMMANDS = ['MenuMode', 'GetPos', 'SetAngle', 'GetDead', 'GetDisabled', 'GetLocked', 'Activate', 'PlaceAtMe', 'AddScriptPackage',
                  'GetDistance', 'Disable', 'MarkForDelete']
 CONSOLE_COMMANDS = ['SCOF', 'CenterOnCell', 'CenterOnWorld', 'ToggleGodMode', 'QuitGame']
@@ -131,27 +133,44 @@ def _advance():
             'if FOLabGTLine >= %d' % CHUNK, '    set FOLabGTLine to 0', '    set FOLabGTChunk to FOLabGTChunk + 1', 'endif']
 
 
-def tick_text(cells, base, package):
+def _find_form(mods, pad):
+    """Lines that put the plan line's form in rT. A plain String parameter (GetFormFromMod's, ReadStringFromFile's) won't take a
+    string variable: the third real run's "Missing parameter String". So the files' names are written in, and forms found by number."""
+    out = ['set fMI to -1']
+    for m in mods:
+        out += ['if eval (aP[2] == "%s")' % m, '    let fMI := GetModIndex "%s"' % m, 'endif']
+    out += ['let fHex := ToNumber aP[3] 1', 'let rT := BuildRef fMI fHex']
+    return [pad + a for a in out]
+
+
+def tick_text(cells, base, package, mods=(), chunks=1):
     """The tick. cells: {number: ('coc', edid) or ('cow', world edid, grid x, grid y)}; base, package: (file, 6 hex digits) of
-    the NPC for the walk test and its follow package. A UDF: every local is gone by the next tick, so what lasts is in globals."""
+    the NPC for the walk test and its follow package; mods: the files the plan's forms are in; chunks: how many plan files there
+    are. A UDF: every local is gone by the next tick, so what lasts is in globals."""
+    read = []
+    for n in range(chunks):
+        read += ['if FOLabGTChunk == %d' % n, '    let sL := ReadStringFromFile "%s" fA 1' % data_rel('plan\\%d.txt' % n), 'endif']
     go = []
     for n, c in sorted(cells.items()):
-        go += ['if fA == %d' % n, ('    con_CenterOnCell "%s"' % c[1]) if c[0] == 'coc' else '    con_CenterOnWorld %s %d %d' % (c[1], c[2], c[3]), 'endif']
+        go += ['if fA == %d' % n, ('    Console "CenterOnCell %s"' % c[1]) if c[0] == 'coc' else '    Console "CenterOnWorld %s %d %d"' % (c[1], c[2], c[3]), 'endif']
     lines = [
         'scn FOLabGTTick', '',
-        'array_var aP', 'string_var sL', 'string_var sPath', 'string_var sMod', 'string_var sHex',
+        'array_var aP', 'string_var sL',
         'ref rT', 'ref rC', 'ref rB', 'ref rK',
-        'float fA', 'float fB', 'float fC', 'float fD', 'float fE', 'float fF', 'float fId', 'float fKind', 'float fPh',
+        'float fA', 'float fB', 'float fC', 'float fD', 'float fE', 'float fF', 'float fId', 'float fKind', 'float fPh', 'float fMI', 'float fHex',
         'float fPX', 'float fPY', 'float fPZ', 'short iAir', 'short iWater', 'short iA', 'short iB', 'short iC', '',
         'begin Function { }', '',
         'if FOLabGTDone', '    return', 'endif',
         'set FOLabGTBeat to FOLabGTBeat + 1',
         # (a menu but the main one: wait. No line is written, so a message box that never closes ends as "went silent".)
+        # (a message box the game shows at a new start, "X added to your inventory", waits for an OK, and someone who speaks first
+        # on arrival, as in Prospector Saloon, waits for an answer: real runs 4 and 5)
+        'if MenuMode 1001 || MenuMode 1009', '    CloseActiveMenu', '    return', 'endif',
         'if MenuMode', '    if MenuMode 1013 == 0', '        return', '    endif', '    if FOLabGTBeat < 40', '        return', '    endif', 'endif',
         'if player.GetDead', '    ' + _write('died|%.0f', 'FOLabGTStep'), '    set FOLabGTDone to 1', '    con_QuitGame', '    return', 'endif',
-        'let sPath := sv_Construct "%s" FOLabGTChunk' % data_rel('plan\\%.0f.txt'),
         'let fA := FOLabGTLine + 1',
-        'let sL := ReadStringFromFile $sPath fA 1',
+        'let sL := ""',
+    ] + read + [
         'let aP := sv_Split $sL "|"',
         'let fKind := ToNumber aP[0]',
         'let fId := ToNumber aP[1]',
@@ -184,7 +203,7 @@ def tick_text(cells, base, package):
         '    endif',
         '    set FOLabGTWait to FOLabGTWait + 1',
         '    if FOLabGTWait < 40', '        return', '    endif',
-        '    if FOLabGTStep == 0', '        con_ToggleGodMode', '    endif',
+        '    if FOLabGTStep == 0', '        Console "ToggleGodMode"', '    endif',
         '    let rC := player.GetParentCell',
         '    set fPX to player.GetPos X', '    set fPY to player.GetPos Y', '    set fPZ to player.GetPos Z',
         '    ' + _write('at|%.0f|%i|%n|%.1f|%.1f|%.1f', 'fId', 'rC', 'rC', 'fPX', 'fPY', 'fPZ'),
@@ -250,8 +269,7 @@ def tick_text(cells, base, package):
         '        set FOLabGTPhase to 1', '        set FOLabGTWait to 10', '        return',
         '    endif',
         '    if FOLabGTWait > 0', '        set FOLabGTWait to FOLabGTWait - 1', '        return', '    endif',
-        '    let sMod := aP[2]', '    let sHex := aP[3]',
-        '    let rT := GetFormFromMod $sMod $sHex',
+    ] + _find_form(mods, '    ') + [
         '    set FOLabGTZ to -99999',
         '    player.GetRayCastPos FOLabGTX FOLabGTY FOLabGTZ',
         '    let rC := player.GetRayCastRef',
@@ -274,8 +292,7 @@ def tick_text(cells, base, package):
         '        set FOLabGTPhase to 1', '        set FOLabGTWait to 30', '        return',
         '    endif',
         '    if FOLabGTWait > 0', '        set FOLabGTWait to FOLabGTWait - 1', '        return', '    endif',
-        '    let sMod := aP[2]', '    let sHex := aP[3]',
-        '    let rT := GetFormFromMod $sMod $sHex',
+    ] + _find_form(mods, '    ') + [
         '    if rT',
         '        set fD to rT.GetPos X', '        set fE to rT.GetPos Y', '        set fF to rT.GetPos Z',
         '        let iA := rT.IsInAir', '        let iB := rT.GetDead', '        let iC := rT.IsInWater',
@@ -293,8 +310,7 @@ def tick_text(cells, base, package):
         '    endif',
         '    if FOLabGTWait > 0', '        set FOLabGTWait to FOLabGTWait - 1', '        return', '    endif',
         '    if fPh == 1',
-        '        let sMod := aP[2]', '        let sHex := aP[3]',
-        '        let rT := GetFormFromMod $sMod $sHex',
+    ] + _find_form(mods, '        ') + [
         '        if rT == 0',
         '            ' + _write('door|%.0f|0|0|0|0|-', 'fId'),
     ] + ['            ' + a for a in _advance()] + ['            return', '        endif',
@@ -352,7 +368,19 @@ def tick_text(cells, base, package):
         'set FOLabGTDone to 1',
         'con_QuitGame',
         '', 'end']
-    return '\r\n'.join(lines) + '\r\n'
+    return _own_names('\r\n'.join(lines) + '\r\n')
+
+
+def _own_names(text):
+    """Make every local's name the checker's alone. The compiler refuses a variable named like something else it knows (the
+    second real run: "Invalid variable name 'rK'", which no command or editor ID in FalloutNV.esm explains), so short names
+    can't be trusted. fA becomes fGtA, keeping the first letter that undeclared_in goes by. Quoted text is left alone."""
+    own = {}
+    for m in re.finditer(r'^\s*(?:float|short|int|ref|array_var|string_var)\s+(\w+)', text, re.M | re.I):
+        own[m.group(1)] = m.group(1)[0] + 'Gt' + m.group(1)[1:]
+    word = re.compile(r'\b(%s)\b' % '|'.join(map(re.escape, sorted(own, key=len, reverse=True))))
+    parts = re.split(r'("[^"]*")', text)
+    return ''.join(p if i % 2 else word.sub(lambda m: own[m.group(1)], p) for i, p in enumerate(parts))
 
 
 def plan_chunks(steps):
@@ -368,7 +396,8 @@ def game_files(plan_steps, cells, base, package, run):
     out = {'NVSE\\plugins\\scripts\\gr_folabgt.txt': boot_text(run),
            'NVSE\\plugins\\scripts\\gl_folabgt.txt': again_text('gl', run),
            'NVSE\\plugins\\scripts\\gn_folabgt.txt': again_text('gn', run),
-           'NVSE\\user_defined_functions\\' + TICK_FILE: tick_text(cells, base, package)}
+           'NVSE\\user_defined_functions\\' + TICK_FILE: tick_text(
+               cells, base, package, sorted({s[2] for s in plan_steps if s[0] in (THING, ACTOR, DOOR)}), len(plan_chunks(plan_steps)))}
     for name, text in plan_chunks(plan_steps).items():
         out['%s\\plan\\%s' % (FOLDER, name)] = text
     return out

@@ -8,7 +8,7 @@ The game walks a place, writes what it finds, a report reads it back (after the 
     make_report(plan, text, ...)     the result file to findings, worst first, whether the run finished or not
 
 The real start is launch_real(): it needs the words from the page (CONFIRM), and refuses under tests. Tests hand run_test
-a fake game. Nothing has yet run in the real game: docs/game-test-first-run.md says what only that can prove.
+a fake game. docs/game-test-first-run.md says what real runs have shown and what only they can prove.
 
 Engine apart from game: everything about how the original game is run is in launch_real, game_settings and
 gametestcheck; a source port would change those three and keep the plan and the report."""
@@ -578,6 +578,12 @@ def make_report(plan, text, ending=None, differences=(), problems=(), seconds=No
         short = sum(totals.values()) - sum(done.values())
         add('did_not_finish', 'critical' if not rows else 'error', G.ENDINGS.get(ending, 'The run stopped before the end (%s).' % (ending or 'no reason recorded')) +
             (' %d of %d checks weren\'t reached: this report says nothing about them.' % (short, sum(totals.values()))))
+    # (the first real run: every thing read as buried, the ray stopping about where the checker had put the player. When nearly
+    # all do, that's the measurement and not the place.)
+    buried = [f for f in findings if f['kind'] == 'thing_buried']
+    if len(buried) >= 5 and len(buried) >= 0.8 * max(done['things'], 1):
+        findings[:] = [f for f in findings if f['kind'] != 'thing_buried']
+        add('things_not_judged', 'info', '%d of %d things read as buried, too many to believe: what\'s under things wasn\'t judged. Where they stand and whether they moved still count.' % (len(buried), done['things']))
     if rows and not cal['ok']:
         add('rays_not_trusted', 'warn', 'Rays were left out of this report: %s So boxed-in and floating weren\'t judged.' % cal['why'])
     if read['bad']:
@@ -615,7 +621,7 @@ def game_settings():
             ('General', 'SIntroSequence'): '', ('General', 'sMainMenuMovieIntro'): '',
             ('GamePlay', 'bSaveOnTravel'): 0, ('GamePlay', 'bSaveOnWait'): 0, ('GamePlay', 'bSaveOnRest'): 0, ('GamePlay', 'bSaveOnInteriorExteriorSwitch'): 0,
             ('Display', 'bFull Screen'): 0, ('Display', 'iSize W'): 1024, ('Display', 'iSize H'): 768,
-            ('Controls', 'bBackground Mouse'): 1, ('Controls', 'bBackground Keyboard'): 1,
+            ('Controls', 'bBackground Mouse'): 1, ('Controls', 'bBackground Keyboard'): 1, ('Controls', 'bUse Joystick'): 0,
             ('Audio', 'fDefaultMasterVolume'): 0}
 
 
@@ -838,7 +844,7 @@ def check_unlocked(confirmation):
 def launch_real(paths, confirmation):
     """THE ONE PLACE FOLAB STARTS THE GAME FOR A TEST. It needs the words the page asks the user to type, and it refuses when
     FOLAB_NV_INI is set, which every test and test server does. Through xNVSE's loader, as Play does; never takes the
-    focus or sends keys. Not run yet: see docs/game-test-first-run.md."""
+    focus or sends keys. What real runs found: docs/game-test-first-run.md."""
     check_unlocked(confirmation)
     loader = os.path.join(paths.game_dir, 'nvse_loader.exe')
     if not os.path.isfile(loader):

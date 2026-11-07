@@ -1,6 +1,6 @@
 // ---------- Tools: Test in game ----------
 // Does this place really work in the game? gametest.py plans what to check; a run starts the real game only behind the words
-// typed here (it's never been run yet: see the help page). The report reads back what the game wrote, worst first.
+// typed here (what real runs found: the help page). The report reads back what the game wrote, worst first.
 const GT = {cell: null, status: null, plan: null, report: null, reportOf: null, busy: '', timer: null, showRead: false};
 TL_TABS.push(['gametest', 'Test in game', 'Let the game walk a place and write down what goes wrong', () => gtDraw()]);
 
@@ -67,7 +67,7 @@ function gtPlanBox(){
     ${p.offline.length ? `<h3 style="margin-top:8px">Seen already, without the game</h3>${p.offline.map(o => `<div class="gt-check"><span class="tl-sev ${o.sev === 'warn' ? 'warn' : 'error'}">${esc(o.sev)}</span><span>${esc(o.text)}</span></div>`).join('')}` : ''}
     <h3 style="margin-top:8px">Before it can start</h3>
     ${preflight.map(r => `<div class="gt-check"><span class="${r.note ? 'i' : r.ok ? 'y' : 'n'}">${r.note ? 'note' : r.ok ? 'yes' : 'NO'}</span><span>${esc(r.text)}</span></div>`).join('')}
-    <div class="gt-lock"><p style="margin:0 0 6px"><b>This starts your real game.</b> It has never yet been run for real. While it runs FOLab changes your settings and plugin list for the run, keeps your saves apart, and puts everything back afterwards, or when it next starts if it crashes. <a href="#" data-doc="game-test">What it does, and what isn't known yet</a>.</p>
+    <div class="gt-lock"><p style="margin:0 0 6px"><b>This starts your real game.</b> It's still new: real runs may stop early. While it runs FOLab changes your settings and plugin list for the run, keeps your saves apart, and puts everything back afterwards, or when it next starts if it crashes. Keep the game window in front, and click OK if a message box stays up. <a href="#" data-doc="game-test">What it does, and what isn't known yet</a>.</p>
       <p style="margin:0">To start, type <code>${esc(GT.status.confirm)}</code> <input type="text" id="gt-words" autocomplete="off"> <button class="btn" data-gt="start" ${blocked || GT.status.running ? 'disabled' : ''}>Start the game</button></p></div></div>`;
 }
 

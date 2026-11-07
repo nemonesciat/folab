@@ -2,7 +2,7 @@
 
 *The **Tools** page, **Test in game**: the game walks a place by itself and writes down what goes wrong, and FOLab turns that into a report. So you don't have to walk it yourself.*
 
-**This hasn't been run in the real game yet.** It has only run against a stand-in. Expect the first runs to stop early; your files are safe when they do. `docs/game-test-first-run.md` lists everything that's still unknown and what to look at when something fails.
+**This is still new.** It has run all the way through in the real game, but only on one small place, so a run on yours may stop early; your files were put back every time that happened. Keep the game window in front while it runs, and leave the controller alone. What's under things isn't judged reliably yet. `docs/game-test-first-run.md` lists what real runs found, what's still unknown, and what to look at when something fails.
 
 ## What it checks
 

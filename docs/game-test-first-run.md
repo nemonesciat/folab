@@ -1,6 +1,6 @@
 # The game test's first real run
 
-Nothing in the game test has ever run in the real game. It has only run against `tests/fake_game.py`, which does what the checker *should* make the game do. This page says what a first real run will do to your machine, what you are approving, what isn't known yet, and what to look at first if each thing fails.
+The game test has now run in the real game, on one small place: **What real runs have found** below says how that went. Its tests use `tests/fake_game.py`, which does what the checker *should* make the game do. This page says what a real run does to your machine, what you are approving, what isn't known yet, and what to look at first if each thing fails.
 
 **Start small.** Pick a little place of your own with a door and a few rooms. Expect the first few runs to stop early, because the checker's text has never been through the game's compiler. A run that stops early is safe and tells you where it stopped. Most failures should be one-line fixes in `app/gametestcheck.py`.
 
@@ -58,7 +58,7 @@ If FOLab itself dies during a run, the journal is still there. The next time FOL
 - A game window opening. It may come to the front (see below).
 - About as long as the page estimates, or less if it stops early.
 
-Leave the game alone while it runs. Clicking into it can make it take the mouse, and FOLab then closes it.
+Keep the game window in front while it runs, and otherwise leave it alone. Clicking into it can make it take the mouse, and FOLab then closes it. If a message box stays up, click OK.
 
 ## What's known, and how
 
@@ -158,6 +158,35 @@ The report says how many of each check were reached and claims nothing about the
 
 Rendering isn't checked, so the report says nothing about looks. A wrong `sLocalSavePath` format would put autosaves somewhere odd; with autosaves off it shouldn't matter, and the live watch covers your real folder. Look at `Documents\My Games\FalloutNV` after the first run: only `RendererInfo.txt` and the like should have changed.
 
-## After the first real run
+## What real runs have found
 
-Change this page: move what you've learned into the "known" section, and fix the checker. Then, as the Workshop did, put a table of what a real run found at the end of this page.
+The first real runs were on 7 November 2026, on FOLab Check House (6 floor points, 22 things, 1 door). Each failed run closed the game and put every file back: both INIs and `plugins.txt` byte for byte, and Data and saves unchanged in name, size and date.
+
+| Run | What happened | What changed |
+|---|---|---|
+| 1 | The tick didn't compile: `Script command "con_CenterOnCell" not found`. | xNVSE gives only some console commands a `con_` name. Moving and god mode now go through its `Console`. |
+| 2 | `Invalid variable name 'rK'`. Nothing found in the commands or `FalloutNV.esm`'s editor IDs explains it. | Every local got a name of the checker's own (`rGtK`). |
+| 3 | `Missing parameter String`: a plain String parameter won't take `$sVar`. | Plan paths and mod names are written into the text; forms are found with `GetModIndex` and `BuildRef`. |
+| 4 | **Ran to the end in 129 seconds and quit by itself**, with the user clicking OK on a message box and the game in front. | Message boxes close by themselves (`CloseActiveMenu`), `bUse Joystick` off for the run, and a report where nearly every thing reads as buried says so once. |
+| 5 | The popups closed by themselves. Through the door, someone in Prospector Saloon spoke first, and the dialogue menu waited for an answer until the watch closed the game. | The dialogue menu is closed the same way. |
+| 6 | **Ran to the end and quit by itself, with no help from the user**, the game in front and the controller left alone. Every check was reached and every file came back. | Nothing. Its only error is the true `no_path` above. |
+
+**Now known from a real run:**
+
+- JIP's `gr_` compiles the whole boot text, `CompileScript` finds the tick, and `SetGameMainLoopCallback` runs it.
+- `CenterOnCell` from the main menu starts the game in the place with no save, and the tick carries on after the move (`gn` fires).
+- Reading the plan, `sv_Split`, `ToNumber`, `SetPosEx`, `BuildRef`, `%i` and `%n` all work as written, and so does `Activate` through a load door, which landed in the right cell.
+- The calibration passed, and on the stands the rays read sensibly.
+
+**Not settled:**
+
+- **Rays on things:** in run 4 all 22 things read as buried, the ray stopping 27 to 191 above the thing's base, on a room piece or nothing. That looks like the ray starting near the player, 96 above the thing. Don't trust what's under a thing until this is understood.
+- **Other menus:** message boxes and dialogue are closed. Any other menu (a tutorial, say) still ends as *went silent*.
+- **The background:** `bAlwaysActive` is a real setting and is set for the run, yet the user saw the game not running behind other windows. Until it's shown otherwise, keep the game in front.
+- **A controller:** one was connected, and the user suspected it interferes. `bUse Joystick=0` is a real setting, and run 6 finished with it set, but no run has tested the controller being touched.
+
+`no_path` in run 4 is a true finding: the house has no navmesh of its own, and the test character didn't get across it.
+
+## After each real run
+
+Change this page: move what you've learned into the "known" part, fix the checker, and add a row to the table.
