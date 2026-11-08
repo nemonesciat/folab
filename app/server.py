@@ -1284,12 +1284,17 @@ def edit(label, ops):
 _kits = {'for': None, 'kits': None, 'error': None, 'tilesets': {}, 'walls': {}}
 
 
+def kits_folder():
+    """Where what's measured from these game files about their buildings is kept (the kit index, dressing, townbuild's catalogue)."""
+    return os.path.join(os.path.dirname(_tile_dir()), '..', 'kits', os.path.basename(_tile_dir()))
+
+
 def kits_state():
     """The index if it's ready; otherwise starts reading it and returns None."""
     if _kits['for'] is not GD:
         game = GD
         _kits.update({'for': game, 'kits': None, 'error': None, 'tilesets': {}, 'walls': {}})
-        folder = os.path.join(os.path.dirname(_tile_dir()), '..', 'kits', os.path.basename(_tile_dir()))
+        folder = kits_folder()
 
         def run():
             try:

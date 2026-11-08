@@ -397,6 +397,10 @@ async function moDraw(box){
     <div id="mo-work" class="note"></div>
     ${R ? moChoices(R) : ''}
     ${MO.layer && MO.layer.buildings ? `<h4>Marker layer</h4><label><input type="checkbox" id="mo-layer" ${MO.showLayer ? 'checked' : ''}> Show ${MO.layer.buildings.length} building outlines, ${MO.layer.places.length} places, ${MO.layer.bridges.length} bridges on the map</label>` : ''}
+    ${MO.layer && MO.layer.buildings && MO.layer.buildings.some(b => b.pad) ? `<h4>Buildings</h4>
+      <div class="note">The game's own buildings on the ${MO.layer.buildings.filter(b => b.pad).length.toLocaleString()} levelled plots: each the nearest fit for its plot and its kind (house, shop, block, works, hall), fronts to the nearest road. Doors are locked for now.</div>
+      <div class="wt-go"><button class="btn primary" id="mo-build">🏚 Put up buildings</button></div>
+      <div class="note">One Undo. Plots that already have theirs are left as they are.</div>` : ''}
     <h4>Going back</h4>
     <div class="wt-go"><button class="btn" id="mo-back" title="The mod as it was before this world, everything since gone with it">Go back to before this world…</button></div>`;
   box.querySelector('#mo-help').onclick = e => { e.preventDefault(); helpDoc('real-maps'); };
@@ -412,6 +416,7 @@ async function moDraw(box){
   };
   const k = box.querySelector('#mo-kept'); if (k) k.onchange = () => { if (k.value) moRead(k.value); };
   const lay = box.querySelector('#mo-layer'); if (lay) lay.onchange = () => { MO.showLayer = lay.checked; M.dirty = true; };
+  const bld = box.querySelector('#mo-build'); if (bld) bld.onclick = moBuild;
   box.querySelector('#mo-back').onclick = async () => {
     if (!confirm('Take this world out of your mod, and everything you have done since it was made? This can\'t be undone.')) return;
     try { await post('/api/maps/restore'); } catch (err){ fail(err); }
@@ -430,7 +435,7 @@ function moChoices(R){
     ${tick('mo-pads', W_.buildings, `Flat pads for ${R.buildings.toLocaleString()} buildings`, !R.buildings)}
     <div class="note">${R.bridges ? `${R.bridges} bridge${R.bridges === 1 ? '' : 's'} left out and listed in the layer. ` : ''}${R.places ? `${R.places} place name${R.places === 1 ? '' : 's'} in the layer. ` : ''}${R.note ? esc(R.note) : ''}</div>
     <div class="wt-go"><button class="btn primary" id="mo-lay">Lay it</button></div>
-    <div class="note">One Undo. No towns or buildings are put up.</div>`;
+    <div class="note">One Undo. Buildings go up afterwards, on the pads (Put up buildings).</div>`;
 }
 function moChoiceEvents(box){
   for (const [c] of MO_ROADS){
@@ -474,6 +479,18 @@ function moLay(){
     await outsideResync();
     mapLandChanged(); if (typeof farLandChanged === 'function') farLandChanged();
     if (t.cell_xy && t.cell_xy.length && t.cell_xy.length <= 200) wnOffer(t.cell_xy);
+  });
+}
+function moBuild(){
+  const b = $('#mo-build'); if (b) b.disabled = true;
+  moJob(post('/api/maps/buildings', {world: OUT.world}), async r => {
+    if (r.state) setState(r.state);
+    const t = r.report, n = (v, one, many) => `${v.toLocaleString()} ${v === 1 ? one : many}`;
+    const words = {house: ['house', 'houses'], shop: ['shop', 'shops'], civic: ['hall', 'halls'], industrial: ['works', 'works'], apartments: ['block', 'blocks']};
+    const fam = Object.entries(t.families).sort((a, b) => b[1] - a[1]).map(([k, v]) => n(v, ...(words[k] || ['other', 'others']))).join(', ');
+    const left = [t.nothing_fits && `${t.nothing_fits.toLocaleString()} too small for any of the game's`, t.blocked && `${t.blocked.toLocaleString()} tries in a road's or a building's way`, t.steep && `${t.steep.toLocaleString()} on ground too uneven`, t.had_one && `${t.had_one.toLocaleString()} already built`].filter(Boolean);
+    MO.said = `Put up ${n(t.buildings, 'building', 'buildings')} on ${n(t.built, 'plot', 'plots')} (${fam}), with ${n(t.doors, 'door', 'doors')}.${t.landmarks ? ` ${n(t.landmarks, 'is a landmark', 'are landmarks')}, on plots that stand out.` : ''}${left.length ? ' Left: ' + left.join('; ') + '.' : ''}${t.cleared ? ` ${n(t.cleared, 'small thing', 'small things')} cleared off the plots.` : ''}${t.roads_seen ? '' : ' No roads laid yet, so fronts face a long side.'}`;
+    await outsideResync();
   });
 }
 function moPath(g, line, closed){

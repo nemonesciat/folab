@@ -19,6 +19,7 @@ import mapworld
 import osm
 import osmplace
 import project
+import townbuild
 
 CHUNK = 1 << 20
 JOB = {'running': False}
@@ -399,6 +400,31 @@ def osm_lay_job(body, srv):
     return _start(work, kind='osm_lay')
 
 
+def buildings_job(body, srv):
+    """The game's buildings stood on the plots an OpenStreetMap file levelled (townbuild.py): one Undo."""
+    srv.not_while_playing()
+    w, _side = _side_of(srv, body['world'])
+
+    def work():
+        _said('Measuring the game\'s buildings (the first time only, about a minute)')
+        cat = townbuild.load(srv.GD, srv.kits_folder(), _said)
+        with srv._lock:
+            rows = read_layers(srv.PR).get(srv.GD.edid(w), {}).get('buildings') or []
+            if not any(r.get('pad') for r in rows):
+                raise ValueError('There are no building plots on this world yet: lay an OpenStreetMap file with Buildings ticked first.')
+            ops, report = townbuild.plan(srv.GD, srv.PR, w, rows, cat, int(body.get('seed', 1)), _said)
+            if not report['buildings']:
+                if report['had_one']:
+                    raise ValueError('Every plot with room for one already has its buildings%s.' % (
+                        ' (%s too small for any of the game\'s)' % report['nothing_fits'] if report['nothing_fits'] else ''))
+                raise ValueError('No building fitted on any plot (%s too small to fit, %s in a road\'s way, %s on ground too steep).'
+                                 % (report['nothing_fits'], report['blocked'], report['steep']))
+            _said('Putting it in the mod')
+            state = srv.edit('Buildings on the plots', ops)['state']
+        return {'state': state, 'report': report}
+    return _start(work, kind='buildings')
+
+
 # ---------- routes ----------
 
 def get(path, q, srv):
@@ -441,6 +467,8 @@ def post(path, body, srv):
         return {'job': osm_read_job(body, srv)}
     if path == '/api/maps/osm/lay':
         return {'job': osm_lay_job(body, srv)}
+    if path == '/api/maps/buildings':
+        return {'job': buildings_job(body, srv)}
     if path == '/api/maps/restore':
         with srv._lock:
             if not srv.PR or not os.path.isfile(os.path.join(_before(srv.PR.name), 'project.json')):

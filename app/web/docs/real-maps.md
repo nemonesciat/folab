@@ -60,7 +60,20 @@ With the new world open, press **🧭 World tools > Real map**, pick the `.osm` 
 
 - **Roads** are the game's own road pieces following the real line, the ground settled under them. Motorways down to tertiary roads are on by default; lesser roads and tracks are a tick away. A road piece stays 9 m wide at any scale. Tunnels are left out; bridges are left out too and listed for you, since FOLab doesn't build them.
 - **Rivers and lakes** go through the same shaping as **Shape land**: a channel that runs downhill, a basin under its lowest shore. Streams are a tick away. Remember **one water level a cell**: a river steps down cell by cell, and at heavy compression anything else in that cell low enough is under water too. Coastlines aren't used: that's what the base level is for.
-- **Buildings** become flat pads at the ground's middle height under them, and a **marker layer**: the outlines, kept in `projects/<mod> maps/layers.json` and shown on the map under **Real map**, for you to build to later. No building is put up. Places too small to see at this scale (less than a land point across) go in the layer without a pad.
+- **Buildings** become flat pads at the ground's middle height under them, and a **marker layer**: the outlines, kept in `projects/<mod> maps/layers.json` and shown on the map under **Real map**. Places too small to see at this scale (less than a land point across) go in the layer without a pad.
+
+## Putting up buildings
+
+Once the pads are laid, **World tools > Real map > 🏚 Put up buildings** stands the game's own buildings on them. It's one Undo, and pressing it again only fills plots that have nothing yet.
+
+- **Which buildings:** every building the game stands on its own outdoors: Novac's and Goodsprings' houses, shacks, ranch houses, corner stores, gas stations, offices and apartment blocks, barracks, transmission buildings, the police station and the like. City-block kit pieces, walls, signs and rubble aren't used. FOLab measures them the first time (about a minute) and keeps what it found.
+- **Which one where:** each plot gets the nearest fit for its size and its kind. OpenStreetMap's `building=house` gets a house, `retail` a shop, `industrial` works, `church` or `school` a hall. Plain `building=yes` goes by size. A wide plot takes a row of buildings and a deep one a second row facing the back. A town doesn't get one house over and over: a building gets less likely each time it's used.
+- **Generic and landmarks:** most of a town is the game's generic buildings: the ones it uses three times or more, ruined and ordinary as the Mojave's are. Its one-offs (the Prospector Saloon, Nipton's town hall, the Goodsprings schoolhouse, the church) are landmarks. They only go on plots that stand out: a building named in the file, a church, school, police station or other public building, or a very big plot. Each landmark appears once in a world and keeps its plot to itself. Where the game has a building of that very kind, it's chosen: a church gets the church.
+- **Facing:** fronts face the nearest road you've laid, where the game had the doors. Lay the roads first: with none, a long side faces out.
+- **On the ground:** each sits on its pad as deep as the game sets it. Nothing goes on a road piece or on another building, and the small things you'd scattered on a plot (plants, rocks) are taken off.
+- **Doors** go where the game had them on that building, locked "needs a key" for now: nothing lies behind them yet.
+
+Real buildings are often smaller than the game's once the map is compressed. A plot too small for any of the game's buildings is left empty, and the message says how many. At 1 : 1 to 1 : 3 most houses get one. Past about 1 : 5, only the big plots do.
 
 FOLab needs to know where the height file is on Earth to line this up. SRTM names and most GeoTIFFs say so; GeoTIFFs in degrees, UTM (WGS84, NAD83, ETRS89) or web mercator work. A plain PNG doesn't, so the OSM file's own bounds are taken as the whole picture.
 
