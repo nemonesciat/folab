@@ -57,6 +57,7 @@ import tes4
 from version import VERSION
 
 PORT = 8771
+mo2write.home = project.HOME        # (where a run from inside MO2 notes what it put in)
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 SETTINGS = os.path.join(project.HOME, 'folab_settings.json')
 TYPES = {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css',
@@ -950,7 +951,8 @@ def mesh(path):
         # (a few of the game's meshes hold not-a-number corners, which JSON can't carry)
         out = re.sub(rb'(?<=[\[,])-?(?:NaN|Infinity)(?=[\],])', b'0', json.dumps({'shapes': shapes}, separators=(',', ':')).encode())
     except Exception as e:
-        out = json.dumps({'shapes': [], 'error': str(e)}).encode()
+        # (not kept: whatever went wrong this time mustn't leave the piece invisible until FOLab is closed)
+        return json.dumps({'shapes': [], 'error': str(e)}).encode()
     with _lock:
         _meshes[key] = out
     return out
@@ -1452,29 +1454,121 @@ def not_while_playing():
 def play(body):
     """Save, put the mod in the game, and start it; with a place and a spot, Play here."""
     not_while_playing()
-    if loadout.started_from_mo2() and not body.get('cell'):     # (the game as this loadout has it: MO2's folder can't take new mods while it runs)
-        return {'via': start_game(), 'from_mo2': True, 'state': state()}
+    if loadout.started_from_mo2():
+        test = None
+        if body.get('cell'):
+            test = os.path.join(project.BUILD_DIR, playtest.INSIDE_PLUGIN)
+            _write_play_test(body, test)
+        return _run_inside(test)
     saved = save()
-    out = {'install': install.install(GD.data_dir, saved['path'])}
+    out = {'install': _put_in_setup(saved['path'])}
     if body.get('cell'):
         path = os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN)
-        if body['cell'].startswith('+'):                # (a place of the mod's own: the test plugin builds on the mod)
-            rec = PR.records[body['cell']]
-            place = recordio.field(rec, 'FULL') or recordio.field(rec, 'EDID')
-            out['test'] = playtest.write_test_plugin(GD, None, body['p'], path, place, mod=PR.plugin, own_place=(body['cell'], rec))
-        else:
-            cell = GD.from_key(body['cell'])
-            f = GD.fields(cell)
-            place = tes4.zstr(f.get('FULL', b'')) or tes4.zstr(f.get('EDID', b''))
-            out['test'] = playtest.write_test_plugin(GD, cell, body['p'], path, place)
-        out['test_install'] = install.install(GD.data_dir, path)      # (after the mod: newest, so it loads last)
-        out['autoload'] = playtest.set_autoload(GD.data_dir, True)
+        out['test'] = _write_play_test(body, path)
+        out.update(_put_test_in_setup(path))
+    elif loadout.current():
+        playtest.test_assets(os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN))
+        mo2write.clear_test(loadout.current(), playtest.TEST_PLUGIN)
     else:
         playtest.take_out_test(GD.data_dir)
         playtest.set_autoload(GD.data_dir, False)
+    if loadout.current():
+        _read_loadout_again(loadout.current())
     out['via'] = start_game()
     out['state'] = state()
     return out
+
+
+def _write_play_test(body, path):
+    """Play here's plugin at path: a marker where the view is, in body's place."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if body['cell'].startswith('+'):                # (a place of the mod's own: the test plugin builds on the mod)
+        rec = PR.records[body['cell']]
+        place = recordio.field(rec, 'FULL') or recordio.field(rec, 'EDID')
+        return playtest.write_test_plugin(GD, None, _arrival(body), path, place, mod=PR.plugin, own_place=(body['cell'], rec))
+    cell = GD.from_key(body['cell'])
+    f = GD.fields(cell)
+    place = tes4.zstr(f.get('FULL', b'')) or tes4.zstr(f.get('EDID', b''))
+    return playtest.write_test_plugin(GD, cell, body['p'], path, place)
+
+
+def _files_of(path):
+    """(path under Data, file) for a saved plugin and the files in '<plugin> assets' beside it."""
+    out = [(os.path.basename(path), path)]
+    assets = os.path.splitext(path)[0] + ' assets'
+    for d, _dirs, files in os.walk(assets):
+        out += [(os.path.relpath(os.path.join(d, fn), assets), os.path.join(d, fn)) for fn in files]
+    return out
+
+
+def _clean_inside(when):
+    """What a run from inside MO2 put in, out (lines always; files unless the game still reads them). Never stops anything."""
+    try:
+        mo2write.clean_inside(loadout.current(), playtest.game_running())
+    except Exception as e:
+        log_error('Play here from MO2: tidying up on ' + when, e)
+
+
+def _release_lines_later():
+    def go():
+        try:
+            mo2write.release_lines()
+        except Exception as e:
+            log_error('Play here: taking its lines out of plugins.txt', e)
+    t = threading.Timer(mo2write.RELEASE_AFTER, go)
+    t.daemon = True
+    t.start()
+
+
+def _run_inside(test=None):
+    """Open in game, Play here and Give it to me when MO2 started FOLab: the mod as saved now, and Play here's plugin (test, already
+    written) if there is one, in MO2's virtual folder for this run only; MO2's lists as they were once the game has started."""
+    lo = loadout.current()
+    out, files, plugins = {'from_mo2': True, 'autoload': None}, [], []
+    if PR:
+        saved = save()
+        files += _files_of(saved['path'])
+        plugins.append(PR.plugin)
+    if test:
+        out['autoload'] = playtest.test_assets(test, GD)
+        files += _files_of(test)
+        plugins.append(os.path.basename(test))
+    else:
+        playtest.test_assets(os.path.join(project.BUILD_DIR, playtest.INSIDE_PLUGIN))     # (an old one's files cleared out)
+    out['install'] = mo2write.place_inside(lo, PR.name if PR else None, files, plugins)
+    if any(rel.lower() == playtest.AUTOLOAD.lower() for rel, _why in out['install']['left_out']):
+        out['autoload'] = None
+    _read_loadout_again(lo)
+    out['via'] = start_game()
+    _release_lines_later()
+    out['state'] = state()
+    return out
+
+
+def _put_in_setup(path):
+    """The saved mod where the game will see it: the profile if there's a loadout, else the game's folder."""
+    lo = loadout.current()
+    return mo2write.install_mod(lo, path, PR.name, may_be_open=True) if lo else install.install(GD.data_dir, path)
+
+
+def _put_test_in_setup(path):
+    """FOLab Test.esp the same way, loading after the mod, and the script that loads your newest save if the setup can run it."""
+    lo = loadout.current()
+    if lo:
+        save = playtest.test_assets(path, GD)
+        return {'test_install': mo2write.install_mod(lo, path, mo2write.TEST_FOLDER, last=True, may_be_open=True), 'autoload': save}
+    playtest.test_assets(path)
+    return {'test_install': install.install(GD.data_dir, path), 'autoload': playtest.set_autoload(GD.data_dir, True)}
+
+
+def _arrival(body):
+    """Where Play here puts you in a place of the mod's own: on its floor, wherever the view was."""
+    try:
+        refs = list(PR.cells.get(body['cell'], {}).get('refs', {}).values())
+        return playtest.floor_near(GD, refs, body['p']) if len(refs) > 1 else body['p']
+    except Exception as e:      # (a nicety: never what stops the game starting)
+        log_error('Play here: finding the floor', e)
+        return body['p']
 
 
 def game_settings():
@@ -1519,7 +1613,11 @@ def game_settings_save(body):
 
 def start_game():
     """Start the game the chosen way; borderless when that's on."""
-    via = playtest.launch(GD.data_dir, load_settings().get('launch_via', 'nvse'))
+    lo = loadout.current()
+    if lo and not loadout.started_from_mo2():
+        via = playtest.launch_through_mo2(lo, load_settings().get('mo2_folders', []))
+    else:
+        via = playtest.launch(GD.data_dir, load_settings().get('launch_via', 'nvse'))
     n = load_settings().get('borderless')
     if n is not None:
         sc = gameini.screens()
@@ -1534,20 +1632,28 @@ def give(body):
     not_while_playing()
     key, count = body['key'], max(1, min(int(body.get('count', 1)), 100000))
     out = {}
-    if PR:
+    inside = loadout.started_from_mo2()
+    if inside:
+        if not PR and key.startswith('+'):
+            raise ValueError('Open the mod this item is in first.')
+    elif PR:
         saved = save()
-        out['install'] = install.install(GD.data_dir, saved['path'])
+        out['install'] = _put_in_setup(saved['path'])
     elif key.startswith('+'):
         raise ValueError('Open the mod this item is in first.')
     rec = BR.record(key)['record']
     edid = recordio.field(rec, 'EDID') or key
-    path = os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN)
+    path = os.path.join(project.BUILD_DIR, playtest.INSIDE_PLUGIN if inside else playtest.TEST_PLUGIN)
     os.makedirs(project.BUILD_DIR, exist_ok=True)
     out['test'] = playtest.write_test_plugin(GD, None, None, path, give=[(key, count, edid)],
                                              mod=PR.plugin if PR else None)
-    out['test_install'] = install.install(GD.data_dir, path)
-    out['autoload'] = playtest.set_autoload(GD.data_dir, True)
-    out['via'] = start_game()
+    if inside:
+        out.update(_run_inside(path))
+    else:
+        out.update(_put_test_in_setup(path))
+        if loadout.current():
+            _read_loadout_again(loadout.current())
+        out['via'] = start_game()
     name = recordio.field(rec, 'FULL') or edid
     out['message'] = ('Starting New Vegas: %s%s will be in your inventory once %s loads.' %
                       ('%d × ' % count if count > 1 else '', name,
@@ -1735,6 +1841,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get('X-FOLab-Quit') != '1':
                     return self.send({'error': 'no'}, code=403)
                 self.send({'ok': True})
+                _clean_inside('closing')
                 threading.Thread(target=SERVER.shutdown, daemon=True).start()
                 return
             with _lock:
@@ -1897,6 +2004,7 @@ def main():
         except (OSError, ValueError):
             PR = None
     restore_loadout()
+    _clean_inside('starting')           # (a run from inside MO2 that FOLab didn't see the end of)
     try:
         load_game(PR)
     except ValueError as e:         # (the last mod needs what this setup hasn't got: start without it)
@@ -1908,6 +2016,8 @@ def main():
     # (on Windows, address reuse lets a second FOLab bind the same port, and the browser then talks to whichever
     # answers, an old one included: refuse to start twice instead)
     ThreadingHTTPServer.allow_reuse_address = False
+    # (a place opening asks for hundreds of files: with Python's short queue, Windows turns the rest away)
+    ThreadingHTTPServer.request_queue_size = 128
     asked = any(a.isdigit() for a in args)
     srv = None
     for p in ([port] if asked else range(port, port + 20)):

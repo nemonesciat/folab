@@ -21,6 +21,7 @@ GAME_NAMES = ('new vegas', 'falloutnv', 'fallout nv', 'fallout: new vegas', 'ttw
 PRIMARY = 'falloutnv.esm'
 HIDDEN = '.mohidden'
 MAX_PLUGINS = 254           # (a form ID's top byte names the file; one is kept for the mod being made)
+NOT_FOR_THE_LAB = ('folab test.esp', 'folab play here.esp')   # (Play here's own plugins, on in the profile while they're in the game: nothing to work with)
 COMMON = [r'C:\Modding\MO2', r'C:\MO2', r'C:\Mod Organizer 2', r'C:\ModOrganizer', r'C:\Games\MO2', r'C:\Games\Mod Organizer 2',
           r'C:\Program Files\Mod Organizer 2', r'C:\Program Files (x86)\Mod Organizer 2', r'D:\Modding\MO2', r'D:\MO2', r'D:\Mod Organizer 2']
 
@@ -405,7 +406,7 @@ class Loadout:
         plugin, already in the profile: the mod's changes stand for it, and what's built on it can't load until it's saved."""
         paths, left, have = [], [], set()
         for n in self.active():
-            if skip and n.lower() == skip.lower():
+            if skip and n.lower() == skip.lower() or n.lower() in NOT_FOR_THE_LAB:
                 continue
             p = self.plugin_path(n)
             h = self.head(n) if p else {}

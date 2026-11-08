@@ -18,8 +18,13 @@ own compiler gives (checked against the game's scripts: GameMode block, if/set o
     end
 
 Each Play here makes a new quest (a new form ID), so it moves you once in any save, even one that used an earlier one.
-Open in game on its own takes FOLab Test.esp out again."""
+Open in game on its own takes FOLab Test.esp out again.
+
+In a Mod Organizer loadout (FOLab opened on its own) all of this goes in the profile as mods, not the game's folder, and the game
+starts through MO2, the only way it sees them: ModOrganizer.exe [-i instance] -p profile run -e <what's on its Run list>.
+Started from MO2, it goes in MO2's virtual folder for that one run instead, as FOLab Play Here.esp (mo2write.place_inside)."""
 import os
+import shutil
 import struct
 import subprocess
 
@@ -31,6 +36,7 @@ import loadout
 import tes4
 
 TEST_PLUGIN = 'FOLab Test.esp'
+INSIDE_PLUGIN = 'FOLab Play Here.esp'       # (the same, when MO2 started FOLab: never a name the real Data folder may have)
 PLAYER_REF = 0x14
 QUEST_START_ENABLED = 0x01
 SCRIPT_QUEST = 1
@@ -63,12 +69,77 @@ def launch(data_dir, via='nvse'):
     loader = os.path.join(os.path.dirname(exe), 'nvse_loader.exe')
     if inside and not os.path.isfile(loader):
         raise ValueError('xNVSE isn\'t beside the game: started through Steam, the game wouldn\'t see your MO2 mods. Use MO2\'s Run button.')
-    if via == 'nvse' and os.path.isfile(loader):
-        flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
-        subprocess.Popen([loader], cwd=os.path.dirname(exe), creationflags=flags, close_fds=True)
+    if (via == 'nvse' or inside) and os.path.isfile(loader):
+        _start([loader])
         return 'nvse'
     os.startfile('steam://rungameid/22380')
     return 'steam'
+
+
+def _start(args):
+    """Starts a program and leaves it. (Tests put their own in its place: nothing there may start the real game.)"""
+    flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+    subprocess.Popen(args, cwd=os.path.dirname(args[0]), creationflags=flags, close_fds=True)
+
+
+def mo2_program(extra=()):
+    """Where ModOrganizer.exe is: the one running, or one found where MO2's programs are looked for. None if not found."""
+    running = loadout._program_folder()
+    found = [running] if running else []
+    found += loadout.find_instances(extra)[1]
+    for d in found:
+        p = os.path.join(d, 'ModOrganizer.exe')
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def run_entry(instance):
+    """Which of the instance's programs starts the game: xNVSE's if it's on the list, else the game. Its title, or None."""
+    rows = instance.executables()
+    for want in ('nvse_loader.exe', 'falloutnv.exe'):
+        for e in rows:
+            if os.path.basename(e['binary'].replace('\\', '/')).lower() == want:
+                return e['title']
+    return None
+
+
+def launch_through_mo2(lo, extra=()):
+    """Start the game inside this profile, as MO2's Run button does. 'mo2', or 'by hand' if FOLab can't find how: everything's in
+    the profile by now, so MO2's own Run button still does it."""
+    exe, title = mo2_program(extra), run_entry(lo.instance)
+    if not exe or not title:
+        return 'by hand'
+    home = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'ModOrganizer', lo.instance.name)
+    which = ['-i', lo.instance.name] if os.path.normcase(os.path.abspath(home)) == os.path.normcase(os.path.abspath(lo.instance.folder)) else []
+    _start([exe] + which + ['-p', lo.profile, 'run', '-e', title])
+    return 'mo2'
+
+
+def floor_near(gd, refs, p):
+    """The spot to arrive at for a place made of these things ([{'base': key, 'p': pose, 's': scale}]), given where the view is: the
+    nearest floor of the main walkable part, straight below if there's floor there. The view is often up in the air, or above
+    the roof: as it stood you'd fall into the void. p: [x, y, z, facing]. p itself if no floor can be worked out."""
+    import kitplan
+    rows = []
+    for n, r in enumerate(refs):
+        b = gd.from_key(r['base']) if not r['base'].startswith('+') else None
+        if b and b in gd.forms and gd.forms[b][1].tag != 'DOOR':
+            rows.append({'ref': n, 'type': 'REFR', 'base': b, 'pos': tuple(r['p'][:3]), 'rot': tuple(r['p'][3:6]), 'scale': r.get('s', 1.0), 'leads': False, 'bkey': r['base']})
+    w = kitplan.Walk(gd, rows, tuple(p[:3]), cache={}, erode=True)
+    if not w.pieces:
+        return p
+    main = max(w.pieces, key=len)
+    v = w.voxel
+    best, far = None, None
+    for i in main:
+        q = w.graph.p[i]
+        x, y, z = (q[1] + 0.5) * v, (q[0] + 0.5) * v, q[2]
+        # (height counts for little: the floor under the view, not the one level with it round a corner)
+        d = (x - p[0]) ** 2 + (y - p[1]) ** 2 + ((z - p[2]) * 0.25) ** 2
+        if far is None or d < far:
+            best, far = (x, y, z), d
+    return [best[0], best[1], best[2] + 8, p[3]]
 
 
 def compiled_script(message=b'', move=True, give=()):
@@ -119,7 +190,7 @@ def write_test_plugin(gd, cell, p, path, place='', give=(), mod=None, own_place=
     mod's own ('+ID') needs mod, its plugin's file name (in the game before this one). own_place: (key, CELL record) when
     the place is the mod's own, not the game's (with mod too, and cell left out): its record is copied the same way."""
     n = _settings_counter()
-    masters = [os.path.basename(pl.path) for pl in gd.plugins]
+    masters = [os.path.basename(pl.path) for pl in gd.plugins if os.path.basename(pl.path).lower() not in (TEST_PLUGIN.lower(), INSIDE_PLUGIN.lower())]
     if mod and mod.lower() not in [m.lower() for m in masters]:
         masters.append(mod)
     own = len(masters) << 24
@@ -226,6 +297,22 @@ def set_autoload(data_dir, on):
         f.write('; FOLab Play here: loads your newest save as the game reaches its menu.\n'
                 '; FOLab removes this file when you use Open in game or Take out of game.\n'
                 'LoadGame "%s"\n' % save)
+    return save
+
+
+def test_assets(path, gd=None):
+    """What goes beside FOLab Test.esp in a loadout's mod folder, kept in '<plugin> assets' as a mod's own files are: the same
+    script as set_autoload, if the loadout has JIP LN NVSE. The save it loads, or None. Without gd: just clears them out."""
+    folder = os.path.splitext(path)[0] + ' assets'
+    if os.path.isdir(folder):
+        shutil.rmtree(folder)
+    save = newest_save() if gd is not None else None
+    if not save or not gd.loose_path(os.path.join('nvse', 'plugins', 'jip_nvse.dll')):
+        return None
+    to = os.path.join(folder, AUTOLOAD)
+    os.makedirs(os.path.dirname(to), exist_ok=True)
+    with open(to, 'w', encoding='cp1252', newline='\r\n') as f:
+        f.write('; FOLab Play here: loads your newest save as the game reaches its menu.\nLoadGame "%s"\n' % save)
     return save
 
 

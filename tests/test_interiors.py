@@ -165,7 +165,7 @@ check('the way in: a small room first, then something much bigger', len(plan.own
 # ---------- rooms made in one piece ----------
 sp = next((s for s in vt.set_pieces if 'overseer' in s.piece.edid.lower()), None)
 check('the overseer\'s office, joined as the game joined it', sp is not None and kits[VAULT].pieces[sp.join_key].edid == 'VHallSmEndExSm01', '')
-check('… its other way out gets a dead end', sp is not None and len(sp.plugs) == 1)
+check('… its other way out is closed with dead ends, with no gap down either side (%d)' % (len(sp.plugs) if sp else 0), sp is not None and 1 <= len(sp.plugs) <= 3)
 good = 0
 for seed in range(4):
     pl = P.Planner(vt, random.Random(seed))
@@ -239,17 +239,70 @@ check('a word is a word: "can" is a tin, not part of a scanner', 'eat' in D.tags
 check('a chair says nothing about what a room is for', not D.tags_of('ChairMetal01') and not D.tags_of('Bench01'))
 check('… a swivel chair and a desk say office, a terminal too', 'desk' in D.tags_of('ChairSwivel01') and 'desk' in D.tags_of('MetalDesk01') and 'desk' in D.tags_of('TerminalWall'))
 check('… a word run together still counts if it\'s long enough', 'desk' in D.tags_of('metalfilingcabinet') and 'care' in D.tags_of('vaultfirstaidbox'))
+check('… a pool table says play, a toilet says wash, a chalkboard says learn', 'play' in D.tags_of('PoolTable01') and 'wash' in D.tags_of('DrinkToiletMetal00Rads') and 'learn' in D.tags_of('VChalkboard02'))
+check('… a light or a stain isn\'t a furnishing, a table is', not D.is_furnishing(('act', [], 'LightCeilingVault01')) and not D.is_furnishing(('stat', [], 'NVStain01')) and D.is_furnishing(('stat', [], 'TableVault01')))
+import kitlife  # noqa: E402
+told = kitlife.things_of(G)
+want = {t[0] for s in kitlife.SCENES.values() for t in s} | {e for v in kitlife.FINDS.values() for e in v} | set(kitlife.ANY_FIND)
+gone = sorted(e for e in want if e not in told.keys)
+check('every thing a vault\'s story uses is in the game', not gone, gone)
+gone = sorted(e for e in want if e in told.keys and told.keys[e][1] != 'light' and not told.size(e))
+check('… and has a mesh to stand it by', not gone, gone)
+check('… every scene a story names exists', all(n in kitlife.SCENES for st in kitlife.STORIES.values() for k, v in st.items() if k != 'said' for n in v))
+real, usual = D.real_rooms(sv[VAULT])
+check('real places are read as real rooms, far more of them than places (%d)' % len(real), len(real) > 3 * len({r['cell'] for r in real.values()}))
+check('… each set of the survey knows its real room', all(len(sv[VAULT].room[k]) == len(v) for k, v in sv[VAULT].sets.items()))
 every = {t for ws in D.PURPOSE_TAGS.values() for t in ws}
 g = P.generate(G, vt, 180, 13, survey=sv)
 rooms_ = g['plan'].rooms()
 vs = sv[VAULT]
 rows = D.theme_scores(vs, [m for m in g['made'] if m.owner == rooms_[1]['n']], {'sleep'}, every - {'sleep'})
 check('real places are scored as whole rooms, best first', rows and rows == sorted(rows, key=lambda r: (-r[0], r[1])))
+
+def outline_share(plan):
+    tops = {(c[0], c[1]) for c, n in plan.cells.items() if c not in plan.air and plan.owners[n]['purpose'] != 'outside'}
+    xs, ys = [c[0] for c in tops], [c[1] for c in tops]
+    return len(tops) / ((max(xs) - min(xs) + 1) * (max(ys) - min(ys) + 1))
+
+
+places = {G.edid(c) for c in G.interiors}
+check('every place a story learns its people from is in the game', all(set(p['like']) <= places for p in kitlife.PEOPLE.values()))
 for seed in range(3):
     g = P.vault_place(G, kits, 3, seed + 31, store, {}, sv)
     plan = g['plan']
+    check('seed %d: a vault reads as one building, filling much of its outline from above (%.2f)' % (seed, outline_share(plan)), outline_share(plan) >= 0.38)
+    check('seed %d: it has somewhere to wash and a rec room' % seed, {'washroom', 'rec room'} <= {o['purpose'] for o in plan.rooms()})
+    check('seed %d: the rooms round its atrium are for something' % seed, all(o.get('dress') for o in plan.rooms() if o.get('part_of') is not None))
+    wrecks = [o for o in plan.rooms() if o.get('wrecked')]
+    check('seed %d: a few rooms are wrecked on purpose, never the main ones (%d)' % (seed, len(wrecks)), wrecks and len(wrecks) <= len(plan.rooms()) / 4 and not any(o.get('main') for o in wrecks))
+    check('seed %d: its story is told room by room (%s)' % (seed, getattr(plan, 'story', None)), getattr(plan, 'story', None) and sum(1 for o in plan.rooms() if o.get('scenes')) >= len(plan.rooms()) / 2)
+    check('seed %d: dug into the ground: more than three storeys, mostly below the door (%d)' % (seed, len({c[2] for c in plan.squares()})), len({c[2] for c in plan.squares()}) > 3 and min(c[2] for c in plan.squares()) <= -2)
+    bare = P.walk_check(G, vt, plan, g['made'], {})
+    check('seed %d: no gap a player falls down, even past furniture into a corner (%d)' % (seed, len(bare['edges'])), not bare['edges'])
+    check('seed %d: there are things to find' % seed, sum(1 for o in plan.rooms() if o.get('find')) >= 3)
+    lock = lambda it: ((it.extra or {}).get('props') or {}).get('lock')
+    shut = set(plan.locks['shut'])
+    keys = [it for it in g['items'] if it.what == 'key']
+    office = next(o['n'] for o in plan.rooms() if o['purpose'] == 'office')
+    check('seed %d: some rooms are locked, the office on a key (%s)' % (seed, plan.locks), len(shut) >= 2 and office in shut and len(keys) == 1
+          and all(lock(it) == {'level': 255, 'key': '$made', 'leveled': False} for it in g['items'] if it.what == 'door' and it.owner == office))
+    graph = kitlife._owner_graph(plan)
+    open_ = kitlife._reach(graph, 0, without=shut)
+    every_ = kitlife._reach(graph, 0)
+    check('seed %d: … locking shuts off only those rooms, and the key is in one left open (%d of %d reached)' % (seed, len(open_), len(every_)), open_ == every_ - shut and keys[0].owner in open_)
+    under = [f for f in plan.finds if f.owner == keys[0].owner and abs(f.p[0] - keys[0].p[0]) < 1 and abs(f.p[1] - keys[0].p[1]) < 1]
+    check('seed %d: … it lies on top of something to search, not locked itself' % seed, under and keys[0].p[2] > under[0].p[2] and not lock(under[0]))
+    check('seed %d: … locks get harder further down' % seed, plan.locks['finds'] >= 1 and all(lock(it)['level'] in kitlife.LOCKS + (255,) for it in g['items'] if lock(it)))
+    who = kitlife.people(plan)
+    check('seed %d: who lives here is learnt from the game\'s places for its story (%s)' % (seed, who and who['like'][0]), who and set(who['like']) <= places and 'turret' in who['skip'])
+    pools = collections.Counter(it.owner for it in g['items'] if 'pool' in D.words_of(vs.info.get(it.key, ('', (), ''))[2] or '') and it.what in D.BIG_KINDS)
+    check('seed %d: never more than one pool table in a room' % seed, not pools or max(pools.values()) == 1)
+    wc = sum(1 for it in g['items'] if plan.owners[it.owner]['purpose'] == 'quarters' and 'wash' in vs.info.get(it.key, ('', ()))[1] and D.is_furnishing(vs.info.get(it.key)) and not plan.owners[it.owner].get('wrecked'))
+    check('seed %d: no toilets in the bedrooms (%d)' % (seed, wc), not wc)
     per = collections.Counter((it.owner, it.key) for it in g['items'] if it.what in D.BIG_KINDS)
-    over = sum(1 for (owner, _k), n in per.items() if n > max(1, sum(1 for c in plan.owners[owner]['cells'] if c not in plan.air) // D.SAME_THING))
+    # (a barricade is many sandbags: what a story's scene builds from several of a thing isn't a room full of them)
+    built = {told.keys[t[0]][0] for s in kitlife.SCENES.values() for t, n in collections.Counter((x[0],) for x in s).items() if n > 1 and t[0] in told.keys}
+    over = sum(1 for (owner, k), n in per.items() if G.from_key(k) not in built and n > max(1, sum(1 for c in plan.owners[owner]['cells'] if c not in plan.air) // D.SAME_THING))
     check('seed %d: no room has more of one big thing than it has room for (%d over)' % (seed, over), not over)
     step = vt.step
     bad = 0

@@ -45,7 +45,11 @@ Plugins that are on but can't load are listed with the reason, usually a missing
 
 **Start FOLab from MO2:** on this page, **Add FOLab to MO2's list** (with MO2 closed) puts it beside MO2's Run button. Close FOLab, choose it there and press **Run**. It opens in the profile MO2 has on, with **Open in game** starting the game with your mods. MO2 is locked while FOLab runs, so **Put in MO2** only saves your patch's folder: close FOLab, press Refresh in MO2 and tick it in both panes.
 
-While you're in a loadout, Play here, saving the load order, xNVSE and Test in game are refused, because they'd change the real game, not your MO2 setup. Change your mods and their order in MO2, then choose the loadout again to see the changes.
+**Play here** and **Open in game** work in a loadout: they put your mod (and, for Play here, a small mod called FOLab Test) in this profile and start the game through MO2. MO2 has to be closed the first time; once they're on, it can stay open.
+
+**Started from MO2,** Play here, Open in game and Give it to me work too, without changing MO2's mod list. For that one run, your mod and a small plugin called FOLab Play Here go into MO2's virtual folder: your mod's own folder if it's in MO2 already, otherwise MO2's Overwrite. FOLab adds them to the profile's plugin list just long enough for the game to read it. They all come out again when you close FOLab, or use Open in game; if FOLab was cut off, the next time it starts. To keep your mod in MO2 for good, use **Put in MO2**.
+
+While you're in a loadout, saving the load order, xNVSE and Test in game are refused, because they'd change the real game, not your MO2 setup. Change your mods and their order in MO2, then choose the loadout again to see the changes.
 
 A mod that uses another mod's things only opens where that mod is on, and FOLab says which plugin it's missing.
 

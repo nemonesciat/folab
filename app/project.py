@@ -170,6 +170,9 @@ class Project:
                 o = dict(o, cell=new_record)
             if o.get('base') == '$made':               # (a thing swapped for the record a record_new just made)
                 o = dict(o, base=new_record)
+            lock = ((o.get('extra') or {}).get('props') or {}).get('lock') or {}
+            if lock.get('key') == '$made':             # (a lock whose key is that record: a generated vault's office)
+                o = dict(o, extra=dict(o['extra'], props=dict(o['extra']['props'], lock=dict(lock, key=new_record))))
             refs = self._refs(o['cell'])
             if o['op'] == 'tel':                     # a door's link: where it leads, or (None) nowhere new
                 r = refs.setdefault(o['ref'], {})

@@ -208,6 +208,17 @@ if people:
 pts = [c['p'] for c in refs.values()]
 check('nobody stands on anybody', all((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 > 16 for i, a in enumerate(pts) for b in pts[:i]))
 pr.undo()
+# learnt from places named (a generated vault's story), some kinds left out, nobody near the way in
+liked = populate.plan(gd, pr, br, {'cell': ckey, 'like': ['Vault11c'], 'who': 'creatures', 'seed': 2})
+v11 = {gd.edid(b) for b in populate.survey(gd).places[[gd.edid(p['cell']) for p in populate.survey(gd).places].index('Vault11c')]['roster']}
+check('learnt from the places named, and only those (%s)' % liked['learnt'], liked['rows'] and liked['learnt_n'] == 1 and all(r['edid'] in v11 for r in liked['rows']))
+skipped = populate.plan(gd, pr, br, {'cell': ckey, 'like': ['Vault11c'], 'who': 'creatures', 'skip': ['turret'], 'seed': 2})
+check('… and those whose names hold a word asked against are left out', any('turret' in e.lower() for e in v11) and skipped['rows'] and not any('turret' in r['edid'].lower() for r in skipped['rows']))
+import random
+middle = populate.spots(gd, pr, ckey, 40, random.Random(5))
+cx, cy, cz = (sum(s[n] for s in middle) / len(middle) for n in range(3))
+kept = populate.spots(gd, pr, ckey, 20, random.Random(5), away=(cx, cy, cz, 300))
+check('nobody stands near where you come in', kept and all((s[0] - cx) ** 2 + (s[1] - cy) ** 2 + (s[2] - cz) ** 2 >= 300 ** 2 for s in kept))
 check('undo takes it all back', len((pr.cells.get(ckey) or {'refs': {}})['refs']) == before and not any(recordio.field(r, 'EDID').startswith('FOLabGSProspector') or 'Prospector Saloon' in recordio.field(r, 'EDID') for r in pr.records.values()))
 
 # levelled: a list of the fixed ones, a creature whose template is the list

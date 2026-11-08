@@ -26,6 +26,7 @@ BUSY = {'few': 0.5, 'usual': 1.0, 'many': 1.7}
 MAX_PEOPLE = 30
 SIMILAR = 14                    # (how many of the game's places a plan learns from)
 SPACING = 90.0                  # (units apart they stand, to start with)
+FLOOR_APART = 150.0             # (this far above or below, something's on another floor)
 CREATURE, PERSON = 'creature', 'person'
 # words that say what a place is: they count for more than the rest of its name
 KIND_WORDS = {'cave', 'mine', 'vault', 'sewer', 'metro', 'tunnel', 'casino', 'hotel', 'motel', 'house', 'home', 'shack', 'office', 'factory', 'plant',
@@ -231,19 +232,23 @@ def _others(gd, pr, ckey):
     if not ckey.startswith('+'):
         for r in gd.refs(gd.from_key(ckey)):
             if r['pos'] and r['base'] in gd.forms and gd.forms[r['base']][1].tag in ('ACHR', 'NPC_', 'CREA', 'FURN') and not (mine.get(gd.key(r['ref'])) or {}).get('removed'):
-                out.append(r['pos'][:2])
-    out += [c['p'][:2] for k, c in mine.items() if k.startswith('+') and c.get('p')]
+                out.append(r['pos'][:3])
+    out += [c['p'][:3] for k, c in mine.items() if k.startswith('+') and c.get('p')]
     return out
 
 
-def spots(gd, pr, ckey, count, rng):
-    """Up to count (x, y, z, turn) spots spread over a place's floor, or over the ground of a square outside."""
+def spots(gd, pr, ckey, count, rng, away=None):
+    """Up to count (x, y, z, turn) spots spread over a place's floor, or over the ground of a square outside. away: (x, y, z, r),
+    somewhere nobody stands within r of (the way in)."""
     cell = None if ckey.startswith('+') else gd.from_key(ckey)
     others = _others(gd, pr, ckey)
     out = []
 
-    def free(x, y, gap):
-        return all((x - a) ** 2 + (y - b) ** 2 > gap * gap for a, b in others + [(s[0], s[1]) for s in out])
+    def free(x, y, gap, z=None):
+        if away and z is not None and (x - away[0]) ** 2 + (y - away[1]) ** 2 + (z - away[2]) ** 2 < away[3] ** 2:
+            return False
+        # (on another floor, above or below, it's no one's way)
+        return all((x - o[0]) ** 2 + (y - o[1]) ** 2 > gap * gap for o in others + out if z is None or abs(z - o[2]) < FLOOR_APART)
     if cell in gd.ext_cells:
         at = _height_fn(gd, pr, cell)
         if not at:
@@ -272,7 +277,7 @@ def spots(gd, pr, ckey, count, rng):
             if u + v > 1:
                 u, v = 1 - u, 1 - v
             p = [A[n] + (B[n] - A[n]) * u + (C[n] - A[n]) * v for n in range(3)]
-            if free(p[0], p[1], gap):
+            if free(p[0], p[1], gap, p[2]):
                 out.append((round(p[0], 1), round(p[1], 1), round(p[2], 1), round(rng.random() * 6.283, 3)))
     return out
 
@@ -414,8 +419,14 @@ def plan(gd, pr, br, body):
     max_level = body.get('max_level')
     # (the base game's, and those of the place's own file: no Sierra Madre ghost people in a Mojave saloon)
     files = {0} if cell is None else {0, cell >> 24}
-    allowed = lambda a: a and a['base'] >> 24 in files and _wanted(a, who) and (max_level in (None, '') or a['levelled'] or a['mult'] or a['level'] is None or a['level'] <= int(max_level))
-    if outside:
+    skip = [w.lower() for w in body.get('skip') or ()]
+    allowed = lambda a: (a and a['base'] >> 24 in files and _wanted(a, who) and not any(w in a['edid'].lower() for w in skip)
+                         and (max_level in (None, '') or a['levelled'] or a['mult'] or a['level'] is None or a['level'] <= int(max_level)))
+    like = {e.lower() for e in body.get('like') or ()}
+    if like:
+        # (the places to learn from are named: a generated vault's story says whose it is)
+        similar = [dict(p, score=1.0) for p in sv.places if gd.edid(p['cell']).lower() in like]
+    elif outside:
         similar = _neighbours(gd, sv, cell)
     else:
         me = _target_features(gd, pr, sv, ckey)
@@ -571,7 +582,7 @@ def apply(gd, pr, br, edit, body):
         return {'note': 'Nobody is ticked.'}
     rng = random.Random(body.get('seed', 1) * 7919 + 13)
     total = sum(int(r['count']) for r in rows)
-    points = spots(gd, pr, ckey, total, rng)
+    points = spots(gd, pr, ckey, total, rng, body.get('away'))
     if len(points) < total:
         if not points:
             return {'note': 'There\'s nowhere to stand here: FOLab found no floor. Add floor pieces, or a navmesh in the Kit tab.'}

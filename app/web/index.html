@@ -221,25 +221,28 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 .th-font body,.th-font h2,.th-font h3,.th-font .h,.th-font .owtitle b,.th-font .mm-bar b{font-family:var(--ui-font)!important}
 .th-mono body,.th-mono h2,.th-mono h3,.th-mono .h,.th-mono .owtitle b{letter-spacing:.04em}
 .th-mono .brand b{font-family:var(--ui-font)!important;text-shadow:0 0 6px var(--gold);letter-spacing:.2em;margin-left:.17em}
-/* Pre-War Desktop: blue title bars, cream dialogs, glossy buttons, a green go button */
-.th-xp header{background:linear-gradient(#3b8cf0,#0a5bd6 30%,#0a4fc0 80%,#0a46ad);border-bottom:1px solid #003c9e;box-shadow:inset 0 1px 0 #7ab6ff}
-.th-xp .brand,.th-xp .brand b{color:#fff}
-.th-xp nav button{color:#eaf2ff}.th-xp nav button svg{stroke:#d5e6ff}
-.th-xp nav button:hover,.th-xp nav button.on{color:#fff;background:#ffffff2e;border-color:#ffffff59}
-.th-xp nav button:hover svg,.th-xp nav button.on svg{stroke:#fff}
-.th-xp header .pill{background:#f6f4e8}
-.th-xp .btn{background:linear-gradient(#fff,#ece9d8);border-color:#7f8fa3;border-radius:4px;box-shadow:inset 0 1px 0 #fff}
-.th-xp .btn:hover{border-color:#e8a33d;box-shadow:inset 0 0 0 1px #fbc761}
-.th-xp .btn.primary{background:linear-gradient(#63bd63,#37923a);border-color:#2a7a2d;color:#fff}
-.th-xp .btn.primary:hover{background:linear-gradient(#74cc74,#44a647);border-color:#2a7a2d}
-.th-xp .btn.on{background:linear-gradient(#dfeafa,#c1d2ee);border-color:#316ac5;color:#003399}
-.th-xp input,.th-xp select{border-color:#7f9db9;border-radius:3px}
-.th-xp .tabs button.on{color:#003399;border-bottom-color:#e8a33d}
-.th-xp .row.on{background:#316ac5;color:#fff;border-left-color:#0a246a}.th-xp .row.on small,.th-xp .row.on .n{color:#f0f5ff}
-.th-xp .tgrp{background:#ece9d8f2;border-color:#aca899;box-shadow:0 1px 4px #0004}
-.th-xp .owtitle{background:linear-gradient(#3b8cf0,#0a5bd6);color:#fff}.th-xp .owtitle b,.th-xp .owtitle button{color:#fff}
-.th-xp .mm-bar{background:linear-gradient(#3b8cf0,#0a5bd6);color:#fff}.th-xp .mm-bar b,.th-xp .mm-bar button,.th-xp .mm-bar .mm-where,.th-xp .mm-bar .tb-grip{color:#fff}
-.th-xp #status{background:linear-gradient(#f2f0e4,#ddd9c4)}
+/* Pre-War Desktop: classic Windows. Flat grey, raised and sunken edges, square corners, quiet slate title bars */
+.th-classic header{background:#d4d0c8;border-bottom:1px solid #808080;box-shadow:inset 0 1px 0 #fff,0 1px 0 #fff}
+.th-classic .brand,.th-classic .brand b{color:#27476b}
+.th-classic nav button{color:#000;border:1px solid transparent;border-radius:0}.th-classic nav button svg{stroke:#333}
+.th-classic nav button:hover{color:#000;background:transparent;border-color:#fff #808080 #808080 #fff}
+.th-classic nav button.on{color:#000;background:#e4e1da;border-color:#808080 #fff #fff #808080}
+.th-classic nav button:hover svg,.th-classic nav button.on svg{stroke:#000}
+.th-classic header .pill{background:#e4e1da;border-color:#808080 #fff #fff #808080;border-radius:0}
+.th-classic .btn{background:#d4d0c8;color:#000;border:1px solid;border-color:#fff #404040 #404040 #fff;border-radius:0;box-shadow:inset -1px -1px 0 #808080}
+.th-classic .btn:hover{background:#dedbd4;border-color:#fff #404040 #404040 #fff}
+.th-classic .btn:active,.th-classic .btn.on{background:#e4e1da;color:#000;border-color:#404040 #fff #fff #404040;box-shadow:inset 1px 1px 0 #808080}
+.th-classic .btn.primary{background:#d4d0c8;color:#000;font-weight:600;border-color:#000;box-shadow:inset 1px 1px 0 #fff,inset -1px -1px 0 #808080}
+.th-classic .btn.primary:hover{background:#dedbd4;border-color:#000}
+.th-classic input:not([type=checkbox]):not([type=radio]):not([type=range]),.th-classic select,.th-classic textarea{background:#fff;color:#000;border:1px solid;border-color:#808080 #fff #fff #808080;border-radius:0;box-shadow:inset 1px 1px 0 #404040}
+.th-classic .tabs button.on{color:#000;border-bottom-color:#27476b}
+.th-classic .row.on{background:#3a5f8a;color:#fff;border-left-color:#27476b}.th-classic .row.on small,.th-classic .row.on .n{color:#e8eef5}
+.th-classic .tgrp{background:#d4d0c8f5;border:1px solid;border-color:#fff #404040 #404040 #fff;border-radius:0;box-shadow:none}
+.th-classic .owin,.th-classic #helpmenu{border:1px solid;border-color:#fff #404040 #404040 #fff;border-radius:0;box-shadow:1px 1px 0 #000,0 4px 12px #0003}
+.th-classic .owtitle{background:linear-gradient(90deg,#3a5f8a,#7f97b2);color:#fff;border-radius:0}.th-classic .owtitle b,.th-classic .owtitle button{color:#fff}
+.th-classic .mm-bar{background:linear-gradient(90deg,#3a5f8a,#7f97b2);color:#fff;border-radius:0}.th-classic .mm-bar b,.th-classic .mm-bar button,.th-classic .mm-bar .mm-where,.th-classic .mm-bar .tb-grip{color:#fff}
+.th-classic #status{background:#d4d0c8;border-top:1px solid #fff;box-shadow:0 -1px 0 #808080}
+.th-classic .th-card{border-radius:0}
 .th-scan body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:500;background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px);mix-blend-mode:multiply}
 .th-scan.th-mono body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:499;background:radial-gradient(ellipse at center,transparent 60%,rgba(0,0,0,.35))}
 .th-calm *{transition:none!important;animation:none!important}

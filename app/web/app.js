@@ -510,7 +510,8 @@ async function play(at){
   try {
     const d = await post('/api/play', at || {});
     setState(d.state);
-    const how = d.via === 'nvse' ? 'New Vegas is starting (with xNVSE)' : 'Steam is starting New Vegas: press Play in its launcher';
+    if (d.via === 'by hand') return toast('Your mod and Play here are in MO2, but FOLab couldn\'t find how to start it: open MO2 and press Run.' + (at ? ' Load a save and you\'ll arrive here.' : ''), true);
+    const how = d.via === 'mo2' ? 'MO2 is starting New Vegas' : d.via === 'nvse' ? 'New Vegas is starting (with xNVSE)' : 'Steam is starting New Vegas: press Play in its launcher';
     toast(at ? (d.autoload ? how + `: it loads your newest save (${d.autoload}) and you'll arrive here.`
                            : how + '. Continue or load a save: you\'ll arrive here a moment after it loads.')
              : how + ', with your mod.');
@@ -604,7 +605,7 @@ function drawModPage(){
       <p><button class="btn primary" id="m-save">Save</button> <button class="btn" id="m-install">Put in ${s.loadout ? 'MO2' : 'game'}</button>
          ${i.installed ? `<button class="btn" id="m-uninstall">Take out of ${s.loadout ? 'MO2' : 'game'}</button>` : ''}</p></div>
     <div class="card"><h3>Trying it in the game</h3>
-      <p>${s.from_mo2 ? 'After <b>Put in MO2</b>, close FOLab, press Refresh in MO2 and tick your mod in both panes. Then run the game from MO2, or from FOLab with <b>Open in game</b>, and load a save.' : s.loadout ? 'After <b>Put in MO2</b>, start the game from MO2 with its <b>Run</b> button and load a save.' : 'After <b>Put in game</b>, start New Vegas and load a save.'} Open the console with <code>~</code> and type
+      <p>${s.from_mo2 ? 'After <b>Put in MO2</b>, close FOLab, press Refresh in MO2 and tick your mod in both panes. Then run the game from MO2, or from FOLab with <b>Open in game</b>, and load a save.' : s.loadout ? '<b>Play here</b> and <b>Open in game</b> put your mod in MO2 and start the game through it (MO2 closed the first time). Or after <b>Put in MO2</b>, start the game from MO2 with its <b>Run</b> button and load a save.' : 'After <b>Put in game</b>, start New Vegas and load a save.'} Open the console with <code>~</code> and type
          <code>coc ${esc(A.cellEdid || 'CellEditorID')}</code> to go to the place you're working on.</p>
       <p>Changes to a place you've already visited in that save can stay hidden until the place resets. A new save, or one from before you went there, shows them straight away.</p></div>` : ''}
     ${p ? `<div class="card"><h3>Plugin</h3>

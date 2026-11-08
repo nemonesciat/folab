@@ -141,7 +141,7 @@ async function kitTab(){
     <div class="note" id="kit-said" style="padding:6px 0">${KIT.said || ''}</div>
     <div class="note" style="padding:0">Generating again replaces the last layout here.</div>
     <div class="h" style="margin-top:10px">A vault in one click</div>
-    <div class="note" style="padding:0 0 6px">An entrance, a two-storey atrium with balconies, living quarters, the overseer's office and a reactor, joined up, with doors, lights and furnishings from the game's own vaults.</div>
+    <div class="note" style="padding:0 0 6px">An entrance, a two-storey atrium with balconies, living quarters with washrooms and a rec room, the overseer's office and a reactor, built close together as one building, each room furnished for what it's for from the game's own vaults; a few left wrecked.</div>
     <label class="vt-row">Size <input type="range" id="kit-vault-size" min="1" max="10" value="${KIT.vaultSize || 4}" style="flex:1"> <span id="kit-vault-n">${KIT.vaultSize || 4}</span></label>
     <label class="vt-row"><input type="checkbox" id="kit-vault-ruin" ${KIT.ruined ? 'checked' : ''}> Ruined, with rubble</label>
     <div class="kit-go"><button class="btn primary" id="kit-vault">Make a vault</button></div>
@@ -175,7 +175,21 @@ async function kitPut(made, label, replace){
   KIT.said = made.said;
   W.cam.position.set(made.start[0], made.start[1], made.start[2] + 110);
   await kitTab();
-  navMake();
+  await navMake();
+  if (made.people) await kitPeople(made.people);
+}
+
+// a generated vault's people: Populate, learnt from the game's places its story names, once there's a navmesh to stand on
+async function kitPeople(who){
+  const cell = A.cellId, seed = (KIT.seed || 0) + 17;
+  const said = s => { KIT.said = (KIT.said || '') + ' ' + s; const el = $('#kit-said'); if (el) el.innerHTML = KIT.said; };
+  const plan = await post('/api/char/populate/plan', {cell, like: who.like, who: who.who, busy: who.busy, skip: who.skip, seed}).catch(() => null);
+  if (!plan || !plan.rows || !plan.rows.length || cell !== A.cellId) return said(`Nobody was put in: ${(plan && plan.notes && plan.notes[0]) || 'Populate found no one.'}`);
+  const r = await post('/api/char/populate/apply', {cell, rows: plan.rows, live: !!who.live, levelled: false, seed, away: who.away}).catch(() => null);
+  if (!r || !r.placed) return said(`Nobody was put in: ${(r && r.note) || 'no room.'}`);
+  setState(r.state);
+  await resync();
+  said(`${r.placed} of ${who.said} put in, like ${plan.model}: Populate on the Characters page changes who.`);
 }
 
 function kitSpot(){

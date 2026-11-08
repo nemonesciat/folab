@@ -35,6 +35,12 @@ Kits with no pieces that close a room (caves, for example) are filled the old wa
 
 The dial sets the size. You get an entrance, a two-storey atrium with balconies, living quarters along their own corridors, the overseer's office and a reactor at the far end. Higher settings add a mess hall, a clinic, stores and workrooms. Tick **Ruined, with rubble** to use the ruined kit.
 
+Each vault has a story, told in what's left in its rooms: people still live there, others took it over, or it went quiet. Most rooms also have something to search.
+
+**Locks.** A few rooms and things to search are locked, harder further down. The overseer's office always needs its key, and the key lies on top of something to search in another room. Only rooms with nothing beyond them are locked, so a locked door never cuts you off from the rest of the vault. Select a door or a container and use **Owner, lock, what enables it** to change its lock.
+
+**Who's there.** Once the navmesh is made, Populate puts people in to suit the story, learnt from the game's own places: New Vegas citizens from the sewers where people still live, Vault 3's fiends where it was taken over, and Vault 34's ghouls where it went quiet. People who live there sleep and go about their day. Nobody stands near the way in. Turrets aren't placed yet: they belong on walls and ceilings. **Populate** on the Characters page changes who's there, and Undo takes them out.
+
 The overseer's office is the game's own room made in one piece. Its doorway isn't on the kit's grid, so it's joined exactly as the game joined it, and the way out of its lower part, which leads elsewhere in the game's cell, is closed with a dead end. If it doesn't fit, the office is built from ordinary pieces instead.
 
 ## Other places in one click

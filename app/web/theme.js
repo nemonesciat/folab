@@ -43,10 +43,10 @@ const TH_THEMES = {
     bg: '#efe8d8', panel: '#f8f3e8', panel2: '#fffaf0', line: '#dccfb4', line2: '#c9b893', text: '#2b2418', muted: '#6b5f4a', faint: '#7d7058',
     gold: '#9a6412', gold2: '#7a4c08', goldline: '#c9a361', hover: '#ece2cd', sel: '#e6d4ad', bg2: '#fffdf8', bg3: '#f4ecdb',
     'btn-primary': '#e3c27e', 'btn-primary-hover': '#d8b264', red: '#b8432e', amber: '#a87a10', green: '#4f8a3a', blue: '#3c6fa8'}},
-  desktop: {label: 'Pre-War Desktop', about: 'Bright blue title bars on a sunny morning, like a home PC from 2001', light: true, font: 'tahoma', cls: 'th-xp', view: 0x3a6ea5, v: {
-    bg: '#ece9d8', panel: '#f6f4e8', panel2: '#ffffff', line: '#c9c5b2', line2: '#aca899', text: '#000000', muted: '#3f3f3f', faint: '#5c5c5c',
-    gold: '#0a53c5', gold2: '#003399', goldline: '#7f9db9', hover: '#d6e3f8', sel: '#c1d2ee', bg2: '#ffffff', bg3: '#f2f0e4',
-    'btn-primary': '#37923a', 'btn-primary-hover': '#44a647', red: '#c01f1f', amber: '#996b00', green: '#1f7a22', blue: '#0a53c5'}},
+  desktop: {label: 'Pre-War Desktop', about: 'Plain grey windows and quiet title bars, like an office PC from before the bombs', light: true, font: 'tahoma', cls: 'th-classic', view: 0x4a6a8c, v: {
+    bg: '#d4d0c8', panel: '#d4d0c8', panel2: '#e4e1da', line: '#a8a49c', line2: '#808080', text: '#000000', muted: '#333333', faint: '#555555',
+    gold: '#27476b', gold2: '#1b3350', goldline: '#808080', hover: '#c8c4bb', sel: '#b8c4d2', bg2: '#ffffff', bg3: '#dedbd4',
+    'btn-primary': '#d4d0c8', 'btn-primary-hover': '#dedbd4', red: '#a02020', amber: '#806000', green: '#2a6b2d', blue: '#27476b'}},
 };
 const TH = {theme: 'pipboy', font: 'theme', size: 14, scan: false, calm: false};      // (Pip-Boy green unless you pick another)
 try { Object.assign(TH, JSON.parse(localStorage.getItem('folab-theme') || '{}')); } catch (e) {}
@@ -60,7 +60,7 @@ function thApply(){
   if (font && font.css) root.style.setProperty('--ui-font', font.css); else root.style.removeProperty('--ui-font');
   root.classList.toggle('th-font', !!(font && font.css));
   root.classList.toggle('th-mono', fontKey === 'terminal');
-  root.classList.toggle('th-xp', t.cls === 'th-xp');
+  root.classList.toggle('th-classic', t.cls === 'th-classic');
   root.classList.toggle('th-light', !!t.light);
   root.classList.toggle('th-scan', !!TH.scan);
   root.classList.toggle('th-calm', !!TH.calm);

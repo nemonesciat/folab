@@ -43,9 +43,17 @@ function material(tex, alpha, double){
 
 // ---------- meshes: built once per file, shared by every thing that uses it ----------
 // (tex: a texture to use instead of the mesh's own, for a race's skin)
+// (a request that fails is asked again, and if it never gets through it isn't remembered: that piece isn't left invisible for good)
+function askMesh(path, tries){
+  return api('/api/mesh?path=' + encodeURIComponent(path)).catch(e => {
+    if (tries <= 1) throw e;
+    return new Promise(r => setTimeout(r, 400)).then(() => askMesh(path, tries - 1));
+  });
+}
+
 function model(path, tex){
   const key = path + (tex ? '|' + tex : '');
-  if (!W.models[key]) W.models[key] = api('/api/mesh?path=' + encodeURIComponent(path)).then(d => {
+  if (!W.models[key]) W.models[key] = askMesh(path, 4).then(d => {
     const parts = [];
     for (const s of d.shapes || []){
       if (tex) s.tex = tex;
@@ -58,7 +66,7 @@ function model(path, tex){
       parts.push([g, material(s.tex, s.alpha, s.double), s.alpha === 'blend']);
     }
     return parts;
-  }).catch(() => []);
+  }).catch(() => { delete W.models[key]; return []; });
   return W.models[key];
 }
 

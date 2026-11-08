@@ -4,10 +4,12 @@ import glob
 import os
 import re
 import struct
+import threading
 
 import bsa
 import tes4
 
+_ARCHIVES_LOCK = threading.Lock()
 STEAM_APP = 22380
 # The game's own files, in the order the launcher loads them
 OFFICIAL = ['FalloutNV.esm', 'DeadMoney.esm', 'HonestHearts.esm', 'OldWorldBlues.esm', 'LonesomeRoad.esm',
@@ -247,26 +249,35 @@ class GameData:
 
     def archives(self):
         """BSAs in the order the game searches them: later ones win, like plugins."""
-        if self._archives is None and self.view:
-            found = self.view.archives_like('fallout - *.bsa')
-            for n in self.names:
-                stem = os.path.splitext(n)[0]
-                found += self.view.archives_like(glob.escape(stem) + '.bsa') + self.view.archives_like(glob.escape(stem) + ' - *.bsa')
-            found += self.view.archives_like('update.bsa')
-            self._archives = []
-            for p in dict.fromkeys(found):
-                try:                    # (one mod's broken archive mustn't stop the rest of a loadout loading)
-                    self._archives.append(bsa.Archive(p))
-                except (OSError, ValueError, struct.error) as e:
-                    print('archive left out: %s: %s' % (p, e), flush=True)
-        if self._archives is None:
-            found = sorted(glob.glob(os.path.join(self.data_dir, 'Fallout - *.bsa')))
-            for n in self.names:
-                stem = os.path.splitext(n)[0]
-                found += sorted(glob.glob(os.path.join(self.data_dir, stem + ' - *.bsa')))
-            found += glob.glob(os.path.join(self.data_dir, 'Update.bsa'))
-            self._archives = [bsa.Archive(p) for p in dict.fromkeys(found)]
-        return self._archives
+        got = self._archives
+        if got is not None:
+            return got
+        # (the server's threads all ask at once as a place opens: none may see a list that's only part made, or a file in
+        # an archive not reached yet reads as missing)
+        with _ARCHIVES_LOCK:
+            if self._archives is not None:
+                return self._archives
+            if self.view:
+                found = self.view.archives_like('fallout - *.bsa')
+                for n in self.names:
+                    stem = os.path.splitext(n)[0]
+                    found += self.view.archives_like(glob.escape(stem) + '.bsa') + self.view.archives_like(glob.escape(stem) + ' - *.bsa')
+                found += self.view.archives_like('update.bsa')
+                made = []
+                for p in dict.fromkeys(found):
+                    try:                    # (one mod's broken archive mustn't stop the rest of a loadout loading)
+                        made.append(bsa.Archive(p))
+                    except (OSError, ValueError, struct.error) as e:
+                        print('archive left out: %s: %s' % (p, e), flush=True)
+            else:
+                found = sorted(glob.glob(os.path.join(self.data_dir, 'Fallout - *.bsa')))
+                for n in self.names:
+                    stem = os.path.splitext(n)[0]
+                    found += sorted(glob.glob(os.path.join(self.data_dir, stem + ' - *.bsa')))
+                found += glob.glob(os.path.join(self.data_dir, 'Update.bsa'))
+                made = [bsa.Archive(p) for p in dict.fromkeys(found)]
+            self._archives = made
+        return made
 
     def loose_path(self, rel):
         """The loose file the game would use for a path under Data, or None."""
