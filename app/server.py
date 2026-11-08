@@ -751,7 +751,7 @@ def outside_cell(o, world):
         c = sq(o['p'])
         return GD.key(c) if c is not None else None
     r = o.get('ref')
-    if not r:
+    if not r or r.startswith('$'):              # (a thing made in the same changes: the cell it was given stands)
         return None
     if r.startswith('+'):
         return next((ck for ck, c in (PR.cells.items() if PR else ()) if r in c['refs']), None)
@@ -1269,11 +1269,11 @@ def edit(label, ops):
         raise ValueError('no mod open')
     for o in ops:
         c = o.get('cell')
-        if c and not c.startswith('+') and c != '$new' and GD.from_key(c) in GD.ext_cells:
+        if c and not c.startswith('+') and not c.startswith('$') and GD.from_key(c) in GD.ext_cells:
             o['cell'] = outside_cell(o, GD.ext_cells[GD.from_key(c)]) or c
     made = PR.apply(label, ops)
     out = {'state': state(), 'made': made}
-    cells = {o['cell'] for o in ops if 'cell' in o and o['cell'] != '$new'}
+    cells = {o['cell'] for o in ops if o.get('cell') and not o['cell'].startswith('$')}
     keys = set(made) | {o.get('ref') for o in ops}
     if cells and len(cells) <= 9:
         out['things'] = [t for c in cells for t in cell_things(c) if t['key'] in keys]

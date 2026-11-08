@@ -71,7 +71,19 @@ Once the pads are laid, **World tools > Real map > 🏚 Put up buildings** stand
 - **Generic and landmarks:** most of a town is the game's generic buildings: the ones it uses three times or more, ruined and ordinary as the Mojave's are. Its one-offs (the Prospector Saloon, Nipton's town hall, the Goodsprings schoolhouse, the church) are landmarks. They only go on plots that stand out: a building named in the file, a church, school, police station or other public building, or a very big plot. Each landmark appears once in a world and keeps its plot to itself. Where the game has a building of that very kind, it's chosen: a church gets the church.
 - **Facing:** fronts face the nearest road you've laid, where the game had the doors. Lay the roads first: with none, a long side faces out.
 - **On the ground:** each sits on its pad as deep as the game sets it. Nothing goes on a road piece or on another building, and the small things you'd scattered on a plot (plants, rocks) are taken off.
-- **Doors** go where the game had them on that building, locked "needs a key" for now: nothing lies behind them yet.
+- **Doors** go where the game had them on that building.
+
+### Ways in
+
+**Ways in** says how many buildings open: none, a few, about a third (the default), most, or every one that can. A plot that stands out always opens when it can. A building that opens gets its own copy of a place the game itself has behind that same building. A Novac house gets one of Novac's house interiors, a ranch house a ranch's, the church the church's, so the inside always fits the outside. Each copy is a place of your mod's own:
+
+- **Furnished as the game has it:** walls, furniture, clutter, lights and containers to search, with nothing owned and nothing locked.
+- **Without the game's story:** its people and creatures, keys, notes, terminals, talking radios, anything switched on by a quest, and anything with a script of its own stay out. A door inside that led somewhere else in the game is locked.
+- **Linked both ways:** you arrive just inside the way out, and back outside in front of the building's door.
+- **Walkable:** each gets its navmesh, made in the same Undo.
+- **Named for what it is:** your world's editor ID with House, Shop, Offices, Works or Hall and a number, shown as the plot's name if the map has one (a church called St Mary is "St Mary"), otherwise as House, Shop and so on. Rename them in Places like any place of your own.
+
+The game has a place behind about 50 of the 86 buildings FOLab uses. The rest stay locked. FOLab makes at most 40 places in one go; press again for more. A plot that already has its building isn't opened later: Undo and put the buildings up again to change how many open.
 
 Real buildings are often smaller than the game's once the map is compressed. A plot too small for any of the game's buildings is left empty, and the message says how many. At 1 : 1 to 1 : 3 most houses get one. Past about 1 : 5, only the big plots do.
 

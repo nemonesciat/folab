@@ -371,7 +371,7 @@ async function mlMake(){
   }; }
 
 // ---------- World tools > Real map: OpenStreetMap over a world made from a height file, and the way back ----------
-const MO = {world: null, side: null, file: null, read: null, layer: null, showLayer: true, want: {roads: ['major'], rivers: true, streams: false, lakes: true, buildings: true}, said: '', poll: null};
+const MO = {world: null, side: null, file: null, read: null, layer: null, showLayer: true, insides: 0.35, want: {roads: ['major'], rivers: true, streams: false, lakes: true, buildings: true}, said: '', poll: null};
 const MO_ROADS = [['major', 'Motorways to tertiary roads'], ['minor', 'Residential and service roads'], ['track', 'Tracks']];
 async function moLoad(){
   if (MO.world === OUT.world) return;
@@ -398,7 +398,11 @@ async function moDraw(box){
     ${R ? moChoices(R) : ''}
     ${MO.layer && MO.layer.buildings ? `<h4>Marker layer</h4><label><input type="checkbox" id="mo-layer" ${MO.showLayer ? 'checked' : ''}> Show ${MO.layer.buildings.length} building outlines, ${MO.layer.places.length} places, ${MO.layer.bridges.length} bridges on the map</label>` : ''}
     ${MO.layer && MO.layer.buildings && MO.layer.buildings.some(b => b.pad) ? `<h4>Buildings</h4>
-      <div class="note">The game's own buildings on the ${MO.layer.buildings.filter(b => b.pad).length.toLocaleString()} levelled plots: each the nearest fit for its plot and its kind (house, shop, block, works, hall), fronts to the nearest road. Doors are locked for now.</div>
+      <div class="note">The game's own buildings on the ${MO.layer.buildings.filter(b => b.pad).length.toLocaleString()} levelled plots: each the nearest fit for its plot and its kind (house, shop, block, works, hall), fronts to the nearest road.</div>
+      <div class="wt-row"><span>Ways in</span><select id="mo-insides" title="A building that opens gets a copy of a place the game has behind that same building: furnished, with a navmesh, without its people or story">
+        ${[[0, 'None: every door locked'], [0.2, 'A few buildings open'], [0.35, 'About a third open'], [0.7, 'Most open'], [1, 'Every one that can']].map(([v, l]) => `<option value="${v}" ${v === MO.insides ? 'selected' : ''}>${l}</option>`).join('')}
+      </select></div>
+      <div class="note">Plots that stand out (named, public buildings) always open when the game has a place behind that building. The rest stay locked.</div>
       <div class="wt-go"><button class="btn primary" id="mo-build">🏚 Put up buildings</button></div>
       <div class="note">One Undo. Plots that already have theirs are left as they are.</div>` : ''}
     <h4>Going back</h4>
@@ -417,6 +421,7 @@ async function moDraw(box){
   const k = box.querySelector('#mo-kept'); if (k) k.onchange = () => { if (k.value) moRead(k.value); };
   const lay = box.querySelector('#mo-layer'); if (lay) lay.onchange = () => { MO.showLayer = lay.checked; M.dirty = true; };
   const bld = box.querySelector('#mo-build'); if (bld) bld.onclick = moBuild;
+  const ins = box.querySelector('#mo-insides'); if (ins) ins.onchange = () => { MO.insides = +ins.value; };
   box.querySelector('#mo-back').onclick = async () => {
     if (!confirm('Take this world out of your mod, and everything you have done since it was made? This can\'t be undone.')) return;
     try { await post('/api/maps/restore'); } catch (err){ fail(err); }
@@ -483,13 +488,13 @@ function moLay(){
 }
 function moBuild(){
   const b = $('#mo-build'); if (b) b.disabled = true;
-  moJob(post('/api/maps/buildings', {world: OUT.world}), async r => {
+  moJob(post('/api/maps/buildings', {world: OUT.world, insides: MO.insides}), async r => {
     if (r.state) setState(r.state);
     const t = r.report, n = (v, one, many) => `${v.toLocaleString()} ${v === 1 ? one : many}`;
     const words = {house: ['house', 'houses'], shop: ['shop', 'shops'], civic: ['hall', 'halls'], industrial: ['works', 'works'], apartments: ['block', 'blocks']};
     const fam = Object.entries(t.families).sort((a, b) => b[1] - a[1]).map(([k, v]) => n(v, ...(words[k] || ['other', 'others']))).join(', ');
     const left = [t.nothing_fits && `${t.nothing_fits.toLocaleString()} too small for any of the game's`, t.blocked && `${t.blocked.toLocaleString()} tries in a road's or a building's way`, t.steep && `${t.steep.toLocaleString()} on ground too uneven`, t.had_one && `${t.had_one.toLocaleString()} already built`].filter(Boolean);
-    MO.said = `Put up ${n(t.buildings, 'building', 'buildings')} on ${n(t.built, 'plot', 'plots')} (${fam}), with ${n(t.doors, 'door', 'doors')}.${t.landmarks ? ` ${n(t.landmarks, 'is a landmark', 'are landmarks')}, on plots that stand out.` : ''}${left.length ? ' Left: ' + left.join('; ') + '.' : ''}${t.cleared ? ` ${n(t.cleared, 'small thing', 'small things')} cleared off the plots.` : ''}${t.roads_seen ? '' : ' No roads laid yet, so fronts face a long side.'}`;
+    MO.said = `Put up ${n(t.buildings, 'building', 'buildings')} on ${n(t.built, 'plot', 'plots')} (${fam}), with ${n(t.doors, 'door', 'doors')}.${t.landmarks ? ` ${n(t.landmarks, 'is a landmark', 'are landmarks')}, on plots that stand out.` : ''}${t.insides ? ` ${n(t.insides, 'building opens', 'buildings open')} into a place of its own (${t.inside_things.toLocaleString()} things in all, each with its navmesh${t.navmesh_missed ? `, ${t.navmesh_missed} without: make those in the Kit tab` : ''}); the other doors are locked.${t.insides_capped ? ' That\'s as many as FOLab makes in one go: press again for more.' : ''}` : ''}${left.length ? ' Left: ' + left.join('; ') + '.' : ''}${t.cleared ? ` ${n(t.cleared, 'small thing', 'small things')} cleared off the plots.` : ''}${t.roads_seen ? '' : ' No roads laid yet, so fronts face a long side.'}`;
     await outsideResync();
   });
 }

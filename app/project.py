@@ -105,12 +105,23 @@ class Project:
     def _refs(self, cell):
         return self.cells.setdefault(cell, {'refs': {}})['refs']
 
-    def apply(self, label, ops):
+    def apply(self, label, ops, merge=False):
         """Make several changes as one undo step. ops: [{'op': 'add'|'move'|'remove', ...}]. Returns the keys
-        given to new refs, in order."""
-        self._step(label)
+        given to new refs, in order. merge: part of the last step (navmeshes made for what that step put in).
+        A record_new or add with a 'name' can be named later in the same ops as '$name' (a cell, a ref, a door's link):
+        self.names says what each became."""
+        if not merge or not self.undo_stack:
+            self._step(label)
         made, new_record = [], None
+        names = self.names = {}
+
+        def named(v):
+            return names.get(v[1:], v) if isinstance(v, str) and v.startswith('$') and v not in ('$new', '$made') else v
         for o in ops:
+            if names and any(named(o.get(f)) != o.get(f) for f in ('cell', 'ref')):
+                o = dict(o, cell=named(o.get('cell')), ref=named(o.get('ref')))
+            if names and o.get('op') == 'tel' and o.get('tel') and named(o['tel'].get('door')) != o['tel'].get('door'):
+                o = dict(o, tel=dict(o['tel'], door=named(o['tel']['door'])))
             if o['op'] == 'record':                  # a record as the mod has it (a game one changed, or its own)
                 self.records[o['key']] = o['record']
                 continue
@@ -120,6 +131,8 @@ class Project:
                 self.records[key] = o['record']
                 made.append(key)
                 new_record = key
+                if o.get('name'):
+                    names[o['name']] = key
                 continue
             if o['op'] == 'record_revert':           # a game record back as the game has it; one of the mod's own, gone
                 self.records.pop(o['key'], None)
@@ -197,6 +210,8 @@ class Project:
                     refs[key]['xlcm'] = int(o['xlcm'])   # (a levelled actor's difficulty: 0 easy .. 3 very hard)
                 if o.get('extra'):
                     refs[key].update(o['extra'])     # (persistent, a map marker, a zone: see worldrec.py)
+                if o.get('name'):
+                    names[o['name']] = key
                 made.append(key)
             elif o['op'] == 'move':
                 r = refs.setdefault(o['ref'], {})

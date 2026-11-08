@@ -6,7 +6,7 @@ a plot too small for anything) laid on a world made from a height file, then the
 nothing on a road or on each other, set on the pad at the game's own depth, doors where the game had them and locked, small things on a plot
 cleared, one Undo, not doubled, saved with no problems. Never starts the game."""
 import io, json, math, time
-import gamedata, health, project, roadgen, townbuild, espwrite
+import gamedata, health, project, recordio, roadgen, townbuild, espwrite
 import server, api_maps
 import mapfixtures as fx
 
@@ -188,9 +188,9 @@ check('every house with a door faces the street (%d of %d)' % (fronts, with_door
 ground = roadgen.Ground(gd, pr, w)
 off = max(abs((ground.at(r['p'][0], r['p'][1]) - r['p'][2]) - cat[r['base']]['mid']) for _c, _k, r in blds if -7200 <= mid(foot(r))[0] <= 2500)
 check('set into the pad as deep as the game sets them (%.1f off at most)' % off, off < 24)
-doors = [(ck, k, r) for ck, k, r in refs if k.startswith('+') and gd.forms[gd.from_key(r['base'])][1].tag == 'DOOR']
-check('doors where the game had them (%d), locked until something lies behind them' % len(doors),
-      len(doors) == rep['doors'] and doors and all(r.get('props', {}).get('lock', {}).get('level') == 255 for _c, _k, r in doors))
+doors = [(ck, k, r) for ck, k, r in refs if k.startswith('+') and not ck.startswith('+') and gd.forms[gd.from_key(r['base'])][1].tag == 'DOOR']
+check('doors where the game had them (%d), locked unless something lies behind them' % len(doors),
+      len(doors) == rep['doors'] and doors and all(bool(r.get('tel')) != (r.get('props', {}).get('lock', {}).get('level') == 255) for _c, _k, r in doors))
 check('the rock on a plot was cleared', rock_key not in pr.cells.get(ck0, {}).get('refs', {}) and rep['cleared'] >= 1)
 works = [f for f in fps if 3000 <= mid(f)[0] <= 7000 and Y0 + 500 <= mid(f)[1] <= Y0 + 4500]
 facing = set()
@@ -199,6 +199,54 @@ for (_c, _k, r), f in zip(blds, fps):
         b = townbuild.Fit(cat[r['base']])
         facing.add(round(townbuild.turn(b.front[0], b.front[1], r['p'][5])[1]))
 check('the deep plot has a row to the street and one at the back (%d buildings, facing %s)' % (len(works), sorted(facing)), len(works) >= 3 and facing == {-1, 1})
+
+# ---------- places behind the doors ----------
+places = rep.get('places') or []
+check('some buildings have a real place behind a door (%d, %d things)' % (rep['insides'], rep['inside_things']), rep['insides'] >= 2 and len(places) == rep['insides'])
+check('the church\'s door leads in (plots that stand out always do)', any(in_box(r, church) for _c, _k, r in refs if r.get('tel')))
+cat_all = {k: b for k, b in cat.items()}
+ref_at = {}
+for ck, c in pr.cells.items():
+    for k, r in c['refs'].items():
+        ref_at[k] = (ck, r)
+bad_link, near_out, near_in, bad_thing, locked_in = 0, 0, 0, 0, 0
+for pk in places:
+    rec = pr.records[pk]
+    inner = pr.cells.get(pk, {}).get('refs', {})
+    exits = [(k, r) for k, r in inner.items() if r.get('tel')]
+    if len(exits) != 1:
+        bad_link += 1
+        continue
+    xk, xr = exits[0]
+    ok_ = xr['tel']['door'] in ref_at
+    if ok_:
+        ock, orr = ref_at[xr['tel']['door']]
+        ok_ = orr.get('tel', {}).get('door') == xk and not orr.get('props', {}).get('lock')
+        near_out += math.hypot(xr['tel']['p'][0] - orr['p'][0], xr['tel']['p'][1] - orr['p'][1]) < 300
+        near_in += math.hypot(orr['tel']['p'][0] - xr['p'][0], orr['tel']['p'][1] - xr['p'][1]) < 300
+    bad_link += not ok_
+    for k, r in inner.items():
+        f = gd.from_key(r['base'])
+        tag = gd.forms[f][1].tag
+        if tag in ('NPC_', 'CREA', 'KEYM', 'NOTE', 'TERM') or (tag != 'DOOR' and 'SCRI' in gd.fields(f)):
+            bad_thing += 1
+check('every place\'s way out leads to its building\'s door and back, that door unlocked', bad_link == 0)
+check('you arrive outside by the building\'s door (%d of %d) and inside by the way out (%d)' % (near_out, len(places), near_in), near_out == near_in == len(places))
+check('nothing of the game\'s story is copied in: no people, keys, notes, terminals or scripted things', bad_thing == 0)
+two_way = next(((b, i) for b in cat.values() for i in b['insides'] if sum(1 for r in gd.refs(gd.from_key(i['cell'])) if r['leads']) > 1), None)
+if two_way:
+    ops_, _n = townbuild.inside_ops(gd, two_way[1], 'tt', 'FOLabCheck', 'Check')
+    src_doors = {(round(r['pos'][0]), round(r['pos'][1])): r for r in gd.refs(gd.from_key(two_way[1]['cell'])) if r['leads']}
+    adds = [o for o in ops_ if o['op'] == 'add' and (round(o['p'][0]), round(o['p'][1])) in src_doors]
+    check('inside %s: its way out is free, its doors to anywhere else locked, other doors left to open'
+          % gd.edid(gd.from_key(two_way[1]['cell'])), adds and all((o.get('name') == 'ttx') != bool(o.get('extra')) for o in adds)
+          and sum(1 for o in adds if o.get('name') == 'ttx') == 1
+          and not any(o.get('extra') for o in ops_ if o['op'] == 'add' and (round(o['p'][0]), round(o['p'][1])) not in src_doors))
+check('the places are named for what they are', all(recordio.field(pr.records[k], 'EDID').startswith('FOLabTownTest') for k in places)
+      and any(recordio.field(pr.records[k], 'FULL') == 'St Mary' for k in places))
+check('no owner on a copied place', not any(s['tag'] == 'XOWN' for k in places for s in pr.records[k]['subs']))
+check('each place has its navmesh (%d missed)' % rep['navmesh_missed'], all(k in pr.navmesh for k in places) and rep['navmesh_missed'] == 0)
+check('still one Undo for all of it', pr.undo_stack[-1][0] == 'Buildings on the plots' and len(pr.undo_stack) == undo_before + 1)
 
 # ---------- again, undo, saved ----------
 n0 = sum(len(c['refs']) for c in pr.cells.values())
@@ -223,5 +271,6 @@ for pl in gd2.plugins:
 label = pr.undo()
 check('Undo takes them all away, the rock back', label == 'Buildings on the plots' and not any(r.get('base') in cat for c in pr.cells.values() for r in c['refs'].values())
       and rock_key in pr.cells[ck0]['refs'])
+check('and the places behind the doors, with their navmeshes', not any(k in pr.records or k in pr.navmesh or k in pr.cells for k in places))
 for pl in gd.plugins:
     pl.close()

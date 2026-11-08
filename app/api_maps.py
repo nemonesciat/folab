@@ -10,12 +10,14 @@ import os
 import re
 import shutil
 import threading
+import traceback
 
 import elevation
 import espwrite
 import landcover
 import mapscale as MS
 import mapworld
+import navbuild
 import osm
 import osmplace
 import project
@@ -83,6 +85,7 @@ def _start(work, **fields):
         try:
             JOB.update(result=work(), ok=True)
         except Exception as e:  # (whatever goes wrong, the page has to hear about it)
+            traceback.print_exc()              # (into FOLab's log: what a problem report needs)
             JOB.update(error=str(e), ok=False)
         JOB['running'] = False
     threading.Thread(target=run, daemon=True).start()
@@ -412,7 +415,8 @@ def buildings_job(body, srv):
             rows = read_layers(srv.PR).get(srv.GD.edid(w), {}).get('buildings') or []
             if not any(r.get('pad') for r in rows):
                 raise ValueError('There are no building plots on this world yet: lay an OpenStreetMap file with Buildings ticked first.')
-            ops, report = townbuild.plan(srv.GD, srv.PR, w, rows, cat, int(body.get('seed', 1)), _said)
+            share = float(body.get('insides', townbuild.INSIDE_SHARE))
+            ops, report = townbuild.plan(srv.GD, srv.PR, w, rows, cat, int(body.get('seed', 1)), _said, insides=share)
             if not report['buildings']:
                 if report['had_one']:
                     raise ValueError('Every plot with room for one already has its buildings%s.' % (
@@ -421,6 +425,21 @@ def buildings_job(body, srv):
                                  % (report['nothing_fits'], report['blocked'], report['steep']))
             _said('Putting it in the mod')
             state = srv.edit('Buildings on the plots', ops)['state']
+            # (each place behind a door walks: its navmesh, in the same Undo)
+            names, made = dict(srv.PR.names), report.pop('made')
+            nav_ops, report['navmesh_missed'] = [], 0
+            for k, (tag, _fam) in enumerate(made):
+                _said('Making the places\' navmeshes', k, len(made))
+                key = names.get(tag)
+                try:
+                    data, _r = navbuild.generate(srv.GD, srv.PR, key)
+                    nav_ops.append({'op': 'navmesh', 'cell': key, 'mesh': data})
+                except navbuild.NavError:
+                    report['navmesh_missed'] += 1
+            if nav_ops:
+                srv.PR.apply('Buildings on the plots', nav_ops, merge=True)
+                state = srv.state()
+            report['places'] = [names[t] for t, _f in made if t in names]
         return {'state': state, 'report': report}
     return _start(work, kind='buildings')
 

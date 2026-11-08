@@ -35,9 +35,10 @@ import struct
 
 import kitindex
 import landshape
+import recordio
 import roadgen
 
-FORMAT = 2                 # (buildings.json's layout: a file with another number is made again)
+FORMAT = 3              # (buildings.json's layout: a file with another number is made again)
 MIN_SIDE, MAX_SIDE = 300, 3600
 MIN_HIGH, MAX_HIGH = 220, 1700
 ALONE = 0.6                # (in this share of its placements at least, nothing building-sized overlaps it)
@@ -54,8 +55,14 @@ POI_AREA = 3000.0 * 3000.0 # (a plot this big stands out even unnamed)
 KIND_PULL = 1.0            # (and one whose editor ID names what the file says it is: KIND_WORD)
 LANDMARK_PULL = 0.6       # (how much a plot that stands out prefers a landmark that fits)
 VARIETY = 0.45            # (each building costs this much more for every time it's up already, by the square root)
-CLEAR_BELOW = 400.0       # (the mod's own things smaller than this across are taken off a plot a building stands on)
+MAX_INSIDE_REFS = 900      # (a real place with more than this in it is too much to copy behind a building)
+CLEAR_BELOW = 400.0      # (the mod's own things smaller than this across are taken off a plot a building stands on)
 DOOR_LOCK = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}
+INSIDE_SHARE = 0.35        # (of ordinary buildings that have a real place behind them in the game, how many get one; plots that stand out always)
+MAX_INSIDES = 40           # (places made in one go: each needs a navmesh, a few seconds)
+INITIALLY_OFF = 0x800      # (a ref's record flag: off until something switches it on)
+NOT_INSIDE = {'NPC_', 'CREA', 'LVLN', 'LVLC', 'KEYM', 'NOTE', 'TACT', 'TERM'}
+PLACE_NAME = {'house': 'House', 'shop': 'Shop', 'apartments': 'Offices', 'civic': 'Hall', 'industrial': 'Works'}
 
 # (words in an editor ID that say it isn't a building: signs, walls, roads, ruins in heaps, far-off stand-ins, parts)
 NOT_A_BUILDING = re.compile(r'imposter|lod|_?wl$|rubble|crater|wall|sign|neon|highway|overpass|rail|pylon|tower|marquee|debris|pile|'
@@ -193,6 +200,40 @@ def _clip(subject, clip):
     return out
 
 
+def _tel(gd, rfid):
+    """A door's link: (the door it leads to, where you arrive: x, y, z, rx, ry, rz), or None."""
+    try:
+        x = gd.fields(rfid).get('XTEL')
+    except KeyError:
+        return None
+    if not x or len(x) < 28:
+        return None
+    i = gd.forms[rfid][0]
+    return gd.to_global(i, struct.unpack_from('<I', x)[0]), list(struct.unpack_from('<6f', x, 4))
+
+
+def _inside_of(gd, d, b):
+    """The real place an outside door d on building b leads into, as a building may take a copy of it: {'cell', 'exit' (the door
+    inside that leads back), 'arrive_in' (where you arrive inside), 'arrive_out' (outside, in the building's frame)}, or None."""
+    t = _tel(gd, d['ref'])
+    if not t:
+        return None
+    dest, arrive_in = t
+    cell = gd.ref_cell.get(dest)
+    if cell is None or cell not in gd.interiors:
+        return None
+    back = _tel(gd, dest)
+    if not back or back[0] != d['ref']:
+        return None
+    n = len(gd.cell_refs.get(cell, {}))
+    if n > MAX_INSIDE_REFS:
+        return None
+    p = back[1]
+    lx, ly = turn(p[0] - b['pos'][0], p[1] - b['pos'][1], -b['rot'][2])
+    return {'cell': gd.key(cell), 'exit': gd.key(dest), 'things': n, 'arrive_in': [round(v, 4) for v in arrive_in],
+            'arrive_out': [round(lx, 1), round(ly, 1), round(p[2] - b['pos'][2], 1), round(p[3], 4), round(p[4], 4), round((p[5] - b['rot'][2]) % math.tau, 4)]}
+
+
 def survey(gd, progress=None):
     """Every stand-alone outdoor building in the game, measured: a list of dicts (see the module's docstring)."""
     shapes, info = {}, {}
@@ -247,8 +288,12 @@ def survey(gd, progress=None):
                 lx, ly = turn(d['pos'][0] - r['pos'][0], d['pos'][1] - r['pos'][1], -r['rot'][2])
                 box = b[2]
                 if box[0] - 96 <= lx <= box[3] + 96 and box[1] - 96 <= ly <= box[4] + 96:
-                    mine.append({'base': gd.key(d['base']), 'x': round(lx, 1), 'y': round(ly, 1), 'z': round(d['pos'][2] - r['pos'][2], 1),
-                                 'rz': round((d['rot'][2] - r['rot'][2]) % math.tau, 4), 'tx': round(d['rot'][0], 4), 'ty': round(d['rot'][1], 4)})
+                    row = {'base': gd.key(d['base']), 'x': round(lx, 1), 'y': round(ly, 1), 'z': round(d['pos'][2] - r['pos'][2], 1),
+                           'rz': round((d['rot'][2] - r['rot'][2]) % math.tau, 4), 'tx': round(d['rot'][0], 4), 'ty': round(d['rot'][1], 4)}
+                    inside = _inside_of(gd, d, r)
+                    if inside:
+                        row['inside'] = inside
+                    mine.append(row)
             seen[r['base']].append((cell, r, alone, mine))
             worlds[cell] = gd.ext_cells[cell]
     out = []
@@ -279,10 +324,22 @@ def survey(gd, progress=None):
         if not mid:
             continue
         mid.sort()
-        doors = max((u[3] for u in uses), key=len)[:4]
+        doors = [{k: v for k, v in d.items() if k != 'inside'} for d in max((u[3] for u in uses), key=len)[:4]]
+        # (every real place the game has behind this building, by which of its doors leads there)
+        insides, had = [], set()
+        for _c, _r, _a, mine in uses:
+            for d in mine:
+                ins = d.get('inside')
+                if not ins or ins['cell'] in had:
+                    continue
+                k = min(range(len(doors)), key=lambda i: math.hypot(doors[i]['x'] - d['x'], doors[i]['y'] - d['y'])) if doors else None
+                if k is None or math.hypot(doors[k]['x'] - d['x'], doors[k]['y'] - d['y']) > 48:
+                    continue
+                had.add(ins['cell'])
+                insides.append(dict(ins, door=k))
         out.append({'key': gd.key(fid), 'edid': edid, 'model': model, 'box': [round(v, 1) for v in box], 'uses': len(uses), 'alone': round(alone, 2),
                     'family': family_of(edid), 'doors': doors, 'mid': round(mid[len(mid) // 2], 1), 'lo': round(min(lo), 1) if lo else 0.0,
-                    'hi': round(max(hi), 1) if hi else 0.0})
+                    'hi': round(max(hi), 1) if hi else 0.0, 'insides': insides})
     out.sort(key=lambda b: b['edid'].lower())
     return out
 
@@ -303,6 +360,48 @@ def load(gd, folder, progress=None):
         json.dump({'format': FORMAT, 'buildings': cat}, f, indent=0)
     os.replace(path + '.tmp', path)
     return cat
+
+
+# ---------- a real place behind a door ----------
+
+def inside_ops(gd, inside, tag, edid, full):
+    """Ops that make a copy of the game's place behind a building as a place of the mod's own, named '$tag', its way out named
+    '$tag' + 'x'. What it has that belongs to the game's own story stays out: people and creatures, keys, notes and terminals,
+    talking radios, things switched on by quests (an enable parent, or off at the start), anything with a script of its own;
+    nothing in it is owned or locked. Doors to anywhere else are locked. Returns (ops, how many things it has)."""
+    cfid = gd.from_key(inside['cell'])
+    rec = recordio.load(gd, cfid)
+    rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('XOWN', 'XRNK')]
+    recordio.set_field(rec, 'EDID', edid, label='Editor ID')
+    recordio.set_field(rec, 'FULL', full, label='Name')
+    ops = [{'op': 'record_new', 'record': rec, 'name': tag}]
+    exit_fid = gd.from_key(inside['exit'])
+    kept = 0
+    for r in gd.refs(cfid):
+        if r['type'] != 'REFR' or not r['base'] or r['base'] not in gd.forms or not r['pos'] or not r['rot']:
+            continue
+        i, rr = gd.cell_refs[cfid][r['ref']] if r['ref'] in gd.cell_refs.get(cfid, {}) else (None, None)
+        if rr is None:
+            continue
+        btag = gd.forms[r['base']][1].tag
+        if btag in NOT_INSIDE or rr.flags & INITIALLY_OFF or 'XESP' in gd.plugins[i].fields(rr):
+            continue
+        if btag != 'DOOR' and 'SCRI' in gd.fields(r['base']):
+            continue                     # (a script of its own may be part of a game quest: a safehouse's bed, a terminal's menu)
+        o = {'op': 'add', 'cell': '$' + tag, 'base': gd.key(r['base']), 'p': [round(v, 4) for v in list(r['pos']) + list(r['rot'])], 's': round(r['scale'], 4)}
+        if r['ref'] == exit_fid:
+            o['name'] = tag + 'x'
+        elif r['leads']:
+            o['extra'] = DOOR_LOCK
+        ops.append(o)
+        kept += 1
+    return ops, kept
+
+
+def _arrive_out(inside, ox, oy, z, rz):
+    p = inside['arrive_out']
+    dx, dy = turn(p[0], p[1], rz)
+    return [round(ox + dx, 2), round(oy + dy, 2), round(z + p[2], 2), p[3], p[4], round((rz + p[5]) % math.tau, 4)]
 
 
 # ---------- standing them on plots ----------
@@ -361,6 +460,7 @@ class World:
         self.gd, self.pr = gd, pr
         self.grid = gd.grid(world)
         self.ground = roadgen.Ground(gd, pr, world)
+        self.ins = None
         self.ours = {b['key'] for b in cat}
         self.boxes, self.big, self.small = {}, [], []
         keys = {gd.key(c): xy for xy, c in self.grid.items()}
@@ -440,11 +540,15 @@ def _family_for(row, area):
     return 'apartments'
 
 
-def plan(gd, pr, world, rows, cat, seed=1, progress=None):
-    """(ops as one Undo, a report). rows: the marker layer's buildings."""
+def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE):
+    """(ops as one Undo, a report). rows: the marker layer's buildings. insides: the share of ordinary buildings that get a copy of a
+    real place behind their door (0: none); report['made'] lists [(tag, family)] for each, '$tag' naming the place in the ops."""
     rng = random.Random(seed)
     fits = [Fit(b) for b in cat]
     w = World(gd, pr, world, cat)
+    if insides:
+        prefix = re.sub(r'[^A-Za-z0-9]', '', gd.edid(world)) or 'Town'
+        w.ins = Insides(gd, prefix, insides, seed=seed, taken=[recordio.field(r, 'EDID') for r in pr.records.values()])
     roads = _roads(gd, w)
     road_bucket = collections.defaultdict(list)
     for x, y in roads:
@@ -501,7 +605,9 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None):
             rep['built'] += 1
     report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'too_small': rep['too_small'],
               'nothing_fits': rep['nothing_fits'], 'blocked': rep['blocked'], 'steep': rep['steep'], 'had_one': rep['had_one'],
-              'cleared': len(gone), 'families': dict(fams), 'catalogue': len(cat), 'roads_seen': len(roads), 'poi': rep['poi'], 'landmarks': rep['landmarks']}
+              'cleared': len(gone), 'families': dict(fams), 'catalogue': len(cat), 'roads_seen': len(roads), 'poi': rep['poi'], 'landmarks': rep['landmarks'],
+              'insides': len(w.ins.tags) if w.ins else 0, 'inside_things': w.ins.things if w.ins else 0, 'made': list(w.ins.tags) if w.ins else [],
+              'insides_capped': bool(w.ins and w.ins.left <= 0)}
     return ops, report
 
 
@@ -571,7 +677,7 @@ def _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, f
             my = cy + ay * along + sfy * back
             rz = f.turn_for(sfx, sfy)
             ox, oy, fp = f.placed(mx, my, rz)
-            if _put(f, w, ox, oy, rz, fp, level, ops, gone, rep):
+            if _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row, poi):
                 got += 1
                 used[f.b['key']] += 1
                 rep['landmarks'] += landmark(f.b)
@@ -585,7 +691,7 @@ def _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, f
     return rows_got
 
 
-def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep):
+def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
     """Stand one building, its doors and clear what's small under it, if nothing big is in its way and the ground lies right."""
     clear = []
     for ck, rk, ofp, big, _ours in w.near(fp):
@@ -613,10 +719,58 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep):
     ops.append({'op': 'add', 'cell': ck, 'base': b['key'], 'p': [round(ox, 2), round(oy, 2), round(z, 2), 0.0, 0.0, round(rz, 4)], 's': 1})
     w.add(fp, ck, '(new)')
     rep['buildings'] += 1
-    for d in b['doors']:
+    inside = w.ins.pick(b, poi) if w.ins else None
+    for k, d in enumerate(b['doors']):
         dx, dy = turn(d['x'], d['y'], rz)
         dck = w.cell_at(ox + dx, oy + dy) or ck
-        ops.append({'op': 'add', 'cell': dck, 'base': d['base'], 'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)],
-                    's': 1, 'extra': DOOR_LOCK})
+        o = {'op': 'add', 'cell': dck, 'base': d['base'], 'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)], 's': 1}
         rep['doors'] += 1
+        if inside and k == inside['door']:
+            ops.extend(w.ins.make(inside, b, row, o, dck, _arrive_out(inside, ox, oy, z, rz)))
+        else:
+            o['extra'] = DOOR_LOCK
+            ops.append(o)
     return True
+
+
+class Insides:
+    """Which buildings get a copy of a real place behind their door, and the ops for it (inside_ops)."""
+
+    def __init__(self, gd, prefix, share=INSIDE_SHARE, most=MAX_INSIDES, seed=1, taken=()):
+        self.gd, self.prefix, self.share, self.left = gd, prefix, share, most
+        self.rng = random.Random(seed * 7919 + 1)
+        self.used = collections.Counter()
+        self.tags = []                           # (what was made: [(tag, family)])
+        self.taken = {e.lower() for e in taken}
+        self.n = collections.Counter()
+        self.things = 0
+
+    def pick(self, b, poi):
+        """One of the places the game has behind this building, or None: always on a plot that stands out, else by share."""
+        if not b.get('insides') or self.left <= 0 or not b['doors']:
+            return None
+        if not poi and self.rng.random() >= self.share:
+            return None
+        least = min(self.used[i['cell']] for i in b['insides'])
+        return self.rng.choice([i for i in b['insides'] if self.used[i['cell']] == least])
+
+    def make(self, inside, b, row, door_op, dck, arrive_out):
+        self.left -= 1
+        self.used[inside['cell']] += 1
+        tag = 'in%d' % len(self.tags)
+        fam = b['family']
+        word = PLACE_NAME.get(fam, 'Building')
+        while True:
+            self.n[word] += 1
+            edid = '%s%s%02d' % (self.prefix, word, self.n[word])
+            if edid.lower() not in self.taken:
+                break
+        self.taken.add(edid.lower())
+        full = (row.get('name') or '').strip() or word
+        ops, kept = inside_ops(self.gd, inside, tag, edid, full)
+        self.things += kept
+        self.tags.append((tag, fam))
+        door = dict(door_op, name=tag + 'o')
+        return ops + [door,
+                      {'op': 'tel', 'cell': dck, 'ref': '$' + tag + 'o', 'tel': {'door': '$' + tag + 'x', 'p': inside['arrive_in']}},
+                      {'op': 'tel', 'cell': '$' + tag, 'ref': '$' + tag + 'x', 'tel': {'door': '$' + tag + 'o', 'p': arrive_out}}]
