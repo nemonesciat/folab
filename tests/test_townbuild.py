@@ -274,6 +274,19 @@ for g_ in report['groups']:
         for r_ in g_['rows'][:6]:
             print('     %s' % json.dumps(r_, default=str)[:220])
 check('the saved plugin reads back with no problems', report['summary']['error'] == 0 and report['summary']['warn'] == 0)
+import masterlist, plugintree
+saved = plugintree.Plugin.read(pr.plugin_path())
+made_with = masterlist.masters_of(plugintree.Plugin.read(pr.source_path()))
+check('a world FOLab made keeps only the masters it uses (%d of the %d it was made with: %s)' % (len(masterlist.masters_of(saved)), len(made_with), masterlist.masters_of(saved)),
+      pr.trim_masters and len(made_with) == 10 and all(masterlist.used_masters(saved)) and len(masterlist.masters_of(saved)) < 10
+      and not any(g_['kind'] == 'unused_master' for g_ in report['groups']))
+fn = masterlist.mapper(['FalloutNV.esm', 'DeadMoney.esm', 'HonestHearts.esm'], 'Mine.esp', ['FalloutNV.esm', 'HonestHearts.esm'], dropped=True)
+try:
+    fn(0x01000ABC)
+    stopped = False
+except ValueError:
+    stopped = True
+check('a master left out is re-pointed round, and one still used stops the save', fn(0x02000ABC) == 0x01000ABC and fn(0x03000ABC) == 0x02000ABC and stopped)
 gd2 = gamedata.GameData(plugins=list(gamedata.OFFICIAL) + [pr.plugin_path()])
 w2 = next(x for x in gd2.worlds() if gd2.edid(x) == 'FOLabTownTest')
 names = {gd2.edid(r['base']) for c in gd2.grid(w2).values() for r in gd2.refs(c) if r['base'] in gd2.forms}

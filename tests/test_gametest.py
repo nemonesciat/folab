@@ -127,7 +127,8 @@ check('the first move happens once, whatever a reset does', 'went.txt' in tick)
 check('a message box is closed, not waited on', 'if MenuMode 1001' in tick and 'CloseActiveMenu' in tick)
 check('no string variable where a plain String goes', not any(c + ' $' in tick for c in ('ReadStringFromFile', 'GetFormFromMod', 'GetModIndex', 'FileExists')))
 check('every local has a name of its own', all(v[1:3] == 'gt' for v in C.declared_in(tick)), sorted(C.declared_in(tick)))
-check('a controller is off for the run', T.game_settings().get(('Controls', 'bUse Joystick')) == 0)
+check('a controller is off for the run, and never rumbles', T.game_settings().get(('Controls', 'bUse Joystick')) == 0
+      and T.game_settings().get(('Controls', 'bGamePadRumble')) == 0 and T.game_settings().get(('Interface', 'bDisable360Controller')) == 1)
 check('it never saves', not any(w in tick.lower() for w in ('savegame', 'con_save', 'autosave')))
 files = C.game_files(plan['steps'], cells, plan['walker'][0], plan['walker'][1], 'RUN1')
 check('the runner\'s scripts go where JIP looks', {'NVSE\\plugins\\scripts\\gr_folabgt.txt', 'NVSE\\plugins\\scripts\\gl_folabgt.txt', 'NVSE\\plugins\\scripts\\gn_folabgt.txt'} <= set(files))
@@ -263,6 +264,11 @@ near = T._far_pairs([[0, 0, 0], [600, 0, 0]], 512 + 256)
 far = T._far_pairs([[0, 0, 0], [600, 0, 0], [0, 900, 0]], 512 + 256)
 check('walks are only planned where arriving proves something: further apart than a follower stops short (%s, %s)' % (near, far),
       near == [] and len(far) == 1 and all(math.dist(a[:2], b[:2]) > 768 for a, b in far))
+pts3 = [[0, 0, 0], [900, 0, 0], [0, 1000, 0]]
+along = [[0, 5000, 1100], [5000, 0, 1500], [1100, 1500, 0]]       # (the far pair is 5,000 round by the mesh: a maze)
+w3 = T._far_pairs(pts3, 768, along)
+check('a walk is one the follower can finish: the straight-line farthest pair is 5,000 round by the mesh, so it is passed over (%s)' % w3,
+      len(w3) == 1 and sorted(map(tuple, w3[0])) == [(0, 1000, 0), (900, 0, 0)])
 
 d0 = doors[0]
 low = T._low(d0['to']['cell'])

@@ -1220,7 +1220,7 @@ def new_world(body, shaped=None):
         load_game(PR)
         raise
     d = PR.to_dict()
-    d.update(cells={}, records={}, land={}, water={}, next_id=nid, source=folder + '/' + PR.plugin)
+    d.update(cells={}, records={}, land={}, water={}, next_id=nid, source=folder + '/' + PR.plugin, trim_masters=True)
     with open(PR.path + '.tmp', 'w', encoding='utf-8') as f:
         json.dump(d, f, indent=1)
     os.replace(PR.path + '.tmp', PR.path)

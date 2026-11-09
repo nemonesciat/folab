@@ -3,6 +3,7 @@ its end means the plugin itself), so a change to the list means re-pointing ever
 group that names a form, the header's list of what it overrides. formlinks.py knows where they all are.
 
 A record with nothing to re-point keeps its bytes (compressed ones stay compressed)."""
+import os
 import struct
 
 import formlinks
@@ -57,9 +58,10 @@ def remap(tree, own_index, fn):
         tree.header.set_data(join(new), tree.header.flags)
 
 
-def mapper(old_masters, own_name, new_masters, own_low=None, renamed=None):
+def mapper(old_masters, own_name, new_masters, own_low=None, renamed=None, dropped=False):
     """fn(form ID as a plugin with old_masters writes it) -> the same form with new_masters. own_low: new object IDs for
-    the plugin's own forms; renamed: {lower file name: (its forms now in the plugin itself) new object IDs or None}."""
+    the plugin's own forms; renamed: {lower file name: (its forms now in the plugin itself) new object IDs or None}.
+    dropped: masters missing from new_masters are allowed, as long as nothing points at them (if something does, ValueError)."""
     index = {m.lower(): i for i, m in enumerate(new_masters)}
     new_own = len(new_masters)
     old = [m.lower() for m in old_masters]
@@ -72,6 +74,8 @@ def mapper(old_masters, own_name, new_masters, own_low=None, renamed=None):
             table[i] = (new_own, renamed[name])
         elif name in index:
             table[i] = (index[name], None)
+        elif dropped:
+            table[i] = (None, name)
         else:
             raise ValueError('%s isn\'t in the new list of masters.' % name)
 
@@ -79,6 +83,8 @@ def mapper(old_masters, own_name, new_masters, own_low=None, renamed=None):
         e = table.get(v >> 24)
         if e is None:
             return v                # (points past the end of its masters: nothing to keep it right against)
+        if e[0] is None:
+            raise ValueError('Something still uses %s (%08X), so it can\'t be left out of the masters.' % (e[1], v))
         low = v & 0xFFFFFF
         if e[1]:
             low = e[1].get(low, low)
@@ -113,14 +119,30 @@ def set_masters(tree, masters):
     tree.header.set_data(join(out[:at] + mast + out[at:]), tree.header.flags)
 
 
-def grow(tree, own_name, new_masters):
-    """A plugin's masters replaced by new_masters, every link re-pointed. Returns False when they're the same."""
+def grow(tree, own_name, new_masters, dropped=False):
+    """A plugin's masters replaced by new_masters, every link re-pointed. Returns False when they're the same. dropped: some
+    may be left out, if nothing uses them (trimmed)."""
     old = masters_of(tree)
     if [m.lower() for m in old] == [m.lower() for m in new_masters]:
         return False
-    remap(tree, len(old), mapper(old, own_name, new_masters))
+    remap(tree, len(old), mapper(old, own_name, new_masters, dropped=dropped))
     set_masters(tree, new_masters)
     return True
+
+
+_USED = {}
+
+
+def used_by_file(path):
+    """used_masters of a plugin on disk, kept while the file is unchanged: {lower master name: used?}, or None."""
+    st = os.stat(path)
+    k = (os.path.normcase(os.path.abspath(path)), st.st_size, st.st_mtime_ns)
+    if k not in _USED:
+        tree = plugintree.Plugin.read(path)
+        u = used_masters(tree)
+        _USED.clear()
+        _USED[k] = None if u is None else {m.lower(): bool(x) for m, x in zip(masters_of(tree), u)}
+    return _USED[k]
 
 
 def used_masters(tree):

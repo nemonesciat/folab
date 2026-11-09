@@ -56,6 +56,7 @@ class Project:
         self.cellinfo = d.get('cellinfo', {})   # CELL key -> what the mod sets on it (worldrec.py): {tag: key}, XCLR a list
         self.source = d.get('source')           # an opened plugin: its copy, under projects/ (adopt.py); None for a new mod
         self.esm = d.get('esm', False)          # saved as a master (.esm)
+        self.trim_masters = d.get('trim_masters', False)   # an opened plugin FOLab made (a new world): masters nothing uses are left out
         self.next_id = d.get('next_id', FIRST_ID)
         self.undo_stack, self.redo_stack = [], []
 
@@ -77,7 +78,7 @@ class Project:
     def to_dict(self):
         return {'name': self.name, 'plugin': self.plugin, 'author': self.author, 'description': self.description,
                 'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'navmesh': self.navmesh, 'drop': self.drop, 'cellinfo': self.cellinfo, 'next_id': self.next_id,
-                'source': self.source, 'esm': self.esm}
+                'source': self.source, 'esm': self.esm, 'trim_masters': self.trim_masters}
 
     def save(self):
         tmp = self.path + '.tmp'

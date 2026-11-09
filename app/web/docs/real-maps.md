@@ -30,7 +30,7 @@ In **Outside**, press **＋ New worldspace…**, then **🗺 From a real map…*
 2. **Set the scale** (below).
 3. **Choose the part you want.** Drag on the map for a rectangle; drag inside it to move it. It snaps to whole cells. Right-drag pans, the wheel zooms.
 4. **Read the numbers.** Before anything is made you see the cells, the plugin's size, how long it'll take, and how high the heights run.
-5. **Make it.** Your mod is saved and reopened with the new world in it. The map shows it, and every tool outside works on it as on any other land.
+5. **Make it.** Your mod is saved and reopened with the new world in it. The map shows it, and every tool outside works on it as on any other land. While you work, every DLC's things are yours to use; when you save, the plugin names only the game files it actually uses, so players need only those (Goodsprings with its buildings needs Honest Hearts and Old World Blues, nothing else).
 
 **Undo** takes the whole world away again, back to your mod as it was, as long as you haven't changed anything in it since. Once you have, **World tools > Real map > Go back to before this world** still can, but what you've done since goes with it. (Only the latest world can be taken back like this.)
 
@@ -102,6 +102,23 @@ Before you make the world, the panel's **Ground types** section takes a land-cov
 FOLab recognises these two by their numbers; any other file just shows its numbers, for you to say what each gets. Each class has a row: a **ground texture** from the game's (blank leaves it to the slope), a **set of things** to scatter (plants, rocks, trees or junk: what the game itself placed in the world you take after), and how many a cell. The defaults are guesses, so look through them. FOLab remembers your choices for that kind of file on this computer.
 
 Steep ground stays as the slope says, so grass doesn't climb cliffs. Textures go into the world as it's made; scatter comes straight after as its own Undo, at most 30,000 things (thinned evenly if it would be more). Nothing stands in water.
+
+## A whole town: Goodsprings, step by step
+
+This is how the real Goodsprings, Nevada was made into a playable town, a church in it walked through in the game. Any small town goes the same way.
+
+1. **The two files.**
+   - Heights: the SRTM tile that holds the town. Goodsprings is at 35.83° N, 115.43° W, so it's `N35W116.hgt` (or `.hgt.gz`), which covers 35-36° N, 116-115° W. Free from NASA Earthdata, the USGS, or the public terrain tiles on Amazon (`elevation-tiles-prod/skadi/N35/N35W116.hgt.gz`).
+   - Streets and buildings: on openstreetmap.org, find the town, press **Export**, **Manually select a different area**, draw a box just round it, and **Export**. Goodsprings' box (115.45° to 115.42° W, 35.822° to 35.845° N) came to 1 MB. Keep it under about 5 MB; for more, use Overpass (see above).
+2. **Start a mod**, then in **Outside** press **＋ New worldspace…** and **🗺 From a real map…**. Pick the height file.
+3. **The area and scale.** Set the scale to **1 : 1** with **height × 1**: a town is small, and at real size its houses get real-sized plots. Drag a rectangle round the town on the shaded map, the same box as your export. Goodsprings came to 46 × 43 cells (2.7 × 2.5 km). Leave the base level as FOLab picks it: just under the area's lowest ground.
+4. **Make it.** About a minute.
+5. **Lay OpenStreetMap.** **World tools > Real map**, pick the `.osm` file, **Read it**. Goodsprings has 19 main roads, 69 side streets, 46 dirt tracks and 222 buildings. Tick the main roads, side streets and Buildings (tracks are optional), then **Lay it**.
+6. **Put up buildings.** Leave **Ways in** at about a third and press it. Goodsprings got 155 buildings on 139 plots, 4 landmarks (its named church among them) and 40 places to go in. The other plots are sheds and garages, smaller than anything the game has. Say yes when FOLab offers to make the navmesh outside.
+7. **Have a look and save.** The map and the 3D view show the street; Places lists the insides, named from the map where it has a name. Save, and **Tools > Health check** should find nothing wrong.
+8. **Go there.** Put it in the game and use the console: `cow GoodspringsWorld 0 0` (your world's editor ID). Or try one place first with **Tools > Test in game**.
+
+What it needs: the plugin names only the game files it uses (Goodsprings: the base game, Honest Hearts and Old World Blues). What it doesn't have yet: people, distant land (**World tools > Far land**), and the road onto it from the Mojave.
 
 ## What's left to you
 

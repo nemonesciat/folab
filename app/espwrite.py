@@ -177,6 +177,8 @@ class Writer:
                     used.add(gd.from_key(k) >> 24)
         questrec.plan_masters(gd, self.pr, used)
         for i in list(used):                    # a copied record may name its own file's masters
+            if gd.names[i] == self.own_name:
+                continue                        # (the mod's own plugin, loaded as part of the game: its list is what's being worked out)
             for m in gd.plugins[i].header['masters']:
                 if m.lower() in gd.names:
                     used.add(gd.names.index(m.lower()))
@@ -186,6 +188,13 @@ class Writer:
             # (what it had stays where it was; anything new it now uses goes after, every link re-pointed in build())
             low = {m.lower() for m in kept} | {self.own_name}
             self.source_masters = kept
+            if getattr(self.pr, 'trim_masters', False):
+                # (a plugin FOLab made, a new world saved naming every game file: those nothing in it or in the mod's changes uses go)
+                inside = masterlist.used_by_file(self.source)
+                if inside is not None:
+                    want = {gd.names[i] for i in used}
+                    kept = [m for n, m in enumerate(kept) if n == 0 or inside.get(m.lower()) or m.lower() in want]
+                    self.trimmed = True
             self.masters = kept + [file_name(i) for i in order if gd.names[i] not in low]
             self.mindex = {m.lower(): k for k, m in enumerate(self.masters)}
             return
@@ -262,7 +271,7 @@ class Writer:
         gd = self.gd
         tree = plugintree.Plugin.read(self.source) if self.source else plugintree.Plugin.empty(b'')
         if self.source and self.masters != self.source_masters:
-            masterlist.grow(tree, self.pr.plugin, self.masters)
+            masterlist.grow(tree, self.pr.plugin, self.masters, dropped=getattr(self, 'trimmed', False))
         order = gd.plugins[0].top_groups()
         found = {r.formid: (r, parent) for r, parent, _path in tree.records()}
 
