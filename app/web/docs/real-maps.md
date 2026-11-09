@@ -81,7 +81,7 @@ Once the pads are laid, **World tools > Real map > 🏚 Put up buildings** stand
 - **Furnished as the game has it:** walls, furniture, clutter, lights and containers to search, with nothing owned and nothing locked.
 - **Without the game's story:** its people and creatures, keys, notes, terminals, talking radios, anything switched on by a quest, and anything with a script of its own stay out. A door inside that led somewhere else in the game is locked.
 - **Linked both ways:** you arrive just inside the way out, and back outside in front of the building's door.
-- **Walkable:** each gets its navmesh, made in the same Undo.
+- **Walkable:** each takes the game's own navmesh for that place, made by hand and fitting the furniture exactly (FOLab makes one where the game's can't be taken as it is), in the same Undo. A Goodsprings church walked this way in the real game.
 - **Named for what it is:** your world's editor ID with House, Shop, Offices, Works or Hall and a number, shown as the plot's name if the map has one (a church called St Mary is "St Mary"), otherwise as House, Shop and so on. Rename them in Places like any place of your own.
 
 The game has a place behind about 50 of the 86 buildings FOLab uses. The rest stay locked. FOLab makes at most 40 places in one go. A plot that already has its building isn't opened later: Undo and put the buildings up again to change how many open.

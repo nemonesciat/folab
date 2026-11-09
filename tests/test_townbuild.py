@@ -243,7 +243,7 @@ check('you arrive outside by the building\'s door (%d of %d) and inside by the w
 check('nothing of the game\'s story is copied in: no people, keys, notes, terminals or scripted things', bad_thing == 0)
 two_way = next(((b, i) for b in cat.values() for i in b['insides'] if sum(1 for r in gd.refs(gd.from_key(i['cell'])) if r['leads']) > 1), None)
 if two_way:
-    ops_, _n = townbuild.inside_ops(gd, two_way[1], 'tt', 'FOLabCheck', 'Check')
+    ops_, _n, _doors = townbuild.inside_ops(gd, two_way[1], 'tt', 'FOLabCheck', 'Check')
     src_doors = {(round(r['pos'][0]), round(r['pos'][1])): r for r in gd.refs(gd.from_key(two_way[1]['cell'])) if r['leads']}
     adds = [o for o in ops_ if o['op'] == 'add' and (round(o['p'][0]), round(o['p'][1])) in src_doors]
     check('inside %s: its way out is free, its doors to anywhere else locked, other doors left to open'
@@ -254,6 +254,10 @@ check('the places are named for what they are', all(recordio.field(pr.records[k]
       and any(recordio.field(pr.records[k], 'FULL') == 'St Mary' for k in places))
 check('no owner on a copied place', not any(s['tag'] == 'XOWN' for k in places for s in pr.records[k]['subs']))
 check('each place has its navmesh (%d missed)' % rep['navmesh_missed'], all(k in pr.navmesh for k in places) and rep['navmesh_missed'] == 0)
+game_meshes = [k for k in places if pr.navmesh[k].get('sig') is not None and len(pr.navmesh[k]['tris']) > 0 and all(d[0] in pr.cells[k]['refs'] for d in pr.navmesh[k]['doors'])]
+check('places take the game\'s own navmesh where it can be taken as it is (%d of %d), its doors linked to the place\'s own'
+      % (rep['navmesh_game'], len(places)), rep['navmesh_game'] >= len(places) // 2 and len(game_meshes) == len(places)
+      and all(pr.navmesh[k]['doors'] for k in places))
 check('still one Undo for all of it', pr.undo_stack[-1][0] == 'Buildings on the plots' and len(pr.undo_stack) == undo_before + 1)
 
 # ---------- again, undo, saved ----------

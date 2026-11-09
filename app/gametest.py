@@ -39,6 +39,8 @@ MAX_POINTS, MAX_DOORS, MAX_THINGS, MAX_ACTORS, MAX_WALKS = 240, 40, 150, 40, 3
 REST_TYPES = {'MISC', 'WEAP', 'ARMO', 'AMMO', 'ALCH', 'BOOK', 'NOTE', 'KEYM', 'CONT', 'FURN', 'IMOD', 'CHIP', 'CMNY', 'CCRD', 'TERM'}
 WALKER = ('1ERefugeeAAM', 'DefaultFollowPlayerFar')
 WALK_TICKS = 300
+FOLLOW_KEEPS = 512.0                    # (how near DefaultFollowPlayerFar comes: its PTDT distance; read again by _follow_keeps. A follower
+                                        # that ends within it has arrived: real run, 8 Nov 2026, all three walks ended 328-361 away)
 
 # seconds each step takes, to cap a run by its size (ticks are every 2 frames: about 30 a second at 60 frames)
 SECONDS = {'go': 25, 'point': 2.5, 'thing': 1, 'actor': 2, 'door': 30, 'walk': 15}
@@ -193,6 +195,13 @@ def _walker(gd):
     return out
 
 
+def _follow_keeps(gd):
+    """How near the walk test's follow package comes to the player, from its target data (PTDT's distance); FOLLOW_KEEPS if unread."""
+    f = next((f for f, (_i, r) in gd.forms.items() if r.tag == 'PACK' and f >> 24 == 0 and gd.edid(f) == WALKER[1]), None)
+    d = gd.fields(f).get('PTDT') if f is not None else None
+    return float(struct.unpack_from('<i', d, 8)[0]) if d and len(d) >= 12 and struct.unpack_from('<i', d, 8)[0] > 0 else FOLLOW_KEEPS
+
+
 def _thin(items, most):
     if len(items) <= most:
         return items
@@ -268,7 +277,8 @@ def make_plan(gd, pr, ckey, walks=True, run=''):
             plan[name_] = _thin(plan[name_], most)
     who = _walker(gd) if walks else None
     if who and len(pts) >= 2 and not plan['outside']:
-        pairs = _far_pairs(pts)[:MAX_WALKS]
+        plan['keeps'] = _follow_keeps(gd)
+        pairs = _far_pairs(pts, plan['keeps'] + SQUARE)[:MAX_WALKS]
         plan['walks'] = [{'id': new_id(), 'a': a, 'b': b, 'ticks': WALK_TICKS} for a, b in pairs]
     plan['walker'] = who
     plan['go'] = list(go) if go else None
@@ -277,8 +287,9 @@ def make_plan(gd, pr, ckey, walks=True, run=''):
     return plan
 
 
-def _far_pairs(points):
-    """Pairs of points to walk between, far apart and on the same floor: first the longest such, then the next from what's left."""
+def _far_pairs(points, least=SQUARE * 2):
+    """Pairs of points to walk between, at least 'least' apart (further than a follower stops short, or arriving proves nothing) and on
+    the same floor: first the longest such, then the next from what's left."""
     rows = sorted(points, key=lambda p: (p[2], p[0], p[1]))
     out, used = [], set()
     for _ in range(MAX_WALKS):
@@ -289,7 +300,7 @@ def _far_pairs(points):
             for j, b in enumerate(rows):
                 if j > i and j not in used and abs(a[2] - b[2]) < LEVEL:
                     d = (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
-                    if d > (SQUARE * 2) ** 2 and (best is None or d > best[0]):
+                    if d > least ** 2 and (best is None or d > best[0]):
                         best = (d, i, j)
         if not best:
             break
@@ -493,7 +504,9 @@ def _judge_door(plan, d, r, land, add):
     if r['locked']:
         return add('door_locked', 'info', 'A door to %s is locked: it wasn\'t gone through.' % where, at, d['p'])
     low = r['form'].strip().upper()[-6:]
-    if low.strip('0') == '':
+    if low.strip('0') == '' and (to.get('interior') or land is None):
+        # (a door out to a world names no cell: its far side stands in the world's persistent cell, which GetTeleportCell
+        # doesn't give (real run, 8 Nov 2026). Going through and landing at the arrival is the proof there.)
         return add('door_leads_nowhere', 'error', 'A door to %s leads nowhere in the game.' % where, at, d['p'])
     if to.get('interior') and to.get('cell') and low != _low(to['cell']):
         add('door_wrong_place', 'error', 'A door should lead to %s; the game says %s (%s).' % (where, r['name'] or '?', r['form']), at, d['p'])
@@ -560,8 +573,9 @@ def make_report(plan, text, ending=None, differences=(), problems=(), seconds=No
         r = by_id('npc', w['id'])
         if r:
             done['walks'] += 1
-            if r['dist'] >= 300:
-                add('no_path', 'error', 'Told to follow across the place, someone was still %.0f away after the time allowed: the navmesh doesn\'t bring them.' % r['dist'], _go(plan, w['b']), w['a'])
+            if r['dist'] > plan.get('keeps', FOLLOW_KEEPS):
+                add('no_path', 'error', 'Told to follow across the place, someone was still %.0f away after the time allowed (a follower comes within %.0f): '
+                    'the navmesh doesn\'t bring them.' % (r['dist'], plan.get('keeps', FOLLOW_KEEPS)), _go(plan, w['b']), w['a'])
     for r in rows:
         if r['kind'] == 'died':
             add('player_died', 'error', 'The player died at step %.0f, god mode or no.' % r['id'])

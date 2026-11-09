@@ -6,6 +6,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..', 'app'))
 import json
+import math
 import shutil
 import struct
 import subprocess
@@ -245,9 +246,23 @@ check('a thing the game hasn\'t got is an error', r['kinds'].get('thing_missing'
 a0 = P['actors'][0]
 r = T.make_report(P, full({a0['id']: 'actor|%d|1|%.1f|%.1f|%.1f|1|0|0' % (a0['id'], a0['p'][0], a0['p'][1], a0['p'][2] - 500)}), 'finished')
 check('a character through the floor is an error', r['kinds'].get('actor_fell') == 1)
-if P['walks']:
-    r = T.make_report(P, full({P['walks'][0]['id']: 'npc|%d|1500.0|0' % P['walks'][0]['id']}), 'finished')
-    check('someone who can\'t follow is an error', r['kinds'].get('no_path') == 1)
+# walks: this place plans none of its own, so one is lent it
+P_walk = json.loads(json.dumps(P))
+P_walk['walks'] = [{'id': 9001, 'a': [x0, y0, z0], 'b': [x0 + 900, y0, z0], 'ticks': 300}]
+P_walk['keeps'] = 512.0
+
+
+def walked(dist):
+    return T.make_report(P_walk, '\n'.join(full().split('\n')[:-1] + ['npc|9001|%.1f|0' % dist, 'done|9999']), 'finished')['kinds']
+
+
+check('someone who can\'t follow is an error', walked(1500).get('no_path') == 1)
+check('someone who came as near as a follower comes (360, within 512) arrived: real run, 8 Nov 2026', 'no_path' not in walked(360))
+check('the follow package\'s distance is read from the game (%s)' % T._follow_keeps(gd), T._follow_keeps(gd) == 512)
+near = T._far_pairs([[0, 0, 0], [600, 0, 0]], 512 + 256)
+far = T._far_pairs([[0, 0, 0], [600, 0, 0], [0, 900, 0]], 512 + 256)
+check('walks are only planned where arriving proves something: further apart than a follower stops short (%s, %s)' % (near, far),
+      near == [] and len(far) == 1 and all(math.dist(a[:2], b[:2]) > 768 for a, b in far))
 
 d0 = doors[0]
 low = T._low(d0['to']['cell'])
@@ -256,6 +271,13 @@ r = T.make_report(P, full({d0['id']: 'door|%d|0|0|0|00000000|-' % d0['id'], ('la
 check('a door the game hasn\'t got is an error', r['kinds'].get('door_missing') == 1)
 r = T.make_report(P, full({d0['id']: 'door|%d|1|1|0|00000000|' % d0['id'], ('land', d0['id']): 'beat|1'}), 'finished')
 check('a door leading nowhere is an error', r['kinds'].get('door_leads_nowhere') == 1, r['kinds'])
+# a door out to a world: the game names no cell for it (its far side is in the persistent cell); landing at the arrival is the proof
+P_out = json.loads(json.dumps(P))
+P_out['doors'][0]['to']['interior'] = False
+r = T.make_report(P_out, full({d0['id']: 'door|%d|1|1|0|00000000|<NULL>' % d0['id'], ('land', d0['id']): 'land|%d|01000EA0|Outside|%.1f|%.1f|%.1f|%.1f|0' % (d0['id'], q[0], q[1], q[2], q[2])}), 'finished')
+check('a door out to a world that lands at its arrival is fine, though the game names no cell', not any(k.startswith('door_') for k in r['kinds']), r['kinds'])
+r = T.make_report(P_out, full({d0['id']: 'door|%d|1|1|0|00000000|<NULL>' % d0['id'], ('land', d0['id']): 'beat|1'}), 'finished')
+check('one that never lands still leads nowhere', r['kinds'].get('door_leads_nowhere') == 1, r['kinds'])
 r = T.make_report(P, full({d0['id']: 'door|%d|1|1|1|01%s|Over There' % (d0['id'], low), ('land', d0['id']): 'beat|1'}), 'finished')
 check('a locked door is noted, not gone through', r['kinds'].get('door_locked') == 1 and 'door_not_gone_through' not in r['kinds'])
 if d0['to']['interior']:

@@ -427,19 +427,25 @@ def buildings_job(body, srv):
             state = srv.edit('Buildings on the plots', ops)['state']
             # (each place behind a door walks: its navmesh, in the same Undo)
             names, made = dict(srv.PR.names), report.pop('made')
-            nav_ops, report['navmesh_missed'] = [], 0
-            for k, (tag, _fam) in enumerate(made):
+            # (the game's own, made by hand, where it can be taken as it is: the copy's things stand where the game's do; else one is made)
+            nav_ops, report['navmesh_missed'], report['navmesh_game'] = [], 0, 0
+            for k, (tag, _fam, src, doors) in enumerate(made):
                 _said('Making the places\' navmeshes', k, len(made))
                 key = names.get(tag)
-                try:
-                    data, _r = navbuild.generate(srv.GD, srv.PR, key)
-                    nav_ops.append({'op': 'navmesh', 'cell': key, 'mesh': data})
-                except navbuild.NavError:
-                    report['navmesh_missed'] += 1
+                data = townbuild.copied_navmesh(srv.GD, srv.PR, src, key, {g: names[n] for g, n in doors.items() if n in names})
+                if data:
+                    report['navmesh_game'] += 1
+                else:
+                    try:
+                        data, _r = navbuild.generate(srv.GD, srv.PR, key)
+                    except navbuild.NavError:
+                        report['navmesh_missed'] += 1
+                        continue
+                nav_ops.append({'op': 'navmesh', 'cell': key, 'mesh': data})
             if nav_ops:
                 srv.PR.apply('Buildings on the plots', nav_ops, merge=True)
                 state = srv.state()
-            report['places'] = [names[t] for t, _f in made if t in names]
+            report['places'] = [names[m[0]] for m in made if m[0] in names]
         return {'state': state, 'report': report}
     return _start(work, kind='buildings')
 

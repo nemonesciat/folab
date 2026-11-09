@@ -35,6 +35,8 @@ import struct
 
 import kitindex
 import landshape
+import navbuild
+import navmesh
 import recordio
 import roadgen
 
@@ -370,7 +372,8 @@ def inside_ops(gd, inside, tag, edid, full):
     """Ops that make a copy of the game's place behind a building as a place of the mod's own, named '$tag', its way out named
     '$tag' + 'x'. What it has that belongs to the game's own story stays out: people and creatures, keys, notes and terminals,
     talking radios, things switched on by quests (an enable parent, or off at the start), anything with a script of its own;
-    nothing in it is owned or locked. Doors to anywhere else are locked. Returns (ops, how many things it has)."""
+    nothing in it is owned or locked. Doors to anywhere else are locked. Returns (ops, how many things it has, {the game's door key:
+    the copy's name}: the game's own navmesh names its doors, copied_navmesh points it at these)."""
     cfid = gd.from_key(inside['cell'])
     rec = recordio.load(gd, cfid)
     rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('XOWN', 'XRNK')]
@@ -379,6 +382,7 @@ def inside_ops(gd, inside, tag, edid, full):
     ops = [{'op': 'record_new', 'record': rec, 'name': tag}]
     exit_fid = gd.from_key(inside['exit'])
     kept = 0
+    doors = {}
     for r in gd.refs(cfid):
         if r['type'] != 'REFR' or not r['base'] or r['base'] not in gd.forms or not r['pos'] or not r['rot']:
             continue
@@ -393,11 +397,35 @@ def inside_ops(gd, inside, tag, edid, full):
         o = {'op': 'add', 'cell': '$' + tag, 'base': gd.key(r['base']), 'p': [round(v, 4) for v in list(r['pos']) + list(r['rot'])], 's': round(r['scale'], 4)}
         if r['ref'] == exit_fid:
             o['name'] = tag + 'x'
-        elif r['leads']:
-            o['extra'] = DOOR_LOCK
+        elif btag == 'DOOR':
+            o['name'] = '%sd%d' % (tag, len(doors))
+            if r['leads']:
+                o['extra'] = DOOR_LOCK
+        if btag == 'DOOR':
+            doors[gd.key(r['ref'])] = o['name']
         ops.append(o)
         kept += 1
-    return ops, kept
+    return ops, kept, doors
+
+
+def copied_navmesh(gd, pr, src, ckey, door_keys):
+    """The game's own navmesh of the place a copy was made from, for the copy (whose things stand exactly where the game's do): the
+    project's form, its doors pointed at the copy's (door_keys: the game's door key to the copy's), or None when it can't be
+    taken as it is (none, more than one, links to other meshes, or not sound) and one has to be made."""
+    entries = navbuild.game_entries(gd, src)
+    if len(entries) != 1:
+        return None
+    data = navbuild.game_copy(gd, entries[0])
+    if data['ext']:
+        return None
+    data['doors'] = [[door_keys[d], t] for d, t in data['doors'] if d in door_keys]
+    for k in ('copy', 'outline'):
+        data.pop(k, None)
+    data['form'] = None
+    if navmesh.validate(navmesh.refresh(navbuild.as_mesh(data))):
+        return None
+    data['sig'] = navbuild.signature(navbuild.place_refs(gd, pr, ckey))
+    return data
 
 
 def _arrive_out(inside, ox, oy, z, rz):
@@ -545,7 +573,7 @@ def _family_for(row, area):
 
 def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE):
     """(ops as one Undo, a report). rows: the marker layer's buildings. insides: the share of ordinary buildings that get a copy of a
-    real place behind their door (0: none); report['made'] lists [(tag, family)] for each, '$tag' naming the place in the ops."""
+    real place behind their door (0: none); report['made'] lists [(tag, family, the game's place, its doors' names)] for each, '$tag' naming the place in the ops."""
     rng = random.Random(seed)
     fits = [Fit(b) for b in cat]
     w = World(gd, pr, world, cat)
@@ -779,9 +807,9 @@ class Insides:
                 break
         self.taken.add(edid.lower())
         full = (row.get('name') or '').strip() or word
-        ops, kept = inside_ops(self.gd, inside, tag, edid, full)
+        ops, kept, doors = inside_ops(self.gd, inside, tag, edid, full)
         self.things += kept
-        self.tags.append((tag, fam))
+        self.tags.append((tag, fam, inside['cell'], doors))
         door = dict(door_op, name=tag + 'o')
         return ops + [door,
                       {'op': 'tel', 'cell': dck, 'ref': '$' + tag + 'o', 'tel': {'door': '$' + tag + 'x', 'p': inside['arrive_in']}},

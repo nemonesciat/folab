@@ -141,7 +141,7 @@ Each entry says what's assumed and what you'd see if it's wrong. "Lines" means t
 
 - **Falls:** `SetPosEx` puts the player's feet at the point, and collision and gravity act within the 12 ticks allowed. If points read as falling though the floor is fine, the wait is too short; see `SETTLE`. The limits are constants at the top of `gametest.py`, chosen from Morrowind experience and untested on this game.
 - **Doors:** `GetFormFromMod "FOLabGT Mine.esp" "000801"` finds a ref by its 6-digit number. `Activate player 1` takes the player through a load door from a script without opening a menu. 40 ticks in-game is long enough to land. A door to outside lands in a cell whose number isn't compared (only its position is).
-- **NPCs:** `PlaceAtMe` with a form from `GetFormFromMod`, `AddScriptPackage DefaultFollowPlayerFar`, and a plain refugee NPC (`1ERefugeeAAM`). If nobody moves in places that are clearly fine, suspect the package before the navmesh.
+- **NPCs:** `PlaceAtMe` with a form from `GetFormFromMod`, `AddScriptPackage DefaultFollowPlayerFar`, and a plain refugee NPC (`1ERefugeeAAM`). The package keeps within 512 of the player, so a walker ending nearer than that has arrived (`FOLLOW_KEEPS`, read from the package's PTDT).
 - **Message boxes:** a mod's script that pops up a box leaves the game in a menu forever. That ends as *went silent*.
 
 <a id="partway"></a>
@@ -170,6 +170,8 @@ The first real runs were on 7 November 2026, on FOLab Check House (6 floor point
 | 4 | **Ran to the end in 129 seconds and quit by itself**, with the user clicking OK on a message box and the game in front. | Message boxes close by themselves (`CloseActiveMenu`), `bUse Joystick` off for the run, and a report where nearly every thing reads as buried says so once. |
 | 5 | The popups closed by themselves. Through the door, someone in Prospector Saloon spoke first, and the dialogue menu waited for an answer until the watch closed the game. | The dialogue menu is closed the same way. |
 | 6 | **Ran to the end and quit by itself, with no help from the user**, the game in front and the controller left alone. Every check was reached and every file came back. | Nothing. Its only error is the true `no_path` above. |
+| 7 | 8 Nov: a church behind a building of Goodsprings at 1 : 1 (Real map: a copy of the game's church, FOLab's own navmesh). Ran to the end. The door out landed exactly on its arrival point in the world, yet read as *leads nowhere*; all three walkers stopped 360-830 short. | A door out to a world is judged by where you land: `GetTeleportCell` gives nothing for it (its far side is in the world's persistent cell). |
+| 8 | The same church with the game's own navmesh copied in (Real map now does this). Ran to the end; the walkers ended 328-361 from the player. | `DefaultFollowPlayerFar` comes within 512 (its PTDT), so that is arriving: walks are judged against the package's own distance and planned only between points further apart than that. Judged again, run 8 *works*; run 7's mesh still fails one walk (830 away). |
 
 **Now known from a real run:**
 
@@ -177,6 +179,8 @@ The first real runs were on 7 November 2026, on FOLab Check House (6 floor point
 - `CenterOnCell` from the main menu starts the game in the place with no save, and the tick carries on after the move (`gn` fires).
 - Reading the plan, `sv_Split`, `ToNumber`, `SetPosEx`, `BuildRef`, `%i` and `%n` all work as written, and so does `Activate` through a load door, which landed in the right cell.
 - The calibration passed, and on the stands the rays read sensibly.
+- A door from a place of the mod's own out to a world of the mod's own takes you to the arrival point FOLab set (runs 7 and 8).
+- `PlaceAtMe` with `AddScriptPackage DefaultFollowPlayerFar` works: the walker follows, and stops within the package's 512.
 
 **Not settled:**
 
