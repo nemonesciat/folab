@@ -74,12 +74,17 @@ def elevation_range(raster, opts):
     return 1.0, 0.0
 
 
-def default_base(raster, opts=None):
-    """Sea level when the file reaches the sea, else just under the file's lowest ground (land all dry, no great height to carry)."""
+def default_base(raster, opts=None, rect=None):
+    """Sea level when the ground chosen reaches the sea, else just under its lowest ground (land all dry, no great height to carry). rect: the part of the
+    file chosen (a town cut from a tile 2,000 m lower at one corner stands on its own ground, not the tile's)."""
     vs, vo = elevation_range(raster, opts or {})
-    lo, _hi, missing = raster.stats()
+    if rect:
+        lo, _hi, missing = raster.stats_in(*rect)
+        n = (int(rect[2]) - int(rect[0]) + 1) * (int(rect[3]) - int(rect[1]) + 1)
+    else:
+        (lo, _hi, missing), n = raster.stats(), raster.w * raster.h
     lo = lo * vs + vo
-    if lo <= 2.0 or missing > raster.w * raster.h * 0.02:
+    if lo <= 2.0 or missing > n * 0.02:
         return 0.0 if lo > -500 else round(lo)
     return float(math.floor(lo) - 1)
 
@@ -99,7 +104,6 @@ class Plan:
         self.compress = max(0.01, float(o.get('compress') or default_compress(raster, o.get('mpp'))))
         self.exag = float(o['exag']) if o.get('exag') not in (None, '') else default_exag(self.compress)
         self.vs, self.vo = elevation_range(raster, o)
-        self.base = float(o['base']) if o.get('base') not in (None, '') else default_base(raster, o)
         self.mx, self.my = mpp_of(raster, o)
         self.upx = self.mx * UNITS_PER_M / self.compress        # game units from one pixel to the next
         self.upy = self.my * UNITS_PER_M / self.compress
@@ -118,6 +122,8 @@ class Plan:
         self.col0 = max(0.0, (c0 + c1 - self.W * pcx) / 2)
         self.row0 = max(0.0, (r0 + r1 - self.H * pcy) / 2)
         self.x0, self.y0 = -(self.W // 2), -(self.H // 2)       # the world's south-west cell: the middle at the origin
+        self.area = (self.col0, self.row0, min(raster.w - 1.0, self.col0 + self.W * pcx), min(raster.h - 1.0, self.row0 + self.H * pcy))
+        self.base = float(o['base']) if o.get('base') not in (None, '') else default_base(raster, o, self.area if o.get('rect') else None)
 
     def count(self):
         return self.W * self.H
@@ -138,7 +144,7 @@ class Plan:
         """All the numbers for the preview. 'stop' is why it can't be made, 'warnings' what to think about."""
         n = self.count()
         mc = metres_per_cell(self.compress)
-        lo, hi, missing = self.raster.stats()
+        lo, hi, missing = self.raster.stats_in(*self.area) if self.opts.get('rect') else self.raster.stats()
         zlo, zhi = self.z_of_value(lo), self.z_of_value(hi)
         warn, stop = [], None
         if n > HARD_CELLS or max(self.W, self.H) > MAX_SIDE:

@@ -40,7 +40,7 @@ A cell is 4,096 units, about **58 m**, so **1 km is about 17 cells**. The Mojave
 
 - **Size** is how much real ground goes in the same space. At **1 : 10**, 10 m of the real place become 1 m in the game: a cell holds 585 m, and 1 km is 1.7 cells. The whole file comes out about 48 cells across unless you change it.
 - **Height ×**: at 1, slopes are as steep as the real ones, whatever the size. So land compressed 1 : 30 with height × 1 is a true model, but its hills have shrunk by 30 too, and it feels flat. Fallout's own land is much steeper than the places it stands for. The default goes up with compression: 1.5 at 1 : 3 to 1 : 5, 2 up to 1 : 20, 3 past that.
-- **Base level** is the real height that comes out at z 0. The world's water stands there, so for a place on the coast it's sea level (0), and FOLab picks that if the file reaches the sea; inland, it picks just under the lowest ground, so there's no sea. Set it higher to flood the valleys.
+- **Base level** is the real height that comes out at z 0. The world's water stands there, so for a place on the coast it's sea level (0), and FOLab picks that if the file reaches the sea; inland, it picks just under the lowest ground of the part you've chosen, so there's no sea. (A town cut from a big tile stands on its own ground, not the tile's lowest corner.) Set it higher to flood the valleys.
 
 Rule of thumb: a town is 1 : 1 to 1 : 3; a valley 1 : 5 to 1 : 15; a whole SRTM square (100 km) 1 : 30 to 1 : 60.
 
@@ -66,12 +66,13 @@ With the new world open, press **🧭 World tools > Real map**, pick the `.osm` 
 
 Once the pads are laid, **World tools > Real map > 🏚 Put up buildings** stands the game's own buildings on them. It's one Undo, and pressing it again only fills plots that have nothing yet.
 
-- **Which buildings:** every building the game stands on its own outdoors: Novac's and Goodsprings' houses, shacks, ranch houses, corner stores, gas stations, offices and apartment blocks, barracks, transmission buildings, the police station and the like. City-block kit pieces, walls, signs and rubble aren't used. FOLab measures them the first time (about a minute) and keeps what it found.
+- **Which buildings:** every building the game stands on its own outdoors: Novac's and Goodsprings' houses, shacks, ranch houses, corner stores, gas stations, offices and apartment blocks, barracks, transmission buildings, the police station and the like, and the mobile homes the game sets upright (closed up, no way in). City-block kit pieces, walls, signs and rubble aren't used. FOLab measures them the first time (about a minute) and keeps what it found.
 - **Which one where:** each plot gets the nearest fit for its size and its kind. OpenStreetMap's `building=house` gets a house, `retail` a shop, `industrial` works, `church` or `school` a hall. Plain `building=yes` goes by size. A wide plot takes a row of buildings and a deep one a second row facing the back. A town doesn't get one house over and over: a building gets less likely each time it's used.
 - **Generic and landmarks:** most of a town is the game's generic buildings: the ones it uses three times or more, ruined and ordinary as the Mojave's are. Its one-offs (the Prospector Saloon, Nipton's town hall, the Goodsprings schoolhouse, the church) are landmarks. They only go on plots that stand out: a building named in the file, a church, school, police station or other public building, or a very big plot. Each landmark appears once in a world and keeps its plot to itself. Where the game has a building of that very kind, it's chosen: a church gets the church.
-- **Facing:** fronts face the nearest road you've laid, where the game had the doors. Lay the roads first: with none, a long side faces out.
+- **Facing:** fronts face the nearest road you've laid, where the game had the doors. Lay the roads first: with none, a long side faces out. A plot too narrow on its street side for anything (a trailer lot) is tried side-on, the way a mobile home stands on a real one.
 - **On the ground:** each sits on its pad as deep as the game sets it. Nothing goes on a road piece or on another building, and the small things you'd scattered on a plot (plants, rocks) are taken off.
 - **Doors** go where the game had them on that building.
+- **Navmesh:** characters outside would walk through the new buildings, so FOLab offers to make the navmesh again in the cells they went up in. Say yes, or do it later from World tools.
 
 ### Ways in
 
@@ -83,9 +84,9 @@ Once the pads are laid, **World tools > Real map > 🏚 Put up buildings** stand
 - **Walkable:** each gets its navmesh, made in the same Undo.
 - **Named for what it is:** your world's editor ID with House, Shop, Offices, Works or Hall and a number, shown as the plot's name if the map has one (a church called St Mary is "St Mary"), otherwise as House, Shop and so on. Rename them in Places like any place of your own.
 
-The game has a place behind about 50 of the 86 buildings FOLab uses. The rest stay locked. FOLab makes at most 40 places in one go; press again for more. A plot that already has its building isn't opened later: Undo and put the buildings up again to change how many open.
+The game has a place behind about 50 of the 86 buildings FOLab uses. The rest stay locked. FOLab makes at most 40 places in one go. A plot that already has its building isn't opened later: Undo and put the buildings up again to change how many open.
 
-Real buildings are often smaller than the game's once the map is compressed. A plot too small for any of the game's buildings is left empty, and the message says how many. At 1 : 1 to 1 : 3 most houses get one. Past about 1 : 5, only the big plots do.
+Real buildings are often smaller than the game's once the map is compressed. A plot too small for any of the game's buildings is left empty, and the message says how many. At 1 : 1 to 1 : 3 most houses get one. Past about 1 : 5, only the big plots do. Even at 1 : 1, sheds and garages (OpenStreetMap maps them too) are smaller than anything the game has: Goodsprings at real size fills 139 of its 222 outlines.
 
 FOLab needs to know where the height file is on Earth to line this up. SRTM names and most GeoTIFFs say so; GeoTIFFs in degrees, UTM (WGS84, NAD83, ETRS89) or web mercator work. A plain PNG doesn't, so the OSM file's own bounds are taken as the whole picture.
 

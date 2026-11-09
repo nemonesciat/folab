@@ -137,10 +137,10 @@ wtTab('nav', 'Navmesh', {
 });
 
 // after shaping the land: offer a navmesh for what changed
-function wnOffer(cells){
+function wnOffer(cells, why){
   let o = $('#wt-offer');
   if (!o){ o = document.createElement('div'); o.id = 'wt-offer'; $('#view').appendChild(o); }
-  o.innerHTML = `<div>The ground changed in ${cells.length} cell${cells.length > 1 ? 's' : ''}. Characters still walk the old navmesh there.</div>
+  o.innerHTML = `<div>${why ? esc(why) : `The ground changed in ${cells.length} cell${cells.length > 1 ? 's' : ''}. Characters still walk the old navmesh there.`}</div>
     <div class="wt-go"><button class="btn primary" id="wo-make">Make new navmeshes</button><button class="btn" id="wo-show">Show on the map</button><button class="btn" id="wo-no">Later</button></div>`;
   o.style.display = 'block';
   o.querySelector('#wo-no').onclick = () => { o.style.display = 'none'; };

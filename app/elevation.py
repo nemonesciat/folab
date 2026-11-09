@@ -54,6 +54,19 @@ class Raster:
             self._stats = (min(good), max(good), len(self.v) - len(good)) if good else (0.0, 0.0, len(self.v))
         return self._stats
 
+    def stats_in(self, c0, r0, c1, r1):
+        """stats() over the pixels from (c0, r0) to (c1, r1), both ends in; the whole file's when that's all of it."""
+        c0, r0 = max(0, int(c0)), max(0, int(r0))
+        c1, r1 = min(self.w - 1, int(math.ceil(c1))), min(self.h - 1, int(math.ceil(r1)))
+        if c0 == 0 and r0 == 0 and c1 == self.w - 1 and r1 == self.h - 1:
+            return self.stats()
+        good, n = [], 0
+        for r in range(r0, r1 + 1):
+            row = self.v[r * self.w + c0:r * self.w + c1 + 1]
+            n += len(row)
+            good += [x for x in row if x == x]
+        return (min(good), max(good), n - len(good)) if good else (0.0, 0.0, n)
+
     def metres_per_pixel(self, fallback=30.0):
         """(east-west, north-south) size of a pixel in metres, at the middle of the file."""
         g = self.geo

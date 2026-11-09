@@ -100,6 +100,9 @@ small = (3000, Y0 - 700, 3200, Y0 - 500)
 wid += 1
 plot(wid, 4000, Y0 - 2300, 6000, Y0 - 500, {'building': 'church', 'name': 'St Mary'})        # stands out: a landmark may go here
 church = (4000, Y0 - 2300, 6000, Y0 - 500)
+wid += 1
+plot(wid, 7500, Y0 + 500, 7820, Y0 + 1750, {'building': 'static_caravan'})                 # a trailer lot: 320 on the street, 1,250 deep
+trailer = (7500, Y0 + 500, 7820, Y0 + 1750)
 data = fx.osm(NODES, WAYS, bounds=(36.0, -115.0, 36.2, -114.8))
 api_maps.upload(io.BytesIO(data), len(data), 'town.osm')
 api_maps.post('/api/maps/osm/lay', {'file': 'town.osm', 'world': world_key, 'want': {'roads': ['major'], 'buildings': True}}, server)
@@ -131,13 +134,18 @@ if not j.get('ok'):
 rep = j['result']['report']
 print('   %.0f s: %s' % (time.time() - t0, json.dumps(rep)))
 check('one Undo', len(pr.undo_stack) == undo_before + 1 and pr.undo_stack[-1][0] == 'Buildings on the plots')
+grid_of = {gd.key(c): xy for xy, c in gd.grid(w).items()}
+stood = {tuple(grid_of[ck]) for ck, c in pr.cells.items() if ck in grid_of for r in c['refs'].values() if r.get('base') in {b['key'] for b in townbuild.load(gd, server.kits_folder())}}
+check('the cells buildings went up in are listed, for a fresh navmesh (%d)' % len(rep['cell_xy']), stood and stood <= {tuple(c) for c in rep['cell_xy']})
 check('the catalogue is measured and kept', rep['catalogue'] >= 40 and os.path.isfile(os.path.join(server.kits_folder(), 'buildings.json')))
 cat = {b['key']: b for b in townbuild.load(gd, server.kits_folder())}
 check('the street\'s road pieces were seen', rep['roads_seen'] > 5)
 refs = [(ck, k, r) for ck, c in pr.cells.items() for k, r in c['refs'].items() if not r.get('removed')]
 blds = [(ck, k, r) for ck, k, r in refs if r.get('base') in cat]
-check('every house plot, the works and the church got buildings (%d plots built, %d buildings)' % (rep['built'], len(blds)), rep['built'] == 14 and len(blds) >= 15)
+check('every house plot, the works, the church and the trailer lot got buildings (%d plots built, %d buildings)' % (rep['built'], len(blds)), rep['built'] == 15 and len(blds) >= 16)
 in_box = lambda r, b: b[0] - 200 <= r['p'][0] <= b[2] + 200 and b[1] - 200 <= r['p'][1] <= b[3] + 200
+on_lot = [cat[r['base']]['edid'] for _c, _k, r in blds if in_box(r, trailer)]
+check('the narrow lot got a mobile home, side-on to the street (%s, %d side-on)' % (on_lot, rep['side_on']), on_lot and all('mobilehome' in e.lower() for e in on_lot) and rep['side_on'] >= 1)
 marks = [r for _c, _k, r in blds if townbuild.landmark(cat[r['base']])]
 check('plots that stand out: the named works and church (%d)' % rep['poi'], rep['poi'] == 2)
 check('the church got the game\'s church, a landmark (%s)' % [cat[r['base']]['edid'] for _c, _k, r in blds if in_box(r, church)],

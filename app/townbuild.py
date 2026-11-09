@@ -4,7 +4,7 @@ osmplace.py levels each building's plot (a pad) and keeps its outline in the mar
 
 The catalogue is measured from the game, once per game files (buildings.json beside the kit index):
 
-  which      a STAT under an architecture folder that the game places outdoors on its own: in most of its placements no other
+  which      a STAT under an architecture folder (or a mobile home, DWELLING) that the game places outdoors on its own: in most of its placements no other
              building-sized piece overlaps it (Westside's wall runs and the Strip's façades are parts of something bigger, so they're
              left out), whose editor ID says what kind of building it is (FAMILY_WORDS). City-block kit pieces (BLD03...), signs,
              walls, roads, rubble, low-detail copies and far-off stand-ins are left out by name.
@@ -38,8 +38,9 @@ import landshape
 import recordio
 import roadgen
 
-FORMAT = 3              # (buildings.json's layout: a file with another number is made again)
+FORMAT = 4              # (buildings.json's layout: a file with another number is made again)
 MIN_SIDE, MAX_SIDE = 300, 3600
+DWELLING = re.compile(r'\\mobilehome[^\\]*\.nif$')   # (homes the game keeps with its vehicles, narrower than a building: trailer lots are full of them)
 MIN_HIGH, MAX_HIGH = 220, 1700
 ALONE = 0.6                # (in this share of its placements at least, nothing building-sized overlaps it)
 OVERLAP_PART = 0.25        # (another big piece over this share of the smaller one's footprint makes them parts of one thing)
@@ -244,7 +245,7 @@ def survey(gd, progress=None):
             if fid in gd.forms and gd.forms[fid][1].tag == 'STAT':
                 _t, edid, _n, model = gd.describe(fid)
                 m = (model or '').replace('/', '\\').lower()
-                if m.startswith('architecture\\') or '\\architecture\\' in m:
+                if m.startswith('architecture\\') or '\\architecture\\' in m or DWELLING.search(m):
                     try:
                         sh = kitindex._load_shape(gd, m, shapes)
                     except (FileNotFoundError, OSError):
@@ -301,7 +302,8 @@ def survey(gd, progress=None):
     for fid, uses in seen.items():
         edid, model, box = info[fid]
         w, d, h = box[3] - box[0], box[4] - box[1], box[5] - box[2]
-        if not (MIN_SIDE <= min(w, d) and max(w, d) <= MAX_SIDE and MIN_HIGH <= h <= MAX_HIGH):
+        narrowest = MIN_SIDE * 0.8 if DWELLING.search(model) else MIN_SIDE
+        if not (narrowest <= min(w, d) and max(w, d) <= MAX_SIDE and MIN_HIGH <= h <= MAX_HIGH):
             continue
         if NOT_A_BUILDING.search(edid.lower()) or family_of(edid) == 'any':
             continue
@@ -461,6 +463,7 @@ class World:
         self.grid = gd.grid(world)
         self.ground = roadgen.Ground(gd, pr, world)
         self.ins = None
+        self.touched = set()                 # (grid squares a building stands over: their navmesh needs making again)
         self.ours = {b['key'] for b in cat}
         self.boxes, self.big, self.small = {}, [], []
         keys = {gd.key(c): xy for xy, c in self.grid.items()}
@@ -595,10 +598,15 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE):
             d = nearest_road(mx, my)
             sides.append((d if d is not None else (1e9 + (0 if k < 2 else 1) + rng.random()), k, nx, ny, half_along * 2, half_across * 2))
         sides.sort()
-        _d, _k, fx, fy, front_len, depth = sides[0]
+        _d, k0, fx, fy, front_len, depth = sides[0]
         poi = is_poi(row, L * W)
         rep['poi'] += poi
         rows_done = _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, fams, used, row, poi)
+        if rows_done == 0:
+            # (nothing fits facing the street: side-on, toward whichever of the other two sides is nearer a road, as a trailer on a narrow lot stands)
+            _d, _k, fx, fy, front_len, depth = next(s for s in sides if (s[1] < 2) != (k0 < 2))
+            rows_done = _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, fams, used, row, poi)
+            rep['side_on'] += rows_done > 0
         if rows_done == 0:
             rep['nothing_fits'] += 1
         else:
@@ -607,7 +615,8 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE):
               'nothing_fits': rep['nothing_fits'], 'blocked': rep['blocked'], 'steep': rep['steep'], 'had_one': rep['had_one'],
               'cleared': len(gone), 'families': dict(fams), 'catalogue': len(cat), 'roads_seen': len(roads), 'poi': rep['poi'], 'landmarks': rep['landmarks'],
               'insides': len(w.ins.tags) if w.ins else 0, 'inside_things': w.ins.things if w.ins else 0, 'made': list(w.ins.tags) if w.ins else [],
-              'insides_capped': bool(w.ins and w.ins.left <= 0)}
+              'insides_capped': bool(w.ins and w.ins.left <= 0), 'side_on': rep['side_on'],
+              'cell_xy': [list(xy) for xy in sorted(w.touched)]}
     return ops, report
 
 
@@ -718,6 +727,9 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
             ops.append({'op': 'remove', 'cell': c, 'ref': r})
     ops.append({'op': 'add', 'cell': ck, 'base': b['key'], 'p': [round(ox, 2), round(oy, 2), round(z, 2), 0.0, 0.0, round(rz, 4)], 's': 1})
     w.add(fp, ck, '(new)')
+    for x, y in fp + [(ox, oy)]:
+        if (int(x // 4096), int(y // 4096)) in w.grid:
+            w.touched.add((int(x // 4096), int(y // 4096)))
     rep['buildings'] += 1
     inside = w.ins.pick(b, poi) if w.ins else None
     for k, d in enumerate(b['doors']):
