@@ -135,5 +135,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
 
 ## Finding the game
 
-`FOLAB_NV_DATA` overrides the Data folder; otherwise Steam's library folders are searched for app 22380.
+`gamedata.find_data_dir`: `FOLAB_NV_DATA` overrides the Data folder; else the folder the user chose (`game_data` in
+folab_settings.json), else Steam wherever the registry says it is and every library it lists, else where the game's
+launcher or GOG wrote it was installed. Nowhere: `server.NO_GAME`, and only `web/findgame.html` answers (it asks for
+the folder, `/api/game/folder`) until the game loads. It used to crash on any PC with Steam off C: (a tester, test 10).
+Test with `gamedata._registry` and `_STEAM_USUAL` replaced (`tests/test_findgame.py`).
 Never read from `steamapps\downloading`: open files there make Steam's install fail with "disk write error".

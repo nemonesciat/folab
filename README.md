@@ -43,8 +43,8 @@ new and has only been tried on a small setup. Big mod lists may take a while to 
 
 ## What you need
 
-- **Fallout: New Vegas** from Steam (FOLab finds it in your Steam libraries; set `FOLAB_NV_DATA` to its Data folder
-  if it doesn't).
+- **Fallout: New Vegas** from Steam (FOLab finds it in your Steam libraries on any drive, and asks you for the game's
+  folder if it can't. A GOG copy is found too, but starting the game from FOLab is only tried with Steam's).
 - With the **portable download** (FOLab.exe), nothing else: Python comes with it. From the source: **Python 3.10 or newer** for Windows, from [python.org](https://www.python.org/downloads/) (tick "Add to PATH" and
   the "py launcher"). Nothing else to install.
 - For Play here and Give it to me in game: **xNVSE** (download it from its page and FOLab installs it from your Downloads folder) and

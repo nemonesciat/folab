@@ -24,27 +24,119 @@ REF_TYPES = {'REFR', 'ACHR', 'ACRE', 'PGRE', 'PMIS', 'PBEA', 'PFLA', 'PCBE', 'NA
 BUILTIN_LIMIT = 0x800
 
 
+GAME_FOLDER = 'Fallout New Vegas'
+# Where Windows is told a program lives: (hive, key, value). Steam itself, then the game as its launcher, Steam's
+# uninstaller and GOG's each write it down.
+_STEAM_KEYS = [('HKCU', r'Software\Valve\Steam', 'SteamPath'), ('HKLM', r'SOFTWARE\WOW6432Node\Valve\Steam', 'InstallPath'),
+               ('HKLM', r'SOFTWARE\Valve\Steam', 'InstallPath')]
+_STEAM_USUAL = [r'C:\Program Files (x86)\Steam', r'C:\Program Files\Steam']
+_GAME_KEYS = [('HKLM', r'SOFTWARE\WOW6432Node\Bethesda Softworks\FalloutNV', 'Installed Path'),
+              ('HKLM', r'SOFTWARE\Bethesda Softworks\FalloutNV', 'Installed Path'),
+              ('HKLM', r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App %d' % STEAM_APP, 'InstallLocation'),
+              ('HKLM', r'SOFTWARE\WOW6432Node\GOG.com\Games\1454587428', 'path'),
+              ('HKLM', r'SOFTWARE\WOW6432Node\GOG.com\Games\1312824873', 'path')]
+
+
+def _registry(hive, key, value):
+    """A text value Windows keeps, or '' (also anywhere that isn't Windows)."""
+    try:
+        import winreg
+        with winreg.OpenKey(getattr(winreg, {'HKCU': 'HKEY_CURRENT_USER', 'HKLM': 'HKEY_LOCAL_MACHINE'}[hive]), key) as k:
+            v = winreg.QueryValueEx(k, value)[0]
+        return v if isinstance(v, str) else ''
+    except (ImportError, OSError):
+        return ''
+
+
 def _steam_libraries():
-    roots = [r'C:\Program Files (x86)\Steam', r'C:\Program Files\Steam']
+    """Every Steam library folder: Steam's own folder, wherever Windows says it is, and the others its list names."""
+    # (the usual places first, spelt as they always were; the registry writes Steam's path in lower case)
+    roots = list(_STEAM_USUAL) + [_registry(*k) for k in _STEAM_KEYS]
     out = []
     for root in roots:
+        if not root:
+            continue
+        root = os.path.normpath(root)
         vdf = os.path.join(root, 'steamapps', 'libraryfolders.vdf')
         if os.path.isfile(vdf):
             out.append(root)
             with open(vdf, encoding='utf-8', errors='replace') as f:
-                out += [p.replace('\\\\', '\\') for p in re.findall(r'"path"\s+"([^"]+)"', f.read())]
-    return list(dict.fromkeys(out))
+                out += [os.path.normpath(p.replace('\\\\', '\\')) for p in re.findall(r'"path"\s+"([^"]+)"', f.read())]
+    return _once(out)
+
+
+def _once(paths):
+    """Each folder once, however its letters are cased; the first spelling stays."""
+    seen = {}
+    for p in paths:
+        seen.setdefault(os.path.normcase(p), p)
+    return list(seen.values())
+
+
+def data_dir_from(path):
+    """The game's Data folder from whatever was pointed at: Data itself, the game's folder, or a file in either
+    (FalloutNV.exe, FalloutNV.esm). None if the game isn't there. Never Steam's download folder: files held open
+    there stop Steam moving them into place ("disk write error")."""
+    p = os.path.normpath(os.path.expandvars((path or '').strip().strip('"')))
+    if not p or p == '.':
+        return None
+    if os.path.isfile(p):
+        p = os.path.dirname(p)
+    for d in (p, os.path.join(p, 'Data')):
+        if os.path.isfile(os.path.join(d, 'FalloutNV.esm')) and 'steamapps\\downloading' not in d.lower().replace('/', '\\'):
+            return d
+    return None
+
+
+def _chosen():
+    """The folder the user pointed FOLab at (`remember_data_dir`), while the game is still there."""
+    import json
+    import project
+    try:
+        with open(os.path.join(project.HOME, 'folab_settings.json'), encoding='utf-8') as f:
+            return data_dir_from(json.load(f).get('game_data') or '')
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def remember_data_dir(path):
+    """Keep the user's own answer to where the game is. Returns the Data folder, or None if the game isn't there."""
+    import json
+    import project
+    d = data_dir_from(path)
+    if not d:
+        return None
+    p = os.path.join(project.HOME, 'folab_settings.json')
+    try:
+        with open(p, encoding='utf-8') as f:
+            s = json.load(f)
+    except (OSError, ValueError):
+        s = {}
+    s['game_data'] = d
+    with open(p, 'w', encoding='utf-8') as f:
+        json.dump(s, f, indent=1)
+    return d
+
+
+def looked_in():
+    """Every place FOLab looks for the game by itself, for saying where it looked."""
+    out = [os.path.join(lib, 'steamapps', 'common', GAME_FOLDER) for lib in _steam_libraries()]
+    out += [os.path.normpath(v) for v in (_registry(*k) for k in _GAME_KEYS) if v]
+    return _once(out)
 
 
 def find_data_dir():
-    """FOLAB_NV_DATA, else the game's Data folder in any Steam library. Never Steam's download folder:
-    files held open there stop Steam moving them into place ("disk write error")."""
+    """FOLAB_NV_DATA, else the folder the user chose, else the game wherever Steam, the game's own launcher or GOG
+    put it. None when it's nowhere to be found: the server then asks (`server.NO_GAME`)."""
     env = os.environ.get('FOLAB_NV_DATA')
     if env:
         return env
-    for lib in _steam_libraries():
-        d = os.path.join(lib, 'steamapps', 'common', 'Fallout New Vegas', 'Data')
-        if os.path.isfile(os.path.join(d, 'FalloutNV.esm')):
+    d = _chosen()
+    if d:
+        return d
+    for place in looked_in():
+        d = data_dir_from(place)
+        if d:
             return d
     return None
 

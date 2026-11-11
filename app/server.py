@@ -86,6 +86,43 @@ _actors = {}                            # base key -> parts (actors.py)
 _lock = threading.RLock()
 LOADOUT_NOTE = ''                       # why the setup isn't the one asked for
 GD_LEFT_OUT = []                        # plugins a loadout has on that can't be loaded
+NO_GAME = False                         # the game wasn't found: only the page that asks where it is answers
+
+
+def game_missing():
+    """What the asking page (web/findgame.html) shows: where FOLab looked."""
+    return {'found': not NO_GAME, 'looked': gamedata.looked_in(), 'version': VERSION}
+
+
+def browse_for_game():
+    """Windows' own folder window, for picking the game's folder. '' if it was closed without one."""
+    import subprocess
+    ps = ('Add-Type -AssemblyName System.Windows.Forms; '
+          '$f = New-Object System.Windows.Forms.Form -Property @{TopMost = $true; ShowInTaskbar = $false; Opacity = 0}; '
+          '$f.Show(); $d = New-Object System.Windows.Forms.FolderBrowserDialog; '
+          '$d.Description = "Choose the folder New Vegas is in (the one with FalloutNV.exe)"; $d.ShowNewFolderButton = $false; '
+          'if ($d.ShowDialog($f) -eq "OK") { [Console]::OutputEncoding = [Text.Encoding]::UTF8; Write-Output $d.SelectedPath }; $f.Close()')
+    r = subprocess.run(['powershell', '-NoProfile', '-STA', '-Command', ps], capture_output=True, timeout=600,
+                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    return {'path': r.stdout.decode('utf-8', 'replace').strip()}
+
+
+def set_game_folder(body):
+    """The user's answer to where the game is: kept, and the game loaded from it."""
+    global NO_GAME, PR, LOADOUT_NOTE
+    d = gamedata.remember_data_dir(body.get('path') or '')
+    if not d:
+        raise ValueError('New Vegas isn\'t in that folder: FOLab looks for FalloutNV.esm in it, or in its Data folder. '
+                         'Choose the folder that has FalloutNV.exe.')
+    with _lock:
+        try:
+            load_game(PR)
+        except ValueError as e:
+            PR = None
+            load_game(None)
+            LOADOUT_NOTE = str(e)
+        NO_GAME = False
+    return {'ok': True, 'data': d}
 
 
 def load_settings():
@@ -1720,6 +1757,12 @@ class Handler(BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path)
         q = dict(urllib.parse.parse_qsl(u.query))
         try:
+            if NO_GAME and not u.path.startswith('/web/'):
+                if u.path in ('/', '/index.html'):
+                    return self.file(os.path.join(WEB, 'findgame.html'))
+                if u.path == '/api/game/missing':
+                    return self.send(game_missing())
+                return self.send({'error': 'FOLab hasn\'t found New Vegas yet.'}, code=503)
             if u.path in ('/', '/index.html'):
                 # (the icon's address carries a hash of it: Edge keeps an app window's icon in a cache of its own,
                 # so a changed icon only shows under a new address)
@@ -1866,6 +1909,12 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/maps/upload':
                 return self.send(api_maps.upload(self.rfile, n, urllib.parse.parse_qs(u.query).get('name', [''])[0]))
             body = json.loads(self.rfile.read(n) or b'{}')
+            if NO_GAME and u.path != '/api/quit':
+                if u.path == '/api/game/folder':
+                    return self.send(set_game_folder(body))
+                if u.path == '/api/game/browse':
+                    return self.send(browse_for_game())
+                return self.send({'error': 'FOLab hasn\'t found New Vegas yet.'}, code=503)
             if u.path.startswith('/api/maps/'):
                 return self.send(api_maps.post(u.path, body, sys.modules[__name__]))
             if u.path == '/api/quit':
@@ -2039,14 +2088,19 @@ def main():
             PR = None
     restore_loadout()
     _clean_inside('starting')           # (a run from inside MO2 that FOLab didn't see the end of)
-    try:
-        load_game(PR)
-    except ValueError as e:         # (the last mod needs what this setup hasn't got: start without it)
-        PR = None
-        load_game(None)
-        LOADOUT_NOTE = str(e)
-    print('%s: %d interiors, %d placeable objects (%.1fs)' % (GD.data_dir, len(GD.interiors), len(CATALOGUE),
-                                                               time.time() - t), flush=True)
+    global NO_GAME
+    if not loadout.current() and not gamedata.find_data_dir():
+        NO_GAME = True              # (the page asks where it is: `set_game_folder` loads it then)
+        print('New Vegas not found: asking where it is. Looked in: %s' % '; '.join(gamedata.looked_in()), flush=True)
+    else:
+        try:
+            load_game(PR)
+        except ValueError as e:         # (the last mod needs what this setup hasn't got: start without it)
+            PR = None
+            load_game(None)
+            LOADOUT_NOTE = str(e)
+        print('%s: %d interiors, %d placeable objects (%.1fs)' % (GD.data_dir, len(GD.interiors), len(CATALOGUE),
+                                                                   time.time() - t), flush=True)
     # (on Windows, address reuse lets a second FOLab bind the same port, and the browser then talks to whichever
     # answers, an old one included: refuse to start twice instead)
     ThreadingHTTPServer.allow_reuse_address = False
