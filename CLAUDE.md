@@ -33,6 +33,19 @@ the model for style, UI and approach. Python, standard library first, code in `a
   beside FalloutNV.exe (its config in Data\NVSE), records what it put in for Take out. The game starts through
   nvse_loader.exe when present (setting `launch_via`), else steam://rungameid/22380; never FalloutNV.exe directly
   (Steam's load error 5:0000065434).
+- Own new game (`newgame.py`, `web/newgame.js`, `/api/newgame`; settings in `project.newgame`, op `newgame`, in Undo): a
+  persistent named XMarkerHeading (a mod ref's `edid` is written as its EDID), a start game enabled quest and its script
+  compiled by scriptc (MoveTo, hour, the screens as VCG04ActivatorScript opens them), VCG01's start flag cleared in an
+  override; it leaves saves where VCG01 runs or is past stage 200 alone, and moves you only after `SETTLE` seconds and no
+  cell load. Switching off the packs' or DLCs' start quests (opt-in) copies them whole, so they become masters (a bare
+  pack quest lost its script and New Game crashed, 9 Nov 2026).
+  Starting gear is the player's record (NPC_ 7). Worked in the real game 11 Nov 2026 (interior start, all screens,
+  Pip-Boy), after what real runs taught: the game starts VCG01 whatever its flag says, so its bed stages are emptied
+  (`_hush`) and the script stops it; the script clears `WhiteISFX`; a Pip-Boy put on by script in GameMode crashes the
+  game (its manager re-runs the equip queue: stack overflow), so a fresh one is given and put on in a MenuMode block
+  during the last screen, then `ResetPipboyManager` in play once worn. Don't reorder these without a real run. A crash
+  leaves `%LOCALAPPDATA%\CrashDumps\FalloutNV.exe.*.dmp`: the faulting thread's stack against fnv_decomp's `@fnv`
+  addresses names the loop.
 - Create page (`web/create.js`): items in plain fields over the same records Browse edits; "Give it to me in game"
   (`/api/give`) reuses FOLab Test.esp: its quest runs player.AddItem once (bytes as the game's Hull20GaAddScript).
 - Outside: `gamedata.py` indexes exterior cells (`ext_cells`, `grid(world)`), LAND (`land`, `land_at`, parent

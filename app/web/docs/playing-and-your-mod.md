@@ -22,6 +22,22 @@ Close New Vegas before saving into the game: it holds its plugins open while it 
 - The **Tools** page checks your mod, handles the game's load order, lists every change and makes a zip to share: see its guide.
 - Your mod is a file in `projects`; FOLab keeps 200 Undo steps while it's open.
 
+## Your own new game
+
+Making a game, not a mod for the Mojave? **New Game** can start in your world instead of at Doc Mitchell's house.
+
+1. Open the place where the player should wake up, right-click a spot on the floor and choose **This place › Start a new game here**. You'll face the way the view looks. Inside or outside, the game's places or your own.
+2. On the **My mod** page, the card **Your own new game** has the rest:
+   - **Screens before you play**: name, face and sex, S.P.E.C.I.A.L., tag skills and traits, one after another, the way the game's own Character revision does them. Untick one and the player starts as their record has it.
+   - **The hour you wake up**, and whether you **start with the Pip-Boy**. It goes on your arm during the last screen, so with every screen unticked you start without it.
+   - **What you start with**: gear, S.P.E.C.I.A.L., skills and looks are the player's own record. **Edit the player** opens it on the Characters page; give them what they should carry.
+   - **The Mojave's own start, switched off**: Doc Mitchell's opening always (and with it the main quest, which it starts). Also, if you like, the pre-order packs and Courier's Stash (Mojave gear in your pack), and the DLCs' invitations. Switching those off makes the packs or DLCs masters of your mod, so players need them.
+3. **Put in game**, start New Vegas and choose **New**.
+
+FOLab makes it from ordinary parts of your mod: a marker where you wake up, a quest that starts with the game, and its script. You'll see them on the Scripts and Quests pages, and FOLab writes them again whenever you change the card. It's one Undo step each time. Untick **A new game starts in my mod** and it all goes.
+
+A save that has met Doc Mitchell (in his house or past it) is left as it is, so your old saves and **Play here** still work with the mod in.
+
 ## Game settings
 
 The **Game** page edits New Vegas's own settings (Fallout.ini and FalloutPrefs.ini): fullscreen, window or **borderless** (FOLab makes it when it starts the game), the monitor and resolution, v-sync, field of view, texture filtering, keep running in the background, skip the intro… and every other setting, searchable. FOLab changes only the lines you change, keeps a copy of both files first, and won't save while the game runs.

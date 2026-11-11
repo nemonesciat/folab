@@ -53,6 +53,7 @@ import refinfo
 import scatter
 import loadout
 import mo2write
+import newgame
 import tes4
 from version import VERSION
 
@@ -1484,6 +1485,26 @@ def play(body):
     return out
 
 
+def new_game(body):
+    """The mod's own new game as body says (newgame.py), one Undo step. A spot from the view stands on the floor there."""
+    if body.get('cell') and body.get('p') and body['cell'].startswith('+'):
+        body = dict(body, p=_arrival(body))
+
+    def comp(text, key, extra):
+        sc = api_scripts.scripts()
+        try:
+            c = sc.compile(text, key, 'quest', extra)
+        except api_scripts.scriptc.CompileError as e:
+            raise ValueError("The new game's script didn't compile (line %d: %s). Please report this." % (e.line, e.message))
+        return sc._record_of(c, c.name)
+    try:
+        label, ops, _s = newgame.plan(GD, PR, comp, body)
+    except newgame.Problem as e:
+        raise ValueError(str(e))
+    out = edit(label, ops)
+    return dict(out, newgame=newgame.view(GD, PR))
+
+
 def _write_play_test(body, path):
     """Play here's plugin at path: a marker where the view is, in body's place."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1530,6 +1551,9 @@ def _run_inside(test=None):
     written) if there is one, in MO2's virtual folder for this run only; MO2's lists as they were once the game has started."""
     lo = loadout.current()
     out, files, plugins = {'from_mo2': True, 'autoload': None}, [], []
+    # (a FOLab Test mod left on in the profile by a Play here made with FOLab opened on its own: its script went on
+    # loading the newest save at the menu, so Open in game never showed the menu, 11 Nov 2026)
+    mo2write.clear_test(lo, playtest.TEST_PLUGIN)
     if PR:
         saved = save()
         files += _files_of(saved['path'])
@@ -1730,6 +1754,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(state())
             if u.path.startswith('/api/tools/'):
                 return self.send(modtools.get(u.path[11:], q, sys.modules[__name__]))
+            if u.path == '/api/newgame':
+                with _lock:
+                    return self.send(newgame.view(GD, PR) if PR else {'none': True})
             if u.path == '/api/interiors':
                 return self.send(interiors())
             if u.path == '/api/cell':
@@ -1886,6 +1913,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(worldapi.post(u.path, body, GD, PR, WORLD_CTX))
                 if u.path == '/api/world/new':
                     return self.send(new_world(body))
+                if u.path == '/api/newgame':
+                    return self.send(new_game(body))
                 if u.path == '/api/shape/cells':
                     return self.send(shape_cells(body))
                 if u.path == '/api/shape/preview':

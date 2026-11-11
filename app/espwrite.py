@@ -214,7 +214,8 @@ class Writer:
         return struct.pack('<I6fI', self.link(t['door']), *[float(v) for v in t['p']], 0)
 
     def new_ref(self, rkey, r):
-        subs = [('NAME', struct.pack('<I', self.link(r['base'])))]
+        subs = [('EDID', r['edid'].encode('cp1252', 'replace') + b'\0')] if r.get('edid') else []   # (a name scripts use: the new game's start)
+        subs.append(('NAME', struct.pack('<I', self.link(r['base']))))
         first, last = worldrec.ref_extra_subs(r, self.link)
         subs += first
         if r.get('xlcm') is not None:                   # (a levelled actor's difficulty: after NAME and XEZN, as the game has it)

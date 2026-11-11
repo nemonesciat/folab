@@ -720,7 +720,7 @@ def check_project_nav(scan, gd, pr):
         for rk, r in c['refs'].items():
             base = r.get('base')
             if rk.startswith('+') and base and not base.startswith('+') and gd.forms[gd.from_key(base)][1].tag in ('STAT', 'SCOL', 'FURN', 'CONT', 'DOOR', 'MSTT'):
-                n += 1
+                n += not _is_marker(gd, gd.from_key(base))
             elif r.get('removed'):
                 n += 1
         if n:
@@ -728,6 +728,12 @@ def check_project_nav(scan, gd, pr):
             # (one at a time: it replaces the game's mesh, which isn't for a "fix everything")
             fix = {'action': 'navmesh', 'cell': ckey, 'label': 'Make a new navmesh', 'one': True} if st.get('can') else None
             scan.add('navmesh_game', '%s: %d thing%s added or removed.' % (_place(gd, pr, ckey), n, '' if n == 1 else 's'), {'cell': ckey}, fix)
+
+
+def _is_marker(gd, fid):
+    """An editor's marker (a heading marker, a map marker...): invisible in the game, nothing to walk round."""
+    _t, edid, _n, model = gd.describe(fid)
+    return re.search(r'(^|\\)marker[^\\]*\.nif$', (model or '').lower()) is not None or re.fullmatch(r'X\w*Marker\w*', edid or '') is not None
 
 
 def _place(gd, pr, ckey):
