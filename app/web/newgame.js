@@ -41,12 +41,16 @@ function ngDraw(){
       ${d.steps.map(x => `<label style="margin-right:14px"><input type="checkbox" data-ngstep="${x.id}" ${s.steps.includes(x.id) ? 'checked' : ''}> ${esc(x.label)}</label>`).join('')}</p>
     <p><label>The hour you wake up <input type="number" id="ng-hour" min="0" max="23" value="${s.hour}" style="width:60px"></label>
        <label style="margin-left:18px"><input type="checkbox" id="ng-pipboy" ${s.pipboy ? 'checked' : ''}> Start with the Pip-Boy</label></p>
+    ${d.pipboy_gap ? '<p class="note"><b>The Pip-Boy won\'t be on your arm:</b> the game only lets it be put on while something is open. Tick a screen or write an opening message.</p>' : ''}
+    <p><b>An opening message</b>, shown in a box once you've arrived, before the screens (leave empty for none):<br>
+      <textarea id="ng-message" rows="3" maxlength="${d.message_max}" style="width:100%;box-sizing:border-box" placeholder="You wake with sand in your mouth…">${esc(s.message || '')}</textarea></p>
     <p><b>What you start with</b> (gear, S.P.E.C.I.A.L., skills, looks) is the player's own record. <button class="btn" id="ng-player">Edit the player</button>
        ${d.player_changed ? '<span class="note">Your mod changes it.</span>' : ''}</p>
     <p><b>The Mojave's own start, switched off:</b> Doc Mitchell's opening (and with it the main quest), always.<br>
       ${d.quiet.filter(q => q.found).map(q => `<label><input type="checkbox" data-ngquiet="${q.id}" ${s.quiet.includes(q.id) ? 'checked' : ''}> ${esc(q.label)}</label> <span class="note">${esc(q.note)}.</span>`).join('<br>')}</p>
     </div>
-    <p class="note">To try it: <b>Put in game</b>, start New Vegas and choose <b>New</b>. A save that has met Doc Mitchell is left as it is, so Play here still works on your old saves.</p>`;
+    <p>${on ? '<button class="btn primary" id="ng-try">▶ Try it</button> ' : ''}<span class="note">${on ? 'Saves, puts your mod in the game and starts it: choose <b>New</b> at the menu.' : ''}
+       A save that has met Doc Mitchell is left as it is, so Play here still works on your old saves.</span></p>`;
   const send = (body, said) => ngPost(body, said);
   $('#ng-on').onchange = e => send({on: e.target.checked}, e.target.checked ? 'New Game now starts in your mod.' : 'New Game starts the Mojave again.');
   const go = $('#ng-go'); if (go) go.onclick = async () => {
@@ -62,6 +66,11 @@ function ngDraw(){
     send({quiet: [...box.querySelectorAll('[data-ngquiet]')].filter(x => x.checked).map(x => x.dataset.ngquiet)}));
   $('#ng-hour').onchange = e => send({hour: Math.max(0, Math.min(23, +e.target.value || 0))});
   $('#ng-pipboy').onchange = e => send({pipboy: e.target.checked});
+  $('#ng-message').onchange = e => send({message: e.target.value});
+  const tryIt = $('#ng-try'); if (tryIt) tryIt.onclick = async () => {
+    await play();           // (Open in game: no save is loaded for you, so the menu shows)
+    toast('When New Vegas reaches its menu, choose New: your game starts in ' + (d.place || 'your place') + '.');
+  };
   $('#ng-player').onclick = async () => { page('characters'); CH.kind = 'NPC_'; await chInit(); chOpen(d.player); };
 }
 

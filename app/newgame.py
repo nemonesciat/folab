@@ -50,7 +50,9 @@ QUIET = {'dlc': ('The DLCs\' invitations', 'radio signals and notes that start D
                    ['VPreorderClassic', 'VPreorderMercenary', 'VPreorderCaravan', 'VPreorderTribal', 'PreordVault13CanteenQuest'])}
 START_ENABLED = 0x01
 PLAYER = 0x7
-DEFAULT = {'on': False, 'cell': None, 'p': None, 'steps': [s[0] for s in STEPS], 'hour': 8, 'pipboy': True, 'quiet': [], 'made': {}}
+DEFAULT = {'on': False, 'cell': None, 'p': None, 'steps': [s[0] for s in STEPS], 'hour': 8, 'pipboy': True, 'quiet': [], 'message': '',
+           'made': {}}
+MESSAGE_MAX = 1500      # (letters in the opening message: the game's own longest boxes are about this)
 PERSISTENT = 0x400
 
 
@@ -71,7 +73,22 @@ def prefix(pr):
 
 def names(pr):
     p = prefix(pr)
-    return {'marker': p + 'NewGameStart', 'quest': p + 'NewGame', 'script': p + 'NewGameScript'}
+    return {'marker': p + 'NewGameStart', 'quest': p + 'NewGame', 'script': p + 'NewGameScript', 'message': p + 'NewGameMessage'}
+
+
+def menus(pr, s):
+    """What the script opens once you've arrived, in order: the opening message if there is one, then the screens."""
+    words = (s.get('message') or '').strip()
+    return (['ShowMessage %s' % names(pr)['message']] if words else []) + [cmd for key, _label, cmd in STEPS if key in s['steps']]
+
+
+def _message_record(edid, words):
+    """A message box with OK, laid out as the game's own (PrimmSlimRepairFail and the like)."""
+    return {'type': 'MESG', 'flags': 0, 'src': '', 'subs': [
+        {'tag': 'EDID', 'label': 'Editor ID', 'kind': 'z', 'value': edid},
+        {'tag': 'DESC', 'label': 'Description', 'kind': 'z', 'value': words},
+        {'tag': 'INAM', 'label': 'Icon', 'kind': 'F', 'value': ''},
+        {'tag': 'DNAM', 'label': 'Flags', 'kind': 'struct', 'fields': [{'name': 'Flags', 'code': 'I', 'value': 1}]}]}
 
 
 def quest_keys(gd, edids):
@@ -87,7 +104,7 @@ def quest_keys(gd, edids):
 def source(pr, s):
     """The start script's text."""
     n = names(pr)
-    steps = [cmd for key, _label, cmd in STEPS if key in s['steps']]
+    steps = menus(pr, s)
     lines = ['scn %s' % n['script'], '',
              '; Made by FOLab (My mod > Your own new game): it writes this again whenever the new game changes.',
              'short step', 'short worn', 'float pause', 'float waited', '',
@@ -104,7 +121,6 @@ def source(pr, s):
              # (the player's record carries the Pip-Boy from the first moment and it stays on: one put on by script
              # crashes the game, see _hush. Taking it off is safe)
              *([] if s['pipboy'] else ['\t\tplayer.RemoveItem PipBoy 1 1', '\t\tplayer.RemoveItem PipBoyGlove 1 1']),
-             '\t\tRemoveImageSpaceModifier WhiteISFX\t; (see below, where it is done again once you have arrived)',
              '\t\tset step to 1',
              # (a new game sets the player up in its own first moments: moving them half a second in crashed the
              # game in the real thing, 9 Nov 2026, while the new place loaded)
@@ -141,7 +157,8 @@ def source(pr, s):
              '\t\tendif',
              '\t\tset step to 3',
              # (a new game begins all white, from the film before it, and the opening's first stage is what clears
-             # that: with the stage empty the whole world stayed white, 11 Nov 2026)
+             # that: with the stage empty the whole world stayed white, 11 Nov 2026. Cleared only here, once you've
+             # arrived, so the moment in Doc Mitchell's house stays behind it)
              '\t\tRemoveImageSpaceModifier WhiteISFX',
              '\t\tset pause to 1']
     for k, cmd in enumerate(steps):
@@ -253,6 +270,7 @@ def plan(gd, pr, compile_script, new):
     s['steps'] = [k for k, _l, _c in STEPS if k in (s.get('steps') or [])]
     s['quiet'] = [k for k in QUIET if k in (s.get('quiet') or [])]
     s['hour'] = max(0, min(23, int(s.get('hour') or 0)))
+    s['message'] = str(s.get('message') or '').strip()[:MESSAGE_MAX]
     made = dict(old['made'])
     n = names(pr)
     ops = []
@@ -271,7 +289,7 @@ def plan(gd, pr, compile_script, new):
             ops.append({'op': 'record_revert', 'key': key} if key in opening or _only_flag(gd, pr, key)
                        else {'op': 'record', 'key': key, 'record': _start_flag(pr.records[key], True)})
     if not s['on']:
-        for k in ('script', 'quest'):
+        for k in ('script', 'quest', 'message'):
             if made.get(k):
                 ops.append({'op': 'record_revert', 'key': made.pop(k)})
         made['quiet'] = []
@@ -286,12 +304,23 @@ def plan(gd, pr, compile_script, new):
                 'p': [float(s['p'][0]), float(s['p'][1]), float(s['p'][2]), 0.0, 0.0, float(s['p'][3])],
                 'extra': {'persistent': True, 'edid': n['marker']}})
     nid = pr.next_id + 1
+    extra = {marker_key: {'type': 'REFR', 'flags': PERSISTENT, 'subs': [{'tag': 'EDID', 'label': 'Editor ID', 'kind': 'z', 'value': n['marker']}]}}
+    # the opening message, a record of the mod's own while there are words for it (before the script, which names it)
+    if s['message']:
+        message = _message_record(n['message'], s['message'])
+        message_key = made.get('message') or '+%06X' % nid
+        if not made.get('message'):
+            nid += 1
+        ops.append({'op': 'record', 'key': message_key, 'record': message} if made.get('message') else {'op': 'record_new', 'record': message})
+        made['message'] = message_key
+        extra[message_key] = message
+    elif made.get('message'):
+        ops.append({'op': 'record_revert', 'key': made.pop('message')})
     script_key = made.get('script') or '+%06X' % nid
     if not made.get('script'):
         nid += 1
     quest_key = made.get('quest') or '+%06X' % nid
-    extra = {marker_key: {'type': 'REFR', 'flags': PERSISTENT, 'subs': [{'tag': 'EDID', 'label': 'Editor ID', 'kind': 'z', 'value': n['marker']}]},
-             quest_key: _quest_record(n['quest'], script_key)}
+    extra[quest_key] = _quest_record(n['quest'], script_key)
     text = source(pr, s)
     script = compile_script(text, made.get('script'), extra)
     ops.append({'op': 'record', 'key': script_key, 'record': script} if made.get('script') else {'op': 'record_new', 'record': script})
@@ -344,4 +373,5 @@ def view(gd, pr):
                 place = c
     quiet = [{'id': k, 'label': v[0], 'note': v[1], 'found': len(quest_keys(gd, v[2]))} for k, v in QUIET.items()]
     return {'settings': s, 'place': place, 'world': world, 'steps': [{'id': k, 'label': l} for k, l, _c in STEPS], 'quiet': quiet,
+            'message_max': MESSAGE_MAX, 'pipboy_gap': bool(s['pipboy'] and not menus(pr, s)),   # (nothing open to put it on in)
             'names': names(pr), 'player': gd.key(PLAYER), 'player_changed': gd.key(PLAYER) in pr.records}

@@ -55,7 +55,7 @@ def mine(g, i, tag):
 
 cell = next(f for f, (i, r) in gd.forms.items() if r.tag == 'CELL' and gd.edid(f) == 'GSProspectorSaloonInterior')
 ckey = gd.key(cell)
-check('names come from the plugin', newgame.names(pr) == {'marker': 'NewGameTestNewGameStart', 'quest': 'NewGameTestNewGame', 'script': 'NewGameTestNewGameScript'})
+check('names come from the plugin', newgame.names(pr) == {'marker': 'NewGameTestNewGameStart', 'quest': 'NewGameTestNewGame', 'script': 'NewGameTestNewGameScript', 'message': 'NewGameTestNewGameMessage'})
 
 try:
     newgame.plan(gd, pr, comp, {'on': True})
@@ -74,7 +74,7 @@ check('it sets the hour', 'set GameHour to 10' in text)
 flat = text.replace('\r', '')
 check('it leaves a save that has met Doc Mitchell alone (in his house or past it)', 0 < flat.find('if GetQuestRunning VCG01 == 1') < flat.find('if GetStageDone VCG01 200 == 1') < flat.find('set step to 1'))
 check("once it is a new game, Doc Mitchell's scene is stopped whenever it starts", flat.find('set step to 1') < flat.find('if GetQuestRunning VCG01 == 1\n\t\tStopQuest VCG01\n\t\tplayer.RemoveScriptPackage'))
-check('the white a new game begins in is cleared, at the start and on arriving', text.count('RemoveImageSpaceModifier WhiteISFX') == 2)
+check('the white a new game begins in is cleared on arriving', text.count('RemoveImageSpaceModifier WhiteISFX') == 1)
 check('a fresh Pip-Boy is handed over only while a screen is open, in the game\'s order; in play only its reset, once worn',
       0 < flat.find('begin MenuMode') < flat.find('player.RemoveItem PipBoy 1 1') < flat.find('player.AddItem PipBoy 1 1')
       < flat.find('player.EquipItem PipBoy\n\t\tplayer.EquipItem PipBoyGlove\n\t\tResetPipboyManager')

@@ -43,7 +43,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   Pip-Boy), after what real runs taught: the game starts VCG01 whatever its flag says, so its bed stages are emptied
   (`_hush`) and the script stops it; the script clears `WhiteISFX`; a Pip-Boy put on by script in GameMode crashes the
   game (its manager re-runs the equip queue: stack overflow), so a fresh one is given and put on in a MenuMode block
-  during the last screen, then `ResetPipboyManager` in play once worn. Don't reorder these without a real run. A crash
+  during the last screen, then `ResetPipboyManager` in play once worn. Don't reorder these without a real run.
+  Since then, not yet run in the real game: an opening message (a MESG of the mod's own, `menus()`: it and the screens
+  are what the Pip-Boy can go on in; none of them, `pipboy_gap`), the white kept until arrival, Try it on the card
+  (Open in game), and tests for outdoor and own-place starts (`tests/test_newgame_places.py`). A crash
   leaves `%LOCALAPPDATA%\CrashDumps\FalloutNV.exe.*.dmp`: the faulting thread's stack against fnv_decomp's `@fnv`
   addresses names the loop.
 - Create page (`web/create.js`): items in plain fields over the same records Browse edits; "Give it to me in game"
