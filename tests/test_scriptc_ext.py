@@ -146,3 +146,14 @@ try:
     check('a word nobody knows is still unknown', False)
 except scriptc.CompileError as e:
     check('a word nobody knows is still unknown', 'Unknown command' in e.message)
+
+# ---------- names ----------
+src = 'scn FOLabNames\r\nshort turn\r\nfloat label\r\nshort floor\r\nbegin GameMode\r\n\tset turn to label + floor\r\n\tlet floor := turn\r\nend\r\n'
+r = scriptc.compile_script(src.encode(), forms, scriptc.SCRIPT_OBJECT)
+check('a variable may share its name with an extender\'s command, and is the variable', [n for _i, n, _f in r.vars] == ['turn', 'label', 'floor']
+      and bytes.fromhex('010f00560100000300560100000100' + '00') in r.data, r.data.hex())
+try:
+    scriptc.compile_script(b'scn FOLabNames2\r\nshort GetDistance\r\nbegin GameMode\r\nend\r\n', forms, scriptc.SCRIPT_OBJECT)
+    check('but not with one of the game\'s own', False)
+except scriptc.CompileError as e:
+    check('but not with one of the game\'s own', 'already has it' in e.message)

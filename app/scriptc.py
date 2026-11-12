@@ -908,7 +908,8 @@ class _Compiler(scriptx.Expressions):
             self.reference(w, True, False)
 
     def valid_var_name(self, w):
-        return self.forms.find(w.name) is None and w.name not in self.t.names
+        # (a name one of the game's own commands has; an extender's command may share its name with a variable, which wins)
+        return self.forms.find(w.name) is None and self.t.names.get(w.name, 0x1400) >= 0x1400
 
     def set_line(self, line, body):
         text = line.text + b'\0'
