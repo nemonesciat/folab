@@ -275,6 +275,7 @@ class Writer:
             masterlist.grow(tree, self.pr.plugin, self.masters, dropped=getattr(self, 'trimmed', False))
         order = gd.plugins[0].top_groups()
         found = {r.formid: (r, parent) for r, parent, _path in tree.records()}
+        had = set(found)                    # (what the opened plugin held before this save)
 
         # records the mod changes or adds (a place's record goes with the place, below)
         for key, rec in sorted(self.pr.records.items()):
@@ -391,11 +392,11 @@ class Writer:
             subs = landmod.encode(L, original, self.link, self._beyond(cell))
             have = found.get(llid)
             if have:
-                have[0].set_data(join(subs), rec.flags & ~tes4.COMPRESSED)
+                have[0].set_packed(join(subs), rec.flags)
                 continue
             kids = cell_kids(cell)
             group = self._ref_group(kids, self.local(cell), False)
-            node = plugintree.Rec.new('LAND', rec.flags & ~tes4.COMPRESSED, llid, join(subs), FORM_VERSION)
+            node = plugintree.Rec.packed('LAND', rec.flags, llid, join(subs), FORM_VERSION)     # (compressed, as all the game's land is)
             group.kids.insert(0, node)                      # (the land first, as the game's cells have it)
             found[llid] = (node, group)
 
@@ -422,6 +423,7 @@ class Writer:
             node.set_data(join(subs), node.flags & ~tes4.COMPRESSED)
 
         self._drop(tree, found)
+        as_the_game_files(tree, len(self.masters) if self.source and getattr(self.pr, 'trim_masters', False) else None)
 
         # the header: an opened plugin's own, with its count and next ID brought up to date
         own_ids = [r.formid & 0xFFFFFF for r, _p, _path in tree.records() if r.formid >> 24 == len(self.masters)]
@@ -443,6 +445,8 @@ class Writer:
             for m in self.masters:
                 subs += [('MAST', m.encode('cp1252') + b'\0'), ('DATA', b'\0' * 8)]
         flags = (tree.header.flags & ~ESM) | (ESM if self.pr.esm else 0)
+        if self.pr.esm:
+            subs = with_overrides(subs, tree, len(self.masters), had if self.source else None)
         new_head = join(subs)
         if new_head != tree.header.raw or flags != tree.header.flags:
             tree.header.set_data(new_head, flags)
@@ -685,6 +689,84 @@ def set_water(subs, h):
         at = max([n + 1 for n, (t, _d) in enumerate(out) if t in WATER_AFTER] or [len(out)])
         out.insert(at, ('XCLW', v))
     return out
+
+
+OVERRIDES_LISTED = ('REFR', 'ACHR', 'ACRE', 'PGRE', 'PMIS', 'PBEA', 'PFLA', 'PCBE', 'NAVM', 'LAND')
+
+
+def with_overrides(subs, tree, own, had=None):
+    """A master file's header with its ONAM: the placed things, navmeshes and land of other files that this one
+    changes, as each of the game's DLC masters lists its own. The game takes a master's changes to another file's
+    placed things only when they're listed here; a plugin (.esp) needs no list. had: the form IDs an opened plugin
+    already held: its own list is kept as it stands (the game's leave a few out), less what's gone, plus what's new."""
+    ids = [r.formid for r, _p, _path in tree.records() if r.tag in OVERRIDES_LISTED and r.formid >> 24 < own]
+    old = next((d for t, d in subs if t == 'ONAM'), None)
+    if had is not None and old is not None:
+        mine = list(struct.unpack('<%dI' % (len(old) // 4), old))
+        now = set(ids)
+        ids = [f for f in mine if f in now] + [f for f in ids if f not in had]
+    subs = [(t, d) for t, d in subs if t != 'ONAM']
+    if not ids:
+        return subs
+    at = max([n + 1 for n, (t, _d) in enumerate(subs) if t in ('HEDR', 'OFST', 'DELE', 'CNAM', 'SNAM', 'MAST', 'DATA')] or [len(subs)])
+    return subs[:at] + [('ONAM', struct.pack('<%dI' % len(ids), *ids))] + subs[at:]
+
+
+DRY_BELOW = 4096.0     # (a cell with no water to see: its water this far under the world's lowest land)
+
+
+def dry(subs, lowest):
+    """A CELL's subrecords with no water to see: the has-water flag on and a level of its own far under the ground.
+    Every outside cell of the game has the flag and a level; none is without."""
+    return set_water(subs, float(lowest) - DRY_BELOW)
+
+
+def as_the_game_files(tree, own=None):
+    """Outside cells laid out the way every one of the game's is (measured over all its worlds; the GECK is less
+    forgiving than the game about what it never made itself):
+      - a world's persistent cell has a children group with a persistent group in it, even an empty one;
+      - a grid cell with nothing in it has no children group at all, and never an empty temporary group's parent alone.
+    own (the plugin's own load-order byte, for a plugin FOLab made a world in) also brings what earlier FOLabs wrote
+    into line: its own land compressed, its own cells without water given a level far under the ground."""
+    wtop = next((g for g in tree.tops if g.gtype == tes4.G_TOP and g.label == plugintree.type_label('WRLD')), None)
+    if not wtop:
+        return
+    is_group = lambda k, t: isinstance(k, plugintree.Group) and k.gtype == t
+
+    def cells(kids, lowest, grid):
+        n = 0
+        while n < len(kids):
+            k = kids[n]
+            if isinstance(k, plugintree.Group) and k.gtype in (tes4.G_EXT_BLOCK, tes4.G_EXT_SUBBLOCK):
+                cells(k.kids, lowest, True)
+            elif isinstance(k, plugintree.Rec) and k.tag == 'CELL':
+                nxt = kids[n + 1] if n + 1 < len(kids) else None
+                has = is_group(nxt, tes4.G_CELL_CHILDREN)
+                if grid and has and not nxt.kids:
+                    del kids[n + 1]
+                elif not grid and not (has and any(is_group(g, tes4.G_CELL_PERSISTENT) for g in nxt.kids)):
+                    if not has:
+                        nxt = plugintree.Group(k.formid, tes4.G_CELL_CHILDREN)
+                        kids.insert(n + 1, nxt)
+                    nxt.kids.insert(0, plugintree.Group(k.formid, tes4.G_CELL_PERSISTENT))
+                if own is not None and k.formid >> 24 == own:
+                    if grid and lowest is not None:
+                        subs = list(tes4.iter_subrecords(k.data()))
+                        flags = next((d for t, d in subs if t == 'DATA'), b'')
+                        if flags and not flags[0] & 2:
+                            k.set_data(join(dry(subs, lowest)), k.flags)
+                    if has:
+                        for g in nxt.kids:
+                            for r in (g.kids if isinstance(g, plugintree.Group) else []):
+                                if isinstance(r, plugintree.Rec) and r.tag == 'LAND' and not r.flags & tes4.COMPRESSED and r.formid >> 24 == own:
+                                    r.set_packed(r.raw)
+            n += 1
+
+    for n, k in enumerate(wtop.kids):
+        nxt = wtop.kids[n + 1] if n + 1 < len(wtop.kids) else None
+        if isinstance(k, plugintree.Rec) and is_group(nxt, tes4.G_WORLD_CHILDREN):
+            dnam = dict(tes4.iter_subrecords(k.data())).get('DNAM')
+            cells(nxt.kids, struct.unpack_from('<f', dnam)[0] if dnam and len(dnam) >= 4 else None, False)
 
 
 def _set_text(subs, tag, text):

@@ -14,7 +14,6 @@ Land already worked out (mapworld.py) comes through opts: 'rect' (x0, y0, w, h) 
 (land.py form, beyond for its normals), 'wet'(x, y) -> whether the cell has water, at the world's level ('water'), 'progress'(n, of).
 Those LAND records are stored compressed, as the game's own are."""
 import struct
-import zlib
 
 import espwrite
 import land
@@ -79,19 +78,21 @@ def add_world(gd, tree, writer, next_id, opts):
     else:
         psubs = [('DATA', b'\x02'), ('XCLC', struct.pack('<iiI', 0, 0, 0)), ('XCLW', struct.pack('<f', espwrite.WORLD_WATER))]
     pid = new_id()
+    # (its children group holds a persistent group, empty to begin with: every world of the game has one)
     wkids.kids += [plugintree.Rec.new('CELL', tes4.PERSISTENT, pid, espwrite.join(psubs), espwrite.FORM_VERSION),
-                   plugintree.Group(pid, tes4.G_CELL_CHILDREN)]
+                   plugintree.Group(pid, tes4.G_CELL_CHILDREN, kids=[plugintree.Group(pid, tes4.G_CELL_PERSISTENT)])]
 
     # the grid: each cell like the persistent one with its square, flat land on it
     flat = {'h': [float(opts['height'])] * 1089, 'c': 'ff' * (33 * 33 * 3),
             'q': [{'bkey': opts['ltex'], 'base': None, 'layers': []} for _ in range(4)]}
-    land_subs = land.encode(flat, [('DATA', struct.pack('<I', 0x1F))], writer.link)
+    flat_land = plugintree.pack(espwrite.join(land.encode(flat, [('DATA', struct.pack('<I', 0x1F))], writer.link)))
+    lowest = float(opts['height'])
     label = lambda a, b: struct.unpack('<I', struct.pack('<hh', a, b))[0]
     land_for, wet, progress = opts.get('land_for'), opts.get('wet'), opts.get('progress')
     for done, (x, y) in enumerate(cells):
         csubs = [(t, struct.pack('<iiI', x, y, 0) if t == 'XCLC' else d) for t, d in psubs]
         if wet:
-            csubs = espwrite.set_water(csubs, None) if wet(x, y) else _dry(csubs)
+            csubs = espwrite.set_water(csubs, None) if wet(x, y) else espwrite.dry(csubs, lowest)
         cid = new_id()
         block = writer._group(wkids, label(y // 32, x // 32), tes4.G_EXT_BLOCK)
         sub = writer._group(block, label(y // 8, x // 8), tes4.G_EXT_SUBBLOCK)
@@ -100,19 +101,14 @@ def add_world(gd, tree, writer, next_id, opts):
         if land_for:
             form, beyond = land_for(x, y)
             raw = espwrite.join(land.encode(form, [('DATA', struct.pack('<I', 0x1F))], writer.link, beyond))
-            temp.kids.append(plugintree.Rec.new('LAND', tes4.COMPRESSED, new_id(), struct.pack('<I', len(raw)) + zlib.compress(raw, 6), espwrite.FORM_VERSION))
+            temp.kids.append(plugintree.Rec.packed('LAND', 0, new_id(), raw, espwrite.FORM_VERSION))
             if progress:
                 progress(done + 1, len(cells))
         else:
-            temp.kids.append(plugintree.Rec.new('LAND', 0, new_id(), espwrite.join(land_subs), espwrite.FORM_VERSION))
+            temp.kids.append(plugintree.Rec.new('LAND', tes4.COMPRESSED, new_id(), flat_land, espwrite.FORM_VERSION))
         kids.kids.append(temp)
         sub.kids += [plugintree.Rec.new('CELL', 0, cid, espwrite.join(csubs), espwrite.FORM_VERSION), kids]
     return wid, next_id
-
-
-def _dry(subs):
-    """A CELL's subrecords with no water."""
-    return [(t, bytes([d[0] & ~2]) + d[1:] if t == 'DATA' and d else d) for t, d in subs if t != 'XCLW']
 
 
 def fix_header(tree, next_id_formid):
