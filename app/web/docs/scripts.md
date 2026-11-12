@@ -45,7 +45,7 @@ A script goes on the kind of thing, not on one placed in the world, so every doo
 
 ## What it doesn't do yet
 
-- **xNVSE's commands aren't known**: the compiler knows the commands in the game's own program, so a script using xNVSE's gets "Unknown". Keep such scripts in the GECK for now.
+- **xNVSE scripts: nearly all of it, not quite all.** FOLab knows the commands xNVSE and JIP LN add (over 1,700) and compiles xNVSE's own language too: `let` and plain `x = 5`, `if eval`, `while` and `foreach` with `loop`, `break` and `continue`, `call`, `string_var` and `array_var`, the `ar_` and `sv_` commands, array `[ ]` and `*`, and scripts that `begin Function {a, b}`. Checked against a real mod's own compiled scripts: 48 of its 53 come out byte for byte. What it can't compile: a function written inside a line (`{...} => ...`, or `(begin Function {...} ... end)`), and commands from extender plugins FOLab hasn't been shown (it knows xNVSE's and JIP LN's). Such a line gets a message saying so; compile that script in the GECK started through xNVSE. Players need xNVSE (and JIP LN for its commands) for any of these to run.
 - **Your own placed things have no editor ID**, so a script can't name one (`MyDoorRef.Activate`). Scripts can name the game's persistent references, and any record of yours by its editor ID.
 - **Scripts inside a quest's stages or dialogue** aren't edited here.
 - **Nothing is proven until the game runs it.** The compiler gives the same bytes as the game's own scripts have (all but a handful that were out of date when the game shipped), but whether your script does what you meant, only the game can say.

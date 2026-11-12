@@ -132,6 +132,14 @@ the model for style, UI and approach. Python, standard library first, code in `a
   INFO/QUST result scripts; forms come through `GameForms` or anything with its `find`/`find_edid`). Function table:
   `scriptfuncs.json`, made from the user's FalloutNV.exe by `tools/gen_scriptfuncs.py`. `tools/script_oracle.py` compares
   every script of the game with its shipped bytes; all match but the 19 out of step listed in `tests/test_scriptc.py`.
+- Extender commands: `app/extfuncs.json` (xNVSE's and its plugins' commands: name, opcode, parameters, `expr` for those only xNVSE's
+  expression compiler can write), made by `tools/gen_extfuncs.py` from the user's nvse_1_4.dll (opcodes by the order its start-up code adds
+  them, checked against `ANCHORS` from real mods' compiled scripts), the plugin DLLs and nvse.log (plugin opcodes). `scriptc` compiles the
+  plain ones as the game's; `scriptx.py` (a mixin of its compiler; its docstring is the byte format) compiles xNVSE's own expressions:
+  let and bare assignment, if eval, while/foreach/loop, call, string_var/array_var, begin Function. Not: a function inside a line
+  (lambda), other extenders' commands. `tools/script_oracle.py --plugin X.esp` compares a mod's scripts with its own bytes (JSawyer
+  Ultimate: 48 of 53; of the rest 3 are lambdas, 1 an older xNVSE's function header, 1 a plugin not installed). Shell heredocs eat
+  backslashes: patch these files with Edit or a script written by Write.
 - Scripts page (`web/scripts.js` + `scriptshelp.js`, `scriptattach.js`; `api_scripts.py`): a script is an SCPT record in `project.records`, only ever
   written with bytes the compiler gave for its source; `ModForms` lays the mod's forms over `GameForms`, `set_script` puts SCRI in the game's place. A compile
   problem comes back as `problem`, not `error` (`post()` throws on that). Starters in `scripttemplates.py`, notes on commands in `scriptdocs.py`.

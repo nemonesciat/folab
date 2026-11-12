@@ -28,6 +28,7 @@ import json
 import os
 import struct
 
+import scriptx
 import tes4
 
 ENC = 'cp1252'
@@ -39,7 +40,9 @@ MAX_NESTING = 10
 C_BEGIN, C_END, C_SHORT, C_LONG, C_FLOAT, C_SET, C_IF, C_ELSE, C_ELSEIF, C_ENDIF = 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, \
     0x16, 0x17, 0x18, 0x19
 C_REFERENCE_ON, C_SCRIPTNAME, C_RETURN, C_REF = 0x1C, 0x1D, 0x1E, 0x1F
-DECLARATIONS = (C_SHORT, C_LONG, C_FLOAT, C_REF)
+C_STRING_VAR, C_ARRAY_VAR = scriptx.C_STRING_VAR, scriptx.C_ARRAY_VAR     # (xNVSE's: no line of the game's has these)
+DECLARATIONS = (C_SHORT, C_LONG, C_FLOAT, C_REF, C_STRING_VAR, C_ARRAY_VAR)
+VAR_KIND = {C_SHORT: 'i', C_LONG: 'i', C_FLOAT: 'f', C_REF: 'r', C_STRING_VAR: 's', C_ARRAY_VAR: 'a'}
 # The three that take a message rather than plain parameters: (has buttons, text written in the line)
 MESSAGE_COMMANDS = {0x1059: (False, False), 0x114D: (True, False), 0x11B9: (False, True)}
 
@@ -100,6 +103,19 @@ class _Tables:
                 if e['short']:
                     self.names.setdefault(e['short'].lower(), e['code'])
                 self.by_code[e['code']] = e
+        # what xNVSE and its plugins add (tools/gen_extfuncs.py reads them from the user's own files); the game's own names win
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extfuncs.json'), encoding='utf-8') as f:
+                ext = json.load(f)['commands']
+        except (OSError, ValueError, KeyError):
+            ext = []
+        for e in ext:
+            if e['code'] in self.by_code:
+                continue
+            self.names.setdefault(e['name'].lower(), e['code'])
+            if e['short']:
+                self.names.setdefault(e['short'].lower(), e['code'])
+            self.by_code[e['code']] = e
         self.blocks = {}
         for e in t['blocks']:
             self.blocks.setdefault(e['name'].lower(), e)
@@ -213,7 +229,7 @@ class Compiled:
         return out
 
 
-class _Compiler:
+class _Compiler(scriptx.Expressions):
     def __init__(self, source, forms, script_type, old_vars, old_count, partial, strict):
         self.src = source
         self.forms, self.t = forms, tables()
@@ -230,6 +246,7 @@ class _Compiler:
         self.lineno = 0
         self.text = b''
         self.block_at = None
+        self.x_init()
 
     def err(self, message):
         raise CompileError(message, self.lineno, self.text.decode(ENC, 'replace'))
@@ -270,11 +287,20 @@ class _Compiler:
     def first_pass(self):
         for line in self.lines:
             self.lineno, self.text = line.number, line.whole
+            if scriptx.inline_function(line.text):
+                self.err(scriptx.LAMBDA % '(begin Function {...} ... end), or {...} => ...')
             w = _Word()
             cur = [0]
             if not self.word(w, line.text + b'\0', cur, True, True):
                 self.err('This line makes no sense here: it needs to start with a command.')
             line.ref = w.ref
+            if w.kind != 'X' and w.name in ('string_var', 'array_var') and not w.ref:
+                line.code = C_STRING_VAR if w.name == 'string_var' else C_ARRAY_VAR
+                line.text = line.text[cur[0]:]
+                continue
+            if w.kind != 'X' and 'let' in self.t.names and scriptx.assigns(line.text[cur[0]:]):
+                line.code, line.ref = self.t.names['let'], 0         # (xNVSE: `x = 5` on its own is `let x := 5`)
+                continue
             if w.kind != 'X':
                 self.err('Unknown command "%s".' % w.text)
             if 0x100 <= w.code < 0x1CD:
@@ -442,8 +468,22 @@ class _Compiler:
         cur = [0]
         out = bytearray(struct.pack('<H', len(params)))
         for i, (ptype, optional, pname) in enumerate(params):
-            allow_ref, is_form = self.t.kinds[ptype]
+            allow_ref, is_form = (1, 0) if ptype == 44 else self.t.kinds[ptype]      # (44: JIP's double, a number)
+            at = cur[0]
+            while buf[at] in (9, 32, 44):
+                at += 1
+            if buf[at] == 40:                                                    # ( an expression of xNVSE's, worked out as the line runs
+                data, cur[0] = self.x_param(buf[:-1], at)
+                out += data
+                continue
             w = _Word()
+            if buf[at] == 36 and ptype == 0:                                     # $ a string variable's words
+                end = at + 1
+                while _isalnum(buf[end]) or buf[end] == 95:
+                    end += 1
+                w.raw, cur[0] = buf[at:end], end
+                out += struct.pack('<H', len(w.raw)) + w.raw
+                continue
             n = self.word(w, buf, cur, bool(allow_ref), False)
             if not n:
                 if not optional:
@@ -480,13 +520,13 @@ class _Compiler:
     def value_param(self, ptype, pname, w, n, out):
         if ptype == 0:                                                           # text
             out += struct.pack('<H', n) + w.raw
-        elif ptype in (1, 2, 23):                                                # a number or a variable
+        elif ptype in (1, 2, 23, 44):                                            # a number or a variable (44: JIP's double)
             if w.ref > 0:
                 out += (b'G' if w.kind == 'G' else b'r') + struct.pack('<H', w.ref)
             if w.kind != 'G':
                 if w.var > 0:
                     out += w.kind.encode('ascii') + struct.pack('<H', w.var)
-                elif ptype == 2:
+                elif ptype in (2, 44):
                     if not _is_number(w.raw):
                         self.err('Unknown variable "%s" (for %s).' % (w.text, pname))
                     out += b'z' + struct.pack('<d', _atof(w.raw))
@@ -606,7 +646,11 @@ class _Compiler:
                     if fn['ref'] and self.quest and not w.ref:
                         self.err('%s needs a reference in front of it in a quest script (like player.%s).' %
                                  (w.text, w.text))
-                    if fn['params']:
+                    if fn.get('expr'):
+                        data, took = self.x_args(text[i:], fn['code'] == self.x_call)
+                        out += struct.pack('<H', len(data)) + data
+                        i += took
+                    elif fn['params']:
                         data, took = self.params(fn, text[i:], False)
                         out += struct.pack('<H', len(data)) + data
                         i += took
@@ -633,7 +677,8 @@ class _Compiler:
         while s[pos] != 0:
             c = s[pos]
             word = struct.unpack_from('<h', s, pos + 1)[0] if pos + 3 <= len(s) else 0
-            if c == 88 and 0x1000 <= word < 0x1280:                              # X: a function call, whole
+            # X: a function call, whole (the game's own numbers, or one xNVSE or a plugin added)
+            if c == 88 and (0x1000 <= word < 0x1280 or (word >= 0x1400 and word in self.t.by_code)):
                 size = struct.unpack_from('<h', s, pos + 3)[0] + 5
                 out += s[pos:pos + size]
                 pos += size
@@ -744,7 +789,7 @@ class _Compiler:
         count = depth = 0
         for line in self.lines[at + 1:]:
             c = line.code
-            if c in (C_SHORT, C_LONG, C_FLOAT):
+            if c in (C_SHORT, C_LONG, C_FLOAT, C_STRING_VAR, C_ARRAY_VAR):
                 continue
             if c == C_IF:
                 count += 1
@@ -801,7 +846,9 @@ class _Compiler:
                 if e.form is not None and e.form.tag not in REF_TAGS and not e.var:
                     self.err('"%s" can\'t go in front of this function: it must be a reference or a ref variable.' %
                              e.text)
-            if fn['params']:
+            if fn.get('expr'):
+                self.x_line(fn, text, body)
+            elif fn['params']:
                 data, _took = self.params(fn, text, True)
                 body += data
         if len(self.out) + len(body) + 10 >= MAX_SIZE:
@@ -809,6 +856,7 @@ class _Compiler:
         if line.ref:
             self.out += struct.pack('<HH', C_REFERENCE_ON, line.ref)
         self.out += struct.pack('<HH', c, len(body)) + body
+        self.x_after(c, len(self.out) - len(body))
 
     def begin_line(self, line, body):
         w = _Word()
@@ -816,6 +864,13 @@ class _Compiler:
         if not self.word(w, line.text + b'\0', cur, False, False):
             self.err('begin needs a block type (GameMode, OnActivate...).')
         block = self.t.blocks.get(w.name)
+        if block is None and w.name == 'function':                               # (xNVSE's: a script others call)
+            body += struct.pack('<H', scriptx.BLOCK_FUNCTION)
+            self.block_at = len(self.out) + 4 + len(body)
+            body += bytes(4)
+            self.x_function(line.text[cur[0]:], body)
+            struct.pack_into('<I', body, 2, len(self.out) + len(body))
+            return
         if block is None:
             self.err('"%s" isn\'t a block type.' % w.text)
         if block['ref'] and self.quest:
@@ -838,7 +893,8 @@ class _Compiler:
         name = w.text
         if self.strict and not self.valid_var_name(w):
             self.err('"%s" can\'t be a variable\'s name: something else already has it.' % name)
-        is_int = line.code in (C_SHORT, C_LONG)
+        is_int = line.code in (C_SHORT, C_LONG, C_STRING_VAR)     # (a string variable is kept as a whole number: which string)
+        self.var_kinds.setdefault(w.name, VAR_KIND[line.code])
         old = self.old_vars.get(w.name)
         if old:
             num = old[0]
