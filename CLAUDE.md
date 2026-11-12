@@ -119,6 +119,13 @@ the model for style, UI and approach. Python, standard library first, code in `a
   Run it before committing changes to the readers, writer, project or schema.
 - Test server: launch config `folab-test` (port 8772, `FOLAB_HOME=%TEMP%\folab-test`) so tests never touch the
   user's own mods. Never test `install` against the real game: use a fake Data folder and `LOCALAPPDATA`.
+- Outside cells as the game files them (`espwrite.as_the_game_files`, `tests/test_world_as_game.py`; measured over every
+  world of the game): all LAND compressed (`plugintree.Rec.packed`), a world's persistent cell with a persistent group in
+  its children, every grid cell with the has-water flag and XCLW (none to see: `espwrite.dry`, far under the lowest land),
+  no empty children group. Earlier FOLab worlds (`trim_masters`) are brought into line on their next save. Done after a
+  tester's report that FOLab worlds crash the GECK on loading cells (test 10). Tried in the GECK 11 Nov 2026: worlds written
+  the old way (flat and real-map) and the new way all load and draw, so the crash is not reproduced and its cause unknown.
+  Driving the GECK by computer use takes over the user's screen for minutes: ask first, or have them do it.
 - New Vegas rules kept in the writer: game refs are never deleted (disabled + sunk to z -30000); form IDs in
   copied records are re-pointed to this plugin's master list.
 - Scripts: `scriptc.py` compiles New Vegas script source to the game's bytes (`compile_script`, `compile_result` for
@@ -128,6 +135,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Scripts page (`web/scripts.js` + `scriptshelp.js`, `scriptattach.js`; `api_scripts.py`): a script is an SCPT record in `project.records`, only ever
   written with bytes the compiler gave for its source; `ModForms` lays the mod's forms over `GameForms`, `set_script` puts SCRI in the game's place. A compile
   problem comes back as `problem`, not `error` (`post()` throws on that). Starters in `scripttemplates.py`, notes on commands in `scriptdocs.py`.
+- GECK parity (help doc `geck`): the GECK's menus and windows were read out of Geck.exe and matched against FOLab. `schema._MORE` is the
+  27 kinds its World, Gameplay and Character menus edit (game settings by `setting_kind`: the name's first letter says what DATA holds;
+  a tag a type lists as None is left raw whatever COMMON says). Still raw there: WTHR INAM, IMAD curves, WATR DNAM, EFSH/CSNO/LSCT DATA,
+  SCOL placements, BPTD BPND, RGDL. Not started: face textures, distant objects, local maps, text export, cover edges, rooms and portals.
 - Records: `schema.py` layouts (checked against every record of each type: run `checkall`; a layout only counts
   if every subrecord fits and encodes back byte for byte), `recordio.py` (a mod's records with links as keys),
   `browse.py` (Browse page data; its index builds in the background, ~20 s). Subrecords no layout reads stay raw in a kept record, in its source file's numbering; the writer re-points their links with `formlinks.py`, which also reads the types not in `schema.TYPES`.

@@ -369,12 +369,122 @@ for _t, _d in _TYPE_ADD.items():
         TYPES[_t] = _d
 
 
+# ---- the kinds the GECK edits from its World, Gameplay and Character menus (same rules: checkall proves each) ----
+_F = lambda *names: [('f', n) for n in names]
+_STAGE = {'DATA': ('Stage', [('I', 'Starts at'), ('F', 'Effect')])}
+_IMGS = _F('Eye adapt speed', 'Blur radius', 'Blur passes', 'Emissive ×', 'Target luminance', 'Upper luminance clamp', 'Bright scale',
+           'Bright clamp', 'Luminance ramp (no texture)', 'Luminance ramp min', 'Luminance ramp max', 'Sunlight dimmer', 'Grass dimmer',
+           'Tree dimmer', 'Skin dimmer', 'Bloom blur radius', 'Bloom alpha × inside', 'Bloom alpha × outside', 'Hit blur radius',
+           'Hit blur damping', 'Hit damping', 'Night eye red', 'Night eye green', 'Night eye blue', 'Night eye brightness',
+           'Saturation', 'Contrast average luminance', 'Contrast', 'Brightness', 'Tint red', 'Tint green', 'Tint blue', 'Tint strength') \
+    + [('16x', ''), ('B', 'Flags'), ('3x', '')]
+_SOUND = [('B', 'Fades from (×5 units)'), ('B', 'Silent at (×100 units)'), ('b', 'Pitch change %'), ('x', ''), ('I', 'Flags'),
+          ('h', 'Volume cut (1/100 dB)'), ('B', 'Stops at hour (×256/24)'), ('B', 'Starts at hour (×256/24)'),
+          ('h', 'Falloff point 1'), ('h', 'Falloff point 2'), ('h', 'Falloff point 3'), ('h', 'Falloff point 4'), ('h', 'Falloff point 5'),
+          ('h', 'Reverb cut'), ('i', 'Priority'), ('i', 'X'), ('i', 'Y')]
+_TIMES = ('sunrise', 'day', 'sunset', 'night', 'high noon', 'midnight')
+
+
+def _colours(label, parts, times):
+    """A weather's colours: for each part of the sky, one colour for each time of day."""
+    return (label, [f for part in parts for t in _TIMES[:times]
+                    for f in (('B', '%s, %s: red' % (part, t)), ('B', '%s, %s: green' % (part, t)), ('B', '%s, %s: blue' % (part, t)), ('x', ''))])
+
+
+_SKY = ('Upper sky', 'Fog', 'Lower clouds', 'Ambient light', 'Sunlight', 'Sun', 'Stars', 'Lower sky', 'Horizon', 'Upper clouds')
+_CLOUDS = ('Cloud layer 1', 'Cloud layer 2', 'Cloud layer 3', 'Cloud layer 4')
+_MORE = {
+    'GMST': ('Game settings', {'DATA': [('Value', [('i', 'Value')]), ('Value', 'z')]}),      # (see setting_kind: its name says what it holds)
+    'MICN': ('Menu icons', {}),
+    'SOUN': ('Sounds', {'FNAM': ('Sound file', 'z'), 'RNAM': ('Chance it plays', [('B', 'Percent')]), 'SNDD': ('Sound', _SOUND),
+                        'SNDX': ('Sound', _SOUND[:8]), 'ANAM': ('Falloff', [('h', 'Point %d' % n) for n in range(1, 6)]),
+                        'GNAM': ('Reverb cut', [('h', 'Value')]), 'HNAM': ('Priority', [('i', 'Value')])}),
+    'MUSC': ('Music types', {'FNAM': ('Music file', 'z'), 'ANAM': ('Volume (dB)', [('f', 'dB')])}),
+    'MSET': ('Media sets', dict(
+        {'NAM1': ('Kind', [('I', 'Type')]), 'NAM2': ('Loop: battle or day outer', 'z'), 'NAM3': ('Explore or day middle', 'z'),
+         'NAM4': ('Suspense or day inner', 'z'), 'NAM5': ('Night outer', 'z'), 'NAM6': ('Night middle', 'z'), 'NAM7': ('Night inner', 'z'),
+         'PNAM': ('Flags', [('B', 'Flags')]), 'DATA': MARK, 'HNAM': ('Intro sound', 'F'), 'INAM': ('Outro sound', 'F')},
+        **{t: (n, [('f', 'Value')]) for t, n in (
+            ('NAM8', 'Loop volume (dB) 1'), ('NAM9', 'Loop volume (dB) 2'), ('NAM0', 'Loop volume (dB) 3'), ('ANAM', 'Loop volume (dB) 4'),
+            ('BNAM', 'Loop volume (dB) 5'), ('CNAM', 'Loop volume (dB) 6'), ('JNAM', 'Boundary 1'), ('KNAM', 'Boundary 2'),
+            ('LNAM', 'Boundary 3'), ('MNAM', 'Boundary 4'), ('NNAM', 'Boundary 5'), ('ONAM', 'Boundary 6'),
+            ('DNAM', 'Wait time'), ('ENAM', 'Loop fade out'), ('FNAM', 'Recovery time'), ('GNAM', 'Night time max'))})),
+    'ALOC': ('Media location controllers', dict(
+        {t: ('Setting %s' % t[-1], [('I', 'Value')]) for t in ('NAM1', 'NAM2', 'NAM3', 'NAM4', 'NAM5', 'NAM6', 'NAM7')},
+        LNAM=('Neutral media set', 'F'), GNAM=('Battle media set', 'F'), HNAM=('Ally media set', 'F'), ZNAM=('Friend media set', 'F'),
+        XNAM=('Enemy media set', 'F'), YNAM=('Location media set', 'F'), RNAM=('Faction', 'F'), FNAM=('Flags', [('I', 'Flags')]))),
+    'WTHR': ('Weather', dict(
+        {chr(i) + 'IAD': ('Image space change %d' % (i + 1), 'F') for i in range(6)},
+        NAM0=[_colours('Colours', _SKY, 6), _colours('Colours', _SKY, 4)], PNAM=[_colours('Cloud colours', _CLOUDS, 6), _colours('Cloud colours', _CLOUDS, 4)],
+        DNAM=('Cloud texture 1', 'z'), CNAM=('Cloud texture 2', 'z'), ANAM=('Cloud texture 3', 'z'), BNAM=('Cloud texture 4', 'z'),
+        LNAM=('Cloud layers', [('I', 'Most')]), ONAM=('Cloud speed', [('B', 'Layer %d' % n) for n in range(1, 5)]),
+        FNAM=('Fog', _F('Day near', 'Day far', 'Night near', 'Night far', 'Day power', 'Night power')),
+        DATA=('Weather', [('B', n) for n in ('Wind speed', 'Lower cloud speed', 'Upper cloud speed', 'Change speed', 'Sun glare', 'Sun damage',
+                                             'Rain fades in', 'Rain fades out', 'Thunder begins', 'Thunder ends', 'Thunder frequency',
+                                             'Kind', 'Lightning red', 'Lightning green', 'Lightning blue')]),
+        SNAM=('Sound', [('F', 'Sound'), ('I', 'Kind')]))),
+    'IMGS': ('Image spaces', {'DNAM': _prefixes('Image space', _IMGS, [152, 148, 132])}),
+    'IMAD': ('Image space changes', {'RDSD': ('Sound at start', 'F'), 'RDSI': ('Sound at end', 'F'), 'SNAM': None, 'YNAM': None}),
+    'LGTM': ('Lighting templates', {'DATA': ('Lighting', [
+        ('B', 'Ambient red'), ('B', 'Ambient green'), ('B', 'Ambient blue'), ('x', ''), ('B', 'Light red'), ('B', 'Light green'),
+        ('B', 'Light blue'), ('x', ''), ('B', 'Fog red'), ('B', 'Fog green'), ('B', 'Fog blue'), ('x', ''), ('f', 'Fog near'), ('f', 'Fog far'),
+        ('i', 'Light turn'), ('i', 'Light tilt'), ('f', 'Light fade'), ('f', 'Fog clip distance'), ('f', 'Fog power')])}),
+    'WATR': ('Water types', {'NNAM': ('Noise texture', 'z'), 'ANAM': ('Opacity', [('B', 'Opacity')]), 'FNAM': ('Flags', [('B', 'Flags')]),
+                             'MNAM': ('Material', 'z'), 'XNAM': ('Actor effect', 'F'), 'SNAM': ('Sound', 'F'),
+                             'DATA': [('Damage', [('H', 'Damage')]), ('Old settings', [('184x', ''), ('2x', '')])]}),
+    'EFSH': ('Effect shaders', {'ICON': ('Fill texture', 'z'), 'ICO2': ('Particle texture', 'z'), 'NAM7': ('Holes texture', 'z')}),
+    'DEBR': ('Debris', {}),
+    'SCOL': ('Static collections', {'ONAM': ('Static', 'F')}),
+    'TREE': ('Trees', {'SNAM': [('Seeds', [('I', 'Seed %d' % n) for n in range(1, 6)]), ('Seeds', [('I', 'Seed 1')])],
+                       'CNAM': ('Tree', _F('Leaf curve', 'Leaf angle min', 'Leaf angle max', 'Branch dimming', 'Leaf dimming')
+                                + [('i', 'Shadow radius')] + _F('Rock speed', 'Rustle speed')),
+                       'BNAM': ('Billboard', _F('Width', 'Height'))}),
+    'CSTY': ('Combat styles', {
+        'CSTD': ('Fighting', [('B', 'Dodge %'), ('B', 'Left or right %'), ('2x', '')]
+                 + _F('Dodge side timer min', 'Dodge side timer max', 'Dodge forward timer min', 'Dodge forward timer max',
+                      'Dodge back timer min', 'Dodge back timer max', 'Idle timer min', 'Idle timer max')
+                 + [('B', 'Block %'), ('B', 'Attack %'), ('2x', '')] + _F('Stagger bonus to attack', 'Knocked-out bonus to attack', 'Unarmed bonus to attack')
+                 + [('B', 'Power attack %'), ('3x', '')] + _F('Stagger bonus to power attack', 'Knocked-out bonus to power attack')
+                 + [('B', 'Power attack: standing'), ('B', 'Power attack: forward'), ('B', 'Power attack: back'), ('B', 'Power attack: left'),
+                    ('B', 'Power attack: right'), ('3x', '')] + _F('Hold timer min', 'Hold timer max')
+                 + [('H', 'Flags'), ('2x', ''), ('B', 'Acrobatic dodge %'), ('B', 'Rushing attack %'), ('2x', ''), ('f', 'Rushing attack distance ×')]),
+        'CSAD': ('Fine tuning', [('f', 'Value %d' % n) for n in range(1, 22)]),
+        'CSSD': ('Guns and cover', _F('Cover search radius', 'Take cover chance', 'Wait timer min', 'Wait timer max', 'Wait to fire min',
+                                      'Wait to fire max', 'Fire timer min', 'Fire timer max', 'Ranged range × min')
+                 + [('4x', ''), ('I', 'Weapon restrictions')]
+                 + _F('Ranged range × max', 'Targeting field of view', 'Combat radius', 'Semi-auto delay × min', 'Semi-auto delay × max'))}),
+    'BPTD': ('Body part data', {'BPTN': ('Part name', 'z'), 'BPNN': ('Part node', 'z'), 'BPNT': ('V.A.T.S. target', 'z'),
+                                'BPNI': ('Start node', 'z'), 'NAM1': ('Limb replacement model', 'z'), 'NAM4': ('Gore target bone', 'z'),
+                                'RAGA': ('Ragdoll', 'F')}),
+    'RGDL': ('Ragdolls', {'NVER': ('Version', [('I', 'Version')]), 'XNAM': ('Body part data', 'F'), 'TNAM': ('Actor', 'F'),
+                          'ANAM': ('Death pose', 'z')}),
+    'AVIF': ('Actor values', {'ANAM': ('Short name', 'z')}),
+    'RADS': ('Radiation stages', _STAGE), 'DEHY': ('Dehydration stages', _STAGE), 'HUNG': ('Hunger stages', _STAGE),
+    'SLPD': ('Sleep deprivation stages', _STAGE),
+    'RCCT': ('Recipe categories', {'DATA': ('Flags', [('B', 'Flags')])}),
+    'CHIP': ('Casino chips', {}),
+    'CSNO': ('Casinos', {'MOD2': ('Slot machine model', 'z'), 'MOD3': ('Blackjack table model', 'z'), 'MOD4': ('Roulette table model', 'z'),
+                         'ICO2': ('Deck texture', 'z')}),
+    'LSCT': ('Load screen types', {}),
+}
+for _t, _d in _MORE.items():
+    assert _t not in TYPES, _t
+    TYPES[_t] = _d
+
+
+def setting_kind(edid):
+    """What a game setting holds, which its name's first letter says: 's' words, 'f' a number with a fraction, else a whole number."""
+    c = (edid or ' ')[:1].lower()
+    return 'z' if c == 's' else 'f' if c == 'f' else 'i'
+
+
 # subrecords that mean something else once a record's later parts begin (PERK's DATA inside its effects)
 AFTER = {'PERK': ('PRKE', {'DATA'})}
 
 
 def _alts(rtype, tag):
-    d = TYPES.get(rtype, (None, {}))[1].get(tag) or COMMON.get(tag)
+    mine = TYPES.get(rtype, (None, {}))[1]
+    d = mine.get(tag) or (None if tag in mine else COMMON.get(tag))     # (a tag a type lists as None is its own, left raw)
     return [] if d is None else d if isinstance(d, list) else [d]
 
 
@@ -466,12 +576,23 @@ def decode_record(rtype, subs):
         if tag == after:
             late = True
         out.append(decode_sub(rtype, tag, data, late))
+    if rtype == 'GMST':                     # (a setting's value is what its name says it is)
+        kind = setting_kind(next((s['value'] for s in out if s['tag'] == 'EDID'), ''))
+        for n, (tag, data) in enumerate(subs):
+            if tag == 'DATA':
+                if kind == 'z' and data.endswith(bytes(1)):
+                    out[n] = {'tag': tag, 'label': 'Value', 'kind': 'z', 'value': data[:-1].decode('cp1252', 'replace')}
+                elif kind != 'z' and len(data) == 4:
+                    out[n] = {'tag': tag, 'label': 'Value', 'kind': 'struct',
+                              'fields': [{'name': 'Value', 'code': kind, 'value': struct.unpack('<' + kind, data)[0]}]}
+                else:
+                    out[n] = {'tag': tag, 'label': 'Value', 'kind': 'raw', 'value': data.hex()}
     return out
 
 
 def _struct_for(rtype, tag, fields):
     """the struct alternative a decoded subrecord came from (its fields, padding included, line up)"""
-    if tag == 'CTDA':       # (a condition's own fields say what they are: see condition_fields)
+    if tag == 'CTDA' or (rtype == 'GMST' and tag == 'DATA'):       # (their own fields say what they are: see condition_fields, setting_kind)
         return [(f['code'], f['name']) if 'code' in f else ('%dx' % (len(f['pad']) // 2), '') for f in fields]
     for d in _alts(rtype, tag):
         if isinstance(d[1], list) and len(d[1]) == len(fields):
