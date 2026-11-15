@@ -104,3 +104,29 @@ check('things that say what it was stand round it', rep2['buildings'] == 1 and l
 check('none of them inside it', not any(b[0] < lx < b[3] and b[1] < ly < b[4] for lx, ly in ((
     (o['p'][0] - x) * math.cos(turn) - (o['p'][1] - y) * math.sin(turn), (o['p'][0] - x) * math.sin(turn) + (o['p'][1] - y) * math.cos(turn)) for o in props)))
 check('all on the ground', all(abs(o['p'][2] - level) < 12 for o in props))
+
+# ---------- the plots nothing was built on ----------
+ring = lambda x0, y0, x1, y1: [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+lots = [{'ring': ring(x + 3000, y + 600, x + 4400, y + 1700), 'pad': True},        # empty, big
+        {'ring': ring(x - 300, y - 300, x + 300, y + 300), 'pad': True},            # the building stands on it
+        {'ring': ring(x - 4000, y + 600, x - 3700, y + 900), 'pad': True},          # empty, tiny
+        {'ring': ring(x + 3000, y + 3000, x + 4000, y + 4000), 'pad': False}]       # never levelled: not a plot
+found = {}
+for seed in range(1, 7):
+    lops, lrep = osmdress.lots(gd, pr, world, Cover('paved'), cat, lots, seed)
+    for o in lops:
+        k = 'big' if o['p'][0] > x + 2000 else 'tiny' if o['p'][0] < x - 2000 else 'other'
+        found.setdefault(k, []).append(o)
+    last = lrep
+check('two plots stand empty, the one with a building and the one never levelled apart', last['empty'] == 2, last)
+check('the empty plots are filled, the others left', len(found.get('big', [])) > 12 and len(found.get('tiny', [])) >= 2 and 'other' not in found,
+      {k: len(v) for k, v in found.items()})
+check('everything is on its own plot', all(x + 2900 <= o['p'][0] <= x + 4500 and y + 500 <= o['p'][1] <= y + 1800 for o in found['big'])
+      and all(x - 4100 <= o['p'][0] <= x - 3600 and y + 500 <= o['p'][1] <= y + 1000 for o in found['tiny']))
+under = [o['p'][2] + townbuild.obnd(gd, o['base'])[2] - level for o in found['big'] + found['tiny']]
+check('each thing\'s underside is on the ground, a little in', all(-12 <= u <= 2 for u in under), (min(under), max(under)))
+kinds = {edid(o) for o in found['big']}
+check('a big plot takes more than rubble: a ruin, a trailer, a wall, wrecks', len(kinds & {'HouseRuined02', 'HouseRuined03', 'HouseRuined04b', 'HouseRuined04c', 'TruckTrailer01',
+      'TruckTrailer03', 'TruckTrailer04', 'TruckTrailer06', 'UrbanCourtyardwallStr01', 'UrbanCourtyardwallStr02', 'Car01HulkBodyStatic', 'ScaffoldDestroyed01'}) >= 3, sorted(kinds))
+check('a tiny one only a heap', {edid(o) for o in found['tiny']} <= {'SuburbanRubblePileSm01', 'ConcreteSlab01', 'Barrel01', 'RubblePile02', 'SuburbanRubblePile01bLiteLitter',
+      'RoadChunkCluster01', 'SWSingleRubble'}, sorted({edid(o) for o in found['tiny']}))

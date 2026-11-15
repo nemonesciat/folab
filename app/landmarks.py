@@ -20,7 +20,11 @@ import roadgen
 # set: what it's called, the world the game has it in, which things are its pieces (editor IDs, lower case), and things
 # added round it: (editor ID, east, north of its middle, turn)
 SETS = {
-    'lucky38': {'label': 'Lucky 38', 'world': 'TheStripWorldNew', 'match': r'^lucky38(b|base|top|overhang0[12]|stairlights)?$'},
+    # (its casino at the tower's foot is made to be seen from the Strip, half a round building: stood four times about the
+    # tower it is a whole one. The tower's own shaft is open on one side too: the game's all-round tower, the one seen
+    # from the desert, stands inside it, a wall wherever the shaft has none. From 58 parts in 100 wall at worst to 98)
+    'lucky38': {'label': 'Lucky 38', 'world': 'TheStripWorldNew', 'match': r'^lucky38(b|base|top|overhang0[12]|stairlights)?$',
+                'round': (r'^lucky38b?$', 4), 'inside': ('Lucky38WL', r'^lucky38top$', 133.0)},
     # (the game's own all-round Tops, the one seen from Freeside: whole from every side and solid to walk into. Its pieces
     # on the Strip are street fronts round a hollow, the hotel blocks on stilts where the casino isn't under them)
     'tops': {'label': 'The Tops', 'extra': [('TheTopsWL', 742, 1120, 0.0, -688.0)]},
@@ -59,7 +63,7 @@ MOORED = [('Boat02a', -60.0, 3), ('Boat02b', -60.0, 3), ('Boat02c', -60.0, 3), (
 SUNK = ['Boat01a', 'Boat01b', 'Boat01d', 'dlc04boatwrecked01', 'Boat02c']
 CRANE = ('CraneStatic02', 900.0)
 
-ONLY_HERE = {'TheTopsWL', 'TheTopsPool', 'RadioTower01', 'HVBunkerNV', 'HVBunkerNV2', 'HVBunkerNV3', 'NVGuardTower01', 'NVMojOutpostStatue01'}
+ONLY_HERE = {'Lucky38WL', 'TheTopsWL', 'TheTopsPool', 'RadioTower01', 'HVBunkerNV', 'HVBunkerNV2', 'HVBunkerNV3', 'NVGuardTower01', 'NVMojOutpostStatue01'}
 _found = {}
 
 
@@ -141,6 +145,20 @@ def lift(gd, name):
         # (the game's own ground is rarely just under a piece's origin: what the set's lowest piece stands at is nearer)
         for _w, base, x, y, z, rx, ry, rz, sc in rows:
             pieces.append((gd.key(base), x - mx, y - my, z - g, rx, ry, rz, sc))
+    if spec.get('round') and pieces:
+        # (some of its pieces again, turned about its middle: each a hair smaller than the last, so no two faces lie in one another)
+        pat, times = re.compile(spec['round'][0]), spec['round'][1]
+        again = [p for p in pieces if pat.search(gd.edid(gd.from_key(p[0])).lower())]
+        for k in range(1, times):
+            a = math.tau * k / times
+            c, s = math.cos(a), math.sin(a)
+            pieces += [(key, dx * c + dy * s, -dx * s + dy * c, dz, rx, ry, rz + a, sc * (1 - 0.004 * k)) for key, dx, dy, dz, rx, ry, rz, sc in again]
+    if spec.get('inside') and pieces:
+        edid, of, up = spec['inside']
+        inner = _base(gd, edid)
+        host = next((p for p in pieces if re.search(of, gd.edid(gd.from_key(p[0])).lower())), None)
+        if inner is not None and host:
+            pieces.append((gd.key(inner), host[1], host[2], host[3] + up * host[7], 0.0, 0.0, host[6], host[7]))
     for edid, dx, dy, rz, *given in spec.get('extra', ()):
         base = _base(gd, edid)
         if base is None:
@@ -462,6 +480,8 @@ class Batch:
                 rep['boats'] += self.add(key, bx, by, w + up, rng.uniform(-0.05, 0.05), rng.uniform(-0.04, 0.04), yaw + rng.choice((0.0, math.pi)) + rng.uniform(-0.08, 0.08), 1.0)
         # a few big ones gone down in the open water between
         big = [gd.key(f) for f in (_base(gd, e) for e in SUNK) if f is not None]
+        if mids:
+            rep['at'] = [round(sum(m[0] for m in mids) / len(mids)), round(sum(m[1] for m in mids) / len(mids))]
         if mids and big:
             cx, cy = sum(m[0] for m in mids) / len(mids), sum(m[1] for m in mids) / len(mids)
             reach = max(1500.0, max(math.hypot(m[0] - cx, m[1] - cy) for m in mids))

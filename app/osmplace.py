@@ -304,6 +304,50 @@ def _step(v):
     return round(v / 8.0) * 8.0
 
 
+LIFT = 2.5              # (game units between two road pieces that lie over each other)
+
+
+def apart(gd, ops):
+    """Road pieces that lie over one another at the same height (where streets cross, and one piece's end over the next
+    on a bend) show both surfaces at once, flickering as you move. Each is lifted a hair clear of the ones under it that
+    it overlaps: a lip nobody sees or trips on. Changes the add ops in place; returns how many were lifted."""
+    import townbuild
+    boxes, done, by, lifted = {}, [], {}, 0
+    for o in ops:
+        if o.get('op') != 'add' or not o.get('p'):
+            continue
+        key = o['base']
+        if key not in boxes:
+            boxes[key] = townbuild.obnd(gd, key)
+        b = boxes[key]
+        if not b or b[5] - b[2] > 80 or max(b[3] - b[0], b[4] - b[1]) < 400:
+            continue                            # (only the flat pieces a road is made of)
+        p = o['p']
+        fp = townbuild._foot(b, p[5], p)
+        near = set()
+        for x, y in fp + [(p[0], p[1])]:
+            near.update(by.get((int(x // 1024), int(y // 1024)), ()))
+        taken = []
+        for n in near:
+            q, qfp = done[n]
+            if townbuild.overlap(fp, qfp):
+                inter = townbuild._clip(fp, qfp)
+                if inter and townbuild._area(inter) > 4000:
+                    taken.append(q[2])
+        z, moved = p[2], False
+        while any(abs(z - t) < LIFT - 0.01 for t in taken):
+            z += LIFT
+            moved = True
+        if moved:
+            p[2] = round(z, 2)
+            lifted += 1
+        n = len(done)
+        done.append((p, fp))
+        for x, y in fp + [(p[0], p[1])]:
+            by.setdefault((int(x // 1024), int(y // 1024)), set()).add(n)
+    return lifted
+
+
 def lay_water(w, lay, want, compress, progress):
     """Rivers and lakes, each through landshape on the cells it reaches. Returns ({cell: level}, how many of each)."""
     water, n_r, n_l = {}, 0, 0
@@ -454,6 +498,7 @@ def ops_for(gd, pr, world, lay, want, compress, seed=1, progress=None):
     else:
         rows = [{'ring': _round(b['ring']), 'name': b['name'], 'kind': b['kind'], 'pad': False} for b in lay['buildings']]
     ops, total, skipped = lay_roads(gd, w, lay, want, seed, progress) if want.get('roads') else ([], 0.0, 0)
+    lifted = apart(gd, ops)
     for ck in sorted(w.changed):
         ops.append({'op': 'land', 'cell': ck, 'land': w.over.land[ck]})
     levels = 0
@@ -476,7 +521,7 @@ def ops_for(gd, pr, world, lay, want, compress, seed=1, progress=None):
             levels += 1
     layer = {'buildings': rows, 'places': [{'p': _round([p['p']])[0], 'name': p['name'], 'kind': p['kind']} for p in lay['places']],
              'bridges': [{'line': _round(b['line']), 'name': b['name'], 'kind': b['kind']} for b in lay['bridges']]}
-    report = {'pieces': sum(1 for o in ops if o['op'] == 'add'), 'road_units': round(total), 'roads_skipped': skipped, 'rivers': n_r, 'lakes': n_l, 'water_cells': levels, 'pads': pads,
+    report = {'pieces': sum(1 for o in ops if o['op'] == 'add'), 'road_units': round(total), 'roads_skipped': skipped, 'rivers': n_r, 'lakes': n_l, 'water_cells': levels, 'pads': pads, 'lifted': lifted,
               'buildings': len(rows), 'pads_too_small': sum(1 for r in rows if not r['pad']) if want.get('buildings') else 0, 'bridges': len(layer['bridges']), 'places': len(layer['places']),
               'land_cells': len(w.changed), 'cell_xy': [list(gd.cell_grid(gd.from_key(ck))) for ck in sorted(w.changed)]}
     return ops, report, layer

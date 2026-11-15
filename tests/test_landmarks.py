@@ -147,3 +147,11 @@ for name in ('grandhotel', 'pool', 'lookout', 'battery'):
 check('each thing put round a landmark has its own underside on the ground: no palm in the air, no buried flagpole', not bad, bad)
 low = min(dz + landmarks._obnd(gd, gd.from_key(key))[2] * sc for key, dx, dy, dz, rx, ry, rz, sc in got['battery']['pieces'] if gd.edid(gd.from_key(key)) == 'NVDLC03GunBatterySTATIC')
 check('and a set lifted from the game stands on the ground too', -170 <= low <= 50, low)
+
+# ---------- the Lucky 38, whole ----------
+names38 = [gd.edid(gd.from_key(p[0])) for p in got['lucky38']['pieces']]
+check('its casino stands four times about the tower, and the all-round tower inside the shaft', names38.count('Lucky38') == 4 and names38.count('Lucky38B') == 4
+      and names38.count('Lucky38WL') == 1 and names38.count('Lucky38Top') == 1, names38)
+check('so that it shows a wall from every one of sixteen sides', all_round('lucky38') > 0.9, all_round('lucky38'))
+sizes = sorted(p[7] for p in got['lucky38']['pieces'] if gd.edid(gd.from_key(p[0])) == 'Lucky38B')
+check('each copy a hair smaller than the last: no two faces lie in one another', len(set(round(v, 4) for v in sizes)) == 4)

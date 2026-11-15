@@ -317,6 +317,7 @@ def _named():
     out |= {r[0] for rows in LIFE.values() for r in rows} | {r[0] for _w, rows in LIFE_WORD for r in rows}
     out |= {r[0] for rows in SCENES.values() for r in rows} | {r[0] for r in RUBBLE}
     out |= {r[0] for r in SLABS} | {r[0] for r in BANKED} | {CORNER[0]}
+    out |= {r[0] for rows in LOT_KINDS.values() for r in rows if not r[0].startswith('@')} | {e for v in LOT_PICK.values() for e in v} | set(LOT_WALL)
     return out
 
 
@@ -552,7 +553,7 @@ def scenes(gd, pr, world, cover, roads, cat, seed=1, progress=None):
     S = _Stands(standing(gd, pr, world, cat), margin=120.0)
     cells = sorted(P.grid)
     want = max(1, len(cells) // SCENE_EVERY)
-    spots, made = [], {}
+    spots, made, which = [], {}, []
     kinds = list(SCENE_ON)
     for _try in range(want * 60):
         if len(spots) >= want:
@@ -606,8 +607,10 @@ def scenes(gd, pr, world, cover, roads, cat, seed=1, progress=None):
                         break
         if got:
             spots.append((x, y))
+            which.append(s)
             made[s] = made.get(s, 0) + 1
-    return P.ops, {'things': len(P.ops), 'scenes': made, 'at': [[round(x), round(y)] for x, y in spots]}
+    return P.ops, {'things': len(P.ops), 'scenes': made, 'at': [[round(x), round(y)] for x, y in spots],
+                   'spots': [[round(x), round(y), k] for (x, y), k in zip(spots, which)]}
 
 
 def rough_roads(gd, pr, world, cover, roads, cat, seed=1, progress=None):
@@ -658,3 +661,150 @@ def rough_roads(gd, pr, world, cover, roads, cat, seed=1, progress=None):
                     P.put(edid, px, py, rng.uniform(0, math.tau), rng.uniform(smin, smax), sink, 'Rubble where the roads are rough')
             walked += L
     return P.ops, {'things': len(P.ops), 'spots': spots}
+
+
+# ---------- the plots nothing was built on ----------
+# A squeezed map leaves most plots too small for any of the game's buildings; left bare, the streets have gaps between
+# the ruins. Each empty plot becomes something a ruined town has there, by its size: a house's shell, a walled yard with
+# a trailer in it, a lot of wrecks, a heap. The walls run along the plot's long sides, so a street has an edge.
+# what a lot is: [(editor ID, how many, 'mid' (about the middle) | 'any' (anywhere in it) | 'edge' (against a side), facing: 'plot' | 'any')]
+LOT_KINDS = {
+    'ruin': [('@ruin', 1, 'mid', 'plot'), ('RubblePile04', 1, 'any', 'any'), ('SuburbanRubblePileSm01', 2, 'any', 'any'), ('ConcreteSlab01', 2, 'any', 'any')],
+    'yard': [('@trailer', 1, 'mid', 'plot'), ('CrateLarge01', 2, 'any', 'any'), ('Barrel01', 2, 'any', 'any'), ('TireStack01', 1, 'any', 'any'),
+             ('Car01HulkBodyStatic', 1, 'any', 'plot'), ('ConcreteBlockPile01', 1, 'edge', 'plot')],
+    'wrecks': [('Car01HulkBodyStatic', 2, 'any', 'plot'), ('Car03HulkBodyStatic', 2, 'any', 'plot'), ('ConcreteDividers01', 1, 'edge', 'plot'),
+               ('Tire01Static', 2, 'any', 'any'), ('NVTruck', 1, 'any', 'plot')],
+    'heap': [('RubblePile02', 1, 'mid', 'any'), ('SuburbanRubblePile01bLiteLitter', 1, 'any', 'any'), ('RoadChunkCluster01', 2, 'any', 'any'),
+             ('ConcreteSlab01', 3, 'any', 'any'), ('SWSingleRubble', 2, 'any', 'any')],
+    'works': [('ScaffoldDestroyed01', 1, 'mid', 'plot'), ('ConcreteDividers02', 1, 'edge', 'plot'), ('ConcreteBlockPile01', 2, 'any', 'any'),
+              ('CrateLarge01', 1, 'any', 'any'), ('ConcreteSlab01', 3, 'any', 'any')],
+    'play': [('SwingsRuined01', 1, 'any', 'plot'), ('SlideRuined01', 1, 'any', 'plot'), ('MerryGoRoundRuined01', 1, 'mid', 'any'), ('SeeSawRuined01', 1, 'any', 'plot'),
+             ('Bench01', 1, 'edge', 'plot')],
+    'sign': [('@billboard', 1, 'edge', 'plot'), ('SuburbanRubblePileSm01', 1, 'any', 'any'), ('Tire01Static', 1, 'any', 'any')],
+    'scrap': [('SuburbanRubblePileSm01', 1, 'mid', 'any'), ('ConcreteSlab01', 1, 'any', 'any'), ('Barrel01', 1, 'any', 'any')],
+}
+LOT_PICK = {'@ruin': ('HouseRuined02', 'HouseRuined03', 'HouseRuined04b', 'HouseRuined04c'),
+            '@trailer': ('TruckTrailer01', 'TruckTrailer03', 'TruckTrailer04', 'TruckTrailer06', 'Trucktrailer07'),
+            '@billboard': ('BillboardBlank01', 'BillboardCarAV1', 'BillboardSunsetSarsaparillaNV', 'BillboardBoulderLNV')}
+# by the plot's shorter side: which kinds, and how often each
+LOT_BY_SIZE = ((420.0, (('scrap', 3), ('heap', 1))),
+               (900.0, (('heap', 3), ('wrecks', 3), ('yard', 2), ('sign', 1), ('play', 1), ('ruin', 1))),
+               (1e9, (('ruin', 4), ('yard', 3), ('wrecks', 2), ('works', 2), ('heap', 2), ('play', 1), ('sign', 1))))
+LOT_WALL = ('UrbanCourtyardwallStr01', 'UrbanCourtyardwallStr02')
+LOT_WALLED = 0.45           # (of plots with a long side of two wall lengths or more, how many get walls)
+LOT_GAPS = 0.3              # (of a wall's lengths, how many are left out: it has fallen there)
+LOT_SHARE = 0.8             # (of empty plots, how many get anything: some ground is just bare)
+LOT_LIMIT = 16000
+
+
+def lots(gd, pr, world, cover, cat, rows, seed=1, progress=None):
+    """(ops, report). rows: the map's building plots ({'ring': [(x, y)...], 'pad'}, the layer osmplace keeps); each one
+    no building stands on is filled as a ruined lot."""
+    import townbuild
+    rng = random.Random(seed * 49979687 + 13)
+    P = _Putter(gd, pr, world, cover)
+    stands = standing(gd, pr, world, cat)
+    S = _Stands(stands, margin=30.0)
+    built = {}
+    for _b, x, y, _z, _rz in stands:
+        built.setdefault((int(x // 2048), int(y // 2048)), []).append((x, y))
+    boxes = {}
+
+    def obnd(edid):
+        if edid not in boxes:
+            key = P.bases.get(edid.lower())
+            boxes[edid] = townbuild.obnd(gd, key) if key else None
+        return boxes[edid]
+
+    made = {}
+    filled = empty = 0
+    for n, row in enumerate(rows):
+        if len(P.ops) >= LOT_LIMIT:
+            break
+        if progress and n % 500 == 0:
+            progress('Filling the empty plots', n, len(rows))
+        ring = row.get('ring') or []
+        if len(ring) < 3 or not row.get('pad'):
+            continue
+        cx, cy, ang, along, across = townbuild.rect_of(ring)
+        ux, uy = math.cos(ang), math.sin(ang)
+        # (is something built here already: a building's origin on the plot, or near enough to it)
+        reach = max(along, across) / 2 + 250
+        if any(math.hypot(bx - cx, by - cy) < reach for i in (-1, 0, 1) for j in (-1, 0, 1)
+               for bx, by in built.get((int(cx // 2048) + i, int(cy // 2048) + j), ())):
+            continue
+        level = P.ground.at(cx, cy)
+        if level is None or level < 8 or P.kind(cx, cy) in ('seabed', None):
+            continue
+        empty += 1
+        if rng.random() > LOT_SHARE:
+            continue
+        short = min(along, across)
+        kinds = next(k for limit, k in LOT_BY_SIZE if short < limit)
+        pick = rng.random() * sum(w for _k, w in kinds)
+        for kind, w in kinds:
+            pick -= w
+            if pick <= 0:
+                break
+        # the plot's own turn, in the game's sense (clockwise from north), its long side first
+        if across > along:
+            ux, uy, along, across = -uy, ux, across, along
+        yaw_plot = math.atan2(ux, uy) - math.pi / 2        # (a thing's own east along the plot's length)
+        got = 0
+
+        def lay(edid, a, b, yaw, what):
+            # (a, b: along and across the plot from its middle)
+            x, y = cx + ux * a - uy * b, cy + uy * a + ux * b
+            o = obnd(edid)
+            g = P.ground.at(x, y)
+            if not o or g is None or g < 8 or abs(g - level) > 40 or S.hit(x, y) or P.kind(x, y) in ('asphalt', 'seabed', None):
+                return False
+            key = P.bases.get(edid.lower())
+            cell = P.grid.get((int(x // 4096), int(y // 4096)))
+            if key is None or cell is None:
+                return False
+            P.ops.append({'op': 'add', 'cell': gd.key(cell), 'base': key, 'p': [round(x, 1), round(y, 1), round(g - o[2] - 5.0, 1), 0.0, 0.0, round(yaw % math.tau, 4)], 's': 1})
+            P.counts[what] = P.counts.get(what, 0) + 1
+            return True
+
+        mine = []
+        for name, count, where, face in LOT_KINDS[kind]:
+            for _k in range(count):
+                edid = rng.choice([e for e in LOT_PICK[name] if P.has(e)] or [None]) if name.startswith('@') else name
+                if not edid or not P.has(edid):
+                    continue
+                o = obnd(edid)
+                half = max(o[3] - o[0], o[4] - o[1]) / 2 if o else 0
+                if where != 'mid' and half * 2 > short * 1.6:
+                    continue                    # (far too big for this plot)
+                for _try in range(5):
+                    if where == 'mid':
+                        a, b = rng.uniform(-0.15, 0.15) * along, rng.uniform(-0.15, 0.15) * across
+                    elif where == 'edge':
+                        a, b = rng.uniform(-0.4, 0.4) * along, rng.choice((-1, 1)) * (across / 2 - 60)
+                    else:
+                        a, b = rng.uniform(-0.42, 0.42) * along, rng.uniform(-0.42, 0.42) * across
+                    if any(math.hypot(a - p, b - q) < min(half, 200) + r for p, q, r in mine):
+                        continue
+                    yaw = yaw_plot + rng.choice((0.0, math.pi)) + rng.uniform(-0.12, 0.12) if face == 'plot' else rng.uniform(0, math.tau)
+                    if lay(edid, a, b, yaw, 'Empty plots: ' + kind):
+                        mine.append((a, b, min(half, 200)))
+                        got += 1
+                        break
+        # walls along the long sides
+        walls = [e for e in LOT_WALL if P.has(e)]
+        if walls and along >= 512 and across >= 300 and kind not in ('scrap',) and rng.random() < LOT_WALLED:
+            wl = 256.0
+            for side in (-1, 1):
+                if rng.random() < 0.25:
+                    continue
+                k = int(along // wl)
+                for i in range(k):
+                    if rng.random() < LOT_GAPS:
+                        continue
+                    a = -k * wl / 2 + (i + 0.5) * wl
+                    got += lay(rng.choice(walls), a, side * (across / 2 - 20), yaw_plot, 'Walls round plots')
+        if got:
+            filled += 1
+            made[kind] = made.get(kind, 0) + 1
+    return P.ops, {'things': len(P.ops), 'empty': empty, 'filled': filled, 'kinds': made, 'by': P.counts}

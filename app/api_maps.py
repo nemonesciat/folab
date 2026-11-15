@@ -18,6 +18,7 @@ import osmdress
 import elevation
 import espwrite
 import landcover
+import worldlife
 import landmarks
 import landsoft
 import mapscale as MS
@@ -488,6 +489,9 @@ def dress_job(body, srv):
             ops += more
             more, report['life'] = osmdress.life(srv.GD, srv.PR, w, cover, cat, seed, _said)
             ops += more
+            plots = read_layers(srv.PR).get(srv.GD.edid(w), {}).get('buildings') or []
+            more, report['lots'] = osmdress.lots(srv.GD, srv.PR, w, cover, cat, plots, seed, _said)      # (what nothing was built on)
+            ops += more
             more, report['scenes'] = osmdress.scenes(srv.GD, srv.PR, w, cover, lay['roads'], cat, seed, _said)
             ops += more
             marks = landmarks.standing(srv.GD, srv.PR, w)
@@ -499,6 +503,9 @@ def dress_job(body, srv):
                 raise ValueError("Nothing to put down: the map says nothing about this world's ground.")
             _said('Putting it in the mod')
             state = srv.edit('Things on the ground', ops)['state']
+            kept = _kept(srv.PR, 'scenes.json')
+            kept[srv.GD.edid(w)] = report['scenes'].get('spots', [])
+            _kept(srv.PR, 'scenes.json', kept)
             if body.get('soften', True):
                 # (sharp steps where plots and road beds meet eased, everything on them moved with the ground; then, where a
                 # road is still rough, the reason for it: all in the same Undo)
@@ -513,6 +520,94 @@ def dress_job(body, srv):
                 state = srv.state()
         return {'state': state, 'report': report}
     return _start(work, kind='dress')
+
+
+def _kept(pr, name, data=None):
+    """Something the later steps of a map-made world need from the earlier ones, kept beside its layers: read, or written."""
+    path = os.path.join(os.path.dirname(_layers_path(pr)), name)
+    if data is None:
+        try:
+            with open(path, encoding='utf-8') as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + '.tmp', 'w', encoding='utf-8') as f:
+        json.dump(data, f)
+    os.replace(path + '.tmp', path)
+    return data
+
+
+# what a landmark is on the map
+MARK_KIND = {'lucky38': 'monument', 'tops': 'urban ruins', 'tops_strip': 'urban ruins', 'grandhotel': 'urban ruins', 'ultraluxe': 'urban ruins',
+             'gomorrah': 'urban ruins', 'battery': 'military', 'pool': 'monument', 'lookout': 'military'}
+SCENE_MARK = {'raiders': ('Raider Camp', 'camp'), 'refuge': ('Refugee Camp', 'camp')}
+
+
+def life_job(body, srv):
+    """What makes a map-made world somewhere to be (worldlife.py): its weather, water and sound, zones that get harder
+    with distance from the start, map markers, who lives at the camps and in the wild, a settlement. One Undo.
+    body: world, file (the OpenStreetMap file), start [x, y] (else the mod's own new game's), air {name, weathers
+    [[WTHR, chance]], sounds_like, water, music}, settlement (its name), harbour (its name), seed."""
+    srv.not_while_playing()
+    name = body['file']
+    file_path(name)
+    w, _side = _side_of(srv, body['world'])
+
+    def work():
+        cover, _lay = map_cover(srv, body['world'], name, _said)
+        cat = townbuild.load(srv.GD, srv.kits_folder(), _said)
+        with srv._lock:
+            gd, pr = srv.GD, srv.PR
+            start = body.get('start') or ((pr.newgame or {}).get('p') or [None])[:2]
+            if not start or start[0] is None:
+                raise ValueError('Say where the player starts first (the mod\'s own new game): what\'s safe and what\'s hard go by it.')
+            seed = int(body.get('seed', 1))
+            L = worldlife.Life(gd, pr, w, start, seed)
+            P = osmdress._Putter(gd, pr, w, cover)
+            inside = osmdress._Stands(osmdress.standing(gd, pr, w, cat), margin=120.0)
+            marks = landmarks.standing(gd, pr, w)
+            keep = lambda x, y: inside.hit(x, y) or P.kind(x, y) in ('asphalt', 'seabed', None) or len(landmarks.clear_of([{'op': 'add', 'p': [x, y]}], marks)) == 0
+            edid = srv.GD.edid(w)
+            air = body.get('air') or {}
+            if air.get('weathers'):
+                _said('Its weather, water and sound')
+                L.air(air.get('name') or edid + 'Air', air['weathers'], air.get('sounds_like'), air.get('water'), air.get('music'))
+            L.zones(edid)
+            # a settlement: the nearest level open ground to the start that isn't on top of it
+            if body.get('settlement'):
+                _said('A settlement')
+                rng, best = L.rng, None
+                for _try in range(4000):
+                    a, d = rng.uniform(0, 6.2832), rng.uniform(3500.0, 11000.0)
+                    x, y = start[0] + d * __import__('math').sin(a), start[1] + d * __import__('math').cos(a)
+                    if P.kind(x, y) not in ('grass', 'golf', 'trees', 'scrub', 'yard') or P.steep(x, y, 700.0) > 0.06:
+                        continue
+                    if any(keep(x + dx, y + dy) or (P.ground.at(x + dx, y + dy) or -1) < 16 for dx in (-1000, -500, 0, 500, 1000) for dy in (-1000, -500, 0, 500, 1000)):
+                        continue
+                    if best is None or d < best[0]:
+                        best = (d, x, y)
+                if best:
+                    L.settlement(body['settlement'], best[1], best[2])
+            _said('Names on the map')
+            for m in (_kept(pr, 'landmarks.json').get(edid) or {}).get('stood', []):
+                L.marker(m['x'], m['y'], m.get('name') or m['label'], MARK_KIND.get(m.get('set'), 'urban ruins'))
+            hb = (_kept(pr, 'landmarks.json').get(edid) or {}).get('harbour') or {}
+            if body.get('harbour') and hb.get('at'):
+                L.marker(hb['at'][0], hb['at'][1], body['harbour'], 'factory')
+            spots = (_kept(pr, 'scenes.json').get(edid) or [])
+            n = {}
+            for x, y, kind in spots:
+                if kind in SCENE_MARK and n.get(kind, 0) < 6:
+                    n[kind] = n.get(kind, 0) + L.marker(x, y, SCENE_MARK[kind][0], SCENE_MARK[kind][1])
+            _said('Who lives there')
+            L.people(spots)
+            L.wildlife(P.kind, keep)
+            ops, report = L.done()
+            _said('Putting it in the mod')
+            state = srv.edit('Life for the world', ops)['state']
+        return {'state': state, 'report': report}
+    return _start(work, kind='life')
 
 
 def landmarks_job(body, srv):
@@ -556,6 +651,9 @@ def landmarks_job(body, srv):
                 raise ValueError('Nothing was stood: none of it fitted, and the map has no piers over the water.')
             _said('Putting it in the mod')
             state = srv.edit('Landmarks and harbour', ops)['state']
+            kept = _kept(srv.PR, 'landmarks.json')
+            kept[srv.GD.edid(w)] = report
+            _kept(srv.PR, 'landmarks.json', kept)
         return {'state': state, 'report': report}
     return _start(work, kind='landmarks')
 
@@ -653,6 +751,8 @@ def post(path, body, srv):
         return {'job': osm_lay_job(body, srv)}
     if path == '/api/maps/buildings':
         return {'job': buildings_job(body, srv)}
+    if path == '/api/maps/life':
+        return {'job': life_job(body, srv)}
     if path == '/api/maps/landmarks':
         return {'job': landmarks_job(body, srv)}
     if path == '/api/maps/dress':
