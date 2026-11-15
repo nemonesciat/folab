@@ -10,6 +10,8 @@ The catalogue is measured from the game, once per game files (buildings.json bes
              walls, roads, rubble, low-detail copies and far-off stand-ins are left out by name.
   footprint  the mesh's own box, in its frame.
   doors      the load doors the game set on it, in its frame (from the placement with the most): its front is where they are.
+  shut       what the game puts in its other doorways, the ones nobody goes through: a door-shaped static, boards over it, a
+             door that leads nowhere ('door': it is placed locked). Without them a building stands with holes for doors.
   ground     how the game's ground stands against it: at its middle (where it's set on a pad) and the lowest and highest at its
              corners over every placement (how far a corner may lie off level before ground shows through a floor or under a wall).
   family     what it is, by its editor ID's words (house, shop, apartments, civic, industrial), matched to OSM's building=*.
@@ -41,7 +43,7 @@ import nif
 import recordio
 import roadgen
 
-FORMAT = 5              # (buildings.json's layout: a file with another number is made again)
+FORMAT = 6              # (buildings.json's layout: a file with another number is made again)
 MIN_SIDE, MAX_SIDE = 300, 3600
 DWELLING = re.compile(r'\\mobilehome[^\\]*\.nif$')   # (homes the game keeps with its vehicles, narrower than a building: trailer lots are full of them)
 MIN_HIGH, MAX_HIGH = 220, 1700
@@ -269,12 +271,15 @@ def survey(gd, progress=None):
         if progress and n % 2000 == 0:
             progress('Looking at the game\'s buildings', n, len(cells))
         refs = gd.refs(cell)
-        parts, doors = [], []
+        parts, doors, shuts = [], [], []
         for r in refs:
             if not r['base'] or not r['pos'] or not r['rot']:
                 continue
             if r['type'] == 'REFR' and r['leads'] and r['base'] in gd.forms and gd.forms[r['base']][1].tag == 'DOOR':
                 doors.append(r)
+                continue
+            if r['type'] == 'REFR' and r['base'] in gd.forms and abs(r['scale'] - 1) < 0.01 and _shuts(gd, r['base']):
+                shuts.append(r)
                 continue
             b = base(r['base'])
             if not b or abs(r['rot'][0]) > 0.05 or abs(r['rot'][1]) > 0.05 or abs(r['scale'] - 1) > 0.01 or not big(b[2]):
@@ -300,7 +305,18 @@ def survey(gd, progress=None):
                     if inside:
                         row['inside'] = inside
                     mine.append(row)
-            seen[r['base']].append((cell, r, alone, mine))
+            shut = []
+            for d in shuts:
+                lx, ly = turn(d['pos'][0] - r['pos'][0], d['pos'][1] - r['pos'][1], -r['rot'][2])
+                box = b[2]
+                if box[0] - SHUT_REACH <= lx <= box[3] + SHUT_REACH and box[1] - SHUT_REACH <= ly <= box[4] + SHUT_REACH \
+                        and box[2] - SHUT_REACH <= d['pos'][2] - r['pos'][2] <= box[5]:
+                    row = {'base': gd.key(d['base']), 'x': round(lx, 1), 'y': round(ly, 1), 'z': round(d['pos'][2] - r['pos'][2], 1),
+                           'rz': round((d['rot'][2] - r['rot'][2]) % math.tau, 4), 'tx': round(d['rot'][0], 4), 'ty': round(d['rot'][1], 4)}
+                    if gd.forms[d['base']][1].tag == 'DOOR':
+                        row['door'] = 1
+                    shut.append(row)
+            seen[r['base']].append((cell, r, alone, mine, shut))
             worlds[cell] = gd.ext_cells[cell]
     out = []
     grounds = {}
@@ -322,7 +338,7 @@ def survey(gd, progress=None):
         if whole < SOLID:
             continue                            # (a facade or a bare frame: from some side there is nothing to see)
         mid, lo, hi = [], [], []
-        for cell, r, _a, _m in uses:
+        for cell, r, _a, _m, _s in uses:
             world = worlds[cell]
             g = grounds.get(world) or grounds.setdefault(world, roadgen.Ground(gd, None, world))
             z0 = g.at(r['pos'][0], r['pos'][1])
@@ -340,7 +356,7 @@ def survey(gd, progress=None):
         doors = [{k: v for k, v in d.items() if k != 'inside'} for d in max((u[3] for u in uses), key=len)[:4]]
         # (every real place the game has behind this building, by which of its doors leads there)
         insides, had = [], set()
-        for _c, _r, _a, mine in uses:
+        for _c, _r, _a, mine, _s in uses:
             for d in mine:
                 ins = d.get('inside')
                 if not ins or ins['cell'] in had:
@@ -351,9 +367,48 @@ def survey(gd, progress=None):
                 had.add(ins['cell'])
                 insides.append(dict(ins, door=k))
         out.append({'key': gd.key(fid), 'edid': edid, 'model': model, 'box': [round(v, 1) for v in box], 'uses': len(uses), 'alone': round(alone, 2),
-                    'family': family_of(edid), 'doors': doors, 'mid': round(mid[len(mid) // 2], 1), 'lo': round(min(lo), 1) if lo else 0.0,
+                    'family': family_of(edid), 'doors': doors, 'shut': _doorways(doors, [u[4] for u in uses if u[2]] or [u[4] for u in uses]), 'mid': round(mid[len(mid) // 2], 1), 'lo': round(min(lo), 1) if lo else 0.0,
                     'hi': round(max(hi), 1) if hi else 0.0, 'insides': insides, 'solid': round(whole, 2)})
     out.sort(key=lambda b: b['edid'].lower())
+    return out
+
+
+SHUT_REACH = 40.0       # (how far outside a building's box something in its doorway may be)
+SHUT_SAME = 80.0        # (two things this near are in the same doorway)
+SHUT_MOST = 12
+_SHUT_WORD = re.compile(r'door')
+_SHUT_NOT = re.compile(r'doorframe|doorway|indoor|outdoor|doorbell|doormat')
+_shut_known = {}
+
+
+def _shuts(gd, base):
+    """Is this what the game closes a doorway with: a door that leads nowhere, a static made to look like one, boards over it?"""
+    if base not in _shut_known:
+        tag = gd.forms[base][1].tag
+        e = (gd.edid(base) or '').lower()
+        _shut_known[base] = tag == 'DOOR' or (tag in ('STAT', 'ACTI', 'MSTT') and bool(_SHUT_WORD.search(e)) and not _SHUT_NOT.search(e))
+    return _shut_known[base]
+
+
+def _doorways(doors, placements):
+    """The doorways the game shuts on a building, from every placement of it (each a list of things in its frame): one
+    doorway is whatever lies within SHUT_SAME of one spot; it is filled as the placement with the most there fills it. A
+    doorway one of `doors` already stands in is left to that door."""
+    ways = []                                   # [x, y, z, {which placement: [rows]}]
+    for n, rows in enumerate(placements):
+        for r in rows:
+            if any(math.hypot(r['x'] - d['x'], r['y'] - d['y']) < SHUT_SAME and abs(r['z'] - d['z']) < SHUT_SAME * 1.5 for d in doors):
+                continue
+            for w in ways:
+                if math.hypot(r['x'] - w[0], r['y'] - w[1]) < SHUT_SAME and abs(r['z'] - w[2]) < SHUT_SAME * 1.5:
+                    w[3].setdefault(n, []).append(r)
+                    break
+            else:
+                ways.append([r['x'], r['y'], r['z'], {n: [r]}])
+    ways.sort(key=lambda w: -len(w[3]))         # (the doorways most placements shut, first)
+    out = []
+    for w in ways[:SHUT_MOST]:
+        out += max(w[3].values(), key=len)[:3]
     return out
 
 
@@ -661,7 +716,7 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE, 
             rep['nothing_fits'] += 1
         else:
             rep['built'] += 1
-    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'too_small': rep['too_small'],
+    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'too_small': rep['too_small'],
               'nothing_fits': rep['nothing_fits'], 'blocked': rep['blocked'], 'steep': rep['steep'], 'had_one': rep['had_one'],
               'cleared': len(gone), 'families': dict(fams), 'catalogue': len(cat), 'roads_seen': len(roads), 'poi': rep['poi'], 'landmarks': rep['landmarks'],
               'insides': len(w.ins.tags) if w.ins else 0, 'inside_things': w.ins.things if w.ins else 0, 'made': list(w.ins.tags) if w.ins else [],
@@ -850,6 +905,14 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
         else:
             o['extra'] = DOOR_LOCK
             ops.append(o)
+    for d in b.get('shut', ()):
+        dx, dy = turn(d['x'], d['y'], rz)
+        o = {'op': 'add', 'cell': w.cell_at(ox + dx, oy + dy) or ck, 'base': d['base'],
+             'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)], 's': 1}
+        if d.get('door'):
+            o['extra'] = DOOR_LOCK
+        ops.append(o)
+        rep['shut'] = rep.get('shut', 0) + 1
     return True
 
 

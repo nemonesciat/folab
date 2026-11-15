@@ -18,7 +18,7 @@ OVERLAP = 48.0          # pieces overlap this much, so a bend leaves no gap
 LIFT = 4.0              # the road's top stands this far over what's under its middle
 SETTLE_FLAT = 340.0     # ground this far from the road's line lies just under it
 SETTLE_FADE = 512.0     # and takes this much further to come back to its own height
-UNDER = 24.0
+UNDER = 12.0            # the ground lies this far under a piece's origin: its sides go 25 down, so it is sunk in, as the game's are
 MAX_CELLS = 400         # a way that needs a search over more cells than this is refused
 
 

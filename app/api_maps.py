@@ -18,6 +18,7 @@ import osmdress
 import elevation
 import espwrite
 import landcover
+import roadbed
 import worldlife
 import landmarks
 import landsoft
@@ -513,6 +514,11 @@ def dress_job(body, srv):
                                                               [(r['line'], osmdress.EDGE.get(r.get('class'), 300.0) * 0.8) for r in lay['roads']], _said)
                 if soft:
                     srv.PR.apply('Things on the ground', soft, merge=True)
+                # (and last of what moves ground: every road piece laid in it again, the land brought up to each)
+                _said('Laying the roads in the ground')
+                bedded, report['roads'] = roadbed.bed(srv.GD, srv.PR, w, osmdress.keep_of(osmdress.standing(srv.GD, srv.PR, w, cat)) + marks, _said)
+                if bedded:
+                    srv.PR.apply('Things on the ground', bedded, merge=True)
                 more, report['rough'] = osmdress.rough_roads(srv.GD, srv.PR, w, cover, lay['roads'], cat, seed, _said)
                 more = landmarks.clear_of(more, marks)
                 if more:
