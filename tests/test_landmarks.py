@@ -131,3 +131,19 @@ check('The Tops stood as a landmark is the game's all-round one: a wall from eac
 check('and stands on the ground, not at the height it has far off', abs(got['tops']['pieces'][0][3] + 688) < 1)
 check('the grand hotel is buildings whole from every side', all_round('grandhotel') > 0.95 and len(got['grandhotel']['pieces']) == 10, all_round('grandhotel'))
 check('the Strip's own pieces are not: stood back to back they still show a way in from some side', all_round('tops_strip') < 0.9, all_round('tops_strip'))
+
+# ---------- nothing flies ----------
+bad = []
+for name in ('grandhotel', 'pool', 'lookout', 'battery'):
+    for key, dx, dy, dz, rx, ry, rz, sc in got[name]['pieces']:
+        fid = gd.from_key(key)
+        e = gd.edid(fid)
+        o = landmarks._obnd(gd, fid)
+        if e in ('TheTopsPool', 'NVDLC03GunBatterySTATIC') or not o:
+            continue
+        under = dz + o[2] * sc
+        if not -20 <= under <= 4:
+            bad.append((name, e, round(under)))
+check('each thing put round a landmark has its own underside on the ground: no palm in the air, no buried flagpole', not bad, bad)
+low = min(dz + landmarks._obnd(gd, gd.from_key(key))[2] * sc for key, dx, dy, dz, rx, ry, rz, sc in got['battery']['pieces'] if gd.edid(gd.from_key(key)) == 'NVDLC03GunBatterySTATIC')
+check('and a set lifted from the game stands on the ground too', -170 <= low <= 50, low)

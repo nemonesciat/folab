@@ -36,7 +36,7 @@ SETS = {
                 'extra': [('HVBunkerNV', -2600, 600, 0.0), ('HVBunkerNV2', 2600, 400, 3.1), ('dlc04sandbagbunkerroundtower', -1500, -1900, 0.0),
                           ('dlc04sandbagbunkerroundtower', 1500, -1900, 0.0), ('truckarmy02Static', -600, -2300, 1.2), ('truckarmy02Static', 700, -2500, 1.9),
                           ('NVGuardTower01', 0, -3000, 0.0), ('FlagPole', 300, -2100, 0.0)]},
-    'pool': {'label': 'Swimming baths', 'extra': [('TheTopsPool', 0, 0, 0.0), ('NVMojOutpostStatue01', 0, 2100, 3.14), ('FlagPole', -1500, 1700, 0.0),
+    'pool': {'label': 'Swimming baths', 'extra': [('TheTopsPool', 0, 0, 0.0, 18.0), ('NVMojOutpostStatue01', 0, 2100, 3.14), ('FlagPole', -1500, 1700, 0.0),
                                                   ('FlagPole', 1500, 1700, 0.0), ('umbrellaNV', -2500, 300, 0.0), ('umbrellaNV', 2500, -200, 0.0),
                                                   ('dlc04lawnchair01', -2500, -300, 1.0), ('dlc04lawnchair01', 2550, 400, 4.0)]},
     'lookout': {'label': 'Lookout station', 'extra': [('RadioTower01', 0, 0, 0.0), ('HVBunkerNV3', 1500, -300, 1.6), ('HVBunkerNV', -1500, 300, 4.7),
@@ -148,12 +148,19 @@ def lift(gd, name):
         if given:                               # (how high its origin goes is said outright: a model made for far off has its own)
             pieces.append((gd.key(base), float(dx), float(dy), float(given[0]), 0.0, 0.0, rz, 1.0))
             continue
-        seats = sorted(z - g for w, _b, x, y, z, rx, ry, _rz, _s in found.get(edid.lower(), ()) if abs(rx) < 0.05 and abs(ry) < 0.05
-                       for g in (ground(w, x, y),) if g is not None)
-        up = seats[len(seats) // 2] if seats else 0.0
+        # (its own underside on the ground. How high the game usually has one says nothing: the game stands palms on roofs
+        # and flagpoles on platforms, and a hotel's palms once flew at seven thousand units)
+        o = _obnd(gd, base)
+        up = -float(o[2]) - BEDDED if o else 0.0
         pieces.append((gd.key(base), float(dx), float(dy), up, 0.0, 0.0, rz, 1.0))
     if not pieces:
         return None
+    if spec.get('match'):
+        # (a set lifted from the game: the lowest of its pieces' undersides goes to the ground, if the game's own ground
+        # under it was no guide)
+        low = min(dz + (_obnd(gd, gd.from_key(key)) or [0] * 6)[2] * sc for key, _dx, _dy, dz, _rx, _ry, _rz, sc in pieces)
+        if low > 48 or low < -160:
+            pieces = [(key, dx, dy, dz - low - BEDDED, rx, ry, rz, sc) for key, dx, dy, dz, rx, ry, rz, sc in pieces]
     key_ = (id(gd), name)
     if key_ in _lifted:
         return _lifted[key_]
@@ -191,6 +198,7 @@ def lift(gd, name):
     return _lifted[key_]
 
 
+BEDDED = 6.0            # (a thing's underside goes this far into the ground, so no light shows under it)
 OPEN = 0.5              # (a side showing less wall than this of what's seen from it is open)
 SEAM = 96.0
 _lifted = {}

@@ -61,6 +61,7 @@ LANDMARK_PULL = 0.6       # (how much a plot that stands out prefers a landmark 
 VARIETY = 0.45            # (each building costs this much more for every time it's up already, by the square root)
 MAX_INSIDE_REFS = 900      # (a real place with more than this in it is too much to copy behind a building)
 CLEAR_BELOW = 400.0      # (the mod's own things smaller than this across are taken off a plot a building stands on)
+FLOAT_MOST = 48.0        # (however far the game once let the ground fall away under one, a trailer on a cliff's edge: the model's own underside no further over the ground than this, or it floats)
 DRY = 8.0                # (ground lower than this is looked at for water over it)
 DOOR_LOCK = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}
 INSIDE_SHARE = 0.35        # (of ordinary buildings that have a real place behind them in the game, how many get one; plots that stand out always)
@@ -821,7 +822,7 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
     z = level - b['mid']
     for x, y in fp + [(ox, oy)]:
         g = w.ground.at(x, y)
-        if g is None or not (b['lo'] - GROUND_OFF <= g - z <= b['hi'] + GROUND_OFF) or (g < DRY and w.wet(x, y, g)):
+        if g is None or not (max(b['lo'] - GROUND_OFF, b['box'][2] - FLOAT_MOST) <= g - z <= b['hi'] + GROUND_OFF) or (g < DRY and w.wet(x, y, g)):
             rep['steep'] += 1                   # (or a corner of it in the water)
             return False
     ck = w.cell_at(ox, oy)
