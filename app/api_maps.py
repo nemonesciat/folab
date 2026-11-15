@@ -631,6 +631,7 @@ def landmarks_job(body, srv):
         geo = osmplace.Georef(side, data)
         lay = osmplace.layout(data, side)
         with srv._lock:
+            landmarks.know(townbuild.load(srv.GD, srv.kits_folder(), _said))
             B = landmarks.Batch(srv.GD, srv.PR, w, lay['roads'], int(body.get('seed', 1)))
             report = {'stood': [], 'missed': []}
             for k, s in enumerate(body.get('sites') or []):

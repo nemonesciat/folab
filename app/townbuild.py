@@ -43,7 +43,7 @@ import nif
 import recordio
 import roadgen
 
-FORMAT = 6              # (buildings.json's layout: a file with another number is made again)
+FORMAT = 7              # (buildings.json's layout: a file with another number is made again)
 MIN_SIDE, MAX_SIDE = 300, 3600
 DWELLING = re.compile(r'\\mobilehome[^\\]*\.nif$')   # (homes the game keeps with its vehicles, narrower than a building: trailer lots are full of them)
 MIN_HIGH, MAX_HIGH = 220, 1700
@@ -376,7 +376,7 @@ def survey(gd, progress=None):
 SHUT_REACH = 40.0       # (how far outside a building's box something in its doorway may be)
 SHUT_SAME = 80.0        # (two things this near are in the same doorway)
 SHUT_MOST = 12
-_SHUT_WORD = re.compile(r'door')
+_SHUT_WORD = re.compile(r'door|woodplanksgroup')       # (boards nailed over a doorway are the game's WoodPlanksGroup)
 _SHUT_NOT = re.compile(r'doorframe|doorway|indoor|outdoor|doorbell|doormat')
 _shut_known = {}
 

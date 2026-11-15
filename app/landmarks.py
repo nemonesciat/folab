@@ -171,6 +171,10 @@ def lift(gd, name):
         o = _obnd(gd, base)
         up = -float(o[2]) - BEDDED if o else 0.0
         pieces.append((gd.key(base), float(dx), float(dy), up, 0.0, 0.0, rz, 1.0))
+        b = _doors.get(gd.key(base))
+        for d in (list(b['doors']) + list(b.get('shut', ())) if b else ()):
+            tx, ty = _turn(d['x'], d['y'], rz)
+            pieces.append((d['base'], dx + tx, dy + ty, up + d['z'], d['tx'], d['ty'], (rz + d['rz']) % math.tau, 1.0))
     if not pieces:
         return None
     if spec.get('match'):
@@ -179,7 +183,7 @@ def lift(gd, name):
         low = min(dz + (_obnd(gd, gd.from_key(key)) or [0] * 6)[2] * sc for key, _dx, _dy, dz, _rx, _ry, _rz, sc in pieces)
         if low > 48 or low < -160:
             pieces = [(key, dx, dy, dz - low - BEDDED, rx, ry, rz, sc) for key, dx, dy, dz, rx, ry, rz, sc in pieces]
-    key_ = (id(gd), name)
+    key_ = (id(gd), name, bool(_doors))
     if key_ in _lifted:
         return _lifted[key_]
 
@@ -220,6 +224,18 @@ BEDDED = 6.0            # (a thing's underside goes this far into the ground, so
 OPEN = 0.5              # (a side showing less wall than this of what's seen from it is open)
 SEAM = 96.0
 _lifted = {}
+_doors = {}             # {building's form key: its entry in townbuild's catalogue}: what stands in its doorways
+
+
+def know(cat):
+    """Tell this the catalogue of buildings (townbuild.load): a set that has one of them among its pieces then stands it
+    with its doors and whatever the game shuts its other doorways with, as a building stood on a plot has them. Without
+    it, one looks straight through the doorway of a hotel's wing."""
+    new = {b['key']: b for b in cat or () if b.get('doors') or b.get('shut')}
+    if set(new) != set(_doors):
+        _lifted.clear()
+    _doors.clear()
+    _doors.update(new)
 
 
 def _shapes(gd, pieces):
@@ -341,8 +357,12 @@ class Batch:
         cell = self.grid.get((int(x // 4096), int(y // 4096)))
         if cell is None:
             return False
-        self.ops.append({'op': 'add', 'cell': self.gd.key(cell), 'base': key,
-                         'p': [round(x, 1), round(y, 1), round(z, 1), round(rx, 4), round(ry, 4), round(rz % math.tau, 4)], 's': round(scale, 3)})
+        o = {'op': 'add', 'cell': self.gd.key(cell), 'base': key,
+             'p': [round(x, 1), round(y, 1), round(z, 1), round(rx, 4), round(ry, 4), round(rz % math.tau, 4)], 's': round(scale, 3)}
+        fid = self.gd.from_key(key)
+        if fid in self.gd.forms and self.gd.forms[fid][1].tag == 'DOOR':
+            o['extra'] = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}      # (a door with nothing behind it stays shut)
+        self.ops.append(o)
         return True
 
     # ----- a landmark -----

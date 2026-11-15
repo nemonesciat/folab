@@ -260,7 +260,14 @@ LIFE_WORD = (
 # most is sidewalk (slabs under and round the walls), then rubble banked against walls and corners, street litter, fences.
 # pavement slabs, longest first: (editor ID, how long, how wide); each a flat plate, laid a little over the ground
 SLABS = (('SWSec1x6', 1536.0, 256.0), ('SWSec1x3', 768.0, 256.0), ('SWSingle', 256.0, 256.0))
-SLAB_UP = 6.0
+# A slab is a flat sheet with no sides, 16 over its own origin (measured from the meshes): the game hides its edge with
+# kerb pieces or brings the land up to it. Laid 6 over the ground as these once were, the sheet hung 22 up with daylight
+# under it. So the sheet goes SLAB_OVER above the land, and roadbed.bed makes the land under it flat and level with it.
+SLAB_TOP = 16.0
+SLAB_OVER = 3.0
+SLAB_UP = SLAB_OVER - SLAB_TOP
+SLAB_FIT = (0.75, 1.34)     # (slabs are made this much smaller or bigger so a row of them is as long as its wall)
+SLAB_IN = 6.0               # (two slabs may touch by this much before they count as lying in each other)
 PAVED_FAMILIES = ('shop', 'apartments', 'civic', 'industrial')
 HOUSES_PAVED = 0.3          # (of houses, how many have a walk round them)
 BANKED = (('RubblePileEdging01', 5, 60.0, 30.0), ('RubblePile04', 1, 240.0, 14.0), ('SuburbanRubblePileCanyon01', 1, 240.0, 2.0),
@@ -414,6 +421,7 @@ def footings(gd, pr, world, cover, cat, seed=1, progress=None):
     stands = standing(gd, pr, world, cat)
     S = _Stands(stands, margin=-20.0)
     boxes = {}
+    laid = {}                                   # (slabs down so far, by 1024 square: their outlines)
 
     def obnd(edid):
         if edid not in boxes:
@@ -438,10 +446,10 @@ def footings(gd, pr, world, cover, cat, seed=1, progress=None):
         def world_of(lx, ly):
             return ox + lx * c + ly * s, oy - lx * s + ly * c
 
-        def lay(edid, lx, ly, yaw, up, what, sink_to_ground=False):
+        def lay(edid, lx, ly, yaw, up, what, sink_to_ground=False, scale=1.0):
             # (its box's middle goes to lx, ly: where its origin is in its box is its own affair)
             o = obnd(edid)
-            mx, my = ((o[0] + o[3]) / 2, (o[1] + o[4]) / 2) if o else (0.0, 0.0)
+            mx, my = ((o[0] + o[3]) / 2 * scale, (o[1] + o[4]) / 2 * scale) if o else (0.0, 0.0)
             cy, sy = math.cos(yaw), math.sin(yaw)
             wx, wy = world_of(lx - (mx * cy + my * sy), ly - (-mx * sy + my * cy))
             cx_, cy_ = world_of(lx, ly)
@@ -453,26 +461,75 @@ def footings(gd, pr, world, cover, cat, seed=1, progress=None):
             if key is None or cell is None:
                 return False
             P.ops.append({'op': 'add', 'cell': gd.key(cell), 'base': key,
-                          'p': [round(wx, 1), round(wy, 1), round((g if sink_to_ground else level) + up, 1), 0.0, 0.0, round((rz + yaw) % math.tau, 4)], 's': 1})
+                          'p': [round(wx, 1), round(wy, 1), round((g if sink_to_ground else level) + up, 1), 0.0, 0.0, round((rz + yaw) % math.tau, 4)],
+                          's': round(scale, 4)})
             P.counts[what] = P.counts.get(what, 0) + 1
             return True
 
-        # pavement: a strip a slab wide along each wall, the front and back ones running past the corners
+        # pavement: a strip a slab wide along each wall, the front and back ones running past the corners. A strip is cut
+        # into squares of one slab, each kept only if it lies on dry open ground near the building's level and in no slab
+        # laid before it (two sheets at one height flicker); runs of squares that stay are covered with the longest slabs
         if slabs and (b['family'] in PAVED_FAMILIES or rng.random() < HOUSES_PAVED):
             w = slabs[0][2]
-            strips = [(x0 - w, x1 + w, y0 - w / 2, 0.0), (x0 - w, x1 + w, y1 + w / 2, 0.0),        # (from, to along it, where across, turned)
-                      (y0, y1, x0 - w / 2, math.pi / 2), (y0, y1, x1 + w / 2, math.pi / 2)]
-            got = 0
-            for a0, a1, across, yaw in strips:
-                at = a0
-                while at < a1 - 16:
-                    e, L, _W = next((sl for sl in slabs if sl[1] <= a1 - at + 128), slabs[-1])
-                    mid = at + L / 2
+
+            def squares(a0, a1):
+                n = max(1, int(round((a1 - a0) / w)))
+                f = (a1 - a0) / n / w
+                return (n, f) if SLAB_FIT[0] <= f <= SLAB_FIT[1] else (0, 1.0)
+
+            def rect(a_from, a_to, wall, out, f, yaw, shrink):
+                # (the world outline of a piece of strip: along it from a_from to a_to, from the wall outward a slab's width)
+                c0, c1 = wall + out * shrink, wall + out * (w * f - shrink)
+                pts = [(a_from + shrink, c0), (a_to - shrink, c0), (a_to - shrink, c1), (a_from + shrink, c1)]
+                return [world_of(*(p if yaw == 0.0 else (p[1], p[0]))) for p in pts]
+
+            def free(a_from, a_to, wall, out, f, yaw):
+                mid, across = (a_from + a_to) / 2, wall + out * w * f / 2
+                for along in (a_from + 8, mid, a_to - 8):
+                    px, py = world_of(*((along, across) if yaw == 0.0 else (across, along)))
+                    g = P.ground.at(px, py)
+                    if g is None or g < 8 or abs(g - level) > 28 or S.hit(px, py) or P.kind(px, py) in ('asphalt', 'seabed', None):
+                        return False
+                poly = rect(a_from, a_to, wall, out, f, yaw, SLAB_IN)
+                cx_, cy_ = world_of(*((mid, across) if yaw == 0.0 else (across, mid)))
+                for i in range(int((cx_ - 1100) // 1024), int((cx_ + 1100) // 1024) + 1):
+                    for j in range(int((cy_ - 1100) // 1024), int((cy_ + 1100) // 1024) + 1):
+                        if any(townbuild.overlap(poly, other) for other in laid.get((i, j), ())):
+                            return False
+                return True
+
+            def strip(a0, a1, wall, out, yaw):
+                n, f = squares(a0, a1)
+                seg = w * f
+                ok = [free(a0 + i * seg, a0 + (i + 1) * seg, wall, out, f, yaw) for i in range(n)]
+                got, i = 0, 0
+                while i < n:
+                    if not ok[i]:
+                        i += 1
+                        continue
+                    fit = next((sl for sl in slabs if all(ok[i:i + int(round(sl[1] / w))]) and i + int(round(sl[1] / w)) <= n), None)
+                    if fit is None:
+                        i += 1
+                        continue
+                    e, L, _W = fit
+                    k = int(round(L / w))
+                    mid, across = a0 + (i + k / 2.0) * seg, wall + out * seg / 2
                     lx, ly = (mid, across) if yaw == 0.0 else (across, mid)
                     # (a slab's long side is its own east-west: a quarter turn in the game's sense for a strip running north)
-                    got += lay(e, lx, ly, yaw, SLAB_UP, 'Pavement round buildings')
-                    at += L
-            paved += bool(got)
+                    if lay(e, lx, ly, yaw, SLAB_OVER - SLAB_TOP * f, 'Pavement round buildings', scale=f):
+                        got += 1
+                        poly = rect(a0 + i * seg, a0 + (i + k) * seg, wall, out, f, yaw, 0.0)
+                        cx_, cy_ = sum(p[0] for p in poly) / 4, sum(p[1] for p in poly) / 4
+                        laid.setdefault((int(cx_ // 1024), int(cy_ // 1024)), []).append(poly)
+                    i += k
+                return got, (f if n else 0.0)
+
+            # (the sides first: the front and back rows then run past the corners by as much as the side rows are wide)
+            got_w, f_w = strip(y0, y1, x0, -1.0, math.pi / 2)
+            got_e, f_e = strip(y0, y1, x1, 1.0, math.pi / 2)
+            got_s, _f = strip(x0 - w * f_w, x1 + w * f_e, y0, -1.0, 0.0)
+            got_n, _f = strip(x0 - w * f_w, x1 + w * f_e, y1, 1.0, 0.0)
+            paved += bool(got_w + got_e + got_s + got_n)
         # rubble banked against the back and the sides
         if banked:
             walls = [(x0, x1, y1, 0.0, 1.0), (y0, y1, x0, math.pi / 2, -1.0), (y0, y1, x1, math.pi / 2, 1.0)]

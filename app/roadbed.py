@@ -16,7 +16,13 @@ ground, their sides showing. So this is done last, after all of that:
      eased back to its own height over FADE beyond; ground under buildings stays as it is;
   3. whatever else stands on ground that moved goes with it.
 
-Returns ops (the pieces' moves, the cells' land, the other moves)."""
+Pavement slabs (osmdress.footings) are bedded here too, by a harder rule, since a slab is a bare sheet with no sides: it
+stays level, the land under and just round it is made flat at its height (under a building's own walls too: that is the
+level the building was stood at), and at the end each slab is set SLAB_OVER above the highest ground under it. One whose
+ground still isn't flat to within SLAB_ROUGH (over the sea, between two buildings at different heights) is taken out:
+no slab is left with daylight under it.
+
+Returns ops (the pieces' moves, the cells' land, the other moves, slabs taken out)."""
 import math
 
 import navgen
@@ -31,6 +37,8 @@ LEAN = 0.16             # and side to side: where a street meets one that climbs
 HOLD = 96.0             # round a building's box, ground that stays (as landsoft)
 SEAT = 2.0
 ROUNDS = 5              # pieces laid, land brought to them, and again: pieces that share ground come to agree
+SLAB_ROUGH = 8.0        # the ground under a slab that stays is flat to within this (one step of the land)
+SLAB_DRY = 8.0          # and no lower than this: not in the sea
 
 
 def _flat_bases(gd):
@@ -41,6 +49,33 @@ def _flat_bases(gd):
         b = townbuild.obnd(gd, key)
         if b:
             out[key] = b
+    return out
+
+
+def _slab_bases(gd):
+    """{key: its box} of the pavement slabs."""
+    import osmdress
+    import townbuild
+    bases = osmdress._bases(gd)
+    out = {}
+    for edid, _l, _w in osmdress.SLABS:
+        key = bases.get(edid.lower())
+        b = townbuild.obnd(gd, key) if key else None
+        if b:
+            out[key] = b
+    return out
+
+
+def _under_slab(g, p, box, s):
+    """The ground under a slab, a spot every land point's width or less: [heights] (None where there is no land)."""
+    c, sn = math.cos(p[5]), math.sin(p[5])
+    x0, y0, x1, y1 = box[0] * s, box[1] * s, box[3] * s, box[4] * s
+    nx, ny = max(2, int(math.ceil((x1 - x0) / 96.0)) + 1), max(2, int(math.ceil((y1 - y0) / 96.0)) + 1)
+    out = []
+    for i in range(nx):
+        for j in range(ny):
+            lx, ly = x0 + (x1 - x0) * i / (nx - 1), y0 + (y1 - y0) * j / (ny - 1)
+            out.append(g.at(p[0] + lx * c + ly * sn, p[1] - lx * sn + ly * c))
     return out
 
 
@@ -97,8 +132,17 @@ def bed(gd, pr, world, keep=(), progress=None):
                 dx, dy = R[0][0], R[1][0]
                 ln = math.hypot(dx, dy) or 1.0
                 found.append([ck, rk, r, p[0], p[1], dx / ln, dy / ln, boxes[r['base']], None])
-    if not found:
-        return [], {'pieces': 0, 'relaid': 0, 'points': 0, 'cells': 0, 'reseated': 0}
+    import osmdress
+    slab_boxes = _slab_bases(gd)
+    slabs = []                                   # [cell key, ref key, ref, scale, box]
+    for ck, c in pr.cells.items():
+        if ck not in inside:
+            continue
+        for rk, r in c['refs'].items():
+            if rk.startswith('+') and not r.get('removed') and r.get('base') in slab_boxes and r.get('p'):
+                slabs.append((ck, rk, r, float(r.get('s', 1) or 1), slab_boxes[r['base']]))
+    if not found and not slabs:
+        return [], {'pieces': 0, 'relaid': 0, 'points': 0, 'cells': 0, 'reseated': 0, 'slabs': 0, 'slabs_out': 0, 'slabs_moved': 0}
     held = set()
     for kx, ky, rz, bx0, by0, bx1, by1 in keep:
         c, sn = math.cos(rz), math.sin(rz)
@@ -146,11 +190,17 @@ def bed(gd, pr, world, keep=(), progress=None):
         fit_all()
         # the land to the pieces' planes: under a piece (and FLAT round it) its plane, the mean where pieces share the
         # ground, so that laid again they come to agree; beyond, the nearest piece's, fading
-        under, near = {}, {}
-        for _ck, _rk, _r, x, y, dx, dy, box, plane in found:
+        under, near, apron = {}, {}, {}
+        level = []                               # (each slab as a piece lying level, its land where its sheet is less SLAB_OVER)
+        for _ck, _rk, r, s, box in slabs:
+            p = r['p']
+            level.append((None, None, None, p[0], p[1], math.cos(p[5]), -math.sin(p[5]), [v * s for v in box],
+                          (p[2] + osmdress.SLAB_TOP * s - osmdress.SLAB_OVER, 0.0, 0.0)))
+        for n_, (_ck, _rk, _r, x, y, dx, dy, box, plane) in enumerate(found + level):
             if plane is None:
                 continue
             a, b, c = plane
+            is_slab = n_ >= len(found)
             rad = math.hypot(max(abs(box[0]), abs(box[3])), max(abs(box[1]), abs(box[4]))) + reach
             for gy in range(int(math.ceil((y - rad) / POINT)), int((y + rad) // POINT) + 1):
                 for gx in range(int(math.ceil((x - rad) / POINT)), int((x + rad) // POINT) + 1):
@@ -163,18 +213,19 @@ def bed(gd, pr, world, keep=(), progress=None):
                         continue
                     want = a + b * max(box[0], min(box[3], lx)) + c * max(box[1], min(box[4], ly))
                     if d <= FLAT:
-                        u = under.get((gx, gy))
-                        if u is None:
-                            under[(gx, gy)] = [want, 1]
-                        else:
-                            u[0] += want
-                            u[1] += 1
+                        for book in ((under, apron) if is_slab else (under,)):
+                            u = book.get((gx, gy))
+                            if u is None:
+                                book[(gx, gy)] = [want, 1]
+                            else:
+                                u[0] += want
+                                u[1] += 1
                     else:
                         was = near.get((gx, gy))
                         if was is None or d < was[0]:
                             near[(gx, gy)] = (d - FLAT, want)
         for pt in set(under) | set(near):
-            if pt in held:
+            if pt in held and pt not in apron:
                 continue
             homes = homes_of(*pt)
             if not homes:
@@ -182,7 +233,10 @@ def bed(gd, pr, world, keep=(), progress=None):
             now = g.h[homes[0][0]][homes[0][1]]
             if now < 0:
                 continue                        # (the sea bed is the coast's)
-            if pt in under:
+            if pt in held:
+                s, n = apron[pt]                # (by a building's wall only its own pavement says where the ground is)
+                new = round(s / n / 8.0) * 8.0
+            elif pt in under:
                 s, n = under[pt]
                 new = round(s / n / 8.0) * 8.0   # (to the nearest step, not the one below: done again, nothing drifts down)
             else:
@@ -216,6 +270,20 @@ def bed(gd, pr, world, keep=(), progress=None):
         if any(abs(u - v) > (0.5 if i == 2 else 0.002) for i, (u, v) in enumerate(zip(f['p'], r['p']))):
             ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': f['p']})
             relaid += 1
+    # the slabs: each on the highest ground under it, or out if that ground isn't flat
+    slabs_out = slabs_moved = 0
+    for ck, rk, r, s, box in slabs:
+        mine.add((ck, rk))
+        p = r['p']
+        zs = _under_slab(g, p, box, s)
+        if None in zs or min(zs) < SLAB_DRY or max(zs) - min(zs) > SLAB_ROUGH:
+            ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
+            slabs_out += 1
+            continue
+        z = round(max(zs) + osmdress.SLAB_OVER - osmdress.SLAB_TOP * s, 1)
+        if abs(z - p[2]) > 0.05:
+            ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [p[0], p[1], z] + list(p[3:])})
+            slabs_moved += 1
     cells = 0
     cache = {}
     for k in sorted(changed):
@@ -242,7 +310,29 @@ def bed(gd, pr, world, keep=(), progress=None):
                 continue
             ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [p[0], p[1], round(p[2] + z1 - z0, 1)] + list(p[3:])})
             reseated += 1
-    return ops, {'pieces': len(found), 'relaid': relaid, 'points': len(moved), 'cells': cells, 'reseated': reseated}
+    return ops, {'pieces': len(found), 'relaid': relaid, 'points': len(moved), 'cells': cells, 'reseated': reseated,
+                 'slabs': len(slabs) - slabs_out, 'slabs_out': slabs_out, 'slabs_moved': slabs_moved}
+
+
+def slab_gaps(gd, pr, world):
+    """How the mod's pavement lies: [(sheet over the highest ground under it, over the lowest)] a slab. For checks."""
+    import osmdress
+    boxes = _slab_bases(gd)
+    g = roadgen.Ground(gd, pr, world)
+    inside = {gd.key(c) for c in gd.grid(world).values()}
+    out = []
+    for ck, c in pr.cells.items():
+        if ck not in inside:
+            continue
+        for rk, r in c['refs'].items():
+            if r.get('removed') or r.get('base') not in boxes or not r.get('p'):
+                continue
+            s = float(r.get('s', 1) or 1)
+            zs = [z for z in _under_slab(g, r['p'], boxes[r['base']], s) if z is not None]
+            if zs:
+                top = r['p'][2] + osmdress.SLAB_TOP * s
+                out.append((top - max(zs), top - min(zs)))
+    return out
 
 
 def gaps(gd, pr, world):

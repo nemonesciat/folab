@@ -96,3 +96,26 @@ check('pieces stay level side to side unless the ground leans', sum(1 for v in l
       (sum(1 for v in lean if v < 0.001), len(lean), round(max(lean), 3)))
 ops2, rep2 = roadbed.bed(gd, pr, world, keep)
 check('done again, next to nothing moves', rep2['points'] < rep['points'] * 0.2, (rep['points'], rep2['points']))
+
+# ---------- pavement ----------
+# a slab is a bare sheet 16 over its origin with no sides: the land is made flat under it and it is set just over that
+import osmdress  # noqa: E402
+
+bases = osmdress._bases(gd)
+sx, sy = ox + 2000.0, oy + 5200.0
+sl = []
+for e, x, y, rz, s in (('SWSec1x6', sx, sy, 0.3, 1.0), ('SWSingle', sx + 1100, sy + 300, 0.3, 1.2), ('SWSec1x3', sx - 200, sy + 900, 1.2, 0.9)):
+    sl.append({'op': 'add', 'cell': gd.key(grid[(int(x // 4096), int(y // 4096))]), 'base': bases[e.lower()], 'p': [x, y, round(g3.at(x, y) / 8) * 8.0 - 13, 0.0, 0.0, rz], 's': s})
+pr.apply('slabs', sl)
+hung = roadbed.slab_gaps(gd, pr, world)
+check('three slabs on rough ground hang over it', len(hung) == 3 and max(b for a, b in hung) > 16, [(round(a), round(b)) for a, b in hung])
+ops3, rep3 = roadbed.bed(gd, pr, world, keep)
+pr.apply('bed', ops3)
+lies = roadbed.slab_gaps(gd, pr, world)
+check('bedded, each lies just over ground made flat for it', len(lies) == rep3['slabs'] >= 2 and all(2.9 <= a <= 3.1 and b <= 3.1 + roadbed.SLAB_ROUGH for a, b in lies),
+      (rep3['slabs'], rep3['slabs_out'], [(round(a, 1), round(b, 1)) for a, b in lies]))
+check('and none is left that doesn\'t', rep3['slabs'] + rep3['slabs_out'] == 3)
+g4 = roadgen.Ground(gd, pr, world)
+check('the ground under the building still stays', all(abs(g4.at(x, y) - z) < 0.01 for x, y, z in held))
+again = roadbed.gaps(gd, pr, world)
+check('and the roads still lie in theirs', sum(1 for a, b in again if a > 32) <= 1 and min(b for a, b in again) > -16)

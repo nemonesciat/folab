@@ -21,8 +21,8 @@ got = {name: landmarks.lift(gd, name) for name in landmarks.SETS}
 check('every set is found in the game', all(got.values()), [n for n, g in got.items() if not g])
 lucky = got['lucky38']
 names = sorted(gd.edid(gd.from_key(p[0])) for p in lucky['pieces'])
-check('the Lucky 38 is its base, its tower and its overhangs', {'Lucky38', 'Lucky38Base', 'Lucky38Top', 'Lucky38Overhang01'} <= set(names) and len(names) == 8, names)
-check('none of its signs or lights from other worlds', not any('WL' in n or 'Sign' in n for n in names))
+check('the Lucky 38 is its base, its tower and its overhangs', {'Lucky38', 'Lucky38Base', 'Lucky38Top', 'Lucky38Overhang01'} <= set(names) and len(names) == 15, names)     # (its casino four times about the tower, the all-round far model inside the shaft)
+check('none of its signs from other worlds, and the far model once', not any('Sign' in n for n in names) and names.count('Lucky38WL') == 1)
 check('it stands on the ground, not far over or under it', all(-100 < p[3] < 200 for p in lucky['pieces']), [round(p[3]) for p in lucky['pieces']])
 check('and is as wide as the game has it', 5000 < lucky['box'][2] - lucky['box'][0] < 7500, lucky['box'])
 check('The Tops as on the Strip is many pieces spread over its block', len(got['tops_strip']['pieces']) >= 10 and got['tops_strip']['box'][2] - got['tops_strip']['box'][0] > 5000)
@@ -47,7 +47,7 @@ pr.apply('add', [{'op': 'add', 'cell': gd.key(grid[xy]), 'base': gd.key(tire), '
                  {'op': 'add', 'cell': gd.key(grid[xy]), 'base': gd.key(tire), 'p': [x + 3900, y + 3900, g0.at(x, y), 0.0, 0.0, 0.0], 's': 1}])
 B = landmarks.Batch(gd, pr, world)
 rep = B.stand('lucky38', x, y, turn=math.pi / 2, scale=0.5, nudge=0)
-check('stood where asked, all of it', rep and rep['pieces'] == 8 and rep['moved'] == 0 and (rep['x'], rep['y']) == (round(x), round(y)), rep)
+check('stood where asked, all of it', rep and rep['pieces'] == 15 and rep['moved'] == 0 and (rep['x'], rep['y']) == (round(x), round(y)), rep)
 ops = B.done()
 adds = [o for o in ops if o['op'] == 'add']
 gone = [o for o in ops if o['op'] == 'remove']
@@ -127,10 +127,10 @@ def all_round(name):
     return min(vals)
 
 
-check('The Tops stood as a landmark is the game's all-round one: a wall from each of sixteen sides', len(got['tops']['pieces']) == 1 and all_round('tops') > 0.95, all_round('tops'))
+check('The Tops stood as a landmark is the game\'s all-round one: a wall from each of sixteen sides', len(got['tops']['pieces']) == 1 and all_round('tops') > 0.95, all_round('tops'))
 check('and stands on the ground, not at the height it has far off', abs(got['tops']['pieces'][0][3] + 688) < 1)
 check('the grand hotel is buildings whole from every side', all_round('grandhotel') > 0.95 and len(got['grandhotel']['pieces']) == 10, all_round('grandhotel'))
-check('the Strip's own pieces are not: stood back to back they still show a way in from some side', all_round('tops_strip') < 0.9, all_round('tops_strip'))
+check('the Strip\'s own pieces are not: stood back to back they still show a way in from some side', all_round('tops_strip') < 0.9, all_round('tops_strip'))
 
 # ---------- nothing flies ----------
 bad = []
@@ -155,3 +155,30 @@ check('its casino stands four times about the tower, and the all-round tower ins
 check('so that it shows a wall from every one of sixteen sides', all_round('lucky38') > 0.9, all_round('lucky38'))
 sizes = sorted(p[7] for p in got['lucky38']['pieces'] if gd.edid(gd.from_key(p[0])) == 'Lucky38B')
 check('each copy a hair smaller than the last: no two faces lie in one another', len(set(round(v, 4) for v in sizes)) == 4)
+
+# ---------- doors ----------
+# a set with one of the catalogue's buildings among its pieces stands it with its doors: without, one looked straight
+# through the doorway of the grand hotel's wings
+import townbuild  # noqa: E402
+import server  # noqa: E402
+
+server.GD = gd
+cat = townbuild.load(gd, server.kits_folder())
+apt = next(b for b in cat if b['edid'] == 'ApartmentPre01')
+check('the catalogue knows the wing\'s doorway', len(apt['doors']) + len(apt.get('shut', ())) >= 1)
+before = len(got['grandhotel']['pieces'])
+landmarks.know(cat)
+hotel = landmarks.lift(gd, 'grandhotel')
+tags = [gd.forms[gd.from_key(p[0])][1].tag for p in hotel['pieces']]
+wings = [p for p in hotel['pieces'] if p[0] == apt['key']]
+want = sum(len(b['doors']) + len(b.get('shut', ())) for p in hotel['pieces'] for b in cat if b['key'] == p[0])
+check('told the catalogue, the grand hotel has something in every doorway of its buildings', len(hotel['pieces']) == before + want and want >= 2, (before, want, len(hotel['pieces'])))
+d = apt['doors'][0] if apt['doors'] else apt['shut'][0]
+near = [p for p in hotel['pieces'] if p[0] == d['base'] and any(abs(math.hypot(p[1] - w[1], p[2] - w[2]) - math.hypot(d['x'], d['y'])) < 1 for w in wings)]
+check('each wing\'s door is where the game has it against the wing', len(near) >= len(wings) >= 2, (len(near), len(wings)))
+B5 = landmarks.Batch(gd, project.Project.create('Landmark 5'), world)
+B5.stand('grandhotel', x, y)
+doors = [o for o in B5.ops if o['op'] == 'add' and gd.forms[gd.from_key(o['base'])][1].tag == 'DOOR']
+check('a door with nothing behind it is locked for good', ('DOOR' not in tags or doors) and all(o.get('extra', {}).get('props', {}).get('lock', {}).get('level') == 255 for o in doors), len(doors))
+landmarks.know(None)
+check('untold, it is as before', len(landmarks.lift(gd, 'grandhotel')['pieces']) == before)
