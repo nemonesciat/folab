@@ -9,8 +9,8 @@ NAVM, one mesh, a child of its CELL in the cell's temporary group. All its form 
     NVTR        triangles, 16 bytes each: three corners, three edges, flags, cover flags. Corners run anticlockwise from
                 above. Edge i runs from corner i to corner i + 1 and holds the triangle across it (NONE if there is
                 none), or, when flag bit i is set, a number in NVEX.
-    NVCA        the triangles with cover flags. Optional: 3,596 of the 6,129 meshes the game ends up with have none, and actors then just don't
-                use cover there, so generated meshes leave it out.
+    NVCA        the triangles with cover flags (any of COVER_BITS: so in all 4,037 of the Mojave's meshes). 3,596 of the 6,129 meshes the game
+                ends up with have none, but a big mesh with none anywhere crashes the game when someone looks for cover: navgen.mark_cover.
     NVDP        door links, 8 bytes each: the door's REFR, the triangle by it, and two bytes of leftover junk
     NVGD        the search grid: side (from the triangle count, see grid_side), cell width and height, the box of the
                 vertices, then for each cell, row by row from the south, a count and that many triangles. A game grid
@@ -66,6 +66,7 @@ F_PREFERRED = 0x40
 F_WATER = 0x200
 F_DOOR = 0x400
 F_FOUND = 0x800                         # set on every triangle in the game's files
+COVER_BITS = 0x0FBE                     # of a triangle's cover flags, what makes it one with cover (NVCA lists exactly these)
 # NVMI flags
 INFO_EMPTY = 0x08
 INFO_OUTLINE = 0x20
@@ -464,6 +465,8 @@ def _split(m, ti, i, pos):
     new = len(m['tris'])
     m['verts'].append(tuple(pos))
     across_bc, across_ca = t[3 + j], t[3 + k]
+    if t[7] and ti in m['cover']:
+        m['cover'] = [x for x in m['cover'] if x != ti]     # (its cover goes with its old shape)
     m['tris'][ti] = (a, n, c, NONE, new, across_ca, t[6], 0)
     m['tris'].append((n, b, c, NONE, across_bc, ti, t[6] & ~F_DOOR, 0))
     if across_bc != NONE:
