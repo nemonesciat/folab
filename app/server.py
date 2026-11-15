@@ -1742,6 +1742,7 @@ def give(body):
 
 def save():
     path = PR.plugin_path()
+    PR.save(afresh=True)                    # (every part of the mod's file written out anew, not from what was kept)
     n = espwrite.write(GD, PR, path)
     library.publish(PR)
     return {'path': path, 'bytes': n, 'state': state()}

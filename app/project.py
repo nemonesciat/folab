@@ -13,6 +13,7 @@ Undo keeps whole copies of the changes: small for now, and impossible to get sub
 import copy
 import json
 import os
+import pickle
 import re
 import time
 
@@ -81,10 +82,29 @@ class Project:
                 'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'navmesh': self.navmesh, 'drop': self.drop, 'cellinfo': self.cellinfo, 'next_id': self.next_id,
                 'source': self.source, 'esm': self.esm, 'trim_masters': self.trim_masters, 'newgame': self.newgame}
 
-    def save(self):
+    def save(self, afresh=False):
+        """Write the mod's file. Every edit does this, so it has to be quick however big the mod is: a world made from a map
+        holds millions of numbers of ground, and writing them all out again took seconds an edit (placing a thing lagged, and
+        clicks piled up behind it). The ground and the navmeshes are kept as the text last written for each cell and written
+        again only when that cell's entry is another one: a change there always puts a whole new entry in (nothing edits
+        one in place). afresh: don't trust that, and write everything out anew (Save does, to be sure)."""
+        d = self.to_dict()
+        kept = {} if afresh else getattr(self, '_written', {})
+        now = {}
+        parts = []
+        for part in ('land', 'navmesh'):
+            rows = []
+            for k, v in d.pop(part).items():
+                had = kept.get((part, k))
+                text = had[1] if had is not None and had[0] is v else json.dumps(v, separators=(',', ':'))
+                now[(part, k)] = (v, text)           # (the entry itself is held, so no other can turn up at its address)
+                rows.append(json.dumps(k) + ':' + text)
+            parts.append(json.dumps(part) + ':{' + ','.join(rows) + '}')
+        self._written = now
+        head = json.dumps(d, separators=(',', ':'))
         tmp = self.path + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(self.to_dict(), f, indent=1)
+            f.write(head[:-1] + ',' + ','.join(parts) + '}')
         os.replace(tmp, self.path)
 
     def source_path(self):
@@ -100,7 +120,9 @@ class Project:
     # --- edits: each one a single undo step ---
 
     def _snap(self):
-        return (copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh),
+        # (cells and records are plain data: through pickle is the same copy as deepcopy, many times quicker on a big mod)
+        cells, records = pickle.loads(pickle.dumps((self.cells, self.records), pickle.HIGHEST_PROTOCOL))
+        return (cells, records, self.next_id, dict(self.land), dict(self.water), dict(self.navmesh),
                 list(self.drop), dict(self.cellinfo), copy.deepcopy(self.newgame))
 
     def _put(self, snap):
