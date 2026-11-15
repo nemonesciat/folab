@@ -504,8 +504,29 @@ $('#b-playhere').onclick = () => {
 };
 
 // Open in game, and Play here (at = {cell, p: [x, y, z, facing]}): the game starts; Continue or load a save there
+// Before the game is started: say so, once each time FOLab is opened, if the game can only use 2 GB (playtest.memory_room).
+// false = the user would rather not start it.
+function roomToPlay(){
+  const m = (A.state || {}).memory || {};
+  if (m.big !== false || A.toldMemory) return true;
+  A.toldMemory = true;
+  return confirm('Your New Vegas can only use 2 GB of memory: it hasn\'t had the 4GB patch.\n\n'
+    + 'Busy outdoor places, a city above all, can need more, and the game then crashes without a word.\n'
+    + 'The cure is the FNV 4GB Patcher, run once on your game: My mod has a button to its page.\n\n'
+    + 'OK starts the game anyway. Cancel doesn\'t.');
+}
+function memoryCard(s){
+  const m = s.memory || {};
+  if (m.big !== false) return '';
+  return `<div class="card"><h3>Memory: the game can only use 2 GB</h3>
+    <p>Your FalloutNV.exe hasn't had the 4GB patch. Busy outdoor places can need more than 2 GB, and the game then crashes without a word.
+       The FNV 4GB Patcher, run once on your game, lets it use 4 GB. FOLab doesn't change the game's exe itself.</p>
+    <p><a class="btn primary" href="${esc(m.page || '')}" target="_blank" rel="noopener" style="text-decoration:none">Open the 4GB Patcher's page</a></p></div>`;
+}
+
 async function play(at){
   if (!A.state.project) return toast('Start a mod first.', true);
+  if (!roomToPlay()) return;
   toast(at ? 'Starting New Vegas: load a save (or Continue) and you\'ll be moved here…' : 'Starting New Vegas…');
   try {
     const d = await post('/api/play', at || {});
@@ -612,6 +633,7 @@ function drawModPage(){
       <p>${p.opened ? 'Opened from an existing plugin: saving keeps everything in it and lays your changes over it.' : 'A new mod of your own.'}</p>
       <p>Masters: ${(p.masters || []).map(m => `<code>${esc(m)}</code>`).join(' ') || 'none yet'}</p>
       <p><label><input type="checkbox" id="m-esm" ${p.esm ? 'checked' : ''}> Save as a master (other mods can build on it; the game loads it before plugins)</label></p></div>` : ''}
+    ${memoryCard(s)}
     ${nvseCard(s)}
     <div class="card"><h3>Open a plugin as your mod</h3>
       <p>${s.loadout ? 'The plugins in this loadout. FOLab works on a copy and won\'t put it back over another mod\'s plugin: to change a mod and leave it as it is, start a patch.' : 'Mods in the game\'s Data folder. FOLab works on a copy; <b>Put in game</b> writes it back over the original (the old one goes to backups first).'}</p>

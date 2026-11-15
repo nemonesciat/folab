@@ -29,6 +29,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Play: `playtest.py` starts FalloutNV.exe; Play here writes `FOLab Test.esp` (marker + start-enabled quest + one
   hand-compiled script, bytes checked against the game's own scripts; a new quest ID each time). Never call
   `/api/play` in tests: it starts the user's real game.
+- 2 GB: `playtest.memory_room` reads the large-address flag of FalloutNV.exe (`state.memory`); unpatched, My mod shows a card linking the
+  4GB Patcher's page and `roomToPlay()` (app.js) asks once a session before Play, Try it, Give. A map-made city ran a tester's game out of
+  memory (15 Nov 2026): a crash in the scrap heap with virtual size near 2 GB in the dump's stream 22 is this.
 - xNVSE: FOLab fetches nothing from the internet (Nexus's rule on tools that download): My mod links to xNVSE's page and `nvse.py` installs from the user's Downloads folder (an archive counts if nvse_1_4.dll is inside), unpacking into `downloads/`; its .dll/.exe go
   beside FalloutNV.exe (its config in Data\NVSE), records what it put in for Take out. The game starts through
   nvse_loader.exe when present (setting `launch_via`), else steam://rungameid/22380; never FalloutNV.exe directly

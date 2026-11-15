@@ -442,6 +442,7 @@ async function crGive(){
   if (n === null) return;
   const count = parseInt(n, 10);
   if (!(count > 0)) return toast('A number above 0, please', true);
+  if (!roomToPlay()) return;
   const r = await post('/api/give', {key: CR.key, count});
   setState(r.state);
   toast(r.message || 'Starting New Vegas: it will be in your inventory once your save loads');

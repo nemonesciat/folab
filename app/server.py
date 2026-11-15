@@ -1090,6 +1090,7 @@ def state():
     s = {'game': GD.data_dir, 'interiors': len(GD.interiors), 'project': PR.state() if PR else None,
          'projects': project.list_projects(), 'kinds': PLACEABLE}
     s['nvse'] = nvse.status(GD.data_dir)
+    s['memory'] = playtest.memory_room(GD.data_dir)
     s['loadout'] = loadout.current().title if loadout.current() else None
     s['from_mo2'] = loadout.started_from_mo2()
     s['launch_via'] = load_settings().get('launch_via', 'nvse')
