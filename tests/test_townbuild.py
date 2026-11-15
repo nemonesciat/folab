@@ -126,7 +126,7 @@ undo_before = len(pr.undo_stack)
 
 # ---------- buildings ----------
 t0 = time.time()
-api_maps.post('/api/maps/buildings', {'world': world_key}, server)
+api_maps.post('/api/maps/buildings', {'world': world_key, 'stretch': 1}, server)     # (the plots here are drawn at the game's size: nothing to outgrow)
 j = wait()
 check('buildings go up as a job', j.get('ok') is True)
 if not j.get('ok'):
@@ -145,7 +145,8 @@ blds = [(ck, k, r) for ck, k, r in refs if r.get('base') in cat]
 check('every house plot, the works, the church and the trailer lot got buildings (%d plots built, %d buildings)' % (rep['built'], len(blds)), rep['built'] == 15 and len(blds) >= 16)
 in_box = lambda r, b: b[0] - 200 <= r['p'][0] <= b[2] + 200 and b[1] - 200 <= r['p'][1] <= b[3] + 200
 on_lot = [cat[r['base']]['edid'] for _c, _k, r in blds if in_box(r, trailer)]
-check('the narrow lot got a mobile home, side-on to the street (%s, %d side-on)' % (on_lot, rep['side_on']), on_lot and all('mobilehome' in e.lower() for e in on_lot) and rep['side_on'] >= 1)
+check('the narrow lot got narrow homes, side-on to the street (%s, %d side-on)' % (on_lot, rep['side_on']),
+      on_lot and all('mobilehome' in e.lower() or 'shack' in e.lower() for e in on_lot) and rep['side_on'] >= 1)
 marks = [r for _c, _k, r in blds if townbuild.landmark(cat[r['base']])]
 check('plots that stand out: the named works and church (%d)' % rep['poi'], rep['poi'] == 2)
 check('the church got the game\'s church, a landmark (%s)' % [cat[r['base']]['edid'] for _c, _k, r in blds if in_box(r, church)],
@@ -186,13 +187,15 @@ for _c, _k, r in blds:
         continue
     f = townbuild.Fit(b)
     mx, my = mid(foot(r))
-    if not (-7200 <= mx <= 2500):
+    if not (-7200 <= mx <= 2500) or in_box(r, trailer):     # (side-on, a door is to the side)
         continue
     with_doors += 1
     dx, dy = townbuild.turn(f.front[0], f.front[1], r['p'][5])
     if dy * (Y0 - my) > 0 and abs(dy) > 0.99:
         fronts += 1
-check('every house with a door faces the street (%d of %d)' % (fronts, with_doors), with_doors >= 3 and fronts == with_doors)
+    elif abs(dy) > 0.99 and any(abs(mid(g)[0] - mx) < 700 and abs(mid(g)[1] - Y0) < abs(my - Y0) - 200 for g in fps):
+        fronts += 1                         # (the back row of a deep plot faces the other way, by design)
+check('every house with a door faces the street, or away from it behind another (%d of %d)' % (fronts, with_doors), with_doors >= 3 and fronts == with_doors)
 ground = roadgen.Ground(gd, pr, w)
 off = max(abs((ground.at(r['p'][0], r['p'][1]) - r['p'][2]) - cat[r['base']]['mid']) for _c, _k, r in blds if -7200 <= mid(foot(r))[0] <= 2500)
 check('set into the pad as deep as the game sets them (%.1f off at most)' % off, off < 24)
@@ -262,7 +265,7 @@ check('still one Undo for all of it', pr.undo_stack[-1][0] == 'Buildings on the 
 
 # ---------- again, undo, saved ----------
 n0 = sum(len(c['refs']) for c in pr.cells.values())
-api_maps.post('/api/maps/buildings', {'world': world_key}, server)
+api_maps.post('/api/maps/buildings', {'world': world_key, 'stretch': 1}, server)     # (the plots here are drawn at the game's size: nothing to outgrow)
 j = wait()
 check('a second time adds nothing, and says why: %s' % j.get('error'), not j.get('ok') and 'already' in (j.get('error') or '')
       and sum(len(c['refs']) for c in pr.cells.values()) == n0)

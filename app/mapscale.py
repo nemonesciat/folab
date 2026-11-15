@@ -124,6 +124,8 @@ class Plan:
         self.x0, self.y0 = -(self.W // 2), -(self.H // 2)       # the world's south-west cell: the middle at the origin
         self.area = (self.col0, self.row0, min(raster.w - 1.0, self.col0 + self.W * pcx), min(raster.h - 1.0, self.row0 + self.H * pcy))
         self.base = float(o['base']) if o.get('base') not in (None, '') else default_base(raster, o, self.area if o.get('rect') else None)
+        # (the lowest the land is let go, in game units: a height file with the real sea floor in it drops far past what the game's land does)
+        self.floor = float(o['floor']) if o.get('floor') not in (None, '') else None
 
     def count(self):
         return self.W * self.H
@@ -146,6 +148,8 @@ class Plan:
         mc = metres_per_cell(self.compress)
         lo, hi, missing = self.raster.stats_in(*self.area) if self.opts.get('rect') else self.raster.stats()
         zlo, zhi = self.z_of_value(lo), self.z_of_value(hi)
+        if self.floor is not None:
+            zlo = max(zlo, self.floor)
         warn, stop = [], None
         if n > HARD_CELLS or max(self.W, self.H) > MAX_SIDE:
             stop = ('%s cells, %d x %d: FOLab stops at %s (%d across), the size of the game\'s own largest world. Compress it more or choose a smaller rectangle.'
@@ -262,6 +266,7 @@ def heights(plan, progress=None):
         i = min(rw - 2, int(f)) if rw > 1 else 0
         cols.append((i, f - i))
     vs, vo, base, k = plan.vs, plan.vo, plan.base, plan.k
+    floor = plan.floor if plan.floor is not None else float('-inf')
     holes = []
     for gy in range(down):
         if progress and gy % 64 == 0:
@@ -287,7 +292,7 @@ def heights(plan, progress=None):
                     pts[at + gx] = 0.0
                     continue
                 val = sum(x * q for x, q in ws) / tot
-            pts[at + gx] = round((val * vs + vo - base) * k / STEP) * STEP
+            pts[at + gx] = round(max(floor, (val * vs + vo - base) * k) / STEP) * STEP
     filled, sea = fill_holes(pts, across, down, holes)
     if progress:
         progress('Keeping slopes the game can store')

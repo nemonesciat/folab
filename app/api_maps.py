@@ -12,9 +12,14 @@ import shutil
 import threading
 import traceback
 
+import coast
+import osmcover
+import osmdress
 import elevation
 import espwrite
 import landcover
+import landmarks
+import landsoft
 import mapscale as MS
 import mapworld
 import navbuild
@@ -186,6 +191,35 @@ def make_job(body, srv):
         if rep['stop']:
             raise ValueError(rep['stop'])
         grid = MS.heights(plan, _said)
+        side = {'file': name, 'opts': opts, 'W': plan.W, 'H': plan.H, 'x0': plan.x0, 'y0': plan.y0, 'col0': plan.col0, 'row0': plan.row0, 'upx': plan.upx, 'upy': plan.upy,
+                'base': plan.base, 'k': plan.k, 'compress': plan.compress, 'exag': plan.exag, 'geo': r.geo, 'px_w': r.w, 'px_h': r.h}
+        if body.get('bumps'):                # (an OpenStreetMap file: roofs a height file measured, off the flat ground its buildings stand on)
+            _said('Taking roofs off the flat ground')
+            side['bumps'] = body['bumps']
+            _roofs_off(grid, side)
+        sea = None
+        if body.get('coast'):                # (an OpenStreetMap file: the sea is what's on the water's side of its coastline)
+            _said('Reading the coastline')
+            data = _osm_data(body['coast'])
+            geo = osmplace.Georef(side, data)
+            _said('Shaping the sea')
+            sea = coast.shape_sea(grid, [[geo.xy(p) for p in line] for line in data.coast], plan.floor)
+            if sea and not sea.get('leak'):
+                MS.limit_slopes(grid.pts, grid.across, grid.down)
+                side['coast'] = body['coast']
+        painted = None
+        if body.get('paint'):                # (an OpenStreetMap file: the ground painted by what the map says it is)
+            data = _osm_data(body['paint'])
+            geo = osmplace.Georef(side, data)
+            if body.get('road_gap'):         # (side streets thinned for a squeezed world: laying and dressing go by the same)
+                side['road_gap'] = float(body['road_gap'])
+            painted = osmcover.MapCover(grid, data, geo.xy, osmcover.default_textures(srv.GD), _said, laid=osmplace.layout(data, side)['roads'])
+            side['paint'] = body['paint']
+        if body.get('relief'):               # (small shape in ground the height file leaves smooth; not under roads and buildings)
+            _said('Giving the ground some shape')
+            coast.roughen(grid, float(body['relief']), int(body.get('seed', 1)), painted.calm if painted else None)
+            MS.limit_slopes(grid.pts, grid.across, grid.down)
+            side['relief'] = float(body['relief'])
         tpl = srv.GD.from_key(body['template']) if body.get('template') else next(w for w in srv.GD.worlds() if srv.GD.edid(w) == 'WastelandNV')
         _said('Learning how the game paints its land')
         cover = None
@@ -193,7 +227,7 @@ def make_job(body, srv):
             _said('Reading the ground types')
             cover = landcover.Cover(_cover_raster(body['cover']['file']), body['cover']['rows'], r.geo, r.w, r.h, plan.pixel_of, (plan.x0, plan.y0))
         with srv._lock:
-            shaped = mapworld.options(plan, grid, srv.GD, tpl, body.get('ltex'), int(body.get('seed', 1)), lambda n, m: _said('Painting and packing the land', n, m), cover)
+            shaped = mapworld.options(plan, grid, srv.GD, tpl, body.get('ltex'), int(body.get('seed', 1)), lambda n, m: _said('Painting and packing the land', n, m), cover or painted)
             _said('Painting and packing the land', 0, plan.count())
             edid = re.sub(r'[^A-Za-z0-9_]', '', body.get('edid') or '')
             name_now = srv.PR.name
@@ -205,12 +239,15 @@ def make_job(body, srv):
                 raise
             _commit_before(name_now)
             d = read_sidecar(srv.PR)
-            d[edid] = {'file': name, 'opts': opts, 'W': plan.W, 'H': plan.H, 'x0': plan.x0, 'y0': plan.y0, 'col0': plan.col0, 'row0': plan.row0, 'upx': plan.upx, 'upy': plan.upy,
-                       'base': plan.base, 'k': plan.k, 'compress': plan.compress, 'exag': plan.exag, 'geo': r.geo, 'px_w': r.w, 'px_h': r.h}
+            d[edid] = side
             if cover:
                 d[edid]['cover'] = {'file': body['cover']['file'], 'rows': body['cover']['rows']}
             write_sidecar(srv.PR, d)
             stats = dict(grid.stats, cells=plan.count(), world=out['world'], z_low=min(grid.pts), z_high=max(grid.pts))
+            if body.get('coast'):
+                stats['sea'] = sea or {'none': True}
+            if painted:
+                stats['ground'] = painted.summary()
             stats['size'] = os.path.getsize(srv.PR.plugin_path())
             if cover and any(row.get('scatter') != 'none' and float(row.get('density') or 0) > 0 for row in body['cover']['rows']):
                 w = srv.GD.from_key(out['world'])
@@ -403,6 +440,124 @@ def osm_lay_job(body, srv):
     return _start(work, kind='osm_lay')
 
 
+def _roofs_off(grid, side):
+    data = _osm_data(side['bumps'])
+    geo = osmplace.Georef(side, data)
+    spots = []
+    for b in data.buildings:
+        ring = [geo.xy(p) for p in b['ring']]
+        spots += ring
+        spots.append((sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring)))
+    return coast.level_bumps(grid, spots)
+
+
+def map_cover(srv, world, name, said=None):
+    """What the map says each land point of a world made from it is: the land worked out again from the height file (and its
+    coastline), as it was when the world was made."""
+    _w, side = _side_of(srv, world)
+    r = raster_of(side['file'])
+    plan = MS.Plan(r, side.get('opts') or {})
+    grid = MS.heights(plan, said)
+    if side.get('bumps'):
+        _roofs_off(grid, side)
+    data = _osm_data(name)
+    geo = osmplace.Georef(side, data)
+    if side.get('coast'):
+        sea = coast.shape_sea(grid, [[geo.xy(p) for p in line] for line in _osm_data(side['coast']).coast], plan.floor)
+        if sea and not sea.get('leak'):
+            MS.limit_slopes(grid.pts, grid.across, grid.down)
+    lay = osmplace.layout(data, side)
+    return osmcover.MapCover(grid, data, geo.xy, osmcover.default_textures(srv.GD), said, laid=lay['roads']), lay
+
+
+def dress_job(body, srv):
+    """Things on the ground by what the map says it is, and along the streets (osmdress.py): one Undo."""
+    srv.not_while_playing()
+    name = body['file']
+    file_path(name)
+    w, _side = _side_of(srv, body['world'])
+
+    def work():
+        cover, lay = map_cover(srv, body['world'], name, _said)
+        cat = townbuild.load(srv.GD, srv.kits_folder(), _said)
+        with srv._lock:
+            seed = int(body.get('seed', 1))
+            ops, report = osmdress.ops(srv.GD, srv.PR, w, cover, lay['roads'], seed, _said)
+            # (round each building what it was for, and a few places someone stopped at)
+            more, report['life'] = osmdress.life(srv.GD, srv.PR, w, cover, cat, seed, _said)
+            ops += more
+            more, report['scenes'] = osmdress.scenes(srv.GD, srv.PR, w, cover, lay['roads'], cat, seed, _said)
+            ops += more
+            marks = landmarks.standing(srv.GD, srv.PR, w)
+            ops = landmarks.clear_of(ops, marks)       # (nothing inside a landmark)
+            # (nor inside a building: one that outgrew its squeezed plot stands on ground the map calls street or yard)
+            inside = osmdress._Stands(osmdress.standing(srv.GD, srv.PR, w, cat), margin=24.0)
+            ops = [o for o in ops if o.get('op') != 'add' or not inside.hit(o['p'][0], o['p'][1])]
+            if not ops:
+                raise ValueError("Nothing to put down: the map says nothing about this world's ground.")
+            _said('Putting it in the mod')
+            state = srv.edit('Things on the ground', ops)['state']
+            if body.get('soften', True):
+                # (sharp steps where plots and road beds meet eased, everything on them moved with the ground; then, where a
+                # road is still rough, the reason for it: all in the same Undo)
+                soft, report['ground'] = landsoft.soften(srv.GD, srv.PR, w, osmdress.keep_of(osmdress.standing(srv.GD, srv.PR, w, cat)) + marks,
+                                                              [(r['line'], osmdress.EDGE.get(r.get('class'), 300.0) * 0.8) for r in lay['roads']], _said)
+                if soft:
+                    srv.PR.apply('Things on the ground', soft, merge=True)
+                more, report['rough'] = osmdress.rough_roads(srv.GD, srv.PR, w, cover, lay['roads'], cat, seed, _said)
+                more = landmarks.clear_of(more, marks)
+                if more:
+                    srv.PR.apply('Things on the ground', more, merge=True)
+                state = srv.state()
+        return {'state': state, 'report': report}
+    return _start(work, kind='dress')
+
+
+def landmarks_job(body, srv):
+    """The game's great buildings stood where the map has its own, and its piers built as a harbour (landmarks.py): one Undo.
+    body: file (the OpenStreetMap file), sites [{set, lat, lon, turn, scale, level}], harbour."""
+    srv.not_while_playing()
+    name = body['file']
+    file_path(name)
+    w, side = _side_of(srv, body['world'])
+
+    def work():
+        data = _osm_data(name)
+        geo = osmplace.Georef(side, data)
+        lay = osmplace.layout(data, side)
+        with srv._lock:
+            B = landmarks.Batch(srv.GD, srv.PR, w, lay['roads'], int(body.get('seed', 1)))
+            report = {'stood': [], 'missed': []}
+            for k, s in enumerate(body.get('sites') or []):
+                _said('Standing the landmarks', k, len(body['sites']))
+                if s.get('set') not in landmarks.SETS:
+                    report['missed'].append(s.get('set'))
+                    continue
+                x, y = geo.xy((float(s['lat']), float(s['lon'])))
+                got = B.stand(s['set'], x, y, s.get('turn'), float(s.get('scale') or 1.0), level=s.get('level', True))
+                if got:
+                    report['stood'].append(dict(got, name=s.get('name')))
+                else:
+                    report['missed'].append(s.get('name') or s['set'])
+            if body.get('harbour'):
+                _said('Building the harbour')
+                piers = []
+                for line in data.piers:
+                    pts = [geo.xy(p) for p in line]
+                    if len(pts) > 3 and line[0] == line[-1]:     # (drawn as an outline: its length is between its two furthest corners)
+                        a, b = max(((p, q) for p in pts for q in pts), key=lambda pq: (pq[0][0] - pq[1][0]) ** 2 + (pq[0][1] - pq[1][1]) ** 2)
+                        pts = [a, b]
+                    piers.append(pts)
+                report['harbour'] = B.harbour(piers)
+            ops = B.done()
+            if not ops:
+                raise ValueError('Nothing was stood: none of it fitted, and the map has no piers over the water.')
+            _said('Putting it in the mod')
+            state = srv.edit('Landmarks and harbour', ops)['state']
+        return {'state': state, 'report': report}
+    return _start(work, kind='landmarks')
+
+
 def buildings_job(body, srv):
     """The game's buildings stood on the plots an OpenStreetMap file levelled (townbuild.py): one Undo."""
     srv.not_while_playing()
@@ -416,7 +571,9 @@ def buildings_job(body, srv):
             if not any(r.get('pad') for r in rows):
                 raise ValueError('There are no building plots on this world yet: lay an OpenStreetMap file with Buildings ticked first.')
             share = float(body.get('insides', townbuild.INSIDE_SHARE))
-            ops, report = townbuild.plan(srv.GD, srv.PR, w, rows, cat, int(body.get('seed', 1)), _said, insides=share)
+            squeeze = float(_side.get('compress') or 1.0)
+            ops, report = townbuild.plan(srv.GD, srv.PR, w, rows, cat, int(body.get('seed', 1)), _said, insides=share,
+                                         stretch=float(body['stretch']) if body.get('stretch') else (min(4.0, squeeze) if squeeze >= 1.5 else 1.0))
             if not report['buildings']:
                 if report['had_one']:
                     raise ValueError('Every plot with room for one already has its buildings%s.' % (
@@ -494,6 +651,10 @@ def post(path, body, srv):
         return {'job': osm_lay_job(body, srv)}
     if path == '/api/maps/buildings':
         return {'job': buildings_job(body, srv)}
+    if path == '/api/maps/landmarks':
+        return {'job': landmarks_job(body, srv)}
+    if path == '/api/maps/dress':
+        return {'job': dress_job(body, srv)}
     if path == '/api/maps/restore':
         with srv._lock:
             if not srv.PR or not os.path.isfile(os.path.join(_before(srv.PR.name), 'project.json')):

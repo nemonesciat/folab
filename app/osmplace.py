@@ -3,12 +3,15 @@ No towns or buildings are put up. All of it comes back as ops, so it's one Undo.
 
 The file's lat/lon goes through the height file's place on Earth to game units (the sidecar api_maps.py keeps). Lines are cut at the world's edge and thinned (a land point is 128 units: finer than that
 is noise here). Water goes first, then pads, then roads, each on what the one before left. Every height stays on a whole 8-unit step, worked out by spot, so cells still meet."""
+import collections
+import struct
 import math
 import random
 
 import elevation
 import land
 import landshape
+import navgen
 import roadgen
 
 CELL = 4096
@@ -161,6 +164,57 @@ def layout(data, side):
         x, y = geo.xy(w['pt'])
         if box[0] <= x <= box[2] and box[1] <= y <= box[3]:
             out['places'].append({'p': [x, y], 'name': w['name'], 'kind': w['kind']})
+    gap = float(side.get('road_gap') or 0)
+    if gap > 0:
+        before = len(out['roads'])
+        out['roads'] = sparse(out['roads'], gap)
+        out['roads_thinned'] = before - len(out['roads'])
+    return out
+
+
+SPARSE_SHARE = 0.6          # (a street goes when this much of it runs closer than the gap to streets already kept)
+SPARSE_STEP = 400.0
+
+
+def sparse(roads, gap):
+    """A street grid thinned for a world squeezed smaller than life, where roads keep their width and the blocks between
+    them don't: main roads all stay; of the rest, whole streets (the pieces of one name together) are taken longest first,
+    and one is kept only if most of it runs at least `gap` from every road kept before it. So the through streets stay and
+    every other side street goes, as the game's own towns have a few streets where the real one has many."""
+    cell = max(gap, 1.0)
+    kept_pts = collections.defaultdict(list)
+
+    def samples(line):
+        out = []
+        for (ax, ay), (bx, by) in zip(line, line[1:]):
+            L = math.hypot(bx - ax, by - ay)
+            n = max(1, int(L / SPARSE_STEP))
+            out += [(ax + (bx - ax) * (k + 0.5) / n, ay + (by - ay) * (k + 0.5) / n) for k in range(n)]
+        return out
+
+    def keep(road):
+        for x, y in samples(road['line']):
+            kept_pts[(int(x // cell), int(y // cell))].append((x, y))
+
+    def crowded(x, y):
+        cx, cy = int(x // cell), int(y // cell)
+        return any(math.hypot(px - x, py - y) < gap for dx in (-1, 0, 1) for dy in (-1, 0, 1) for px, py in kept_pts.get((cx + dx, cy + dy), ()))
+
+    out = []
+    streets = collections.defaultdict(list)
+    for n, r in enumerate(roads):
+        if r['class'] == 'major':
+            keep(r)
+            out.append(r)
+        else:
+            streets[r.get('name') or ('', n)].append(r)
+    for _name, parts in sorted(streets.items(), key=lambda kv: -sum(length(p['line']) for p in kv[1])):
+        pts = [p for part in parts for p in samples(part['line'])]
+        if pts and sum(1 for x, y in pts if crowded(x, y)) > SPARSE_SHARE * len(pts):
+            continue
+        for part in parts:
+            keep(part)
+            out.append(part)
     return out
 
 
@@ -406,6 +460,19 @@ def ops_for(gd, pr, world, lay, want, compress, seed=1, progress=None):
     for k, v in sorted(water.items()):
         if v > 0 and k in w.grid:
             ops.append({'op': 'water', 'cell': gd.key(w.grid[k]), 'h': round(v, 1)})
+            levels += 1
+    # a square dug under the world's own water level (a canal to the sea, a harbour basin) takes that water: a world made
+    # from a map files its dry squares with a level far underground (espwrite.dry), and digging doesn't change that
+    d = gd.fields(world).get('DNAM')
+    sea = struct.unpack_from('<f', d, 4)[0] if d and len(d) >= 8 else 0.0
+    own = {gd.key(c): k for k, c in w.grid.items()}
+    for ck in sorted(w.changed):
+        k = own.get(ck)
+        if k is None or (k in water and water[k] > 0) or min(w.over.land[ck]['h']) >= sea:
+            continue
+        have = navgen._water_of(gd, w.grid[k])
+        if have is None or have < sea - 1.0:
+            ops.append({'op': 'water', 'cell': ck, 'h': None})
             levels += 1
     layer = {'buildings': rows, 'places': [{'p': _round([p['p']])[0], 'name': p['name'], 'kind': p['kind']} for p in lay['places']],
              'bridges': [{'line': _round(b['line']), 'name': b['name'], 'kind': b['kind']} for b in lay['bridges']]}

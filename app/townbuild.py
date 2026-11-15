@@ -37,10 +37,11 @@ import kitindex
 import landshape
 import navbuild
 import navmesh
+import nif
 import recordio
 import roadgen
 
-FORMAT = 4              # (buildings.json's layout: a file with another number is made again)
+FORMAT = 5              # (buildings.json's layout: a file with another number is made again)
 MIN_SIDE, MAX_SIDE = 300, 3600
 DWELLING = re.compile(r'\\mobilehome[^\\]*\.nif$')   # (homes the game keeps with its vehicles, narrower than a building: trailer lots are full of them)
 MIN_HIGH, MAX_HIGH = 220, 1700
@@ -60,6 +61,7 @@ LANDMARK_PULL = 0.6       # (how much a plot that stands out prefers a landmark 
 VARIETY = 0.45            # (each building costs this much more for every time it's up already, by the square root)
 MAX_INSIDE_REFS = 900      # (a real place with more than this in it is too much to copy behind a building)
 CLEAR_BELOW = 400.0      # (the mod's own things smaller than this across are taken off a plot a building stands on)
+DRY = 8.0                # (ground lower than this is looked at for water over it)
 DOOR_LOCK = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}
 INSIDE_SHARE = 0.35        # (of ordinary buildings that have a real place behind them in the game, how many get one; plots that stand out always)
 MAX_INSIDES = 40           # (places made in one go: each needs a navmesh, a few seconds)
@@ -312,6 +314,12 @@ def survey(gd, progress=None):
         alone = sum(1 for u in uses if u[2]) / len(uses)
         if alone < ALONE:
             continue
+        try:
+            whole = solid(nif.mesh_from_nif(gd.read_file('meshes\\' + model)))
+        except Exception:
+            whole = 0.0
+        if whole < SOLID:
+            continue                            # (a facade or a bare frame: from some side there is nothing to see)
         mid, lo, hi = [], [], []
         for cell, r, _a, _m in uses:
             world = worlds[cell]
@@ -343,7 +351,7 @@ def survey(gd, progress=None):
                 insides.append(dict(ins, door=k))
         out.append({'key': gd.key(fid), 'edid': edid, 'model': model, 'box': [round(v, 1) for v in box], 'uses': len(uses), 'alone': round(alone, 2),
                     'family': family_of(edid), 'doors': doors, 'mid': round(mid[len(mid) // 2], 1), 'lo': round(min(lo), 1) if lo else 0.0,
-                    'hi': round(max(hi), 1) if hi else 0.0, 'insides': insides})
+                    'hi': round(max(hi), 1) if hi else 0.0, 'insides': insides, 'solid': round(whole, 2)})
     out.sort(key=lambda b: b['edid'].lower())
     return out
 
@@ -539,6 +547,10 @@ class World:
             for by in range(int(min(ys) // 1024), int(max(ys) // 1024) + 1):
                 self.bucket[(bx, by)].append(item)
 
+    def wet(self, x, y, g):
+        w = self.ground.water(x, y)
+        return w is not None and g < w
+
     def cell_at(self, x, y):
         c = self.grid.get((int(x // 4096), int(y // 4096)))
         return self.gd.key(c) if c is not None else None
@@ -571,12 +583,21 @@ def _family_for(row, area):
     return 'apartments'
 
 
-def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE):
+def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE, stretch=1.0):
     """(ops as one Undo, a report). rows: the marker layer's buildings. insides: the share of ordinary buildings that get a copy of a
     real place behind their door (0: none); report['made'] lists [(tag, family, the game's place, its doors' names)] for each, '$tag' naming the place in the ops."""
     rng = random.Random(seed)
     fits = [Fit(b) for b in cat]
     w = World(gd, pr, world, cat)
+    # In a world squeezed smaller than life the plots shrink and the game's buildings don't: stretch lets a building take
+    # that much more room than its plot (it still can't stand on a road or another building), and the plots that stand
+    # out, then the biggest, choose first, so fewer buildings go up than the map has, each at its real size.
+    stretch = max(1.0, float(stretch))
+    if stretch > 1.0:
+        def order(row):
+            _cx, _cy, _a, L, W = rect_of(row['ring']) if row.get('pad') else (0, 0, 0, 0, 0)
+            return (0 if is_poi(row, L * W) else 1, -(L * W))
+        rows = sorted(rows, key=order)
     if insides:
         prefix = re.sub(r'[^A-Za-z0-9]', '', gd.edid(world)) or 'Town'
         w.ins = Insides(gd, prefix, insides, seed=seed, taken=[recordio.field(r, 'EDID') for r in pr.records.values()])
@@ -629,11 +650,11 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE):
         _d, k0, fx, fy, front_len, depth = sides[0]
         poi = is_poi(row, L * W)
         rep['poi'] += poi
-        rows_done = _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, fams, used, row, poi)
+        rows_done = _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, fams, used, row, poi, stretch)
         if rows_done == 0:
             # (nothing fits facing the street: side-on, toward whichever of the other two sides is nearer a road, as a trailer on a narrow lot stands)
             _d, _k, fx, fy, front_len, depth = next(s for s in sides if (s[1] < 2) != (k0 < 2))
-            rows_done = _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, fams, used, row, poi)
+            rows_done = _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, fams, used, row, poi, stretch)
             rep['side_on'] += rows_done > 0
         if rows_done == 0:
             rep['nothing_fits'] += 1
@@ -646,6 +667,62 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE):
               'insides_capped': bool(w.ins and w.ins.left <= 0), 'side_on': rep['side_on'],
               'cell_xy': [list(xy) for xy in sorted(w.touched)]}
     return ops, report
+
+
+SOLID = 0.45               # (a building shows at least this much wall to someone standing on each of its four sides)
+SOLID_GRID = 20
+
+
+def solid(shapes):
+    """How much of a model a person sees as wall from its worst side: for each of the four sides, the share of the model's
+    outline, seen level from there, that outward-facing triangles fill (the game doesn't draw a wall from behind). A whole
+    building is near 1; a facade made to stand against others, or a ruin's bare frame, is near 0: from somewhere, it is
+    only lines, or nothing."""
+    lo, hi = [1e18] * 3, [-1e18] * 3
+    for sh in shapes:
+        p = sh['p']
+        for k in range(0, len(p), 3):
+            for a in range(3):
+                lo[a] = min(lo[a], p[k + a])
+                hi[a] = max(hi[a], p[k + a])
+    if hi[0] <= lo[0] or hi[1] <= lo[1] or hi[2] <= lo[2]:
+        return 0.0
+    G = SOLID_GRID
+    worst = 1.0
+    for axis, sign in ((0, 1), (0, -1), (1, 1), (1, -1)):
+        other = 1 - axis
+        seen = bytearray(G * G)
+        for sh in shapes:
+            if sh.get('alpha') == 'blend':
+                continue
+            p, idx, both = sh['p'], sh['i'], sh.get('double')
+            for k in range(0, len(idx) - 2, 3):
+                a, b, c = (p[3 * idx[k]:3 * idx[k] + 3], p[3 * idx[k + 1]:3 * idx[k + 1] + 3], p[3 * idx[k + 2]:3 * idx[k + 2] + 3])
+                u = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+                v = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+                n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2])[axis]
+                if not both and n * sign <= 0:
+                    continue                    # (its back is to the viewer on this side)
+                # its three corners on the side's grid; every square its box covers that its middle or a corner lies in
+                pts = [((q[other] - lo[other]) / (hi[other] - lo[other]) * G, (q[2] - lo[2]) / (hi[2] - lo[2]) * G) for q in (a, b, c)]
+                x0, x1 = max(0, int(min(q[0] for q in pts))), min(G - 1, int(max(q[0] for q in pts)))
+                y0, y1 = max(0, int(min(q[1] for q in pts))), min(G - 1, int(max(q[1] for q in pts)))
+                d = (pts[1][1] - pts[2][1]) * (pts[0][0] - pts[2][0]) + (pts[2][0] - pts[1][0]) * (pts[0][1] - pts[2][1])
+                if abs(d) < 1e-9:
+                    continue
+                for gy in range(y0, y1 + 1):
+                    for gx in range(x0, x1 + 1):
+                        if seen[gy * G + gx]:
+                            continue
+                        px, py = gx + 0.5, gy + 0.5
+                        w0 = ((pts[1][1] - pts[2][1]) * (px - pts[2][0]) + (pts[2][0] - pts[1][0]) * (py - pts[2][1])) / d
+                        w1 = ((pts[2][1] - pts[0][1]) * (px - pts[2][0]) + (pts[0][0] - pts[2][0]) * (py - pts[2][1])) / d
+                        if w0 >= -0.02 and w1 >= -0.02 and w0 + w1 <= 1.02:
+                            seen[gy * G + gx] = 1
+        # (the top fifth is left out: a pitched roof leaves the corners of its side empty and is no less a building)
+        rows = int(G * 0.8)
+        worst = min(worst, sum(seen[:rows * G]) / float(rows * G))
+    return worst
 
 
 def landmark(b):
@@ -672,17 +749,19 @@ def _cost(f, fam, want_w, want_d, last, used, rng, poi=False, word=None):
     return c + rng.uniform(0, 0.35)
 
 
-def _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, fams, used, row, poi=False):
+def _fill(fits, w, fam, cx, cy, fx, fy, front_len, depth, rng, ops, gone, rep, fams, used, row, poi=False, stretch=1.0):
     """Rows of buildings along the street side (fx, fy outward) of a plot, a second facing back if it's deep. Returns how many rows got any."""
     ax, ay = fy, -fx                          # (along the street)
     level = row['level']
     rows_got = 0
+    plot_depth = depth                        # (the row's front stays at the plot's own street side, however far back it may reach)
+    front_len, depth = front_len * stretch, depth * stretch
     spare = depth
     for facing in (1, -1):
         if spare < ROW_MIN:
             break
         sfx, sfy = fx * facing, fy * facing
-        edge = depth / 2 - SETBACK            # (the row's front, from the plot's middle, toward its street)
+        edge = plot_depth / 2 - SETBACK       # (the row's front, from the plot's middle, toward its street)
         max_d = spare * DEPTH_OVER + SLACK if facing == 1 else spare - GAP
         picked, left, last = [], front_len * WIDTH_OVER + SLACK, None
         while left >= ROW_MIN:
@@ -740,10 +819,10 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
         clear.append((ck, rk))
     b = f.b
     z = level - b['mid']
-    for x, y in fp:
+    for x, y in fp + [(ox, oy)]:
         g = w.ground.at(x, y)
-        if g is None or not (b['lo'] - GROUND_OFF <= g - z <= b['hi'] + GROUND_OFF):
-            rep['steep'] += 1
+        if g is None or not (b['lo'] - GROUND_OFF <= g - z <= b['hi'] + GROUND_OFF) or (g < DRY and w.wet(x, y, g)):
+            rep['steep'] += 1                   # (or a corner of it in the water)
             return False
     ck = w.cell_at(ox, oy)
     if ck is None:
