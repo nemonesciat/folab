@@ -149,3 +149,27 @@ close = sum(1 for a in ferns if any(a is not b and math.hypot(a[0] - b[0], a[1] 
 check('small plants stand in clumps', ferns and close >= len(ferns) * 0.5, (close, len(ferns)))
 pops, prep = osmdress.ops(gd, project.Project.create('Grey'), world, Cover('paved'), [], 3)
 check('a paved place has weeds in its cracks, far fewer', 0 < prep['plants'] < wrep['plants'] * 0.3, (prep['plants'], wrep['plants']))
+
+# ---------- what lies on a slope ----------
+import navgen  # noqa: E402
+
+
+class Hill:
+    def at(self, px, py):
+        return 0.3 * px + 0.1 * py
+
+
+for yaw in (0.0, 0.7, 2.9):
+    R = navgen._turn(*osmdress.lie(Hill(), 'RubblePile02', 0.0, 0.0, yaw))
+    up = (R[0][2], R[1][2], R[2][2])
+    n = math.sqrt(0.3 ** 2 + 0.1 ** 2 + 1)
+    check('rubble on a hillside lies along it, whichever way it faces (%.1f)' % yaw, all(abs(u - v) < 0.01 for u, v in zip(up, (-0.3 / n, -0.1 / n, 1 / n))), [round(v, 3) for v in up])
+check('a barrel stands upright there', osmdress.lie(Hill(), 'Barrel01', 0.0, 0.0, 1.0) == (0.0, 0.0, 1.0))
+
+
+class Level:
+    def at(self, px, py):
+        return 100.0
+
+
+check('and on level ground nothing is tilted', osmdress.lie(Level(), 'RubblePile02', 0.0, 0.0, 1.0) == (0.0, 0.0, 1.0))

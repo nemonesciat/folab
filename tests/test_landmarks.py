@@ -98,7 +98,7 @@ hb = B3.harbour([[(lx, ly), (lx + 2560, ly)], [(lx, ly + 100), (lx + 2560, ly + 
 level = g0.water(lx, ly)
 docks = [o for o in B3.ops if gd.edid(gd.from_key(o['base'])) == landmarks.DOCK]
 check('a pier is dock pieces a step apart along it', hb['piers'] == 2 and 9 <= len([d for d in docks if abs(d['p'][1] - ly) < 1]) <= 11, hb)
-check('as high over the water as the game has them', all(abs(d['p'][2] - level - landmarks.DOCK_UP) < 0.2 for d in docks))
+check('their planking just over the water, where a shore is', all(abs(d['p'][2] - level - landmarks.DOCK_UP) < 0.2 for d in docks))
 check('a pier too near another is left out', not any(abs(d['p'][1] - ly - 100) < 1 for d in docks))
 short = [d for d in docks if abs(d['p'][1] - ly - 1500) < 1]
 check('a short one is built long enough to be a pier', len(short) >= 6, len(short))
@@ -182,3 +182,24 @@ doors = [o for o in B5.ops if o['op'] == 'add' and gd.forms[gd.from_key(o['base'
 check('a door with nothing behind it is locked for good', ('DOOR' not in tags or doors) and all(o.get('extra', {}).get('props', {}).get('lock', {}).get('level') == 255 for o in doors), len(doors))
 landmarks.know(None)
 check('untold, it is as before', len(landmarks.lift(gd, 'grandhotel')['pieces']) == before)
+
+# ---------- a pier comes ashore ----------
+class Shore:
+    """Sea west of x = 0, a low beach east of it that goes on for ever."""
+    def at(self, px, py):
+        return -200.0 if px < 0 else 20.0
+
+    def water(self, px, py):
+        return 0.0
+
+
+B6 = landmarks.Batch(gd, project.Project.create('Shore'), world)
+B6.ground = Shore()
+B6.grid = type('Everywhere', (dict,), {'get': lambda self, k, d=None: next(iter(grid.values()))})()
+hs = B6.harbour([[(-2048.0, 0.0), (4096.0, 0.0)]])
+sd = [o for o in B6.ops if gd.edid(gd.from_key(o['base'])) == landmarks.DOCK]
+py_ = [o for o in B6.ops if gd.edid(gd.from_key(o['base'])) == landmarks.PYLON[0]]
+check('its planking is at the height of a low shore', all(abs(o['p'][2] + 32 - landmarks.DECK) < 0.2 for o in sd) and 16 <= landmarks.DECK <= 40)
+check('it runs up the beach a couple of pieces and stops, however far the low ground goes', hs.get('ashore') == landmarks.LANDING
+      and max(o['p'][0] for o in sd) < landmarks.DOCK_STEP * (landmarks.LANDING + 0.6), (hs.get('ashore'), round(max(o['p'][0] for o in sd))))
+check('with posts only under what is over the water', py_ and all(o['p'][0] < 0 for o in py_))

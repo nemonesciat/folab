@@ -53,8 +53,15 @@ NUDGE = 3500.0          # (how far off the spot asked for it may be moved to sta
 ROAD_HALF = 330.0
 DOCK = 'PotDockBg4way01'
 DOCK_STEP = 256.0
-DOCK_UP = 104.0         # (a dock piece over the water, and a pylon under it, as the game has them at Lake Mead)
-PYLON = ('PotDockPylon01', -296.0)
+# A dock piece's planking is 32 over its origin, its legs 224 under. At Lake Mead the game stands them 104 over the water
+# (the lake has fallen): by the sea that left a deck a man's height over the beach with no way up, ending in the air
+# where the water began. Here the planking is DECK over the water, about where the shore's ground is, and a pier runs
+# up the beach LANDING pieces past the water's edge so its end is in the sand.
+DECK = 28.0
+DOCK_UP = DECK - 32.0
+DECK_ON = 4.0           # (ground higher than this under the planking: the pier has come ashore, it ends)
+LANDING = 2
+PYLON = ('PotDockPylon01', DOCK_UP - 400.0)
 PIER_APART = 760.0      # (a real marina's fingers are a boat apart; squeezed, most of them go)
 PIER_LONG = 1792.0      # (and the ones kept are built at least this long, or a squeezed pier is two steps of planking)
 DOCK_LIMIT = 1400
@@ -458,15 +465,25 @@ class Batch:
                 if S < DOCK_STEP / 2:
                     continue
                 yaw = math.atan2(bx - ax, by - ay)
+                spots = []
                 for k in range(int(S // DOCK_STEP) + 1):
                     t = min(1.0, (k + 0.5) * DOCK_STEP / S)
                     x, y = ax + (bx - ax) * t, ay + (by - ay) * t
-                    g, w = self.ground.at(x, y), self.ground.water(x, y)
-                    if g is None or w is None or g > w - 24 or any(math.hypot(x - a, y - b) < DOCK_STEP * 0.8 for a, b, _y in laid[-40:]):
+                    spots.append((x, y, self.ground.at(x, y), self.ground.water(x, y)))
+                afloat = [g is not None and w is not None and g <= w - 24 for _x, _y, g, w in spots]
+                for k, (x, y, g, w) in enumerate(spots):
+                    if g is None or w is None or any(math.hypot(x - a, y - b) < DOCK_STEP * 0.8 for a, b, _y in laid[-40:]):
+                        continue
+                    # (over the water, or on the beach within a couple of pieces of it and still under the planking)
+                    ashore = not afloat[k] and g <= w + DECK - DECK_ON and any(afloat[max(0, k - LANDING):k + LANDING + 1])
+                    if not afloat[k] and not ashore:
                         continue
                     if self.add(dock, x, y, w + DOCK_UP, 0.0, 0.0, yaw, 1.0):
                         laid.append((x, y, yaw))
                         rep['dock'] += 1
+                        if ashore:
+                            rep['ashore'] = rep.get('ashore', 0) + 1
+                            continue
                         if pylon and k % 2 == 0:
                             self.add(pylon, x, y, w + PYLON[1], 0.0, 0.0, yaw, 1.0)
                         wet.append((x, y, yaw, w, g))

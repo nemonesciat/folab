@@ -492,7 +492,62 @@ def copied_navmesh(gd, pr, src, ckey, door_keys):
     return data
 
 
-def _arrive_out(inside, ox, oy, z, rz):
+# A hotel on the map is a hotel inside, whatever stands for it outside: a small building's own interior behind the door
+# of the Hyatt was a corner shop. So a plot the map calls a hotel (its kind, or its name) gets one of the game's big
+# hotel and casino floors behind its door, the ones with a single way out to the street.
+GRAND = {'hotel': ('VikkiAndVance', 'BisonSteve01', 'MonteCarloSuitesInterior', 'FreesideAtomicWrangler', 'JacobstownLodge', '2CCampGolfResort')}
+GRAND_KIND = {'hotel': 'hotel', 'motel': 'hotel', 'hostel': 'hotel', 'guest_house': 'hotel', 'resort': 'hotel'}
+GRAND_NAME = re.compile(r'\b(hotel|inn|resort|suites?|motel|lodge|hostel|hyatt|hilton|marriott|sheraton|westin|outrigger)\b', re.I)
+GRAND_MOST = 12             # (of the places made in one go, how many may be these: the rest stay for ordinary buildings)
+GRAND_OUT = 110.0           # (how far outside the door one arrives)
+_grand = {}
+
+
+def grand_kind(row):
+    """What big place a plot calls for ('hotel'), or None."""
+    if not row:
+        return None
+    k = GRAND_KIND.get((row.get('kind') or '').lower())
+    if not k and GRAND_NAME.search(row.get('name') or ''):
+        k = 'hotel'
+    return k
+
+
+def grand_inside(gd, edid):
+    """One of the game's interiors by editor ID, as a building may take a copy of it (the same form as a building's own
+    `insides`, but with no arrival outside: that is worked out from whichever building's door it goes behind), or None."""
+    key = (id(gd), edid)
+    if key not in _grand:
+        got = None
+        cell = next((c for c in gd.interiors if (gd.edid(c) or '').lower() == edid.lower()), None)
+        for r in (gd.refs(cell) if cell is not None else ()):
+            if r['type'] != 'REFR' or not r.get('leads') or r['base'] not in gd.forms or gd.forms[r['base']][1].tag != 'DOOR':
+                continue
+            t = _tel(gd, r['ref'])
+            if not t or gd.ref_cell.get(t[0]) in gd.interiors or gd.ref_cell.get(t[0]) is None:
+                continue                        # (the door that leads out to the street, not one to another floor)
+            back = _tel(gd, t[0])
+            arrive = back[1] if back and back[0] == r['ref'] else list(r['pos']) + list(r['rot'])
+            got = {'cell': gd.key(cell), 'exit': gd.key(r['ref']), 'things': len(gd.cell_refs.get(cell, {})), 'arrive_in': [round(v, 4) for v in arrive], 'door': 0, 'grand': edid}
+            break
+        _grand[key] = got
+    return _grand[key]
+
+
+def _arrive_out(inside, ox, oy, z, rz, b=None):
+    if 'arrive_out' not in inside:
+        # (a place that isn't this building's own: out through the door, a step clear of the wall it is in, facing away)
+        d = b['doors'][inside['door']]
+        x0, y0, _z0, x1, y1, _z1 = b['box']
+        vx, vy = d['x'] - (x0 + x1) / 2, d['y'] - (y0 + y1) / 2
+        if abs(vx) / max(1.0, (x1 - x0) / 2) > abs(vy) / max(1.0, (y1 - y0) / 2):
+            ux, uy = (1.0 if vx > 0 else -1.0), 0.0
+            lx, ly = (x1 if vx > 0 else x0) + ux * GRAND_OUT, d['y']
+        else:
+            ux, uy = 0.0, (1.0 if vy > 0 else -1.0)
+            lx, ly = d['x'], (y1 if vy > 0 else y0) + uy * GRAND_OUT
+        dx, dy = turn(lx, ly, rz)
+        return [round(ox + dx, 2), round(oy + dy, 2), round(z + b['mid'] + 8.0, 2), 0.0, 0.0, round((rz + math.atan2(ux, uy)) % math.tau, 4)]
     p = inside['arrive_out']
     dx, dy = turn(p[0], p[1], rz)
     return [round(ox + dx, 2), round(oy + dy, 2), round(z + p[2], 2), p[3], p[4], round((rz + p[5]) % math.tau, 4)]
@@ -894,14 +949,14 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
         if (int(x // 4096), int(y // 4096)) in w.grid:
             w.touched.add((int(x // 4096), int(y // 4096)))
     rep['buildings'] += 1
-    inside = w.ins.pick(b, poi) if w.ins else None
+    inside = w.ins.pick(b, poi, row) if w.ins else None
     for k, d in enumerate(b['doors']):
         dx, dy = turn(d['x'], d['y'], rz)
         dck = w.cell_at(ox + dx, oy + dy) or ck
         o = {'op': 'add', 'cell': dck, 'base': d['base'], 'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)], 's': 1}
         rep['doors'] += 1
         if inside and k == inside['door']:
-            ops.extend(w.ins.make(inside, b, row, o, dck, _arrive_out(inside, ox, oy, z, rz)))
+            ops.extend(w.ins.make(inside, b, row, o, dck, _arrive_out(inside, ox, oy, z, rz, b)))
         else:
             o['extra'] = DOOR_LOCK
             ops.append(o)
@@ -923,13 +978,22 @@ class Insides:
         self.gd, self.prefix, self.share, self.left = gd, prefix, share, most
         self.rng = random.Random(seed * 7919 + 1)
         self.used = collections.Counter()
+        self.grand = set()                       # (the cells of the big places: GRAND)
         self.tags = []                           # (what was made: [(tag, family)])
         self.taken = {e.lower() for e in taken}
         self.n = collections.Counter()
         self.things = 0
 
-    def pick(self, b, poi):
-        """One of the places the game has behind this building, or None: always on a plot that stands out, else by share."""
+    def pick(self, b, poi, row=None):
+        """One of the places the game has behind this building, or None: always on a plot that stands out, else by share.
+        A plot that calls for a big place (a hotel) gets one of those, whatever the building."""
+        what = grand_kind(row)
+        if what and self.left > 0 and b['doors'] and sum(1 for c in self.used.elements() if c in self.grand) < GRAND_MOST:
+            big = [g for g in (grand_inside(self.gd, e) for e in GRAND[what]) if g]
+            if big:
+                self.grand |= {i['cell'] for i in big}
+                least = min(self.used[i['cell']] for i in big)
+                return self.rng.choice([i for i in big if self.used[i['cell']] == least])
         if not b.get('insides') or self.left <= 0 or not b['doors']:
             return None
         if not poi and self.rng.random() >= self.share:

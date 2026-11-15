@@ -255,6 +255,22 @@ for pk in places:
 check('every place\'s way out leads to its building\'s door and back, that door unlocked', bad_link == 0)
 check('you arrive outside by the building\'s door (%d of %d) and inside by the way out (%d)' % (near_out, len(places), near_in), near_out == near_in == len(places))
 check('nothing of the game\'s story is copied in: no people, keys, notes, terminals or scripted things', bad_thing == 0)
+# ---------- a hotel is a hotel inside ----------
+check('a plot is a hotel by its kind or by its name', townbuild.grand_kind({'kind': 'hotel'}) == 'hotel' and townbuild.grand_kind({'kind': 'yes', 'name': 'Hyatt Inn'}) == 'hotel'
+      and townbuild.grand_kind({'kind': 'yes', 'name': 'Winning Ways'}) is None and townbuild.grand_kind({'kind': 'retail', 'name': ''}) is None)
+big = [townbuild.grand_inside(gd, e) for e in townbuild.GRAND['hotel']]
+check('the big hotel floors of the game are found, each with its way out to the street', all(big) and all(gd.ref_cell[gd.from_key(g['exit'])] == gd.from_key(g['cell']) for g in big))
+ins = townbuild.Insides(gd, 'FOLabT', share=0.0, most=5, seed=1)
+small = next(b for b in cat.values() if b['doors'] and b['family'] == 'shop')
+g = ins.pick(small, False, {'kind': 'yes', 'name': 'Hyatt Inn'})
+check('a hotel gets one whatever stands for it, though no ordinary building gets a place', bool(g) and bool(g.get('grand')) and ins.pick(small, False, {'kind': 'yes', 'name': 'Corner Shop'}) is None)
+out = townbuild._arrive_out(g, 1000.0, 2000.0, 50.0, 0.0, small)
+d0, bx = small['doors'][0], small['box']
+lx, ly = out[0] - 1000.0, out[1] - 2000.0
+check('one comes out a step clear of the wall its door is in', not (bx[0] <= lx <= bx[3] and bx[1] <= ly <= bx[4]) and math.hypot(lx - d0['x'], ly - d0['y']) < 500
+      and abs(out[2] - (50.0 + small['mid'] + 8)) < 0.01)
+ops_, kept_, _doors = townbuild.inside_ops(gd, g, 'hh', 'FOLabHotel', 'Hyatt Inn')
+check('copied behind the door it is a big place, named as the map names it', kept_ > 300 and any(o.get('op') == 'record_new' or o.get('name') == 'hh' for o in ops_))
 two_way = next(((b, i) for b in cat.values() for i in b['insides'] if sum(1 for r in gd.refs(gd.from_key(i['cell'])) if r['leads']) > 1), None)
 if two_way:
     ops_, _n, _doors = townbuild.inside_ops(gd, two_way[1], 'tt', 'FOLabCheck', 'Check')

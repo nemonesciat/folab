@@ -6,6 +6,7 @@ ID; one the game doesn't have is left out. Returned as ops, to go in as one Undo
 Nothing is put inside a building's plot, on a road that isn't meant for it, or under water (but for the sea bed's own)."""
 import math
 import random
+import re
 
 import roadgen
 
@@ -44,34 +45,51 @@ GROUND = {
 # plants, the lake's water plants in the shallows; some of it can be picked. Things in CLUMPS come several together.
 PLANTS = {
     'sand': (8.0, [('NVQueenPalm01', 6, 0.9, 1.4, 4), ('NVDatePalm01', 2, 0.9, 1.3, 4), ('NVDatePalm02', 2, 0.9, 1.3, 4), ('NVDatePalm03', 2, 0.9, 1.3, 4),
-                   ('NVSagoPalm01', 3, 0.8, 1.4, 2), ('NVGoldfingerBanana', 2, 1.0, 1.6, 2), ('v22Grass', 3, 1.5, 3.0, 2), ('BuffaloGourdPickable', 1, 0.8, 1.2, 0)]),
-    'grass': (26.0, [('v22Grass', 8, 1.5, 3.5, 2), ('v22Fern', 6, 1.5, 4.0, 2), ('NVGoldfingerBanana', 5, 1.0, 2.0, 2), ('NVQueenPalm01', 3, 0.9, 1.5, 4),
+                   ('NVSagoPalm01', 3, 0.8, 1.4, 2), ('NVGoldfingerBanana', 2, 1.0, 1.6, 2), ('v22Grass', 3, 1.5, 3.0, 2), ('BuffaloGourdPickable', 1, 0.8, 1.2, 0),
+                   ('NVAloeVera', 2, 1.0, 2.0, 0), ('NVFrailejon', 1, 1.0, 1.8, 0)]),
+    'grass': (60.0, [('v22Grass', 9, 1.5, 3.5, 2), ('v22Fern', 7, 1.5, 4.0, 2), ('NVGoldfingerBanana', 5, 1.0, 2.0, 2), ('NVQueenPalm01', 3, 0.9, 1.5, 4),
                      ('NVDatePalm01', 1, 0.9, 1.3, 4), ('NVDatePalm02', 1, 0.9, 1.3, 4), ('NVSagoPalm01', 2, 0.8, 1.5, 2), ('NVSagoPalm02', 2, 0.8, 1.5, 2),
-                     ('NVDLC02TreeA1', 1, 1.2, 2.2, 6), ('NVDLC02TreeA2', 1, 1.2, 2.2, 6), ('NVDLC02TreeA3', 1, 1.2, 2.2, 6), ('NVDLC02TreeA5', 1, 1.2, 2.2, 6), ('NVDLC02TreeB1', 1, 1.2, 2.2, 6), ('NVDLC02TreeF2', 1, 1.2, 2.2, 6), ('NVDLC02TreeF3', 1, 1.2, 2.2, 6),
-                     ('NVDLC02BushA01LeavesOnly', 4, 1.0, 1.8, 4), ('EuonymusBush01', 2, 0.8, 1.4, 2), ('NVFalseSpireaPlant', 3, 1.0, 2.0, 2),
-                     ('NVDLC02SacredDaturaPlant', 2, 1.5, 3.0, 0), ('BananaYuccaPickable', 1, 1.0, 1.5, 0), ('BrocFlowerPlant', 1, 1.0, 1.6, 0),
-                     ('XanderRootPlant', 1, 1.0, 1.6, 0), ('CaveFungusPlant', 1, 2.0, 4.0, 0)]),
-    'trees': (44.0, [('NVDLC02TreeA1', 3, 1.5, 3.0, 6), ('NVDLC02TreeA2', 3, 1.5, 3.0, 6), ('NVDLC02TreeA3', 3, 1.5, 3.0, 6), ('NVDLC02TreeA5', 3, 1.5, 3.0, 6), ('NVDLC02TreeB1', 3, 1.5, 3.0, 6), ('NVDLC02TreeF2', 3, 1.5, 3.0, 6), ('NVDLC02TreeF3', 3, 1.5, 3.0, 6),
-                     ('WhiteOak01', 1, 0.5, 0.9, 10), ('NVQueenPalm01', 3, 1.0, 1.6, 4), ('NVDatePalm01', 2, 1.0, 1.4, 4), ('NVGoldfingerBanana', 6, 1.2, 2.4, 2),
-                     ('v22Fern', 8, 2.0, 5.0, 2), ('v22Grass', 6, 2.0, 4.0, 2), ('NVDLC02BushA01LeavesOnly', 6, 1.0, 2.0, 4), ('NVDLC02BushEVA01LeavesOnly', 3, 1.0, 2.0, 4),
+                     ('NVDLC02TreeA1', 1, 1.2, 2.2, 6), ('NVDLC02TreeA2', 1, 1.2, 2.2, 6), ('NVDLC02TreeA3', 1, 1.2, 2.2, 6), ('NVDLC02TreeA4', 1, 1.2, 2.2, 6), ('NVDLC02TreeA5', 1, 1.2, 2.2, 6), ('NVDLC02TreeA6', 1, 1.2, 2.2, 6), ('NVDLC02TreeB1', 1, 1.2, 2.2, 6), ('NVDLC02TreeB2', 1, 1.2, 2.2, 6), ('NVDLC02TreeB3', 1, 1.2, 2.2, 6), ('NVDLC02TreeF2', 1, 1.2, 2.2, 6), ('NVDLC02TreeF3', 1, 1.2, 2.2, 6), ('NVDLC02TreeG2', 1, 1.2, 2.2, 6), ('NVDLC02TreeG3', 1, 1.2, 2.2, 6), ('NVDLC02TreeI2', 1, 1.2, 2.2, 6), ('NVDLC02TreeI3', 1, 1.2, 2.2, 6),
+                     ('NVFicus01', 2, 0.8, 1.4, 6), ('NVFicus02', 2, 0.8, 1.4, 6), ('NVSassafras01', 2, 0.8, 1.4, 6), ('NVSassafras02', 2, 0.8, 1.4, 6), ('NVGreyBirch01', 2, 0.8, 1.4, 6), ('NVGreyBirch02', 2, 0.8, 1.4, 6),
+                     ('NVDLC02BushA01LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushA02LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushEVA01LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushEVA02LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushMA01LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushMA02LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC03Leaves', 2, 1.0, 1.8, 4), ('NVDLC03LeavesLow', 2, 1.0, 1.8, 4),
+                     ('NVDLC03VinesA', 1, 0.5, 1.0, 8), ('NVDLC03VinesB', 1, 0.5, 1.0, 8), ('NVDLC03VinesC', 1, 0.5, 1.0, 8),
+                     ('NVFungusStalk01', 1, 2.0, 5.0, 0), ('NVFungusStalk02', 1, 2.0, 5.0, 0), ('NVFungusStalk03', 1, 2.0, 5.0, 0), ('NVFungusStalk04', 1, 2.0, 5.0, 0),
+                     ('NVDLC02SacredDaturaPlant', 1, 1.2, 2.2, 0), ('BananaYuccaPickable', 1, 1.2, 2.2, 0), ('BrocFlowerPlant', 1, 1.2, 2.2, 0), ('XanderRootPlant', 1, 1.2, 2.2, 0), ('HoneyMesquitePickable', 1, 1.2, 2.2, 0), ('CoyoteTobaccoPickable', 1, 1.2, 2.2, 0), ('JalapenoPickable', 1, 1.2, 2.2, 0),
+                     ('EuonymusBush01', 2, 0.8, 1.4, 2), ('NVFalseSpireaPlant', 3, 1.0, 2.0, 2), ('NVAloeVera', 2, 1.0, 2.2, 0), ('NVFrailejon', 2, 1.0, 2.0, 0),
+                     ('NVItalianCypress01', 1, 0.9, 1.5, 4), ('NVItalianCypress02', 1, 0.9, 1.5, 4), ('CaveFungusPlant', 1, 2.0, 4.0, 0)]),
+    'trees': (80.0, [('NVDLC02TreeA1', 3, 1.5, 3.0, 6), ('NVDLC02TreeA2', 3, 1.5, 3.0, 6), ('NVDLC02TreeA3', 3, 1.5, 3.0, 6), ('NVDLC02TreeA4', 3, 1.5, 3.0, 6), ('NVDLC02TreeA5', 3, 1.5, 3.0, 6), ('NVDLC02TreeA6', 3, 1.5, 3.0, 6), ('NVDLC02TreeB1', 3, 1.5, 3.0, 6), ('NVDLC02TreeB2', 3, 1.5, 3.0, 6), ('NVDLC02TreeB3', 3, 1.5, 3.0, 6), ('NVDLC02TreeF2', 3, 1.5, 3.0, 6), ('NVDLC02TreeF3', 3, 1.5, 3.0, 6), ('NVDLC02TreeG2', 3, 1.5, 3.0, 6), ('NVDLC02TreeG3', 3, 1.5, 3.0, 6), ('NVDLC02TreeI2', 3, 1.5, 3.0, 6), ('NVDLC02TreeI3', 3, 1.5, 3.0, 6),
+                     ('NVFicus01', 4, 0.9, 1.6, 6), ('NVFicus02', 4, 0.9, 1.6, 6), ('NVSassafras01', 4, 0.9, 1.6, 6), ('NVSassafras02', 4, 0.9, 1.6, 6), ('NVGreyBirch01', 4, 0.9, 1.6, 6), ('NVGreyBirch02', 4, 0.9, 1.6, 6),
+                     ('NVDLC02BushA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushEVA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushEVA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushMA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushMA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC03Leaves', 3, 1.0, 2.0, 4), ('NVDLC03LeavesLow', 3, 1.0, 2.0, 4),
+                     ('NVDLC03VinesA', 2, 0.6, 1.2, 8), ('NVDLC03VinesB', 2, 0.6, 1.2, 8), ('NVDLC03VinesC', 2, 0.6, 1.2, 8),
+                     ('NVFungusStalk01', 2, 2.5, 6.0, 0), ('NVFungusStalk02', 2, 2.5, 6.0, 0), ('NVFungusStalk03', 2, 2.5, 6.0, 0), ('NVFungusStalk04', 2, 2.5, 6.0, 0),
+                     ('WhiteOak01', 1, 0.5, 0.9, 10), ('NVDLC03WestJuniperLOW', 2, 0.8, 1.4, 6), ('NVQueenPalm01', 3, 1.0, 1.6, 4), ('NVDatePalm01', 2, 1.0, 1.4, 4),
+                     ('NVGoldfingerBanana', 6, 1.2, 2.4, 2), ('v22Fern', 8, 2.0, 5.0, 2), ('v22Grass', 6, 2.0, 4.0, 2),
                      ('CaveFungusPlant', 2, 2.0, 4.0, 0), ('NVDLC02SacredDaturaPlant', 2, 1.5, 3.0, 0)]),
-    'golf': (9.0, [('v22Grass', 6, 1.5, 3.0, 2), ('NVQueenPalm01', 3, 1.0, 1.4, 4), ('NVGoldfingerBanana', 2, 1.0, 1.8, 2), ('EuonymusBush01', 2, 0.9, 1.4, 2),
-                   ('v22Fern', 2, 1.5, 3.0, 2), ('NVSagoPalm01', 2, 0.9, 1.3, 2)]),
-    'yard': (16.0, [('v22Grass', 6, 1.0, 2.5, 2), ('v22Fern', 3, 1.0, 3.0, 2), ('NVGoldfingerBanana', 3, 1.0, 1.8, 2), ('NVSagoPalm01', 2, 0.8, 1.3, 2),
-                   ('NVSagoPalm02', 2, 0.8, 1.3, 2), ('EuonymusBush01', 3, 0.7, 1.3, 2), ('NVDLC02BushA01LeavesOnly', 2, 0.8, 1.4, 4),
-                   ('NVDLC02SacredDaturaPlant', 1, 1.2, 2.0, 0), ('BuffaloGourdPickable', 1, 0.8, 1.2, 0), ('NVDatePalm01', 1, 0.9, 1.2, 4)]),
-    'paved': (6.0, [('v22Grass', 6, 1.0, 2.0, 2), ('v22Fern', 2, 1.0, 2.0, 2), ('NVFalseSpireaPlant', 2, 0.8, 1.4, 2)]),
-    'scrub': (14.0, [('CreosoteBushSm', 6, 0.8, 1.4, 2), ('CreosoteBushLg', 3, 0.8, 1.3, 2), ('YuccaANV', 2, 0.8, 1.3, 2), ('YuccaBNV', 2, 0.8, 1.3, 2),
+    'golf': (24.0, [('v22Grass', 6, 1.5, 3.0, 2), ('NVQueenPalm01', 3, 1.0, 1.4, 4), ('NVGoldfingerBanana', 2, 1.0, 1.8, 2), ('EuonymusBush01', 2, 0.9, 1.4, 2),
+                    ('v22Fern', 3, 1.5, 3.0, 2), ('NVSagoPalm01', 2, 0.9, 1.3, 2), ('NVItalianCypress01', 2, 0.9, 1.5, 4), ('NVItalianCypress02', 2, 0.9, 1.5, 4),
+                    ('NVFicus01', 1, 0.8, 1.3, 6), ('NVFicus02', 1, 0.8, 1.3, 6), ('NVSassafras01', 1, 0.8, 1.3, 6), ('NVSassafras02', 1, 0.8, 1.3, 6),
+                    ('NVDLC02BushA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushA02LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA02LeavesOnly', 1, 0.8, 1.5, 4)]),
+    'yard': (22.0, [('v22Grass', 6, 1.0, 2.5, 2), ('v22Fern', 3, 1.0, 3.0, 2), ('NVGoldfingerBanana', 3, 1.0, 1.8, 2), ('NVSagoPalm01', 2, 0.8, 1.3, 2),
+                    ('NVSagoPalm02', 2, 0.8, 1.3, 2), ('EuonymusBush01', 3, 0.7, 1.3, 2), ('NVDatePalm01', 1, 0.9, 1.2, 4),
+                    ('NVDLC02BushA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushA02LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA02LeavesOnly', 1, 0.8, 1.5, 4),
+                    ('NVDLC02SacredDaturaPlant', 1, 1.2, 2.2, 0), ('BananaYuccaPickable', 1, 1.2, 2.2, 0), ('BrocFlowerPlant', 1, 1.2, 2.2, 0), ('XanderRootPlant', 1, 1.2, 2.2, 0), ('HoneyMesquitePickable', 1, 1.2, 2.2, 0), ('CoyoteTobaccoPickable', 1, 1.2, 2.2, 0), ('JalapenoPickable', 1, 1.2, 2.2, 0),
+                    ('BuffaloGourdPickable', 1, 0.8, 1.2, 0), ('NVFicus01', 1, 0.8, 1.3, 6), ('NVFicus02', 1, 0.8, 1.3, 6), ('NVItalianCypress01', 1, 0.9, 1.3, 4),
+                    ('NVAloeVera', 2, 1.0, 1.8, 0), ('MaizeHealthyPGroup1', 1, 1.0, 1.4, 0), ('NVDLC03VinesC', 1, 0.5, 0.9, 6), ('NVFungusStalk01', 1, 2.0, 4.0, 0)]),
+    'paved': (6.0, [('v22Grass', 6, 1.0, 2.0, 2), ('v22Fern', 2, 1.0, 2.0, 2), ('NVFalseSpireaPlant', 2, 0.8, 1.4, 2), ('NVAloeVera', 1, 0.8, 1.4, 0)]),
+    'scrub': (20.0, [('CreosoteBushSm', 6, 0.8, 1.4, 2), ('CreosoteBushLg', 3, 0.8, 1.3, 2), ('YuccaANV', 2, 0.8, 1.3, 2), ('YuccaBNV', 2, 0.8, 1.3, 2),
                      ('YuccaCNV', 2, 0.8, 1.3, 2), ('NVbarrelcactus02', 2, 0.8, 1.4, 2), ('pricklypearcactus03', 2, 0.8, 1.3, 2), ('NVFalseSpireaPlant', 3, 1.0, 1.8, 2),
-                     ('nevadaagave02', 2, 1.0, 2.0, 0), ('BananaYuccaPickable', 1, 1.0, 1.4, 0), ('v22Fern', 2, 1.5, 3.0, 2)]),
+                     ('nevadaagave02', 2, 1.0, 2.0, 0), ('BananaYuccaPickable', 1, 1.0, 1.4, 0), ('v22Fern', 2, 1.5, 3.0, 2), ('NVSagebrush', 5, 0.8, 1.5, 2),
+                     ('NVAloeVera', 2, 1.0, 2.0, 0), ('NVFrailejon', 2, 1.0, 1.8, 0), ('NVDLC03WestJuniperLOW', 1, 0.7, 1.2, 6), ('HoneyMesquitePickable', 1, 1.0, 1.5, 0)]),
     'seabed': (6.0, [('NVSeaPlant01', 5, 1.0, 2.5, 0), ('NVSeaPlant02', 5, 1.0, 2.5, 0)]),
 }
-CLUMPS = ('v22grass', 'v22fern', 'nvdlc02busha01leavesonly', 'nvdlc02busheva01leavesonly', 'nvdlc02sacreddaturaplant', 'cavefungusplant', 'nvseaplant01',
-          'nvseaplant02', 'nvgoldfingerbanana', 'creosotebushsm', 'nvfalsespireaplant', 'euonymusbush01')
+CLUMPS = ('v22grass', 'v22fern', 'nvdlc02busha01leavesonly', 'nvdlc02busha02leavesonly', 'nvdlc02busheva01leavesonly', 'nvdlc02busheva02leavesonly',
+          'nvdlc02bushma01leavesonly', 'nvdlc02bushma02leavesonly', 'nvdlc03leaves', 'nvdlc03leaveslow', 'nvdlc02sacreddaturaplant', 'cavefungusplant',
+          'nvseaplant01', 'nvseaplant02', 'nvgoldfingerbanana', 'creosotebushsm', 'nvfalsespireaplant', 'euonymusbush01', 'nvfungusstalk01', 'nvfungusstalk02',
+          'nvfungusstalk03', 'nvfungusstalk04', 'nvaloevera', 'nvfrailejon', 'nvsagebrush', 'jalapenopickable', 'coyotetobaccopickable')
 CLUMP_MOST = 5
 CLUMP_OUT = (70.0, 280.0)   # (how far from the first the rest of a clump stand)
 PLANT_SHALLOW = -220.0      # (water plants no deeper than this: where the light reaches and someone wades)
-PLANT_LIMIT = 34000
+PLANT_LIMIT = 60000
 PLANT_UNSAID = 'yard'      # (ground the map says nothing of, in a town: somebody's lot. It grows over as a yard does)
 SEA_BED = 'Sea bed'         # (osmcover's name for that ground)
 SEA_DEEP = -400.0           # nothing on the sea bed lower than this: nobody goes there
@@ -96,6 +114,35 @@ STREET_LIMIT = 9000
 GROUND_LIMIT = 26000
 
 
+# What lies on the ground rather than stands on it: on a slope it is laid along the slope, or its downhill side hangs in
+# the air (rubble on Diamond Head did). Anything else stays upright: a barrel, a tree, a car on its wheels.
+LIES = re.compile(r'rubble|rock|litter|chunk|slab|debris|tire|pile|mattress|plank|gourd')
+LIE_FROM = 0.05             # (rise over run: flatter ground than this, nothing is tilted)
+LIE_MOST = 0.7
+LIE_REACH = 110.0
+
+
+def lie(ground, edid, x, y, yaw, scale=1.0):
+    """The turn (rx, ry, rz) for a thing put at x, y facing yaw: laid along the ground's slope there if it is one of the
+    things that lie, else upright."""
+    if not LIES.search(edid.lower()):
+        return 0.0, 0.0, yaw
+    import navgen
+    import roadbed
+    R = navgen._turn(0.0, 0.0, yaw)
+    dx, dy = R[0][0], R[1][0]
+    r = LIE_REACH * max(0.6, min(3.0, scale))
+    a0, a1 = ground.at(x - dx * r, y - dy * r), ground.at(x + dx * r, y + dy * r)
+    c0, c1 = ground.at(x + dy * r, y - dx * r), ground.at(x - dy * r, y + dx * r)
+    if None in (a0, a1, c0, c1):
+        return 0.0, 0.0, yaw
+    b, c = (a1 - a0) / (2 * r), (c1 - c0) / (2 * r)
+    if max(abs(b), abs(c)) < LIE_FROM:
+        return 0.0, 0.0, yaw
+    b, c = max(-LIE_MOST, min(LIE_MOST, b)), max(-LIE_MOST, min(LIE_MOST, c))
+    return roadbed._turn_plane(dx, dy, b, c)
+
+
 def _bases(gd):
     """{editor ID lowered: form key} for everything named above that the game has."""
     want = {e.lower() for e in _named()}
@@ -108,8 +155,10 @@ def _bases(gd):
     return out
 
 
-def ops(gd, pr, world, cover, roads, seed=1, progress=None):
-    """(ops, report). cover: the osmcover.MapCover of this world; roads: [{'line': [(x, y)...], 'class'}] in game units (osmplace.layout)."""
+def ops(gd, pr, world, cover, roads, seed=1, progress=None, swaps=None):
+    """(ops, report). cover: the osmcover.MapCover of this world; roads: [{'line': [(x, y)...], 'class'}] in game units (osmplace.layout).
+    swaps: {a game editor ID, lowered: [(base key, smallest, biggest, sunk by)]}: wherever that thing would go, one of
+    these goes instead (the mod's own models for a place the Mojave's don't suit: modelsets.swaps)."""
     import osmcover
     rng = random.Random(seed)
     bases = _bases(gd)
@@ -132,10 +181,15 @@ def ops(gd, pr, world, cover, roads, seed=1, progress=None):
         cell = grid.get((int(x // 4096), int(y // 4096)))
         if key is None or cell is None:
             return False
+        if swaps and edid.lower() in swaps:
+            key, smin, smax, sink = rng.choice(swaps[edid.lower()])
+            scale = rng.uniform(smin, smax)
+            counts['Swapped'] = counts.get('Swapped', 0) + 1
         z = ground.at(x, y)
         if z is None or (z < 8 and what != SEA_BED):
             return False                        # (only the sea bed's own things go under the water)
-        out.append({'op': 'add', 'cell': gd.key(cell), 'base': key, 'p': [round(x, 1), round(y, 1), round(z - sink * scale, 1), 0.0, 0.0, round(yaw, 3)], 's': round(scale, 3)})
+        rx, ry, rz = lie(ground, edid, x, y, yaw, scale)
+        out.append({'op': 'add', 'cell': gd.key(cell), 'base': key, 'p': [round(x, 1), round(y, 1), round(z - sink * scale, 1), round(rx, 4), round(ry, 4), round(rz, 4)], 's': round(scale, 3)})
         counts[what] = counts.get(what, 0) + 1
         return True
 
@@ -246,6 +300,8 @@ def ops(gd, pr, world, cover, roads, seed=1, progress=None):
             x, y = (cx + rng.random()) * 4096.0, (cy + rng.random()) * 4096.0
             # (a building's plot grows over like anywhere else: what would stand inside the building itself is taken out
             # afterwards with everything else that would)
+            if not (0 <= int(round(x / 128.0)) - gx0 < A and 0 <= int(round(y / 128.0)) - gy0 < D):
+                continue                        # (off the map: not this town's ground)
             k = kind_at(x, y)[0] or PLANT_UNSAID
             if k not in PLANTS:
                 continue
@@ -430,8 +486,9 @@ class _Putter:
         z = self.ground.at(x, y) if key is not None and cell is not None else None
         if z is None or z < 0:
             return False
+        rx, ry, rz = lie(self.ground, edid, x, y, yaw % math.tau, scale)
         self.ops.append({'op': 'add', 'cell': self.gd.key(cell), 'base': key,
-                         'p': [round(x, 1), round(y, 1), round(z - sink * scale, 1), 0.0, 0.0, round(yaw % math.tau, 3)], 's': round(scale, 3)})
+                         'p': [round(x, 1), round(y, 1), round(z - sink * scale, 1), round(rx, 4), round(ry, 4), round(rz, 4)], 's': round(scale, 3)})
         self.counts[what] = self.counts.get(what, 0) + 1
         return True
 
@@ -535,8 +592,9 @@ def footings(gd, pr, world, cover, cat, seed=1, progress=None):
             cell = P.grid.get((int(wx // 4096), int(wy // 4096)))
             if key is None or cell is None:
                 return False
+            tx, ty, tz = lie(P.ground, edid, wx, wy, (rz + yaw) % math.tau, scale) if sink_to_ground else (0.0, 0.0, (rz + yaw) % math.tau)
             P.ops.append({'op': 'add', 'cell': gd.key(cell), 'base': key,
-                          'p': [round(wx, 1), round(wy, 1), round((g if sink_to_ground else level) + up, 1), 0.0, 0.0, round((rz + yaw) % math.tau, 4)],
+                          'p': [round(wx, 1), round(wy, 1), round((g if sink_to_ground else level) + up, 1), round(tx, 4), round(ty, 4), round(tz, 4)],
                           's': round(scale, 4)})
             P.counts[what] = P.counts.get(what, 0) + 1
             return True
