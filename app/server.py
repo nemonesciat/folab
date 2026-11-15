@@ -401,6 +401,18 @@ def map_tile(wkey, tx, ty):
     return _tiles[k]
 
 
+_far_things = {}
+
+
+def far_things(wkey, tx, ty):
+    """What stands far off in a map tile, as the game's far models (lodobj.Far): for the 3D view past its loaded cells."""
+    import lodobj
+    if _far_things.get('gd') is not GD:
+        _far_things.clear()
+        _far_things.update(gd=GD, far=lodobj.Far(GD))
+    return _far_things['far'].tile(PR, GD.from_key(wkey), tx, ty)
+
+
 _far = {}
 
 
@@ -1862,6 +1874,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(map_tile(q['world'], int(q['tx']), int(q['ty'])), 'image/png')
             if u.path == '/api/farland':
                 return self.send(far_land(q['world'], int(q['tx']), int(q['ty'])))
+            if u.path == '/api/farthings':
+                with _lock:
+                    return self.send(far_things(q['world'], int(q['tx']), int(q['ty'])))
             if u.path == '/api/heightmap':
                 data = heightmap_export(q)
                 self.send_response(200)

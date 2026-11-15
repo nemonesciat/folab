@@ -102,3 +102,15 @@ before = len(lodobj.things_of(gd, pr, world))
 pr.apply('add', [{'op': 'add', 'cell': gd.key(cell), 'base': gd.key(with_far), 'p': [100.0, 200.0, 300.0, 0.0, 0.0, 0.5], 's': 1}])
 after = lodobj.things_of(gd, pr, world)
 check('the game\'s own things, and the mod\'s', before > 100 and len(after) == before + 1 and (with_far, 100.0, 200.0, 300.0, 0.5, 1.0) in after, (before, len(after)))
+
+# ---------- far things for the editor's own view ----------
+far = lodobj.Far(gd)
+tx, ty = (sw[0] + 3) // 16, (sw[1] + 3) // 16
+plain = far.tile(None, world, tx, ty)
+mine = far.tile(pr, world, tx, ty)
+check('a map tile of the game has far things, each with its far model\'s file', len(plain['things']) > 20 and all(m.endswith('_lod.nif') and gd.read_file(m) for m in plain['models']),
+      (len(plain['things']), len(plain['models'])))
+check('every thing names one of the tile\'s models', all(0 <= t[0] < len(plain['models']) for t in plain['things']))
+spot = [t for t in mine['things'] if t[1:4] == [100.0, 200.0, 300.0]]
+check('the mod's own thing is among them, with the cell it is filed in', len(spot) == 1 and len(mine['things']) == len(plain['things']) + 1, len(spot))
+check('a thing with no far model is not', far.path(without) is None and far.path(with_far).endswith('_lod.nif'), far.path(with_far))

@@ -345,3 +345,83 @@ def generate(gd, pr, world, out, progress=None, trees=False):
             block_nif(edid, bx, by, verts, normals, tangents, uvs, segments))
     return {'blocks': len(blocks), 'things': shown, 'skipped': skipped, 'dropped': dropped, 'kinds': len(kinds), 'textures': len(sheet.repeat),
             'sheet': size, 'files': len(files), 'folder': out}
+
+
+# ---------- far things for the editor's own view ----------
+
+class Far:
+    """What stands far off, for FOLab's 3D view to draw past the cells it has in full: by map tile (16 x 16 cells), every
+    placed thing the game ships a far model for, with that model's file. The game's own are read once a tile; the mod's
+    changes are laid over them each time asked, so an edit shows without anything being worked out again."""
+    TILE = 16
+
+    def __init__(self, gd):
+        self.gd = gd
+        self.st = StandIns(gd)
+        self.paths = {}
+        self.game = {}
+
+    def path(self, base):
+        """The far model's file for a base form, or None."""
+        if base not in self.paths:
+            got = None
+            if base in self.gd.forms and self.st.of(base):
+                got = 'meshes\\' + self.st.models[base].lower().replace('/', '\\')[:-4] + '_lod.nif'
+            self.paths[base] = got
+        return self.paths[base]
+
+    def _cells(self, world, tx, ty):
+        grid = self.gd.grid(world)
+        for i in range(self.TILE):
+            for j in range(self.TILE):
+                c = grid.get((tx * self.TILE + i, ty * self.TILE + j))
+                if c is not None:
+                    yield c
+
+    def _game(self, world, tx, ty):
+        k = (world, tx, ty)
+        if k not in self.game:
+            out = []
+            for cell in self._cells(world, tx, ty):
+                for r in self.gd.refs(cell):
+                    if not r['base'] or not r['pos'] or not r['rot']:
+                        continue
+                    p = self.path(r['base'])
+                    if p:
+                        out.append((self.gd.key(r['ref']), self.gd.key(cell), p, r['pos'][0], r['pos'][1], r['pos'][2], r['rot'][2], float(r.get('scale') or 1.0)))
+            if len(self.game) > 400:
+                self.game.clear()
+            self.game[k] = out
+        return self.game[k]
+
+    def tile(self, pr, world, tx, ty):
+        """{'models': [file...], 'things': [[which model, x, y, z, turn, size]...]}"""
+        models, things = {}, []
+
+        def add(path, x, y, z, rz, s):
+            things.append([models.setdefault(path, len(models)), round(x, 1), round(y, 1), round(z, 1), round(rz, 4), round(s, 3)])
+
+        cells = pr.cells if pr else {}
+        for rk, ck, path, x, y, z, rz, s in self._game(world, tx, ty):
+            ch = (cells.get(ck) or {}).get('refs', {}).get(rk) if cells else None
+            if ch:
+                if ch.get('removed'):
+                    continue
+                p = ch.get('p')
+                if p:
+                    x, y, z, rz = p[0], p[1], p[2], p[5] if len(p) > 5 else rz
+                s = float(ch.get('s') or s)
+            add(path, x, y, z, rz, s)
+        for cell in (self._cells(world, tx, ty) if cells else ()):
+            c = cells.get(self.gd.key(cell))
+            for rk, r in (c['refs'].items() if c else ()):
+                if not rk.startswith('+') or not r.get('base') or not r.get('p') or r.get('removed'):
+                    continue
+                try:
+                    path = self.path(self.gd.from_key(r['base']))
+                except Exception:
+                    path = None
+                if path:
+                    p = r['p']
+                    add(path, p[0], p[1], p[2], p[5] if len(p) > 5 else 0.0, float(r.get('s') or 1.0))
+        return {'models': list(models), 'things': things}
