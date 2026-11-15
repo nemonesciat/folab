@@ -21,7 +21,15 @@ import roadgen
 # added round it: (editor ID, east, north of its middle, turn)
 SETS = {
     'lucky38': {'label': 'Lucky 38', 'world': 'TheStripWorldNew', 'match': r'^lucky38(b|base|top|overhang0[12]|stairlights)?$'},
-    'tops': {'label': 'The Tops', 'world': 'TheStripWorldNew', 'match': r'^thetops(casino|hotel)\d\d$'},
+    # (the game's own all-round Tops, the one seen from Freeside: whole from every side and solid to walk into. Its pieces
+    # on the Strip are street fronts round a hollow, the hotel blocks on stilts where the casino isn't under them)
+    'tops': {'label': 'The Tops', 'extra': [('TheTopsWL', 742, 1120, 0.0, -688.0)]},
+    'tops_strip': {'label': 'The Tops (as on the Strip)', 'world': 'TheStripWorldNew', 'match': r'^thetops(casino|hotel)\d\d$'},
+    # (a grand hotel of buildings that are whole from every side: the Ultra-Luxe and Gomorrah are fronts, open behind)
+    'grandhotel': {'label': 'Grand hotel', 'extra': [('CasinoBoarded01', 0, 0, 0.0), ('ApartmentPre01', -2230, 0, 0.0), ('ApartmentPre01', 2230, 0, 3.1416),
+                                                    ('HotelFountain01', 0, -2150, 0.0), ('FlagPole', -700, -1750, 0.0), ('FlagPole', 700, -1750, 0.0),
+                                                    ('NVQueenPalm01', -1250, -1750, 0.0), ('NVQueenPalm01', 1250, -1750, 0.0),
+                                                    ('NVQueenPalm01', -3300, -1300, 0.0), ('NVQueenPalm01', 3300, -1300, 0.0)]},
     'ultraluxe': {'label': 'Ultra-Luxe', 'world': 'TheStripWorldNew', 'match': r'^ultralux(hotelfront|dome)$'},
     'gomorrah': {'label': 'Gomorrah', 'world': 'TheStripWorldNew', 'match': r'^gamorrah01$'},
     'battery': {'label': 'Gun battery', 'world': 'NVDLC03BigMT', 'match': r'^nvdlc03gunbatterystatic$',
@@ -51,7 +59,7 @@ MOORED = [('Boat02a', -60.0, 3), ('Boat02b', -60.0, 3), ('Boat02c', -60.0, 3), (
 SUNK = ['Boat01a', 'Boat01b', 'Boat01d', 'dlc04boatwrecked01', 'Boat02c']
 CRANE = ('CraneStatic02', 900.0)
 
-ONLY_HERE = {'TheTopsPool', 'RadioTower01', 'HVBunkerNV', 'HVBunkerNV2', 'HVBunkerNV3', 'NVGuardTower01', 'NVMojOutpostStatue01'}
+ONLY_HERE = {'TheTopsWL', 'TheTopsPool', 'RadioTower01', 'HVBunkerNV', 'HVBunkerNV2', 'HVBunkerNV3', 'NVGuardTower01', 'NVMojOutpostStatue01'}
 _found = {}
 
 
@@ -70,7 +78,7 @@ def _scan(gd):
     if id(gd) in _found:
         return _found[id(gd)]
     pats = [re.compile(s['match']) for s in SETS.values() if s.get('match')]
-    extra = {e[0].lower() for s in SETS.values() for e in s.get('extra', ())}
+    extra = {e[0].lower() for s in SETS.values() for e in s.get('extra', ()) if len(e) < 5}
     want, out = {}, {}
     for cell, refs in gd.cell_refs.items():
         if cell not in gd.ext_cells:
@@ -133,9 +141,12 @@ def lift(gd, name):
         # (the game's own ground is rarely just under a piece's origin: what the set's lowest piece stands at is nearer)
         for _w, base, x, y, z, rx, ry, rz, sc in rows:
             pieces.append((gd.key(base), x - mx, y - my, z - g, rx, ry, rz, sc))
-    for edid, dx, dy, rz in spec.get('extra', ()):
+    for edid, dx, dy, rz, *given in spec.get('extra', ()):
         base = _base(gd, edid)
         if base is None:
+            continue
+        if given:                               # (how high its origin goes is said outright: a model made for far off has its own)
+            pieces.append((gd.key(base), float(dx), float(dy), float(given[0]), 0.0, 0.0, rz, 1.0))
             continue
         seats = sorted(z - g for w, _b, x, y, z, rx, ry, _rz, _s in found.get(edid.lower(), ()) if abs(rx) < 0.05 and abs(ry) < 0.05
                        for g in (ground(w, x, y),) if g is not None)

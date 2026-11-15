@@ -16,7 +16,7 @@ GROUND = {
                    ('Tire01Static', 1, 1.0, 1.0, 2)]),
     'grass': (5.0, [('NVQueenPalm01', 6, 0.9, 1.4, 4), ('NVDatePalm01', 3, 0.9, 1.3, 4), ('NVDatePalm02', 3, 0.9, 1.3, 4), ('NVDatePalm03', 2, 0.9, 1.3, 4),
                     ('NVSagoPalm01', 3, 0.8, 1.3, 2), ('NVSagoPalm02', 3, 0.8, 1.3, 2), ('EuonymusBush01', 4, 0.8, 1.3, 2), ('BenchUrban01', 1, 1.0, 1.0, 0),
-                    ('Bench01', 1, 1.0, 1.0, 0), ('CementPlanterRd01', 1, 1.0, 1.0, 0)]),
+                    ('Bench01', 1, 1.0, 1.0, 0), ('CementPlanterRd01', 1, 1.0, 1.0, 0), ('NVNRockCanyon12', 2, 2.5, 6.0, 12), ('NVNRockCanyon06', 1, 3.0, 6.0, 12)]),
     'golf': (1.5, [('NVQueenPalm01', 4, 1.0, 1.4, 4), ('NVSagoPalm01', 2, 0.9, 1.2, 2), ('EuonymusBush01', 2, 0.9, 1.3, 2)]),
     'yard': (6.0, [('NVSagoPalm01', 3, 0.8, 1.2, 2), ('NVSagoPalm02', 3, 0.8, 1.2, 2), ('EuonymusBush01', 4, 0.7, 1.2, 2), ('NVDatePalm01', 2, 0.9, 1.2, 4),
                    ('Tire01Static', 2, 1.0, 1.0, 2), ('TirePile01', 1, 1.0, 1.0, 2), ('MailboxDestroyed', 2, 1.0, 1.0, 0), ('Barrel01', 2, 1.0, 1.0, 0),
@@ -28,15 +28,17 @@ GROUND = {
                     ('Planter01', 2, 1.0, 1.0, 0), ('Planter02', 1, 1.0, 1.0, 0), ('NVStripPlanter03', 1, 1.0, 1.0, 0), ('TireStack01', 1, 1.0, 1.0, 0),
                     ('Barrel01', 2, 1.0, 1.0, 0), ('CrateLarge01', 1, 1.0, 1.0, 0), ('FireHydrant01', 1, 1.0, 1.0, 0), ('NVTruck', 1, 1.0, 1.0, 2),
                     ('JerseyBarricade01', 2, 1.0, 1.0, 0), ('JerseyBarricade03', 1, 1.0, 1.0, 0), ('BenchUrban01', 2, 1.0, 1.0, 0),
-                    ('NukaVendingMachineSTATIC', 1, 1.0, 1.0, 0), ('Tire01Static', 2, 1.0, 1.0, 2), ('SWSingleRubble', 2, 0.7, 1.1, 2)]),
+                    ('NukaVendingMachineSTATIC', 1, 1.0, 1.0, 0), ('Tire01Static', 2, 1.0, 1.0, 2), ('SWSingleRubble', 2, 0.7, 1.1, 2), ('RubblePile04', 2, 0.8, 1.3, 8),
+                    ('SuburbanRubblePile01bLiteLitter', 2, 0.8, 1.2, 4), ('RoadChunkCluster01', 2, 1.0, 2.0, 2), ('SuburbanRubblePileCanyon01', 1, 0.8, 1.2, 4)]),
     'asphalt': (2.2, [('Car01HulkBodyStatic', 6, 1.0, 1.0, 2), ('Car03HulkBodyStatic', 6, 1.0, 1.0, 2), ('Car03A', 1, 1.0, 1.0, 2), ('BusHulkFrontStatic01', 1, 1.0, 1.0, 2),
                       ('truckarmy02Static', 1, 1.0, 1.0, 2), ('Barrier03', 2, 1.0, 1.0, 0), ('Tire02Static', 2, 1.0, 1.0, 2), ('NVTruck', 1, 1.0, 1.0, 2), ('JerseyBarricade02', 1, 1.0, 1.0, 0),
                       ('SWSingleRubble', 2, 0.6, 1.0, 2), ('ShoppingCart01', 1, 1.0, 1.0, 0)]),
     'scrub': (5.0, [('NVNRockCanyon06', 2, 0.25, 0.7, 30), ('NVNRockCanyon12', 2, 0.25, 0.7, 30), ('NVNRockCanyon13', 2, 0.25, 0.7, 30), ('CreosoteBushSm', 6, 0.8, 1.3, 2),
-                    ('CreosoteBushLg', 3, 0.8, 1.2, 2), ('pricklypearcactus02', 2, 0.8, 1.2, 2), ('NVbarrelcactus02', 2, 0.8, 1.2, 2)]),
+                    ('CreosoteBushLg', 3, 0.8, 1.2, 2), ('pricklypearcactus02', 2, 0.8, 1.2, 2), ('NVbarrelcactus02', 2, 0.8, 1.2, 2), ('NVNRockCanyon06', 2, 3.0, 7.0, 12), ('NVNRockCanyon13', 2, 3.0, 7.0, 12)]),
     'trees': (6.0, [('NVQueenPalm01', 5, 0.9, 1.4, 4), ('NVDatePalm01', 3, 0.9, 1.3, 4), ('EuonymusBush01', 4, 0.8, 1.3, 2), ('CreosoteBushLg', 3, 0.8, 1.2, 2)]),
     'seabed': (0.25, [('UnderwaterRockCanyon12NV', 4, 0.3, 0.8, 30), ('Boat03c', 1, 1.0, 1.0, 10), ('Tire01Static', 1, 1.0, 1.0, 2)]),
 }
+SEA_BED = 'Sea bed'         # (osmcover's name for that ground)
 SEA_DEEP = -400.0           # nothing on the sea bed lower than this: nobody goes there
 # road class: [(editor ID, how far apart along the road, which side each one takes: 'both', 'turns' (left, right, left...) or 'one')]
 STREET = {
@@ -96,8 +98,8 @@ def ops(gd, pr, world, cover, roads, seed=1, progress=None):
         if key is None or cell is None:
             return False
         z = ground.at(x, y)
-        if z is None:
-            return False
+        if z is None or (z < 8 and what != SEA_BED):
+            return False                        # (only the sea bed's own things go under the water)
         out.append({'op': 'add', 'cell': gd.key(cell), 'base': key, 'p': [round(x, 1), round(y, 1), round(z - sink * scale, 1), 0.0, 0.0, round(yaw, 3)], 's': round(scale, 3)})
         counts[what] = counts.get(what, 0) + 1
         return True
@@ -253,6 +255,21 @@ LIFE_WORD = (
                                           ('TireStack01', 0.3, 'side', (-0.8, 0.8), (50, 110), 'any'), ('CrateGenericNV', 0.4, 'side', (-0.8, 0.8), (50, 130), 'any')]),
     (('church', 'school', 'police', 'fire'), [('Skeleton50sCasualFemale', 0.1, 'front', (-0.6, 0.6), (120, 300), 'any'), ('SandbagStraight', 0.4, 'front', (-0.6, 0.6), (300, 380), 'along')]),
 )
+# ---------- what a building stands on ----------
+# The game hardly ever stands a building straight on bare ground. Of 557 it stands in the open, what lies against them
+# most is sidewalk (slabs under and round the walls), then rubble banked against walls and corners, street litter, fences.
+# pavement slabs, longest first: (editor ID, how long, how wide); each a flat plate, laid a little over the ground
+SLABS = (('SWSec1x6', 1536.0, 256.0), ('SWSec1x3', 768.0, 256.0), ('SWSingle', 256.0, 256.0))
+SLAB_UP = 6.0
+PAVED_FAMILIES = ('shop', 'apartments', 'civic', 'industrial')
+HOUSES_PAVED = 0.3          # (of houses, how many have a walk round them)
+BANKED = (('RubblePileEdging01', 5, 60.0, 30.0), ('RubblePile04', 1, 240.0, 14.0), ('SuburbanRubblePileCanyon01', 1, 240.0, 2.0),
+          ('dlc04streetlitteredge03', 2, 110.0, 8.0))      # (editor ID, how often, how far out from the wall its middle lies, how high over the ground)
+BANK_EVERY = 900.0          # (along a wall)
+BANK_CHANCE = 0.45
+CORNER = ('RubblePileEdgingCorner01', 0.22, 65.0)
+FOOT_LIMIT = 16000
+
 ROOM = 110.0                # (two things round one building stand at least this far apart)
 LIFE_LIMIT = 14000
 
@@ -299,6 +316,7 @@ def _named():
     out |= {r[0] for _e, rows in ON_ROAD.values() for r in rows}
     out |= {r[0] for rows in LIFE.values() for r in rows} | {r[0] for _w, rows in LIFE_WORD for r in rows}
     out |= {r[0] for rows in SCENES.values() for r in rows} | {r[0] for r in RUBBLE}
+    out |= {r[0] for r in SLABS} | {r[0] for r in BANKED} | {CORNER[0]}
     return out
 
 
@@ -383,6 +401,101 @@ class _Stands:
             if x0 <= lx <= x1 and y0 <= ly <= y1:
                 return True
         return False
+
+
+def footings(gd, pr, world, cover, cat, seed=1, progress=None):
+    """(ops, report): pavement round each building's walls and rubble banked against them, so that none stands straight
+    out of bare flat ground. Laid in the building's own frame; left off where the ground isn't level with it, on a
+    road, or under another building."""
+    import townbuild
+    rng = random.Random(seed * 32452843 + 9)
+    P = _Putter(gd, pr, world, cover)
+    stands = standing(gd, pr, world, cat)
+    S = _Stands(stands, margin=-20.0)
+    boxes = {}
+
+    def obnd(edid):
+        if edid not in boxes:
+            key = P.bases.get(edid.lower())
+            boxes[edid] = townbuild.obnd(gd, key) if key else None
+        return boxes[edid]
+
+    slabs = [(e, L, W) for e, L, W in SLABS if obnd(e)]
+    banked = [b for b in BANKED if P.has(b[0])]
+    paved = 0
+    for n, (b, ox, oy, _z, rz) in enumerate(stands):
+        if len(P.ops) >= FOOT_LIMIT:
+            break
+        if progress and n % 200 == 0:
+            progress('Pavement and rubble round the buildings', n, len(stands))
+        x0, y0, _z0, x1, y1, _z1 = b['box']
+        level = P.ground.at(ox, oy)
+        if level is None:
+            continue
+        c, s = math.cos(rz), math.sin(rz)
+
+        def world_of(lx, ly):
+            return ox + lx * c + ly * s, oy - lx * s + ly * c
+
+        def lay(edid, lx, ly, yaw, up, what, sink_to_ground=False):
+            # (its box's middle goes to lx, ly: where its origin is in its box is its own affair)
+            o = obnd(edid)
+            mx, my = ((o[0] + o[3]) / 2, (o[1] + o[4]) / 2) if o else (0.0, 0.0)
+            cy, sy = math.cos(yaw), math.sin(yaw)
+            wx, wy = world_of(lx - (mx * cy + my * sy), ly - (-mx * sy + my * cy))
+            cx_, cy_ = world_of(lx, ly)
+            g = P.ground.at(cx_, cy_)
+            if g is None or g < 8 or abs(g - level) > 28 or S.hit(cx_, cy_) or P.kind(cx_, cy_) in ('asphalt', 'seabed', None):
+                return False
+            key = P.bases.get(edid.lower())
+            cell = P.grid.get((int(wx // 4096), int(wy // 4096)))
+            if key is None or cell is None:
+                return False
+            P.ops.append({'op': 'add', 'cell': gd.key(cell), 'base': key,
+                          'p': [round(wx, 1), round(wy, 1), round((g if sink_to_ground else level) + up, 1), 0.0, 0.0, round((rz + yaw) % math.tau, 4)], 's': 1})
+            P.counts[what] = P.counts.get(what, 0) + 1
+            return True
+
+        # pavement: a strip a slab wide along each wall, the front and back ones running past the corners
+        if slabs and (b['family'] in PAVED_FAMILIES or rng.random() < HOUSES_PAVED):
+            w = slabs[0][2]
+            strips = [(x0 - w, x1 + w, y0 - w / 2, 0.0), (x0 - w, x1 + w, y1 + w / 2, 0.0),        # (from, to along it, where across, turned)
+                      (y0, y1, x0 - w / 2, math.pi / 2), (y0, y1, x1 + w / 2, math.pi / 2)]
+            got = 0
+            for a0, a1, across, yaw in strips:
+                at = a0
+                while at < a1 - 16:
+                    e, L, _W = next((sl for sl in slabs if sl[1] <= a1 - at + 128), slabs[-1])
+                    mid = at + L / 2
+                    lx, ly = (mid, across) if yaw == 0.0 else (across, mid)
+                    # (a slab's long side is its own east-west: a quarter turn in the game's sense for a strip running north)
+                    got += lay(e, lx, ly, yaw, SLAB_UP, 'Pavement round buildings')
+                    at += L
+            paved += bool(got)
+        # rubble banked against the back and the sides
+        if banked:
+            walls = [(x0, x1, y1, 0.0, 1.0), (y0, y1, x0, math.pi / 2, -1.0), (y0, y1, x1, math.pi / 2, 1.0)]
+            if b['doors']:
+                front_y = b['doors'][0]['y'] > (y0 + y1) / 2
+                walls[0] = (x0, x1, y0 if front_y else y1, 0.0, -1.0 if front_y else 1.0)
+            for a0, a1, wall, yaw, out in walls:
+                at = a0 + rng.uniform(0.2, 0.8) * BANK_EVERY
+                while at < a1 - 100:
+                    if rng.random() < BANK_CHANCE:
+                        pick = rng.random() * sum(q[1] for q in banked)
+                        for e, wt, off, up in banked:
+                            pick -= wt
+                            if pick <= 0:
+                                break
+                        lx, ly = (at, wall + out * off) if yaw == 0.0 else (wall + out * off, at)
+                        # (its long side along the wall)
+                        lay(e, lx, ly, yaw + math.pi / 2 + (math.pi if rng.random() < 0.5 else 0.0), up, 'Rubble against walls', True)
+                    at += BANK_EVERY * rng.uniform(0.7, 1.3)
+            if P.has(CORNER[0]):
+                for k, (lx, ly) in enumerate(((x0, y0), (x1, y0), (x1, y1), (x0, y1))):
+                    if rng.random() < CORNER[1]:
+                        lay(CORNER[0], lx, ly, k * math.pi / 2, CORNER[2], 'Rubble against walls', True)
+    return P.ops, {'things': len(P.ops), 'paved': paved, 'of': len(stands), 'by': P.counts}
 
 
 def life(gd, pr, world, cover, cat, seed=1, progress=None):

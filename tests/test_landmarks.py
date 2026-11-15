@@ -25,7 +25,7 @@ check('the Lucky 38 is its base, its tower and its overhangs', {'Lucky38', 'Luck
 check('none of its signs or lights from other worlds', not any('WL' in n or 'Sign' in n for n in names))
 check('it stands on the ground, not far over or under it', all(-100 < p[3] < 200 for p in lucky['pieces']), [round(p[3]) for p in lucky['pieces']])
 check('and is as wide as the game has it', 5000 < lucky['box'][2] - lucky['box'][0] < 7500, lucky['box'])
-check('The Tops is many pieces spread over its block', len(got['tops']['pieces']) >= 10 and got['tops']['box'][2] - got['tops']['box'][0] > 5000)
+check('The Tops as on the Strip is many pieces spread over its block', len(got['tops_strip']['pieces']) >= 10 and got['tops_strip']['box'][2] - got['tops_strip']['box'][0] > 5000)
 check('a set put together here seats each thing as the game does', all(abs(p[3]) < 2600 for p in got['lookout']['pieces']) and len(got['lookout']['pieces']) == 8)
 
 # ---------- one stood somewhere else ----------
@@ -108,7 +108,26 @@ check('the ones afloat sit in the water, not over or under it', all(-80 < o['p']
 check('nothing is built where there is no water', landmarks.Batch(gd, project.Project.create('Dry'), world).harbour([[(x, y), (x + 3000, y)]])['dock'] == 0)
 
 # ---------- open backs ----------
-check('a casino made to be seen from the street is stood twice, back to back', got['ultraluxe']['doubled'] and got['tops']['doubled']
-      and len(got['ultraluxe']['pieces']) == 4, (got['ultraluxe']['doubled'], got['tops']['doubled']))
-check('so that no side of it is open', min(got['ultraluxe']['sides']) > 0.7 and min(got['tops']['sides']) > 0.7, (got['ultraluxe']['sides'], got['tops']['sides']))
+check('a casino made to be seen from the street is stood twice, back to back', got['ultraluxe']['doubled'] and got['tops_strip']['doubled']
+      and len(got['ultraluxe']['pieces']) == 4, (got['ultraluxe']['doubled'], got['tops_strip']['doubled']))
+check('so that no side of it is open', min(got['ultraluxe']['sides']) > 0.7 and min(got['tops_strip']['sides']) > 0.7, (got['ultraluxe']['sides'], got['tops_strip']['sides']))
 check('what is whole already is stood once', not got['battery']['doubled'] and not got['lookout']['doubled'] and min(got['battery']['sides']) > 0.9)
+
+# ---------- whole from every side ----------
+import math as _m  # noqa: E402
+
+
+def all_round(name):
+    shapes = landmarks._shapes(gd, got[name]['pieces'])
+    vals = []
+    for k in range(4):
+        c, sn = _m.cos(k * _m.pi / 8), _m.sin(k * _m.pi / 8)
+        vals += landmarks.closed_sides([dict(sh, p=[v for q in range(0, len(sh['p']), 3)
+                                                    for v in (sh['p'][q] * c + sh['p'][q + 1] * sn, -sh['p'][q] * sn + sh['p'][q + 1] * c, sh['p'][q + 2])]) for sh in shapes])
+    return min(vals)
+
+
+check('The Tops stood as a landmark is the game's all-round one: a wall from each of sixteen sides', len(got['tops']['pieces']) == 1 and all_round('tops') > 0.95, all_round('tops'))
+check('and stands on the ground, not at the height it has far off', abs(got['tops']['pieces'][0][3] + 688) < 1)
+check('the grand hotel is buildings whole from every side', all_round('grandhotel') > 0.95 and len(got['grandhotel']['pieces']) == 10, all_round('grandhotel'))
+check('the Strip's own pieces are not: stood back to back they still show a way in from some side', all_round('tops_strip') < 0.9, all_round('tops_strip'))

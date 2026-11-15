@@ -6,7 +6,7 @@
 const VT_KINDS = [['buildings', 'Buildings & pieces'], ['scenery', 'Rocks, plants & trees'], ['doors', 'Doors'],
                   ['containers', 'Containers'], ['furniture', 'Furniture & switches'], ['lights', 'Lights'],
                   ['items', 'Items'], ['people', 'People'], ['creatures', 'Creatures']];
-const VT = {kinds: {}, locked: [], onlyMine: false, borders: false, mini: true, fov: 70, landR: 3, thingR: 2, far: true};
+const VT = {kinds: {}, locked: [], onlyMine: false, borders: false, mini: true, fov: 70, landR: 3, thingR: 2, far: true, sky: true, farThings: true};
 try { Object.assign(VT, JSON.parse(localStorage.getItem('folab-view') || '{}')); } catch (e) {}
 function vtSave(){ try { localStorage.setItem('folab-view', JSON.stringify(VT)); } catch (e) {} }
 
@@ -17,6 +17,7 @@ function vtApply(){
   W.cam.fov = VT.fov; W.cam.updateProjectionMatrix();
   LAND_R = VT.landR; THING_R = Math.min(VT.thingR, VT.landR);
   FAR.R = VT.far ? 2 : -1;
+  if (typeof FT !== 'undefined') FT.on = VT.farThings !== false;
   restyle();
   if (W.locked.size) select(W.sel.filter(g => !W.locked.has(thingKind(g.userData.thing))).map(g => g.userData.thing.key));
   if (typeof drawObjects === 'function') drawObjects();
@@ -40,6 +41,8 @@ function vtDraw(){
     <label class="vt-row">Ground round you <input type="range" min="1" max="5" value="${VT.landR}" data-v="landR"><b>${VT.landR * 2 + 1} × ${VT.landR * 2 + 1}</b></label>
     <label class="vt-row">Things round you <input type="range" min="1" max="4" value="${VT.thingR}" data-v="thingR"><b>${VT.thingR * 2 + 1} × ${VT.thingR * 2 + 1}</b></label>
     <label class="vt-row"><input type="checkbox" data-v="far" ${VT.far ? 'checked' : ''}> Distant hills</label>
+    <label class="vt-row"><input type="checkbox" data-v="farThings" ${VT.farThings !== false ? 'checked' : ''}> Distant buildings</label>
+    <label class="vt-row"><input type="checkbox" data-v="sky" ${VT.sky !== false ? 'checked' : ''}> Sky</label>
     <div class="note" style="padding:2px 0">More cells round you show more but load slower.</div>`;
 }
 document.addEventListener('input', e => {

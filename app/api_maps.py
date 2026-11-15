@@ -484,6 +484,8 @@ def dress_job(body, srv):
             seed = int(body.get('seed', 1))
             ops, report = osmdress.ops(srv.GD, srv.PR, w, cover, lay['roads'], seed, _said)
             # (round each building what it was for, and a few places someone stopped at)
+            more, report['footings'] = osmdress.footings(srv.GD, srv.PR, w, cover, cat, seed, _said)
+            ops += more
             more, report['life'] = osmdress.life(srv.GD, srv.PR, w, cover, cat, seed, _said)
             ops += more
             more, report['scenes'] = osmdress.scenes(srv.GD, srv.PR, w, cover, lay['roads'], cat, seed, _said)
