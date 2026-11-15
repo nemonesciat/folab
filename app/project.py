@@ -141,7 +141,8 @@ class Project:
     def apply(self, label, ops, merge=False):
         """Make several changes as one undo step. ops: [{'op': 'add'|'move'|'remove', ...}]. Returns the keys
         given to new refs, in order. merge: part of the last step (navmeshes made for what that step put in).
-        A record_new or add with a 'name' can be named later in the same ops as '$name' (a cell, a ref, a door's link):
+        A record_new or add with a 'name' can be named later in the same ops as '$name' (a cell, a ref, a door's link, what a
+        placed thing is):
         self.names says what each became."""
         if not merge or not self.undo_stack:
             self._step(label)
@@ -153,6 +154,8 @@ class Project:
         for o in ops:
             if names and any(named(o.get(f)) != o.get(f) for f in ('cell', 'ref')):
                 o = dict(o, cell=named(o.get('cell')), ref=named(o.get('ref')))
+            if names and named(o.get('base')) != o.get('base'):
+                o = dict(o, base=named(o['base']))      # (a thing placed of a record made earlier in the same ops)
             if names and o.get('op') == 'tel' and o.get('tel') and named(o['tel'].get('door')) != o['tel'].get('door'):
                 o = dict(o, tel=dict(o['tel'], door=named(o['tel']['door'])))
             if o['op'] == 'record':                  # a record as the mod has it (a game one changed, or its own)

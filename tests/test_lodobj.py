@@ -112,5 +112,5 @@ check('a map tile of the game has far things, each with its far model\'s file', 
       (len(plain['things']), len(plain['models'])))
 check('every thing names one of the tile\'s models', all(0 <= t[0] < len(plain['models']) for t in plain['things']))
 spot = [t for t in mine['things'] if t[1:4] == [100.0, 200.0, 300.0]]
-check('the mod's own thing is among them, with the cell it is filed in', len(spot) == 1 and len(mine['things']) == len(plain['things']) + 1, len(spot))
+check('the mod\'s own thing is among them, with the cell it is filed in', len(spot) == 1 and len(mine['things']) == len(plain['things']) + 1, len(spot))
 check('a thing with no far model is not', far.path(without) is None and far.path(with_far).endswith('_lod.nif'), far.path(with_far))

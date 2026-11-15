@@ -30,7 +30,7 @@ AT_SCENE = {
 # who lives in the open, by the ground and how hard the place is
 IN_THE_WILD = {
     'grass': ([('LvlGecko', 3)], [('VSpawnTier1GiantMantisSmall', 3)], [('VSpawnFireGeckoTier1', 3)]),
-    'trees': ([('VSpawnTier1GiantMantisSmall', 3)], [('LvlGecko', 4)], [('VSpawnNightStalkerTier1', 3)]),
+    'trees': ([('VSpawnTier1GiantMantisSmall', 3)], [('CrSporePlant', 3), ('LvlGecko', 2)], [('VCrSporeCarrier', 3), ('CrSporePlant', 2)]),   # (the green fights back)
     'golf': ([('LvlGecko', 2)], [('LvlCoyote', 3)], [('VSpawnNightStalkerTier1', 2)]),
     'scrub': ([('LvlCoyote', 2)], [('LvlRadscorpion', 2)], [('LvlCazador', 2)]),
     'sand': ([('LvlWastelandBloatfly', 2)], [('VSpawnTier3LakelurkMed', 2)], [('VSpawnTier3LakelurkMed', 3)]),

@@ -128,8 +128,9 @@ def read_block_nif(d):
 class StandIns:
     """A base form's far model, if the game ships one: its shapes in the thing's own frame, read once."""
 
-    def __init__(self, gd):
+    def __init__(self, gd, pr=None):
         self.gd = gd
+        self.pr = pr                # (a base that is one of the mod's own records comes as its key, '+...')
         self.by_model = {}
         self.models = {}
 
@@ -150,9 +151,14 @@ class StandIns:
     def of(self, base_fid):
         if base_fid not in self.models:
             try:
-                f = self.gd.fields(base_fid)
-                m = f.get('MODL')
-                self.models[base_fid] = m[:-1].decode('cp1252', 'replace') if m else ''
+                if isinstance(base_fid, str):
+                    import recordio
+                    rec = self.pr.records.get(base_fid) if self.pr else None
+                    self.models[base_fid] = (recordio.field(rec, 'MODL') or '') if rec else ''
+                else:
+                    f = self.gd.fields(base_fid)
+                    m = f.get('MODL')
+                    self.models[base_fid] = m[:-1].decode('cp1252', 'replace') if m else ''
             except Exception:
                 self.models[base_fid] = ''
         return self.of_model(self.models[base_fid])
@@ -265,7 +271,8 @@ def things_of(gd, pr, world):
         for rk, r in c['refs'].items():
             if rk.startswith('+') and r.get('base') and r.get('p') and not r.get('removed'):
                 try:
-                    base = gd.from_key(r['base'])
+                    # (a thing of the mod's own making, a ship out of another game say, goes by its record's key)
+                    base = r['base'] if r['base'].startswith('+') else gd.from_key(r['base'])
                 except Exception:
                     continue
                 p = r['p']
@@ -277,7 +284,7 @@ def generate(gd, pr, world, out, progress=None, trees=False):
     """Write a world's distant buildings into a folder laid out as Data is. Returns a report. trees: far plants too (the
     game shows its own trees another way; as plain models they cost a lot for what they add)."""
     edid = gd.edid(world)
-    stand = StandIns(gd)
+    stand = StandIns(gd, pr)
     sheet = Sheet(gd)
     blocks = {}
     shown = skipped = 0
@@ -288,7 +295,7 @@ def generate(gd, pr, world, out, progress=None, trees=False):
         if not shapes:
             skipped += 1
             continue
-        if not trees and any(w in gd.edid(base).lower() for w in TREE_WORDS):
+        if not trees and not isinstance(base, str) and any(w in gd.edid(base).lower() for w in TREE_WORDS):
             skipped += 1
             continue
         cx, cy = int(math.floor(x / CELL)), int(math.floor(y / CELL))

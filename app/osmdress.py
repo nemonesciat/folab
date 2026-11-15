@@ -38,6 +38,41 @@ GROUND = {
     'trees': (6.0, [('NVQueenPalm01', 5, 0.9, 1.4, 4), ('NVDatePalm01', 3, 0.9, 1.3, 4), ('EuonymusBush01', 4, 0.8, 1.3, 2), ('CreosoteBushLg', 3, 0.8, 1.2, 2)]),
     'seabed': (0.25, [('UnderwaterRockCanyon12NV', 4, 0.3, 0.8, 30), ('Boat03c', 1, 1.0, 1.0, 10), ('Tire01Static', 1, 1.0, 1.0, 2)]),
 }
+# What grows, apart from what lies about: a wet warm place two hundred years untended. ground kind: (how many spots a cell
+# all of that ground gets, [(editor ID, how often, smallest, biggest, sunk by)]). The green is the game's own: Zion's
+# trees and bushes, Vault 22's ferns and grass (grown far past their size: what the bombs left in the soil), banana
+# plants, the lake's water plants in the shallows; some of it can be picked. Things in CLUMPS come several together.
+PLANTS = {
+    'sand': (8.0, [('NVQueenPalm01', 6, 0.9, 1.4, 4), ('NVDatePalm01', 2, 0.9, 1.3, 4), ('NVDatePalm02', 2, 0.9, 1.3, 4), ('NVDatePalm03', 2, 0.9, 1.3, 4),
+                   ('NVSagoPalm01', 3, 0.8, 1.4, 2), ('NVGoldfingerBanana', 2, 1.0, 1.6, 2), ('v22Grass', 3, 1.5, 3.0, 2), ('BuffaloGourdPickable', 1, 0.8, 1.2, 0)]),
+    'grass': (26.0, [('v22Grass', 8, 1.5, 3.5, 2), ('v22Fern', 6, 1.5, 4.0, 2), ('NVGoldfingerBanana', 5, 1.0, 2.0, 2), ('NVQueenPalm01', 3, 0.9, 1.5, 4),
+                     ('NVDatePalm01', 1, 0.9, 1.3, 4), ('NVDatePalm02', 1, 0.9, 1.3, 4), ('NVSagoPalm01', 2, 0.8, 1.5, 2), ('NVSagoPalm02', 2, 0.8, 1.5, 2),
+                     ('NVDLC02TreeA1', 1, 1.2, 2.2, 6), ('NVDLC02TreeA2', 1, 1.2, 2.2, 6), ('NVDLC02TreeA3', 1, 1.2, 2.2, 6), ('NVDLC02TreeA5', 1, 1.2, 2.2, 6), ('NVDLC02TreeB1', 1, 1.2, 2.2, 6), ('NVDLC02TreeF2', 1, 1.2, 2.2, 6), ('NVDLC02TreeF3', 1, 1.2, 2.2, 6),
+                     ('NVDLC02BushA01LeavesOnly', 4, 1.0, 1.8, 4), ('EuonymusBush01', 2, 0.8, 1.4, 2), ('NVFalseSpireaPlant', 3, 1.0, 2.0, 2),
+                     ('NVDLC02SacredDaturaPlant', 2, 1.5, 3.0, 0), ('BananaYuccaPickable', 1, 1.0, 1.5, 0), ('BrocFlowerPlant', 1, 1.0, 1.6, 0),
+                     ('XanderRootPlant', 1, 1.0, 1.6, 0), ('CaveFungusPlant', 1, 2.0, 4.0, 0)]),
+    'trees': (44.0, [('NVDLC02TreeA1', 3, 1.5, 3.0, 6), ('NVDLC02TreeA2', 3, 1.5, 3.0, 6), ('NVDLC02TreeA3', 3, 1.5, 3.0, 6), ('NVDLC02TreeA5', 3, 1.5, 3.0, 6), ('NVDLC02TreeB1', 3, 1.5, 3.0, 6), ('NVDLC02TreeF2', 3, 1.5, 3.0, 6), ('NVDLC02TreeF3', 3, 1.5, 3.0, 6),
+                     ('WhiteOak01', 1, 0.5, 0.9, 10), ('NVQueenPalm01', 3, 1.0, 1.6, 4), ('NVDatePalm01', 2, 1.0, 1.4, 4), ('NVGoldfingerBanana', 6, 1.2, 2.4, 2),
+                     ('v22Fern', 8, 2.0, 5.0, 2), ('v22Grass', 6, 2.0, 4.0, 2), ('NVDLC02BushA01LeavesOnly', 6, 1.0, 2.0, 4), ('NVDLC02BushEVA01LeavesOnly', 3, 1.0, 2.0, 4),
+                     ('CaveFungusPlant', 2, 2.0, 4.0, 0), ('NVDLC02SacredDaturaPlant', 2, 1.5, 3.0, 0)]),
+    'golf': (9.0, [('v22Grass', 6, 1.5, 3.0, 2), ('NVQueenPalm01', 3, 1.0, 1.4, 4), ('NVGoldfingerBanana', 2, 1.0, 1.8, 2), ('EuonymusBush01', 2, 0.9, 1.4, 2),
+                   ('v22Fern', 2, 1.5, 3.0, 2), ('NVSagoPalm01', 2, 0.9, 1.3, 2)]),
+    'yard': (16.0, [('v22Grass', 6, 1.0, 2.5, 2), ('v22Fern', 3, 1.0, 3.0, 2), ('NVGoldfingerBanana', 3, 1.0, 1.8, 2), ('NVSagoPalm01', 2, 0.8, 1.3, 2),
+                   ('NVSagoPalm02', 2, 0.8, 1.3, 2), ('EuonymusBush01', 3, 0.7, 1.3, 2), ('NVDLC02BushA01LeavesOnly', 2, 0.8, 1.4, 4),
+                   ('NVDLC02SacredDaturaPlant', 1, 1.2, 2.0, 0), ('BuffaloGourdPickable', 1, 0.8, 1.2, 0), ('NVDatePalm01', 1, 0.9, 1.2, 4)]),
+    'paved': (6.0, [('v22Grass', 6, 1.0, 2.0, 2), ('v22Fern', 2, 1.0, 2.0, 2), ('NVFalseSpireaPlant', 2, 0.8, 1.4, 2)]),
+    'scrub': (14.0, [('CreosoteBushSm', 6, 0.8, 1.4, 2), ('CreosoteBushLg', 3, 0.8, 1.3, 2), ('YuccaANV', 2, 0.8, 1.3, 2), ('YuccaBNV', 2, 0.8, 1.3, 2),
+                     ('YuccaCNV', 2, 0.8, 1.3, 2), ('NVbarrelcactus02', 2, 0.8, 1.4, 2), ('pricklypearcactus03', 2, 0.8, 1.3, 2), ('NVFalseSpireaPlant', 3, 1.0, 1.8, 2),
+                     ('nevadaagave02', 2, 1.0, 2.0, 0), ('BananaYuccaPickable', 1, 1.0, 1.4, 0), ('v22Fern', 2, 1.5, 3.0, 2)]),
+    'seabed': (6.0, [('NVSeaPlant01', 5, 1.0, 2.5, 0), ('NVSeaPlant02', 5, 1.0, 2.5, 0)]),
+}
+CLUMPS = ('v22grass', 'v22fern', 'nvdlc02busha01leavesonly', 'nvdlc02busheva01leavesonly', 'nvdlc02sacreddaturaplant', 'cavefungusplant', 'nvseaplant01',
+          'nvseaplant02', 'nvgoldfingerbanana', 'creosotebushsm', 'nvfalsespireaplant', 'euonymusbush01')
+CLUMP_MOST = 5
+CLUMP_OUT = (70.0, 280.0)   # (how far from the first the rest of a clump stand)
+PLANT_SHALLOW = -220.0      # (water plants no deeper than this: where the light reaches and someone wades)
+PLANT_LIMIT = 34000
+PLANT_UNSAID = 'yard'      # (ground the map says nothing of, in a town: somebody's lot. It grows over as a yard does)
 SEA_BED = 'Sea bed'         # (osmcover's name for that ground)
 SEA_DEEP = -400.0           # nothing on the sea bed lower than this: nobody goes there
 # road class: [(editor ID, how far apart along the road, which side each one takes: 'both', 'turns' (left, right, left...) or 'one')]
@@ -197,7 +232,46 @@ def ops(gd, pr, world, cover, roads, seed=1, progress=None):
                     break
             label = next(lab for kk, lab, _t in osmcover.KINDS if kk == k)
             put(edid, x, y, rng.uniform(0, math.tau), rng.uniform(smin, smax), sink, label)
-    return out, {'things': len(out), 'by': counts, 'missing': sorted(e for e in _named() if e.lower() not in bases)}
+    # and what grows there (cells in no order, so that if the limit is met no side of the map is left bare)
+    planted = len(out)
+    order = list(cells)
+    rng.shuffle(order)
+    top = max(d for d, _i in PLANTS.values())
+    for n, (cx, cy) in enumerate(order):
+        if len(out) - planted >= PLANT_LIMIT:
+            break
+        if progress and n % 64 == 0:
+            progress('Planting', n, len(order))
+        for _ in range(int(top) + (rng.random() < top - int(top))):
+            x, y = (cx + rng.random()) * 4096.0, (cy + rng.random()) * 4096.0
+            # (a building's plot grows over like anywhere else: what would stand inside the building itself is taken out
+            # afterwards with everything else that would)
+            k = kind_at(x, y)[0] or PLANT_UNSAID
+            if k not in PLANTS:
+                continue
+            density, items = PLANTS[k]
+            if rng.random() > density / top:
+                continue
+            have = [i for i in items if i[0].lower() in bases]
+            if not have:
+                continue
+            pick = rng.random() * sum(i[1] for i in have)
+            for edid, w, smin, smax, sink in have:
+                pick -= w
+                if pick <= 0:
+                    break
+            many = 1 + int(rng.random() ** 2 * CLUMP_MOST) if edid.lower() in CLUMPS else 1
+            for m in range(many):
+                px, py = x, y
+                if m:
+                    a, d = rng.uniform(0, math.tau), rng.uniform(*CLUMP_OUT)
+                    px, py = x + math.sin(a) * d, y + math.cos(a) * d
+                    if (kind_at(px, py)[0] or PLANT_UNSAID) != k:
+                        continue
+                if k == 'seabed' and not (PLANT_SHALLOW <= (ground.at(px, py) or -1e9) < 0):
+                    continue
+                put(edid, px, py, rng.uniform(0, math.tau), rng.uniform(smin, smax), sink, SEA_BED if k == 'seabed' else 'Plants')
+    return out, {'things': len(out), 'plants': len(out) - planted, 'by': counts, 'missing': sorted(e for e in _named() if e.lower() not in bases)}
 
 
 # ---------- what a building was for ----------
@@ -320,6 +394,7 @@ ROUGH_LIMIT = 3000
 
 def _named():
     out = {e for _d, items in GROUND.values() for e, *_r in items} | {e for rows in STREET.values() for e, *_r in rows}
+    out |= {e for _d, items in PLANTS.values() for e, *_r in items}
     out |= {r[0] for _e, rows in ON_ROAD.values() for r in rows}
     out |= {r[0] for rows in LIFE.values() for r in rows} | {r[0] for _w, rows in LIFE_WORD for r in rows}
     out |= {r[0] for rows in SCENES.values() for r in rows} | {r[0] for r in RUBBLE}

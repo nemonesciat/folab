@@ -130,3 +130,22 @@ check('a big plot takes more than rubble: a ruin, a trailer, a wall, wrecks', le
       'TruckTrailer03', 'TruckTrailer04', 'TruckTrailer06', 'UrbanCourtyardwallStr01', 'UrbanCourtyardwallStr02', 'Car01HulkBodyStatic', 'ScaffoldDestroyed01'}) >= 3, sorted(kinds))
 check('a tiny one only a heap', {edid(o) for o in found['tiny']} <= {'SuburbanRubblePileSm01', 'ConcreteSlab01', 'Barrel01', 'RubblePile02', 'SuburbanRubblePile01bLiteLitter',
       'RoadChunkCluster01', 'SWSingleRubble'}, sorted({edid(o) for o in found['tiny']}))
+
+# ---------- what grows ----------
+# woods are thick with the game's own green, some of it grown far past its size, in clumps; a road stays clear
+wops, wrep = osmdress.ops(gd, project.Project.create('Green'), world, Cover('trees'), [], 3)
+green = [o for o in wops if o['op'] == 'add']
+names = {k: gd.edid(gd.from_key(k)) for k in {o['base'] for o in green}}
+in_plants = {e.lower() for e, *_r in osmdress.PLANTS['trees'][1]}
+mine = [o for o in green if names[o['base']].lower() in in_plants]
+check('woods are planted thick', wrep['plants'] >= 150 and len(mine) >= 150, (wrep['plants'], len(mine)))
+check('with trees, ferns and more: many kinds', len({o['base'] for o in mine}) >= 10, len({o['base'] for o in mine}))
+check('some grown far past their size', max(o['s'] for o in mine) > 3 and min(o['s'] for o in mine) >= 0.5, (min(o['s'] for o in mine), max(o['s'] for o in mine)))
+road_top = (int(y // 128) - 60 + 45) * 128.0
+check('none on the road', not any(o['p'][1] < road_top - 64 and abs(o['p'][0] - x) < 60 * 128 and o['p'][1] > (int(y // 128) - 60) * 128.0 for o in mine))
+fern = next(k for k, e in names.items() if e.lower() == 'v22fern')
+ferns = [o['p'] for o in green if o['base'] == fern]
+close = sum(1 for a in ferns if any(a is not b and math.hypot(a[0] - b[0], a[1] - b[1]) < 2 * osmdress.CLUMP_OUT[1] for b in ferns))
+check('small plants stand in clumps', ferns and close >= len(ferns) * 0.5, (close, len(ferns)))
+pops, prep = osmdress.ops(gd, project.Project.create('Grey'), world, Cover('paved'), [], 3)
+check('a paved place has weeds in its cracks, far fewer', 0 < prep['plants'] < wrep['plants'] * 0.3, (prep['plants'], wrep['plants']))

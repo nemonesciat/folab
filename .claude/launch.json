@@ -16,7 +16,7 @@
     {
       "name": "folab-look",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set FOLAB_HOME=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\home27&& set FOLAB_NV_INI=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\ini&& py -3 app/server.py 8773 --no-browser"],
+      "runtimeArgs": ["/c", "set FOLAB_HOME=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\home28s&& set FOLAB_NV_INI=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\ini&& py -3 app/server.py 8773 --no-browser"],
       "port": 8773
     }
   ]
