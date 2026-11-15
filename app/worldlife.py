@@ -74,6 +74,7 @@ class Life:
         self.safe = [(start[0], start[1])]
         self.tier_of = {}
         self.taken = []
+        self.blocked = None                     # (blocked(x, y) -> True where nobody can stand: inside a building, a landmark)
 
     def key(self, tags, edid):
         k = (tags, edid.lower())
@@ -158,7 +159,7 @@ class Life:
                 px, py = x + math.sin(a) * d, y + math.cos(a) * d
                 z = self.ground.at(px, py)
                 cell = self.grid.get((int(px // 4096), int(py // 4096)))
-                if z is None or z < 8 or cell is None:
+                if z is None or z < 8 or cell is None or (self.blocked and self.blocked(px, py)):
                     continue
                 self.ops.append({'op': 'add', 'cell': self.gd.key(cell), 'base': key, 'p': [round(px, 1), round(py, 1), round(z + 4.0, 1), 0.0, 0.0, round(self.rng.uniform(0, math.tau), 3)], 's': 1})
                 n += 1
@@ -174,6 +175,8 @@ class Life:
             rows = AT_SCENE.get(kind)
             if not rows:
                 continue
+            if self.blocked and self.blocked(x, y):
+                continue                        # (the scene was cleared for something built there since)
             hostile = kind in ('raiders', 'roadblock', 'crash')
             if hostile and self.near_safe(x, y):
                 continue

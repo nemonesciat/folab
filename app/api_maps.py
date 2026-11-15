@@ -563,11 +563,13 @@ def life_job(body, srv):
             if not start or start[0] is None:
                 raise ValueError('Say where the player starts first (the mod\'s own new game): what\'s safe and what\'s hard go by it.')
             seed = int(body.get('seed', 1))
-            L = worldlife.Life(gd, pr, w, start, seed)
             P = osmdress._Putter(gd, pr, w, cover)
+            L = worldlife.Life(gd, pr, w, start, seed)
             inside = osmdress._Stands(osmdress.standing(gd, pr, w, cat), margin=120.0)
             marks = landmarks.standing(gd, pr, w)
-            keep = lambda x, y: inside.hit(x, y) or P.kind(x, y) in ('asphalt', 'seabed', None) or len(landmarks.clear_of([{'op': 'add', 'p': [x, y]}], marks)) == 0
+            within = lambda x, y: inside.hit(x, y) or len(landmarks.clear_of([{'op': 'add', 'p': [x, y]}], marks)) == 0
+            keep = lambda x, y: within(x, y) or P.kind(x, y) in ('asphalt', 'seabed', None)
+            L.blocked = within
             edid = srv.GD.edid(w)
             air = body.get('air') or {}
             if air.get('weathers'):
