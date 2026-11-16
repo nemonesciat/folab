@@ -43,7 +43,7 @@ import nif
 import recordio
 import roadgen
 
-FORMAT = 7              # (buildings.json's layout: a file with another number is made again)
+FORMAT = 10              # (buildings.json's layout: a file with another number is made again)
 MIN_SIDE, MAX_SIDE = 300, 3600
 DWELLING = re.compile(r'\\mobilehome[^\\]*\.nif$')   # (homes the game keeps with its vehicles, narrower than a building: trailer lots are full of them)
 MIN_HIGH, MAX_HIGH = 220, 1700
@@ -66,8 +66,8 @@ CLEAR_BELOW = 400.0      # (the mod's own things smaller than this across are ta
 FLOAT_MOST = 48.0        # (however far the game once let the ground fall away under one, a trailer on a cliff's edge: the model's own underside no further over the ground than this, or it floats)
 DRY = 8.0                # (ground lower than this is looked at for water over it)
 DOOR_LOCK = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}
-INSIDE_SHARE = 0.35        # (of ordinary buildings that have a real place behind them in the game, how many get one; plots that stand out always)
-MAX_INSIDES = 40           # (places made in one go: each needs a navmesh, a few seconds)
+INSIDE_SHARE = 0.6         # (of ordinary buildings that have a real place behind them in the game, how many get one; plots that stand out always)
+MAX_INSIDES = 300          # (places made in one go: each needs a navmesh, a few seconds)
 INITIALLY_OFF = 0x800      # (a ref's record flag: off until something switches it on)
 NOT_INSIDE = {'NPC_', 'CREA', 'LVLN', 'LVLC', 'KEYM', 'NOTE', 'TACT', 'TERM'}
 PLACE_NAME = {'house': 'House', 'shop': 'Shop', 'apartments': 'Offices', 'civic': 'Hall', 'industrial': 'Works'}
@@ -278,7 +278,7 @@ def survey(gd, progress=None):
             if r['type'] == 'REFR' and r['leads'] and r['base'] in gd.forms and gd.forms[r['base']][1].tag == 'DOOR':
                 doors.append(r)
                 continue
-            if r['type'] == 'REFR' and r['base'] in gd.forms and abs(r['scale'] - 1) < 0.01 and _shuts(gd, r['base']):
+            if r['type'] == 'REFR' and r['base'] in gd.forms and _shuts(gd, r['base']):      # (at any size: the game fits a door or boards to the doorway)
                 shuts.append(r)
                 continue
             b = base(r['base'])
@@ -313,6 +313,10 @@ def survey(gd, progress=None):
                         and box[2] - SHUT_REACH <= d['pos'][2] - r['pos'][2] <= box[5]:
                     row = {'base': gd.key(d['base']), 'x': round(lx, 1), 'y': round(ly, 1), 'z': round(d['pos'][2] - r['pos'][2], 1),
                            'rz': round((d['rot'][2] - r['rot'][2]) % math.tau, 4), 'tx': round(d['rot'][0], 4), 'ty': round(d['rot'][1], 4)}
+                    if abs((d['scale'] or 1.0) - 1) > 0.005:
+                        row['s'] = round(d['scale'], 3)
+                    if _BOARDS.search((gd.edid(d['base']) or '').lower()):
+                        row['board'] = 1
                     if gd.forms[d['base']][1].tag == 'DOOR':
                         row['door'] = 1
                     shut.append(row)
@@ -367,7 +371,7 @@ def survey(gd, progress=None):
                 had.add(ins['cell'])
                 insides.append(dict(ins, door=k))
         out.append({'key': gd.key(fid), 'edid': edid, 'model': model, 'box': [round(v, 1) for v in box], 'uses': len(uses), 'alone': round(alone, 2),
-                    'family': family_of(edid), 'doors': doors, 'shut': _doorways(doors, [u[4] for u in uses if u[2]] or [u[4] for u in uses]), 'mid': round(mid[len(mid) // 2], 1), 'lo': round(min(lo), 1) if lo else 0.0,
+                    'family': family_of(edid), 'doors': doors, 'shut': _doorways(doors, [u[4] for u in uses if u[2]]) or _doorways(doors, [u[4] for u in uses]), 'mid': round(mid[len(mid) // 2], 1), 'lo': round(min(lo), 1) if lo else 0.0,
                     'hi': round(max(hi), 1) if hi else 0.0, 'insides': insides, 'solid': round(whole, 2)})
     out.sort(key=lambda b: b['edid'].lower())
     return out
@@ -375,7 +379,7 @@ def survey(gd, progress=None):
 
 SHUT_REACH = 40.0       # (how far outside a building's box something in its doorway may be)
 SHUT_SAME = 80.0        # (two things this near are in the same doorway)
-SHUT_MOST = 12
+SHUT_MOST = 48          # (a motel has a door to every room, on two floors)
 _SHUT_WORD = re.compile(r'door|woodplanksgroup')       # (boards nailed over a doorway are the game's WoodPlanksGroup)
 _SHUT_NOT = re.compile(r'doorframe|doorway|indoor|outdoor|doorbell|doormat')
 _shut_known = {}
@@ -408,7 +412,8 @@ def _doorways(doors, placements):
     ways.sort(key=lambda w: -len(w[3]))         # (the doorways most placements shut, first)
     out = []
     for w in ways[:SHUT_MOST]:
-        out += max(w[3].values(), key=len)[:3]
+        # (as the placement that puts a door there has it, before one that only boards it over)
+        out += max(w[3].values(), key=lambda rows: (any(not r.get('board') for r in rows), len(rows)))[:3]
     return out
 
 
@@ -495,10 +500,29 @@ def copied_navmesh(gd, pr, src, ckey, door_keys):
 # A hotel on the map is a hotel inside, whatever stands for it outside: a small building's own interior behind the door
 # of the Hyatt was a corner shop. So a plot the map calls a hotel (its kind, or its name) gets one of the game's big
 # hotel and casino floors behind its door, the ones with a single way out to the street.
-GRAND = {'hotel': ('VikkiAndVance', 'BisonSteve01', 'MonteCarloSuitesInterior', 'FreesideAtomicWrangler', 'JacobstownLodge', '2CCampGolfResort')}
-GRAND_KIND = {'hotel': 'hotel', 'motel': 'hotel', 'hostel': 'hotel', 'guest_house': 'hotel', 'resort': 'hotel'}
-GRAND_NAME = re.compile(r'\b(hotel|inn|resort|suites?|motel|lodge|hostel|hyatt|hilton|marriott|sheraton|westin|outrigger)\b', re.I)
-GRAND_MOST = 12             # (of the places made in one go, how many may be these: the rest stay for ordinary buildings)
+# The same for the other places a town has that are big inside or particular: a market, a warehouse, offices, a school,
+# a police station, a clinic. Each kind has its own few of the game's interiors and its own share of the places made.
+GRAND = {'hotel': ('VikkiAndVance', 'BisonSteve01', 'MonteCarloSuitesInterior', 'FreesideAtomicWrangler', 'JacobstownLodge', '2CCampGolfResort'),
+         'market': ('NiptonGeneralStore', 'FreesideRobotShop', 'WestsideLiquorStoreInterior', 'GSGeneralStore', 'WestsidePawnShopInterior', 'FreesideSupplyDropHouse'),
+         'works': ('FreesideVanGraffWarehouse', 'NorthVegasHouseTools', '1ENeonSignFactory', '2EOMichaelAngelo', '1EEastPumpStation'),
+         'office': ('RepconHQ01', 'AerotechOfficeInterior01', 'AerotechOfficeInterior02', 'SLAlliedTechnologiesOfficesINT', 'QJOffice'),
+         'school': ('NellisSchool', 'CampSearchlightSchool', 'GSSchoolHouse'),
+         'police': ('CampSearchlightPoliceStation', 'PrimmSheriffStation', 'SLNHPStationINT', '2ENCREmbassy02'),
+         'clinic': ('NewVegasMedicalClinicInterior',)}
+GRAND_KIND = {'hotel': 'hotel', 'motel': 'hotel', 'hostel': 'hotel', 'guest_house': 'hotel', 'resort': 'hotel',
+              'supermarket': 'market', 'mall': 'market', 'department_store': 'market', 'warehouse': 'works', 'industrial': 'works', 'hangar': 'works',
+              'manufacture': 'works', 'office': 'office', 'government': 'office', 'bank': 'office', 'school': 'school', 'college': 'school', 'university': 'school',
+              'kindergarten': 'school', 'police': 'police', 'fire_station': 'police', 'hospital': 'clinic', 'clinic': 'clinic'}
+GRAND_NAMES = (('hotel', re.compile(r'\b(hotel|inn|resort|suites?|motel|lodge|hostel|hyatt|hilton|marriott|sheraton|westin|outrigger)\b', re.I)),
+               ('market', re.compile(r'\b(market|supermarket|foodland|safeway|grocery|mart|stores?|shopping)\b', re.I)),
+               ('works', re.compile(r'\b(warehouse|depot|factory|cannery|works|storage)\b', re.I)),
+               ('police', re.compile(r'\b(police|sheriff|fire station)\b', re.I)),
+               ('clinic', re.compile(r'\b(clinic|hospital|medical)\b', re.I)),
+               ('school', re.compile(r'\b(school|academy|college|library)\b', re.I)),
+               ('office', re.compile(r'\b(bank|offices?|consulate|city hall|courthouse)\b', re.I)))
+GRAND_NAME = GRAND_NAMES[0][1]
+GRAND_MOST = 10             # (of the places made in one go, how many may be of one of these kinds: the rest stay for ordinary buildings)
+POOL_THINGS = 420           # (an interior with more in it than this isn't lent to a building of another kind)
 GRAND_OUT = 110.0           # (how far outside the door one arrives)
 _grand = {}
 
@@ -508,9 +532,151 @@ def grand_kind(row):
     if not row:
         return None
     k = GRAND_KIND.get((row.get('kind') or '').lower())
-    if not k and GRAND_NAME.search(row.get('name') or ''):
-        k = 'hotel'
+    if not k:
+        name = row.get('name') or ''
+        k = next((what for what, pat in GRAND_NAMES if pat.search(name)), None)
     return k
+
+
+def pools_of(cat):
+    """{family: [interiors]}: every place the game has behind a building of that family, for a building of the same family
+    that has a door but no place of its own (as the game's own interiors of a family are much alike). Each without its
+    arrival outside: that is worked out from the door it goes behind."""
+    out = {}
+    for b in cat:
+        for i in b.get('insides', ()):
+            if i.get('things', 0) <= POOL_THINGS:
+                out.setdefault(b['family'], {})[i['cell']] = dict({k: v for k, v in i.items() if k != 'arrive_out'}, door=0)
+    return {f: list(v.values()) for f, v in out.items()}
+
+
+_entries = {}
+_door_names = {}
+
+
+def entries_of(gd, b):
+    """Which of a building's `shut` rows can be ways in: [(which row, the real door to stand there)]. A door that leads
+    nowhere is one already; a static made to look like a door (`...DoorStatic`) is swapped for the door it copies, where
+    the game has one of that name."""
+    if b['key'] not in _entries:
+        got = []
+        for n, d in enumerate(b.get('shut', ())):
+            if d.get('door'):
+                got.append((n, d['base']))
+                continue
+            e = (gd.edid(gd.from_key(d['base'])) or '').lower()
+            if d.get('board') or 'door' not in e:
+                continue
+            if id(gd) not in _door_names:
+                _door_names[id(gd)] = {(gd.edid(f) or '').lower(): f for f, (_i, r) in gd.forms.items() if r.tag == 'DOOR'}
+            bare = e.replace('static', '')
+            twin = _door_names[id(gd)].get(bare) if bare != e else None
+            if twin is None:
+                twin = _door_names[id(gd)].get(bare.rstrip('0123456789')) if bare.rstrip('0123456789') != e else None      # (dlc04shackdoor01: dlc04shackdoor)
+            if twin is None:
+                twin = _door_like(gd, gd.from_key(d['base']))
+            if twin is not None:
+                got.append((n, gd.key(twin)))
+        _entries[b['key']] = got
+    return _entries[b['key']]
+
+
+_like = {}
+LIKE_BOX = 12.0             # (two boxes whose six sides differ by no more than this in all are the same door)
+
+
+def _door_like(gd, static):
+    """A real door that looks like a static made to look like one: the same model, else the same box. One with no script
+    of its own (a door of some quest would bring its quest with it)."""
+    key = (id(gd), static)
+    if key not in _like:
+        if id(gd) not in _like:
+            doors = []
+            for f, (_i, r) in gd.forms.items():
+                if r.tag == 'DOOR':
+                    fl = gd.fields(f)
+                    if 'SCRI' in fl:
+                        continue
+                    m = fl.get('MODL')
+                    doors.append((f, (m[:-1].decode('cp1252', 'replace') if m else '').lower().replace('/', '\\'), obnd(gd, gd.key(f))))
+            _like[id(gd)] = doors
+        m = gd.fields(static).get('MODL')
+        model = (m[:-1].decode('cp1252', 'replace') if m else '').lower().replace('/', '\\')
+        box = obnd(gd, gd.key(static))
+        got = next((f for f, dm, _o in _like[id(gd)] if model and dm == model), None)
+        if got is None and box:
+            best = min(((sum(abs(u - v) for u, v in zip(box, o)), f) for f, _dm, o in _like[id(gd)] if o), default=None)
+            if best and best[0] <= LIKE_BOX:
+                got = best[1]
+        _like[key] = got
+    return _like[key]
+
+
+def entry_of(gd, b):
+    """For a building with no door that leads anywhere: the first of its `entries_of`, or None."""
+    got = entries_of(gd, b) if not b['doors'] else []
+    return got[0] if got else None
+
+
+# A motel or a block of flats is a row of doors, each to a room: a few of them open (the game's own motel rooms behind
+# them), the rest stay shut.
+STRIP = re.compile(r'noso|motel|apartment|rowhouse')
+ROOMS = ('NovacPlayersRoom', 'ElReyMotelRoom02', 'ElReyMotelRoom03', 'SLHellsMotel', 'NiptonHotel')
+ROOMS_EACH = 3              # (rooms opened in one building)
+ROOMS_MOST = 45             # (and in one go)
+
+
+# A doorway the game only nails boards over shows daylight between them here, where the building is a hollow shell with
+# nothing behind: the game's own black sheet (BlackPlane01, a 256 square) is stood just inside, facing out.
+BLACK = 'BlackPlane01'
+BLACK_ON = False           # (off: stood by the building's box it came out in front of porch walls, 1,100 black squares in a town.
+                           # To come back it must go by the boards' own facing, just behind them, no bigger than they are)
+BLACK_SIZE = 1.3
+BLACK_IN = 14.0
+_BOARDS = re.compile(r'woodplanks|barricade')
+_black = {}
+
+
+def boarded_ways(gd, b):
+    """The middles (x, y in the building's frame) of the doorways that have boards over them and no door or door static."""
+    if b['key'] not in _black:
+        ways = []
+        for d in b.get('shut', ()):
+            e = (gd.edid(gd.from_key(d['base'])) or '').lower()
+            for w in ways:
+                if math.hypot(d['x'] - w[0], d['y'] - w[1]) < SHUT_SAME:
+                    w[2].append(e)
+                    break
+            else:
+                ways.append([d['x'], d['y'], [e]])
+        _black[b['key']] = [(w[0], w[1]) for w in ways if all(_BOARDS.search(e) for e in w[2])
+                            and not any(math.hypot(w[0] - d['x'], w[1] - d['y']) < SHUT_SAME for d in b['doors'])]
+    return _black[b['key']]
+
+
+def _outward(b, x, y):
+    """Which way is out, for a spot in or against a building's wall: a unit step along x or y in its frame."""
+    x0, y0, _z0, x1, y1, _z1 = b['box']
+    vx, vy = x - (x0 + x1) / 2, y - (y0 + y1) / 2
+    if abs(vx) / max(1.0, (x1 - x0) / 2) > abs(vy) / max(1.0, (y1 - y0) / 2):
+        return (1.0 if vx > 0 else -1.0), 0.0
+    return 0.0, (1.0 if vy > 0 else -1.0)
+
+
+def _facing(ux, uy):
+    """The turn (rx, ry, rz) that stands a flat sheet (lying in its own x-y, face up) upright with its face toward
+    (ux, uy) and its edges level. Found by trying: the game turns about z first, so the face is aimed with rx and ry."""
+    import navgen
+    best = None
+    for rx in (math.pi / 2, -math.pi / 2):
+        for k in range(360):
+            ry = math.tau * k / 360
+            for rz in (0.0, math.pi / 2):
+                R = navgen._turn(rx, ry, rz)
+                score = R[0][2] * ux + R[1][2] * uy - abs(R[2][0]) - abs(R[2][2])
+                if best is None or score > best[0]:
+                    best = (score, rx, ry, rz)
+    return best[1], best[2], best[3]
 
 
 def grand_inside(gd, edid):
@@ -534,18 +700,36 @@ def grand_inside(gd, edid):
     return _grand[key]
 
 
-def _arrive_out(inside, ox, oy, z, rz, b=None):
+def _arrive_door(d, ox, oy, z, rz, b, gd=None):
+    """Coming out of a room in a row of them: on the walkway just before its own door (which may be upstairs, and well
+    inside the building's box), facing away from it."""
+    # (which way a door faces is its thin side, turned as it stands; of the two ways through it, out is the one away from
+    # the building's middle)
+    o = obnd(gd, d['base']) if gd is not None else None
+    thin_x = bool(o) and (o[3] - o[0]) < (o[4] - o[1])
+    nx, ny = turn(1.0 if thin_x else 0.0, 0.0 if thin_x else 1.0, d['rz'])
+    x0, y0, _z0, x1, y1, _z1 = b['box']
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    if math.hypot(d['x'] - nx * ROOM_OUT - cx, d['y'] - ny * ROOM_OUT - cy) > math.hypot(d['x'] + nx * ROOM_OUT - cx, d['y'] + ny * ROOM_OUT - cy):
+        nx, ny = -nx, -ny
+    ux, uy = nx, ny
+    dx, dy = turn(d['x'] + ux * ROOM_OUT, d['y'] + uy * ROOM_OUT, rz)
+    return [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'] + 4.0, 2), 0.0, 0.0, round((rz + math.atan2(ux, uy)) % math.tau, 4)]
+
+
+ROOM_OUT = 70.0
+
+
+def _arrive_out(inside, ox, oy, z, rz, b=None, d=None):
     if 'arrive_out' not in inside:
         # (a place that isn't this building's own: out through the door, a step clear of the wall it is in, facing away)
-        d = b['doors'][inside['door']]
+        d = d or b['doors'][inside['door']]
         x0, y0, _z0, x1, y1, _z1 = b['box']
-        vx, vy = d['x'] - (x0 + x1) / 2, d['y'] - (y0 + y1) / 2
-        if abs(vx) / max(1.0, (x1 - x0) / 2) > abs(vy) / max(1.0, (y1 - y0) / 2):
-            ux, uy = (1.0 if vx > 0 else -1.0), 0.0
-            lx, ly = (x1 if vx > 0 else x0) + ux * GRAND_OUT, d['y']
+        ux, uy = _outward(b, d['x'], d['y'])
+        if ux:
+            lx, ly = (x1 if ux > 0 else x0) + ux * GRAND_OUT, d['y']
         else:
-            ux, uy = 0.0, (1.0 if vy > 0 else -1.0)
-            lx, ly = d['x'], (y1 if vy > 0 else y0) + uy * GRAND_OUT
+            lx, ly = d['x'], (y1 if uy > 0 else y0) + uy * GRAND_OUT
         dx, dy = turn(lx, ly, rz)
         return [round(ox + dx, 2), round(oy + dy, 2), round(z + b['mid'] + 8.0, 2), 0.0, 0.0, round((rz + math.atan2(ux, uy)) % math.tau, 4)]
     p = inside['arrive_out']
@@ -610,6 +794,7 @@ class World:
         self.grid = gd.grid(world)
         self.ground = roadgen.Ground(gd, pr, world)
         self.ins = None
+        self._black = False
         self.touched = set()                 # (grid squares a building stands over: their navmesh needs making again)
         self.ours = {b['key'] for b in cat}
         self.boxes, self.big, self.small = {}, [], []
@@ -634,6 +819,15 @@ class World:
                 for bx in range(int(min(xs) // 1024), int(max(xs) // 1024) + 1):
                     for by in range(int(min(ys) // 1024), int(max(ys) // 1024) + 1):
                         self.bucket[(bx, by)].append(item)
+
+    def black_key(self):
+        """The game's black sheet, or None."""
+        if not BLACK_ON:
+            return None
+        if self._black is False:
+            f = next((f for f, (_i, r) in self.gd.forms.items() if r.tag == 'STAT' and self.gd.edid(f) == BLACK), None)
+            self._black = self.gd.key(f) if f is not None else None
+        return self._black
 
     def _box(self, key):
         if key not in self.boxes:
@@ -712,6 +906,7 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE, 
     if insides:
         prefix = re.sub(r'[^A-Za-z0-9]', '', gd.edid(world)) or 'Town'
         w.ins = Insides(gd, prefix, insides, seed=seed, taken=[recordio.field(r, 'EDID') for r in pr.records.values()])
+        w.ins.pools = pools_of(cat)
     roads = _roads(gd, w)
     road_bucket = collections.defaultdict(list)
     for x, y in roads:
@@ -771,7 +966,7 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE, 
             rep['nothing_fits'] += 1
         else:
             rep['built'] += 1
-    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'too_small': rep['too_small'],
+    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'opened': rep.get('opened', 0), 'rooms': rep.get('rooms', 0), 'backed': rep.get('backed', 0), 'too_small': rep['too_small'],
               'nothing_fits': rep['nothing_fits'], 'blocked': rep['blocked'], 'steep': rep['steep'], 'had_one': rep['had_one'],
               'cleared': len(gone), 'families': dict(fams), 'catalogue': len(cat), 'roads_seen': len(roads), 'poi': rep['poi'], 'landmarks': rep['landmarks'],
               'insides': len(w.ins.tags) if w.ins else 0, 'inside_things': w.ins.things if w.ins else 0, 'made': list(w.ins.tags) if w.ins else [],
@@ -949,7 +1144,14 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
         if (int(x // 4096), int(y // 4096)) in w.grid:
             w.touched.add((int(x // 4096), int(y // 4096)))
     rep['buildings'] += 1
-    inside = w.ins.pick(b, poi, row) if w.ins else None
+    entry = entry_of(w.gd, b)
+    inside = w.ins.pick(b, poi, row, entry is not None) if w.ins else None
+    rooms = {}
+    if w.ins and STRIP.search(b['edid'].lower()):
+        # (spread along the row, not the first three doors side by side)
+        ways = [e for e in entries_of(w.gd, b) if entry is None or e[0] != entry[0]]
+        for e in ways[::max(1, len(ways) // ROOMS_EACH)][:ROOMS_EACH]:
+            rooms[e[0]] = e[1]
     for k, d in enumerate(b['doors']):
         dx, dy = turn(d['x'], d['y'], rz)
         dck = w.cell_at(ox + dx, oy + dy) or ck
@@ -960,14 +1162,38 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
         else:
             o['extra'] = DOOR_LOCK
             ops.append(o)
-    for d in b.get('shut', ()):
+    for n, d in enumerate(b.get('shut', ())):
         dx, dy = turn(d['x'], d['y'], rz)
-        o = {'op': 'add', 'cell': w.cell_at(ox + dx, oy + dy) or ck, 'base': d['base'],
-             'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)], 's': 1}
+        dck = w.cell_at(ox + dx, oy + dy) or ck
+        o = {'op': 'add', 'cell': dck, 'base': d['base'],
+             'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)], 's': d.get('s', 1)}
+        if entry is not None and n == entry[0] and inside:
+            # (the way in: the real door in place of what only looked like one, a place behind it)
+            o['base'] = entry[1]
+            ops.extend(w.ins.make(inside, b, row, o, dck, _arrive_out(inside, ox, oy, z, rz, b, d)))
+            rep['doors'] += 1
+            rep['opened'] = rep.get('opened', 0) + 1
+            continue
+        room = w.ins.room() if n in rooms else None
+        if room:
+            o['base'] = rooms[n]
+            ops.extend(w.ins.make(room, b, row, o, dck, _arrive_door(d, ox, oy, z, rz, b, w.gd)))
+            rep['doors'] += 1
+            rep['rooms'] = rep.get('rooms', 0) + 1
+            continue
         if d.get('door'):
             o['extra'] = DOOR_LOCK
         ops.append(o)
         rep['shut'] = rep.get('shut', 0) + 1
+    black = w.black_key()
+    for bx, by in (boarded_ways(w.gd, b) if black else ()):
+        ux, uy = _outward(b, bx, by)
+        dx, dy = turn(bx - ux * BLACK_IN, by - uy * BLACK_IN, rz)
+        wx, wy = turn(ux, uy, rz)
+        rx, ry, rz2 = _facing(wx, wy)
+        ops.append({'op': 'add', 'cell': w.cell_at(ox + dx, oy + dy) or ck, 'base': black,
+                    'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + b['mid'] + 128.0 * BLACK_SIZE - 12.0, 2), round(rx, 4), round(ry, 4), round(rz2, 4)], 's': BLACK_SIZE})
+        rep['backed'] = rep.get('backed', 0) + 1
     return True
 
 
@@ -978,28 +1204,44 @@ class Insides:
         self.gd, self.prefix, self.share, self.left = gd, prefix, share, most
         self.rng = random.Random(seed * 7919 + 1)
         self.used = collections.Counter()
-        self.grand = set()                       # (the cells of the big places: GRAND)
+        self.kinds = collections.Counter()       # (how many of each big kind were made: GRAND_MOST)
+        self.pools = {}                          # (pools_of(cat), set by plan)
         self.tags = []                           # (what was made: [(tag, family)])
         self.taken = {e.lower() for e in taken}
         self.n = collections.Counter()
         self.things = 0
 
-    def pick(self, b, poi, row=None):
+    def pick(self, b, poi, row=None, entry=False):
         """One of the places the game has behind this building, or None: always on a plot that stands out, else by share.
-        A plot that calls for a big place (a hotel) gets one of those, whatever the building."""
+        A plot that calls for a big or particular place (a hotel, a market, a school) gets one of those, whatever the
+        building. A building with a door (or, entry, something that can be made one) but no place of its own in the game
+        borrows one from the others of its family."""
+        if self.left <= 0 or not (b['doors'] or entry):
+            return None
         what = grand_kind(row)
-        if what and self.left > 0 and b['doors'] and sum(1 for c in self.used.elements() if c in self.grand) < GRAND_MOST:
+        if what and self.kinds[what] < GRAND_MOST:
             big = [g for g in (grand_inside(self.gd, e) for e in GRAND[what]) if g]
             if big:
-                self.grand |= {i['cell'] for i in big}
+                self.kinds[what] += 1
                 least = min(self.used[i['cell']] for i in big)
                 return self.rng.choice([i for i in big if self.used[i['cell']] == least])
-        if not b.get('insides') or self.left <= 0 or not b['doors']:
+        own = b.get('insides') if b['doors'] else None
+        cands = own or self.pools.get(b['family']) or ()
+        if not cands or (not poi and self.rng.random() >= self.share):
             return None
-        if not poi and self.rng.random() >= self.share:
+        least = min(self.used[i['cell']] for i in cands)
+        return self.rng.choice([i for i in cands if self.used[i['cell']] == least])
+
+    def room(self):
+        """A motel room for one door of a row of them, or None when enough have been made."""
+        if self.left <= 0 or self.kinds['room'] >= ROOMS_MOST:
             return None
-        least = min(self.used[i['cell']] for i in b['insides'])
-        return self.rng.choice([i for i in b['insides'] if self.used[i['cell']] == least])
+        got = [g for g in (grand_inside(self.gd, e) for e in ROOMS) if g]
+        if not got:
+            return None
+        self.kinds['room'] += 1
+        least = min(self.used[i['cell']] for i in got)
+        return self.rng.choice([i for i in got if self.used[i['cell']] == least])
 
     def make(self, inside, b, row, door_op, dck, arrive_out):
         self.left -= 1

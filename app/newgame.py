@@ -44,8 +44,8 @@ OPENING = 'VCG01'
 HUSH_BELOW = 55     # (the opening's stages while the player is in bed, up to being let walk)
 WORN_WAIT = 120   # (seconds to wait for the Pip-Boy to be on before giving up on its reset)
 SETTLE = 1    # (seconds of play before the player is moved: the new game sets them up first)
-QUIET = {'dlc': ('The DLCs\' invitations', 'radio signals and notes that start Dead Money, Honest Hearts, Old World Blues and Lonesome Road',
-                 ['NVDLC01MQ00', 'NVDLC02MQ00', 'NVDLC03MQ00', 'NVDLC04MQ00']),
+QUIET = {'dlc': ('The DLCs\' invitations', 'radio signals and notes that start Dead Money, Honest Hearts, Old World Blues and Lonesome Road, and the notice from Gun Runners\' Arsenal',
+                 ['NVDLC01MQ00', 'NVDLC02MQ00', 'NVDLC03MQ00', 'NVDLC04MQ00', 'NVDLC05MQ00']),     # (the last: Gun Runners' Arsenal setting up the Mojave's shops, with its notice)
          'stash': ('Pre-order packs and the Courier\'s Stash', 'Mojave gear put in your pack at the start. Switching them off makes the packs masters of your mod, so players need them',
                    ['VPreorderClassic', 'VPreorderMercenary', 'VPreorderCaravan', 'VPreorderTribal', 'PreordVault13CanteenQuest'])}
 START_ENABLED = 0x01

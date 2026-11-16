@@ -181,7 +181,7 @@ def lift(gd, name):
         b = _doors.get(gd.key(base))
         for d in (list(b['doors']) + list(b.get('shut', ())) if b else ()):
             tx, ty = _turn(d['x'], d['y'], rz)
-            pieces.append((d['base'], dx + tx, dy + ty, up + d['z'], d['tx'], d['ty'], (rz + d['rz']) % math.tau, 1.0))
+            pieces.append((d['base'], dx + tx, dy + ty, up + d['z'], d['tx'], d['ty'], (rz + d['rz']) % math.tau, d.get('s', 1.0)))
     if not pieces:
         return None
     if spec.get('match'):

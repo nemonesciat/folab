@@ -44,10 +44,10 @@ GROUND = {
 # trees and bushes, Vault 22's ferns and grass (grown far past their size: what the bombs left in the soil), banana
 # plants, the lake's water plants in the shallows; some of it can be picked. Things in CLUMPS come several together.
 PLANTS = {
-    'sand': (8.0, [('NVQueenPalm01', 6, 0.9, 1.4, 4), ('NVDatePalm01', 2, 0.9, 1.3, 4), ('NVDatePalm02', 2, 0.9, 1.3, 4), ('NVDatePalm03', 2, 0.9, 1.3, 4),
+    'sand': (12.0, [('NVQueenPalm01', 6, 0.9, 1.4, 4), ('NVDatePalm01', 2, 0.9, 1.3, 4), ('NVDatePalm02', 2, 0.9, 1.3, 4), ('NVDatePalm03', 2, 0.9, 1.3, 4),
                    ('NVSagoPalm01', 3, 0.8, 1.4, 2), ('NVGoldfingerBanana', 2, 1.0, 1.6, 2), ('v22Grass', 3, 1.5, 3.0, 2), ('BuffaloGourdPickable', 1, 0.8, 1.2, 0),
                    ('NVAloeVera', 2, 1.0, 2.0, 0), ('NVFrailejon', 1, 1.0, 1.8, 0)]),
-    'grass': (60.0, [('v22Grass', 9, 1.5, 3.5, 2), ('v22Fern', 7, 1.5, 4.0, 2), ('NVGoldfingerBanana', 5, 1.0, 2.0, 2), ('NVQueenPalm01', 3, 0.9, 1.5, 4),
+    'grass': (100.0, [('v22Grass', 9, 1.5, 3.5, 2), ('v22Fern', 7, 1.5, 4.0, 2), ('NVGoldfingerBanana', 5, 1.0, 2.0, 2), ('NVQueenPalm01', 3, 0.9, 1.5, 4),
                      ('NVDatePalm01', 1, 0.9, 1.3, 4), ('NVDatePalm02', 1, 0.9, 1.3, 4), ('NVSagoPalm01', 2, 0.8, 1.5, 2), ('NVSagoPalm02', 2, 0.8, 1.5, 2),
                      ('NVDLC02TreeA1', 1, 1.2, 2.2, 6), ('NVDLC02TreeA2', 1, 1.2, 2.2, 6), ('NVDLC02TreeA3', 1, 1.2, 2.2, 6), ('NVDLC02TreeA4', 1, 1.2, 2.2, 6), ('NVDLC02TreeA5', 1, 1.2, 2.2, 6), ('NVDLC02TreeA6', 1, 1.2, 2.2, 6), ('NVDLC02TreeB1', 1, 1.2, 2.2, 6), ('NVDLC02TreeB2', 1, 1.2, 2.2, 6), ('NVDLC02TreeB3', 1, 1.2, 2.2, 6), ('NVDLC02TreeF2', 1, 1.2, 2.2, 6), ('NVDLC02TreeF3', 1, 1.2, 2.2, 6), ('NVDLC02TreeG2', 1, 1.2, 2.2, 6), ('NVDLC02TreeG3', 1, 1.2, 2.2, 6), ('NVDLC02TreeI2', 1, 1.2, 2.2, 6), ('NVDLC02TreeI3', 1, 1.2, 2.2, 6),
                      ('NVFicus01', 2, 0.8, 1.4, 6), ('NVFicus02', 2, 0.8, 1.4, 6), ('NVSassafras01', 2, 0.8, 1.4, 6), ('NVSassafras02', 2, 0.8, 1.4, 6), ('NVGreyBirch01', 2, 0.8, 1.4, 6), ('NVGreyBirch02', 2, 0.8, 1.4, 6),
@@ -57,7 +57,7 @@ PLANTS = {
                      ('NVDLC02SacredDaturaPlant', 1, 1.2, 2.2, 0), ('BananaYuccaPickable', 1, 1.2, 2.2, 0), ('BrocFlowerPlant', 1, 1.2, 2.2, 0), ('XanderRootPlant', 1, 1.2, 2.2, 0), ('HoneyMesquitePickable', 1, 1.2, 2.2, 0), ('CoyoteTobaccoPickable', 1, 1.2, 2.2, 0), ('JalapenoPickable', 1, 1.2, 2.2, 0),
                      ('EuonymusBush01', 2, 0.8, 1.4, 2), ('NVFalseSpireaPlant', 3, 1.0, 2.0, 2), ('NVAloeVera', 2, 1.0, 2.2, 0), ('NVFrailejon', 2, 1.0, 2.0, 0),
                      ('NVItalianCypress01', 1, 0.9, 1.5, 4), ('NVItalianCypress02', 1, 0.9, 1.5, 4), ('CaveFungusPlant', 1, 2.0, 4.0, 0)]),
-    'trees': (80.0, [('NVDLC02TreeA1', 3, 1.5, 3.0, 6), ('NVDLC02TreeA2', 3, 1.5, 3.0, 6), ('NVDLC02TreeA3', 3, 1.5, 3.0, 6), ('NVDLC02TreeA4', 3, 1.5, 3.0, 6), ('NVDLC02TreeA5', 3, 1.5, 3.0, 6), ('NVDLC02TreeA6', 3, 1.5, 3.0, 6), ('NVDLC02TreeB1', 3, 1.5, 3.0, 6), ('NVDLC02TreeB2', 3, 1.5, 3.0, 6), ('NVDLC02TreeB3', 3, 1.5, 3.0, 6), ('NVDLC02TreeF2', 3, 1.5, 3.0, 6), ('NVDLC02TreeF3', 3, 1.5, 3.0, 6), ('NVDLC02TreeG2', 3, 1.5, 3.0, 6), ('NVDLC02TreeG3', 3, 1.5, 3.0, 6), ('NVDLC02TreeI2', 3, 1.5, 3.0, 6), ('NVDLC02TreeI3', 3, 1.5, 3.0, 6),
+    'trees': (130.0, [('NVDLC02TreeA1', 3, 1.5, 3.0, 6), ('NVDLC02TreeA2', 3, 1.5, 3.0, 6), ('NVDLC02TreeA3', 3, 1.5, 3.0, 6), ('NVDLC02TreeA4', 3, 1.5, 3.0, 6), ('NVDLC02TreeA5', 3, 1.5, 3.0, 6), ('NVDLC02TreeA6', 3, 1.5, 3.0, 6), ('NVDLC02TreeB1', 3, 1.5, 3.0, 6), ('NVDLC02TreeB2', 3, 1.5, 3.0, 6), ('NVDLC02TreeB3', 3, 1.5, 3.0, 6), ('NVDLC02TreeF2', 3, 1.5, 3.0, 6), ('NVDLC02TreeF3', 3, 1.5, 3.0, 6), ('NVDLC02TreeG2', 3, 1.5, 3.0, 6), ('NVDLC02TreeG3', 3, 1.5, 3.0, 6), ('NVDLC02TreeI2', 3, 1.5, 3.0, 6), ('NVDLC02TreeI3', 3, 1.5, 3.0, 6),
                      ('NVFicus01', 4, 0.9, 1.6, 6), ('NVFicus02', 4, 0.9, 1.6, 6), ('NVSassafras01', 4, 0.9, 1.6, 6), ('NVSassafras02', 4, 0.9, 1.6, 6), ('NVGreyBirch01', 4, 0.9, 1.6, 6), ('NVGreyBirch02', 4, 0.9, 1.6, 6),
                      ('NVDLC02BushA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushEVA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushEVA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushMA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushMA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC03Leaves', 3, 1.0, 2.0, 4), ('NVDLC03LeavesLow', 3, 1.0, 2.0, 4),
                      ('NVDLC03VinesA', 2, 0.6, 1.2, 8), ('NVDLC03VinesB', 2, 0.6, 1.2, 8), ('NVDLC03VinesC', 2, 0.6, 1.2, 8),
@@ -65,22 +65,31 @@ PLANTS = {
                      ('WhiteOak01', 1, 0.5, 0.9, 10), ('NVDLC03WestJuniperLOW', 2, 0.8, 1.4, 6), ('NVQueenPalm01', 3, 1.0, 1.6, 4), ('NVDatePalm01', 2, 1.0, 1.4, 4),
                      ('NVGoldfingerBanana', 6, 1.2, 2.4, 2), ('v22Fern', 8, 2.0, 5.0, 2), ('v22Grass', 6, 2.0, 4.0, 2),
                      ('CaveFungusPlant', 2, 2.0, 4.0, 0), ('NVDLC02SacredDaturaPlant', 2, 1.5, 3.0, 0)]),
-    'golf': (24.0, [('v22Grass', 6, 1.5, 3.0, 2), ('NVQueenPalm01', 3, 1.0, 1.4, 4), ('NVGoldfingerBanana', 2, 1.0, 1.8, 2), ('EuonymusBush01', 2, 0.9, 1.4, 2),
+    'golf': (40.0, [('v22Grass', 6, 1.5, 3.0, 2), ('NVQueenPalm01', 3, 1.0, 1.4, 4), ('NVGoldfingerBanana', 2, 1.0, 1.8, 2), ('EuonymusBush01', 2, 0.9, 1.4, 2),
                     ('v22Fern', 3, 1.5, 3.0, 2), ('NVSagoPalm01', 2, 0.9, 1.3, 2), ('NVItalianCypress01', 2, 0.9, 1.5, 4), ('NVItalianCypress02', 2, 0.9, 1.5, 4),
                     ('NVFicus01', 1, 0.8, 1.3, 6), ('NVFicus02', 1, 0.8, 1.3, 6), ('NVSassafras01', 1, 0.8, 1.3, 6), ('NVSassafras02', 1, 0.8, 1.3, 6),
                     ('NVDLC02BushA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushA02LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA02LeavesOnly', 1, 0.8, 1.5, 4)]),
-    'yard': (22.0, [('v22Grass', 6, 1.0, 2.5, 2), ('v22Fern', 3, 1.0, 3.0, 2), ('NVGoldfingerBanana', 3, 1.0, 1.8, 2), ('NVSagoPalm01', 2, 0.8, 1.3, 2),
+    'yard': (36.0, [('v22Grass', 6, 1.0, 2.5, 2), ('v22Fern', 3, 1.0, 3.0, 2), ('NVGoldfingerBanana', 3, 1.0, 1.8, 2), ('NVSagoPalm01', 2, 0.8, 1.3, 2),
                     ('NVSagoPalm02', 2, 0.8, 1.3, 2), ('EuonymusBush01', 3, 0.7, 1.3, 2), ('NVDatePalm01', 1, 0.9, 1.2, 4),
                     ('NVDLC02BushA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushA02LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA02LeavesOnly', 1, 0.8, 1.5, 4),
                     ('NVDLC02SacredDaturaPlant', 1, 1.2, 2.2, 0), ('BananaYuccaPickable', 1, 1.2, 2.2, 0), ('BrocFlowerPlant', 1, 1.2, 2.2, 0), ('XanderRootPlant', 1, 1.2, 2.2, 0), ('HoneyMesquitePickable', 1, 1.2, 2.2, 0), ('CoyoteTobaccoPickable', 1, 1.2, 2.2, 0), ('JalapenoPickable', 1, 1.2, 2.2, 0),
                     ('BuffaloGourdPickable', 1, 0.8, 1.2, 0), ('NVFicus01', 1, 0.8, 1.3, 6), ('NVFicus02', 1, 0.8, 1.3, 6), ('NVItalianCypress01', 1, 0.9, 1.3, 4),
                     ('NVAloeVera', 2, 1.0, 1.8, 0), ('MaizeHealthyPGroup1', 1, 1.0, 1.4, 0), ('NVDLC03VinesC', 1, 0.5, 0.9, 6), ('NVFungusStalk01', 1, 2.0, 4.0, 0)]),
-    'paved': (6.0, [('v22Grass', 6, 1.0, 2.0, 2), ('v22Fern', 2, 1.0, 2.0, 2), ('NVFalseSpireaPlant', 2, 0.8, 1.4, 2), ('NVAloeVera', 1, 0.8, 1.4, 0)]),
-    'scrub': (20.0, [('CreosoteBushSm', 6, 0.8, 1.4, 2), ('CreosoteBushLg', 3, 0.8, 1.3, 2), ('YuccaANV', 2, 0.8, 1.3, 2), ('YuccaBNV', 2, 0.8, 1.3, 2),
+    'paved': (9.0, [('v22Grass', 6, 1.0, 2.0, 2), ('v22Fern', 2, 1.0, 2.0, 2), ('NVFalseSpireaPlant', 2, 0.8, 1.4, 2), ('NVAloeVera', 1, 0.8, 1.4, 0)]),
+    'scrub': (46.0, [('NVDLC02TreeA1', 2, 1.0, 1.8, 6), ('NVDLC02TreeB2', 2, 1.0, 1.8, 6), ('NVDLC02TreeG2', 2, 1.0, 1.8, 6), ('NVDLC02BushA01LeavesOnly', 4, 1.0, 1.8, 4), ('NVDLC02BushMA02LeavesOnly', 4, 1.0, 1.8, 4), ('NVDLC03LeavesLow', 3, 1.0, 1.8, 4), ('v22Grass', 8, 1.5, 3.5, 2), ('NVGoldfingerBanana', 2, 1.0, 1.8, 2), ('NVDLC03VinesC', 1, 0.5, 1.0, 8),
+                     ('CreosoteBushSm', 6, 0.8, 1.4, 2), ('CreosoteBushLg', 3, 0.8, 1.3, 2), ('YuccaANV', 2, 0.8, 1.3, 2), ('YuccaBNV', 2, 0.8, 1.3, 2),
                      ('YuccaCNV', 2, 0.8, 1.3, 2), ('NVbarrelcactus02', 2, 0.8, 1.4, 2), ('pricklypearcactus03', 2, 0.8, 1.3, 2), ('NVFalseSpireaPlant', 3, 1.0, 1.8, 2),
                      ('nevadaagave02', 2, 1.0, 2.0, 0), ('BananaYuccaPickable', 1, 1.0, 1.4, 0), ('v22Fern', 2, 1.5, 3.0, 2), ('NVSagebrush', 5, 0.8, 1.5, 2),
                      ('NVAloeVera', 2, 1.0, 2.0, 0), ('NVFrailejon', 2, 1.0, 1.8, 0), ('NVDLC03WestJuniperLOW', 1, 0.7, 1.2, 6), ('HoneyMesquitePickable', 1, 1.0, 1.5, 0)]),
-    'seabed': (6.0, [('NVSeaPlant01', 5, 1.0, 2.5, 0), ('NVSeaPlant02', 5, 1.0, 2.5, 0)]),
+    # (the mountain's bare rock and steep ground: what holds on there)
+    'rock': (30.0, [('v22Grass', 8, 1.5, 3.0, 2), ('v22Fern', 5, 1.5, 3.5, 2), ('NVSagebrush', 5, 0.8, 1.5, 2), ('NVAloeVera', 3, 1.0, 2.0, 0), ('NVFrailejon', 3, 1.0, 2.0, 0),
+                    ('nevadaagave02', 2, 1.0, 2.0, 0), ('NVDLC03WestJuniperLOW', 2, 0.7, 1.2, 6), ('NVDLC02BushA02LeavesOnly', 4, 0.9, 1.6, 4), ('NVDLC03LeavesLow', 3, 0.9, 1.6, 4),
+                    ('NVDLC03VinesC', 2, 0.5, 1.0, 8), ('NVDLC02TreeI2', 1, 1.0, 1.6, 6), ('CreosoteBushSm', 3, 0.8, 1.4, 2), ('NVFalseSpireaPlant', 3, 1.0, 1.8, 2)]),
+    'farm': (50.0, [('MaizeHealthyPGroup1', 8, 1.0, 1.5, 0), ('NVGoldfingerBanana', 8, 1.0, 2.0, 2), ('v22Grass', 6, 1.5, 3.0, 2), ('JalapenoPickable', 2, 1.2, 2.0, 0),
+                    ('MaizePickable', 3, 1.0, 1.5, 0), ('BuffaloGourdPickable', 2, 0.8, 1.2, 0), ('NVDLC02BushA01LeavesOnly', 2, 1.0, 1.6, 4)]),
+    'wet': (60.0, [('v22Grass', 10, 2.0, 4.0, 2), ('v22Fern', 8, 2.0, 5.0, 2), ('NVGoldfingerBanana', 4, 1.2, 2.2, 2), ('NVDLC03VinesA', 1, 0.5, 1.0, 8),
+                   ('NVDLC02BushEVA01LeavesOnly', 4, 1.0, 2.0, 4), ('NVFungusStalk02', 2, 2.0, 5.0, 0), ('NVDLC02TreeF2', 2, 1.2, 2.2, 6), ('NVSassafras01', 1, 0.8, 1.3, 6)]),
+    'seabed': (10.0, [('NVSeaPlant01', 5, 1.0, 2.5, 0), ('NVSeaPlant02', 5, 1.0, 2.5, 0)]),
 }
 CLUMPS = ('v22grass', 'v22fern', 'nvdlc02busha01leavesonly', 'nvdlc02busha02leavesonly', 'nvdlc02busheva01leavesonly', 'nvdlc02busheva02leavesonly',
           'nvdlc02bushma01leavesonly', 'nvdlc02bushma02leavesonly', 'nvdlc03leaves', 'nvdlc03leaveslow', 'nvdlc02sacreddaturaplant', 'cavefungusplant',
@@ -89,7 +98,7 @@ CLUMPS = ('v22grass', 'v22fern', 'nvdlc02busha01leavesonly', 'nvdlc02busha02leav
 CLUMP_MOST = 5
 CLUMP_OUT = (70.0, 280.0)   # (how far from the first the rest of a clump stand)
 PLANT_SHALLOW = -220.0      # (water plants no deeper than this: where the light reaches and someone wades)
-PLANT_LIMIT = 60000
+PLANT_LIMIT = 90000
 PLANT_UNSAID = 'yard'      # (ground the map says nothing of, in a town: somebody's lot. It grows over as a yard does)
 SEA_BED = 'Sea bed'         # (osmcover's name for that ground)
 SEA_DEEP = -400.0           # nothing on the sea bed lower than this: nobody goes there

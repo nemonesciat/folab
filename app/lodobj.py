@@ -37,7 +37,8 @@ _SHAPE_TAIL = bytes.fromhex('0000803f0000000000000000000000000000803f00000000000
                             '0100000002000000ffffffff04000000ffffffff000000000000000000')
 _LIGHTING = bytes.fromhex('ffffffff00000000ffffffff01000100000000200000040000000000803f00000000030000000000000000000000000000410000803f')
 MAX_VERTS = 65000           # (a shape's corners are numbered in 16 bits)
-TILE = 128                  # each texture's square on the sheet, in pixels
+TILE = 256                  # each texture's square on the sheet, in pixels (at 128 a ship's hull seen across the bay was a smear)
+OWN_BIG = 500.0             # a thing of the mod's own this big with no far model of its own is shown far off as it is
 MAX_REPEAT = 4              # a texture a stand-in repeats more than this many times across is shown this many
 TREE_WORDS = ('tree', 'palm', 'bush', 'shrub', 'cactus', 'joshua', 'yucca')
 
@@ -161,7 +162,33 @@ class StandIns:
                     self.models[base_fid] = m[:-1].decode('cp1252', 'replace') if m else ''
             except Exception:
                 self.models[base_fid] = ''
-        return self.of_model(self.models[base_fid])
+        got = self.of_model(self.models[base_fid])
+        if got is None and isinstance(base_fid, str) and self.models[base_fid]:
+            got = self.whole(self.models[base_fid])
+        return got
+
+    def whole(self, model):
+        """A big model of the mod's own (a ship's deck out of another game) as its own far model, where none was made for
+        it: without, parts of the ship were missing from across the water. None for anything small."""
+        low = 'whole:' + model.lower().replace('/', chr(92))
+        if low not in self.by_model:
+            shapes = None
+            try:
+                data = self.gd.read_file('meshes' + chr(92) + low[6:])
+                got = [s for s in nif.mesh_from_nif(data) if s['uv'] and s['i'] and s.get('alpha') != 'blend'] if data else []
+                # (not what FOLab made itself, which has a far model where it should be seen far off, nor anything of
+                # leaves: thousands of big jungle plants filled every block and crowded the buildings out)
+                if low[6:].startswith('folab' + chr(92)) or any(s.get('alpha') for s in got):
+                    got = []
+                xs = [v for s in got for v in s['p'][0::3]]
+                ys = [v for s in got for v in s['p'][1::3]]
+                zs = [v for s in got for v in s['p'][2::3]]
+                if xs and max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)) >= OWN_BIG:
+                    shapes = got
+            except Exception:
+                shapes = None
+            self.by_model[low] = shapes
+        return self.by_model[low]
 
 
 # ---------- the sheet ----------
@@ -377,6 +404,18 @@ class Far:
             self.paths[base] = got
         return self.paths[base]
 
+    def own(self, pr, key):
+        """The far model's file for a record of the mod's own (a hotel FOLab made, a ship out of another game), or None:
+        by its model, since the same key is another record in another mod."""
+        import recordio
+        rec = pr.records.get(key) if pr else None
+        model = ((recordio.field(rec, 'MODL') or '') if rec else '').lower().replace('/', chr(92))
+        if not model.endswith('.nif'):
+            return None
+        if model not in self.paths:
+            self.paths[model] = 'meshes' + chr(92) + model[:-4] + '_lod.nif' if self.st.of_model(model) else None
+        return self.paths[model]
+
     def _cells(self, world, tx, ty):
         grid = self.gd.grid(world)
         for i in range(self.TILE):
@@ -425,7 +464,7 @@ class Far:
                 if not rk.startswith('+') or not r.get('base') or not r.get('p') or r.get('removed'):
                     continue
                 try:
-                    path = self.path(self.gd.from_key(r['base']))
+                    path = self.own(pr, r['base']) if r['base'].startswith('+') else self.path(self.gd.from_key(r['base']))
                 except Exception:
                     path = None
                 if path:

@@ -152,7 +152,7 @@ check('and none where a door that leads somewhere already is', all(((d['x'] - e[
 shut_keys = {d['base'] for b in cat.values() for d in b.get('shut', ())}
 placed_shut = [r for _c, _k, r in refs if r.get('base') in shut_keys and r.get('base') not in cat]
 want_shut = sum(len(cat[r['base']].get('shut', ())) for _c, _k, r in blds)
-check('the buildings stood got theirs (%d of %d, %d placed)' % (rep['shut'], want_shut, len(placed_shut)), rep['shut'] == want_shut and len(placed_shut) >= rep['shut'] > 0)
+check('the buildings stood got theirs (%d of %d, %d placed)' % (rep['shut'], want_shut, len(placed_shut)), rep['shut'] + rep.get('opened', 0) == want_shut and len(placed_shut) >= rep['shut'] > 0)      # (one made a way in is no longer shut)
 check('every house plot, the works, the church and the trailer lot got buildings (%d plots built, %d buildings)' % (rep['built'], len(blds)), rep['built'] == 15 and len(blds) >= 16)
 in_box = lambda r, b: b[0] - 200 <= r['p'][0] <= b[2] + 200 and b[1] - 200 <= r['p'][1] <= b[3] + 200
 on_lot = [cat[r['base']]['edid'] for _c, _k, r in blds if in_box(r, trailer)]
@@ -244,7 +244,7 @@ for pk in places:
     if ok_:
         ock, orr = ref_at[xr['tel']['door']]
         ok_ = orr.get('tel', {}).get('door') == xk and not orr.get('props', {}).get('lock')
-        near_out += math.hypot(xr['tel']['p'][0] - orr['p'][0], xr['tel']['p'][1] - orr['p'][1]) < 300
+        near_out += math.hypot(xr['tel']['p'][0] - orr['p'][0], xr['tel']['p'][1] - orr['p'][1]) < 460      # (a borrowed place: a step outside the wall the door is set back in)
         near_in += math.hypot(orr['tel']['p'][0] - xr['p'][0], orr['tel']['p'][1] - xr['p'][1]) < 300
     bad_link += not ok_
     for k, r in inner.items():
@@ -271,6 +271,34 @@ check('one comes out a step clear of the wall its door is in', not (bx[0] <= lx 
       and abs(out[2] - (50.0 + small['mid'] + 8)) < 0.01)
 ops_, kept_, _doors = townbuild.inside_ops(gd, g, 'hh', 'FOLabHotel', 'Hyatt Inn')
 check('copied behind the door it is a big place, named as the map names it', kept_ > 300 and any(o.get('op') == 'record_new' or o.get('name') == 'hh' for o in ops_))
+# ---------- many more ways in ----------
+check('a market, a school, a bank and a police station are told by kind or by name', townbuild.grand_kind({'kind': 'school'}) == 'school'
+      and townbuild.grand_kind({'kind': 'yes', 'name': 'Foodland Market'}) == 'market' and townbuild.grand_kind({'kind': 'yes', 'name': 'First Hawaiian Bank'}) == 'office'
+      and townbuild.grand_kind({'kind': 'yes', 'name': 'Waikiki Police Substation'}) == 'police' and townbuild.grand_kind({'kind': 'house', 'name': ''}) is None)
+check('every big place named is in the game', all(townbuild.grand_inside(gd, e) for eds in townbuild.GRAND.values() for e in eds))
+pools = townbuild.pools_of(list(cat.values()))
+check('each family has a pool of places to lend, none too big, none tied to one building', len(pools.get('house', ())) >= 20 and len(pools.get('shop', ())) >= 3
+      and all(i['things'] <= townbuild.POOL_THINGS and 'arrive_out' not in i and i['door'] == 0 for v in pools.values() for i in v))
+ins2 = townbuild.Insides(gd, 'FOLabP', share=1.0, most=50, seed=2)
+ins2.pools = pools
+bare = next((b for b in cat.values() if b['doors'] and not b.get('insides') and pools.get(b['family'])), None)
+check('a building with a door but no place of its own borrows one from its family', bare is None or bool(ins2.pick(bare, False, {'kind': 'yes', 'name': ''})))
+ent = [(b, townbuild.entry_of(gd, b)) for b in cat.values() if not b['doors']]
+twins = [(b, e) for b, e in ent if e]
+check('a door static is swapped for the real door it copies, to be a way in', len(twins) >= 3 and all(gd.forms[gd.from_key(e[1])][1].tag == 'DOOR' for _b, e in twins))
+b3, e3 = twins[0]
+g3 = ins2.pick(b3, False, {'kind': 'yes', 'name': ''}, True)
+check('and such a building then gets a place too', bool(g3))
+check('but a building with nothing to make a door of gets none', all(ins2.pick(b, True, {'kind': 'hotel'}, False) is None for b, e in ent if not e))
+for _n in range(60):
+    ins2.pick(small, False, {'kind': 'school'})
+check('no more than its share of the places made are of one big kind', ins2.kinds['school'] == townbuild.GRAND_MOST)
+import navgen
+for u in ((1.0, 0.0), (0.0, -1.0), (0.6, 0.8)):
+    Rb = navgen._turn(*townbuild._facing(*u))
+    check('a black sheet stands upright facing out of the doorway %s' % (u,), abs(Rb[0][2] - u[0]) < 0.02 and abs(Rb[1][2] - u[1]) < 0.02 and abs(Rb[2][2]) < 0.02 and abs(Rb[2][0]) < 0.02)
+boarded = [b for b in cat.values() if townbuild.boarded_ways(gd, b)]
+check('doorways with only boards over them are known, for the sheet to go behind', len(boarded) >= 3)
 two_way = next(((b, i) for b in cat.values() for i in b['insides'] if sum(1 for r in gd.refs(gd.from_key(i['cell'])) if r['leads']) > 1), None)
 if two_way:
     ops_, _n, _doors = townbuild.inside_ops(gd, two_way[1], 'tt', 'FOLabCheck', 'Check')
