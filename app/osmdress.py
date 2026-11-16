@@ -125,7 +125,9 @@ GROUND_LIMIT = 26000
 
 # What lies on the ground rather than stands on it: on a slope it is laid along the slope, or its downhill side hangs in
 # the air (rubble on Diamond Head did). Anything else stays upright: a barrel, a tree, a car on its wheels.
-LIES = re.compile(r'rubble|rock|litter|chunk|slab|debris|tire|pile|mattress|plank|gourd')
+LIES = re.compile(r'rubble|rock|litter|chunk|slab|debris|tire|pile|mattress|(?<!woodplanksgroup)plank|gourd')
+NOT_LIES = re.compile(r'woodplanksgroup|doorbarricade')     # (boards nailed over a doorway are on a wall, not on the ground)
+GONE_IF_HANGING = re.compile(r'rubble|chunk|slab|debris|litter|rock')   # (what is no loss if it can't be laid down cleanly)
 LIE_FROM = 0.05             # (rise over run: flatter ground than this, nothing is tilted)
 LIE_MOST = 0.7
 LIE_REACH = 110.0
@@ -134,7 +136,7 @@ LIE_REACH = 110.0
 def lie(ground, edid, x, y, yaw, scale=1.0):
     """The turn (rx, ry, rz) for a thing put at x, y facing yaw: laid along the ground's slope there if it is one of the
     things that lie, else upright."""
-    if not LIES.search(edid.lower()):
+    if not LIES.search(edid.lower()) or NOT_LIES.search(edid.lower()):
         return 0.0, 0.0, yaw
     import navgen
     import roadbed
@@ -150,6 +152,95 @@ def lie(ground, edid, x, y, yaw, scale=1.0):
         return 0.0, 0.0, yaw
     b, c = max(-LIE_MOST, min(LIE_MOST, b)), max(-LIE_MOST, min(LIE_MOST, c))
     return roadbed._turn_plane(dx, dy, b, c)
+
+
+SEAT_GAP = 6.0              # (a lying thing whose underside is further than this over the ground anywhere is let down)
+SEAT_DEEP = 0.6             # (but never sunk by more than this share of its own height)
+SEAT_ON = 40.0              # (one whose underside is this far over the ground everywhere stands on something: a roof, a pier)
+
+
+def seat_lying(gd, pr, world, progress=None):
+    """(ops, report): every thing of the mod's own that lies on the ground (LIES), laid on it as it now is: its tilt fitted
+    to the ground under its whole footprint (nine spots), then let down until no part of its underside hangs over the
+    ground, never sunk by more than SEAT_DEEP of its height. Ground moved after it was put down (plots levelled, the
+    coast cut, roads bedded) left 2,500 of 6,000 such things on Waikiki with an edge in the air. One that still hangs
+    after that, if it is rubble or the like (GONE_IF_HANGING), is taken out."""
+    import navgen
+    import roadbed
+    import townbuild
+    g = roadgen.Ground(gd, pr, world)
+    keys = {gd.key(c) for c in gd.grid(world).values()}
+    names, boxes = {}, {}
+    ops, moved, gone, looked = [], 0, 0, 0
+    for ck, c in pr.cells.items():
+        if ck not in keys:
+            continue
+        for rk, r in c['refs'].items():
+            base, p = r.get('base'), r.get('p')
+            if not rk.startswith('+') or not base or not p or r.get('removed') or base.startswith('+'):
+                continue
+            if base not in names:
+                try:
+                    names[base] = (gd.edid(gd.from_key(base)) or '').lower()
+                except Exception:
+                    names[base] = ''
+            name = names[base]
+            if not LIES.search(name) or NOT_LIES.search(name):
+                continue
+            if base not in boxes:
+                boxes[base] = townbuild.obnd(gd, base)
+            o = boxes[base]
+            if not o:
+                continue
+            s = float(r.get('s') or 1.0)
+            spots = [((o[0] + (o[3] - o[0]) * fx) * s, (o[1] + (o[4] - o[1]) * fy) * s) for fx in (0.0, 0.5, 1.0) for fy in (0.0, 0.5, 1.0)]
+            R0 = navgen._turn(p[3], p[4], p[5])
+            gz0 = g.at(p[0], p[1])
+            if gz0 is None:
+                continue
+            under = [p[2] + R0[2][0] * lx + R0[2][1] * ly + R0[2][2] * o[2] * s for lx, ly in spots]
+            if min(u - (g.at(p[0] + R0[0][0] * lx + R0[0][1] * ly, p[1] + R0[1][0] * lx + R0[1][1] * ly) or u) for u, (lx, ly) in zip(under, spots)) > SEAT_ON:
+                continue                        # (it stands on something: a roof, a pier)
+            looked += 1
+            # its heading kept, its tilt the ground's under it
+            yaw = math.atan2(R0[0][0], R0[1][0])
+            dx, dy = math.sin(yaw), math.cos(yaw)
+            pts = []
+            for lx, ly in spots:
+                z = g.at(p[0] + dx * lx - dy * ly, p[1] + dy * lx + dx * ly)
+                if z is not None:
+                    pts.append((lx, ly, z))
+            if len(pts) < 6:
+                continue
+            _mx, _my, _mz, b, cc = roadbed._fit(pts)
+            b, cc = max(-LIE_MOST, min(LIE_MOST, b)), max(-LIE_MOST, min(LIE_MOST, cc))
+            rot = roadbed._turn_plane(dx, dy, b, cc) if max(abs(b), abs(cc)) >= LIE_FROM else (0.0, 0.0, p[5])
+            R = navgen._turn(*rot)
+            worst = -1e9
+            for lx, ly in spots:
+                lz = o[2] * s
+                wx = p[0] + R[0][0] * lx + R[0][1] * ly + R[0][2] * lz
+                wy = p[1] + R[1][0] * lx + R[1][1] * ly + R[1][2] * lz
+                wz = R[2][0] * lx + R[2][1] * ly + R[2][2] * lz        # (under the origin)
+                gz = g.at(wx, wy)
+                if gz is not None:
+                    worst = max(worst, wz - gz)
+            # origin height so that the highest point of its underside over the ground is 2 under it
+            z = -worst - 2.0
+            sunk = (gz0 - (z + R[2][2] * o[2] * s))     # (how far its middle's underside is now under the ground)
+            room = (o[5] - o[2]) * s * SEAT_DEEP
+            if sunk > room:
+                if GONE_IF_HANGING.search(name):
+                    ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
+                    gone += 1
+                    continue
+                z += sunk - room
+            z = round(z, 1)
+            new = [p[0], p[1], z, round(rot[0], 4), round(rot[1], 4), round(rot[2] % math.tau, 4)]
+            if abs(new[2] - p[2]) > 1.0 or any(abs(u - v) > 0.01 for u, v in zip(new[3:], p[3:6])):
+                ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': new + list(p[6:])})
+                moved += 1
+    return ops, {'looked': looked, 'laid': moved, 'taken_out': gone}
 
 
 def _bases(gd):

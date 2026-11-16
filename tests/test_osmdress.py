@@ -173,3 +173,23 @@ class Level:
 
 
 check('and on level ground nothing is tilted', osmdress.lie(Level(), 'RubblePile02', 0.0, 0.0, 1.0) == (0.0, 0.0, 1.0))
+
+
+# ---------- what lies is laid on the ground ----------
+lp = project.Project.create('Lying')
+bases = osmdress._bases(gd)
+lx0, ly0 = x + 1500, y + 1500
+lops = []
+for k, e in enumerate(('RubblePile02', 'SWSingleRubble', 'SuburbanRubblePileSm01')):
+    px, py = lx0 + k * 600, ly0
+    lops.append({'op': 'add', 'cell': gd.key(grid[(int(px // 4096), int(py // 4096))]), 'base': bases[e.lower()], 'p': [px, py, g0.at(px, py) + 30.0, 0.0, 0.0, 0.4], 's': 1.0})
+# (and one well up, as on a roof: left where it is)
+lops.append({'op': 'add', 'cell': gd.key(grid[(int(lx0 // 4096), int((ly0 + 900) // 4096))]), 'base': bases['rubblepile02'], 'p': [lx0, ly0 + 900, g0.at(lx0, ly0 + 900) + 400.0, 0.0, 0.0, 0.0], 's': 1.0})
+pr2 = lp
+pr2.apply('lying', lops)
+sops, srep = osmdress.seat_lying(gd, pr2, world)
+check('things left hanging over the ground are laid on it or taken out', srep['laid'] + srep['taken_out'] == 3 and srep['looked'] == 3, srep)
+pr2.apply('seat', sops)
+again, arep = osmdress.seat_lying(gd, pr2, world)
+check('done again, nothing more to do', arep['laid'] == 0 and arep['taken_out'] == 0, arep)
+check('boards over a doorway are not ground litter', not osmdress.LIES.search('woodplanksgroup01') or osmdress.NOT_LIES.search('woodplanksgroup01'))

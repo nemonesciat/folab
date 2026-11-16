@@ -152,7 +152,7 @@ check('and none where a door that leads somewhere already is', all(((d['x'] - e[
 shut_keys = {d['base'] for b in cat.values() for d in b.get('shut', ())}
 placed_shut = [r for _c, _k, r in refs if r.get('base') in shut_keys and r.get('base') not in cat]
 want_shut = sum(len(cat[r['base']].get('shut', ())) for _c, _k, r in blds)
-check('the buildings stood got theirs (%d of %d, %d placed)' % (rep['shut'], want_shut, len(placed_shut)), rep['shut'] + rep.get('opened', 0) == want_shut and len(placed_shut) >= rep['shut'] > 0)      # (one made a way in is no longer shut)
+check('the buildings stood got theirs (%d of %d, %d placed)' % (rep['shut'], want_shut, len(placed_shut)), rep['shut'] + rep.get('opened', 0) + rep.get('rooms', 0) + rep.get('unboarded', 0) == want_shut and len(placed_shut) >= rep['shut'] > 0)      # (one made a way in is no longer shut)
 check('every house plot, the works, the church and the trailer lot got buildings (%d plots built, %d buildings)' % (rep['built'], len(blds)), rep['built'] == 15 and len(blds) >= 16)
 in_box = lambda r, b: b[0] - 200 <= r['p'][0] <= b[2] + 200 and b[1] - 200 <= r['p'][1] <= b[3] + 200
 on_lot = [cat[r['base']]['edid'] for _c, _k, r in blds if in_box(r, trailer)]

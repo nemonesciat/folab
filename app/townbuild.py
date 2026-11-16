@@ -966,7 +966,7 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE, 
             rep['nothing_fits'] += 1
         else:
             rep['built'] += 1
-    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'opened': rep.get('opened', 0), 'rooms': rep.get('rooms', 0), 'backed': rep.get('backed', 0), 'too_small': rep['too_small'],
+    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'opened': rep.get('opened', 0), 'rooms': rep.get('rooms', 0), 'unboarded': rep.get('unboarded', 0), 'backed': rep.get('backed', 0), 'too_small': rep['too_small'],
               'nothing_fits': rep['nothing_fits'], 'blocked': rep['blocked'], 'steep': rep['steep'], 'had_one': rep['had_one'],
               'cleared': len(gone), 'families': dict(fams), 'catalogue': len(cat), 'roads_seen': len(roads), 'poi': rep['poi'], 'landmarks': rep['landmarks'],
               'insides': len(w.ins.tags) if w.ins else 0, 'inside_things': w.ins.things if w.ins else 0, 'made': list(w.ins.tags) if w.ins else [],
@@ -1144,14 +1144,19 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
         if (int(x // 4096), int(y // 4096)) in w.grid:
             w.touched.add((int(x // 4096), int(y // 4096)))
     rep['buildings'] += 1
-    entry = entry_of(w.gd, b)
-    inside = w.ins.pick(b, poi, row, entry is not None) if w.ins else None
+    strip = bool(STRIP.search(b['edid'].lower()))
+    # (a motel or a row of flats: its doors open into rooms, the game's motel rooms, never a shop or an office borrowed
+    # from another building however the plot is named)
+    entry = entry_of(w.gd, b) if not strip else None
+    inside = w.ins.pick(b, poi, row, entry is not None) if w.ins and not (strip and not b['doors']) else None
     rooms = {}
-    if w.ins and STRIP.search(b['edid'].lower()):
+    if w.ins and strip:
         # (spread along the row, not the first three doors side by side)
-        ways = [e for e in entries_of(w.gd, b) if entry is None or e[0] != entry[0]]
+        ways = entries_of(w.gd, b)
         for e in ways[::max(1, len(ways) // ROOMS_EACH)][:ROOMS_EACH]:
             rooms[e[0]] = e[1]
+    shut = b.get('shut', ())
+    doorlike = [(d['x'], d['y'], d['z']) for d in b['doors']] + [(d['x'], d['y'], d['z']) for d in shut if not d.get('board')]
     for k, d in enumerate(b['doors']):
         dx, dy = turn(d['x'], d['y'], rz)
         dck = w.cell_at(ox + dx, oy + dy) or ck
@@ -1162,7 +1167,10 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
         else:
             o['extra'] = DOOR_LOCK
             ops.append(o)
-    for n, d in enumerate(b.get('shut', ())):
+    for n, d in enumerate(shut):
+        if d.get('board') and any(math.hypot(d['x'] - x, d['y'] - y) < SHUT_SAME and abs(d['z'] - z_) < SHUT_SAME * 2 for x, y, z_ in doorlike):
+            rep['unboarded'] = rep.get('unboarded', 0) + 1
+            continue                            # (boards nailed across a door stood through it: a door is enough)
         dx, dy = turn(d['x'], d['y'], rz)
         dck = w.cell_at(ox + dx, oy + dy) or ck
         o = {'op': 'add', 'cell': dck, 'base': d['base'],

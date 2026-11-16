@@ -523,6 +523,10 @@ def dress_job(body, srv):
                 more = landmarks.clear_of(more, marks)
                 if more:
                     srv.PR.apply('Things on the ground', more, merge=True)
+                # (last: whatever lies on the ground let down onto it as the ground now is)
+                more, report['seated'] = osmdress.seat_lying(srv.GD, srv.PR, w, _said)
+                if more:
+                    srv.PR.apply('Things on the ground', more, merge=True)
                 state = srv.state()
         return {'state': state, 'report': report}
     return _start(work, kind='dress')
