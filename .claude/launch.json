@@ -4,20 +4,58 @@
     {
       "name": "folab",
       "runtimeExecutable": "py",
-      "runtimeArgs": ["-3", "app/server.py", "8771", "--no-browser"],
+      "runtimeArgs": [
+        "-3",
+        "app/server.py",
+        "8771",
+        "--no-browser"
+      ],
       "port": 8771
     },
     {
       "name": "folab-test",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set FOLAB_HOME=%TEMP%\\folab-test&& set FOLAB_NV_INI=%TEMP%\\folab-test\\ini&& py -3 app/server.py 8772 --no-browser"],
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=%TEMP%\\folab-test&& set FOLAB_NV_INI=%TEMP%\\folab-test\\ini&& py -3 app/server.py 8772 --no-browser"
+      ],
       "port": 8772
     },
     {
       "name": "folab-look",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set FOLAB_HOME=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\home28s&& set FOLAB_NV_INI=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\ini&& py -3 app/server.py 8773 --no-browser"],
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\home37&& set FOLAB_NV_INI=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\ini&& py -3 app/server.py 8773 --no-browser"
+      ],
       "port": 8773
+    },
+    {
+      "name": "folab-models",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=%TEMP%\\folab-models&& set FOLAB_NV_INI=%TEMP%\\folab-models\\ini&& py -3 app/server.py 8774 --no-browser"
+      ],
+      "port": 8774
+    },
+    {
+      "name": "folab-radio",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=%TEMP%\\folab-radio&& set FOLAB_NV_INI=%TEMP%\\folab-radio\\ini&& py -3 app/server.py 8775 --no-browser"
+      ],
+      "port": 8775
+    },
+    {
+      "name": "folab-ship",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\home31ship&& set FOLAB_NV_INI=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\ini&& py -3 app/server.py 8776 --no-browser"
+      ],
+      "port": 8776
     }
   ]
 }

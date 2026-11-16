@@ -12,7 +12,8 @@ The copied files are the other game's: this is for the user's own play. A mod ho
 `remove_borrowed` takes them out again. Nothing is read from a game still being installed (Steam's downloading folder).
 
 Not copied here: sounds, scripts, the way in (Rivet City's swing bridge is an activator with a script, its doors lead to
-Fallout 3's interiors): the ship is something to see and climb about on, not yet somewhere to go into."""
+Fallout 3's interiors). The way aboard and somewhere to go into are made of New Vegas's own things, after the ship is
+stood: aboard.py."""
 import json
 import math
 import os

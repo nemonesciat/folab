@@ -23,7 +23,7 @@ function cmEntries(key, point){
     if (one){ add('Look and open', 'Open its window', () => owOpen(one.key)); add('Look and open', 'Open its record', () => openRecord(one.bkey)); }
     add('Look and open', 'Look at it', focusSel);
     add('Edit', n > 1 ? `Copy ${n}` : 'Copy', copySel);
-    if (A.clip) add('Edit', 'Paste here', () => { W.mouse = CM.at; paste(); });
+    if (A.clip) add('Edit', 'Paste here', () => { W.mouse = CM.at; pasteHere(); });
     add('Edit', 'Duplicate', dupSel);
     add('Edit', n > 1 ? `Save these ${n} as a prefab…` : 'Save as a prefab…', savePrefab);
     if (sel.some(t => t.state === 'moved' || t.state === 'removed')) add('Edit', 'Put back as the game has it', revertSel);
@@ -38,7 +38,7 @@ function cmEntries(key, point){
     if (one) add('Replace and select', `Select all the ${one.base} here`, () => select(visibleGroups().filter(g => g.userData.thing.bkey === one.bkey).map(g => g.userData.thing.key)));
     add('View', n > 1 ? `Hide them` : 'Hide it', hideSel);
     add('View', 'Hide everything else', () => { const keep = new Set(A.sel); hideKeys(W.group.children.map(g => g.userData.thing.key).filter(k => !keep.has(k))); });
-  } else if (A.clip) add('Edit', 'Paste here', () => { W.mouse = CM.at; paste(); });
+  } else if (A.clip) add('Edit', 'Paste here', () => { W.mouse = CM.at; pasteHere(); });
   add('This place', 'Play here', () => playHere(point));
   add('This place', 'New place of your own…', newPlaceDialog);
   add('This place', 'Select everything you can see', () => select(visibleGroups().map(g => g.userData.thing.key)));
@@ -112,8 +112,17 @@ addEventListener('mousedown', e => { if (CM.el && !CM.el.contains(e.target)) cmC
 W.onContext = (e, key, point) => cmOpen(e, key, point);
 
 // ---------- what the menu does that the toolbar doesn't ----------
+// (several turn as one, about their middle, keeping their places to each other; the game's turn is clockwise from above)
 function turnSel(sign){
-  sendMoves(selThings().map(t => { const p = t.p.slice(); p[5] = Math.round((p[5] + sign * Math.PI / 2) * 10000) / 10000; return [t, p]; }), 'Turn 90°');
+  const list = selThings(); if (!list.length) return;
+  const xs = list.map(t => t.p[0]), ys = list.map(t => t.p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2, r = v => Math.round(v * 100) / 100;
+  sendMoves(list.map(t => {
+    const p = t.p.slice(), dx = p[0] - cx, dy = p[1] - cy;
+    p[0] = r(cx + sign * dy); p[1] = r(cy - sign * dx);
+    p[5] = Math.round((p[5] + sign * Math.PI / 2) * 10000) / 10000;
+    return [t, p];
+  }), 'Turn 90°');
 }
 function alignSel(){
   const g = +$('#t-grid').value || 16;

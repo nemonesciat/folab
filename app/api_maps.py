@@ -472,6 +472,81 @@ def map_cover(srv, world, name, said=None):
     return osmcover.MapCover(grid, data, geo.xy, osmcover.default_textures(srv.GD), said, laid=lay['roads']), lay
 
 
+def hotels_job(body, srv):
+    """FOLab's own landmark hotels (modelsets.skyline) stood along a world's shore: one Undo. body: count, seed, or
+    sites [[piece, x, y]]."""
+    import modelsets
+    srv.not_while_playing()
+    name = body['file']
+    file_path(name)
+    w, _side = _side_of(srv, body['world'])
+
+    def work():
+        cover, lay = map_cover(srv, body['world'], name, _said)
+        with srv._lock:
+            ops, report = modelsets.skyline(srv.GD, srv.PR, w, cover, lay['roads'], int(body.get('count', 4)), int(body.get('seed', 1)), _said,
+                                            [tuple(s) for s in body['sites']] if body.get('sites') else None)
+            if not report['hotels']:
+                raise ValueError('No place was found for a hotel: this world has no shore with level ground behind it.')
+            _said('Putting it in the mod')
+            state = srv.edit('Landmark hotels', ops)['state']
+            kept = _kept(srv.PR, 'hotels.json')
+            kept[srv.GD.edid(w)] = report['hotels']
+            _kept(srv.PR, 'hotels.json', kept)
+        return {'state': state, 'report': report}
+    return _start(work, kind='hotels')
+
+
+def green_job(body, srv):
+    """The Mojave's bare brown painted over on wild ground only (greenground.py: by the land point, with what the map
+    says each is): one Undo. body: world, file (the map)."""
+    import greenground
+    srv.not_while_playing()
+    name = body['file']
+    file_path(name)
+    w, _side = _side_of(srv, body['world'])
+
+    def work():
+        cover, _lay = map_cover(srv, body['world'], name, _said)
+        with srv._lock:
+            ops, report = greenground.regreen(srv.GD, srv.PR, w, cover, _said)
+            if not ops:
+                raise ValueError('Nothing to change: this world\'s wild ground is already painted so, or it has none.')
+            _said('Putting it in the mod')
+            state = srv.edit('Green ground', ops)['state']
+        return {'state': state, 'report': report}
+    return _start(work, kind='green')
+
+
+def plants_job(body, srv):
+    """FOLab's own plants (modelsets.py; body 'set': 'beach', the default, 'jungle', or 'mountain': low cover for slopes) added to a world already
+    dressed, over and above what grows there: one Undo. Nothing inside a building or a landmark."""
+    import modelsets
+    srv.not_while_playing()
+    name = body['file']
+    file_path(name)
+    w, _side = _side_of(srv, body['world'])
+
+    def work():
+        cover, _lay = map_cover(srv, body['world'], name, _said)
+        cat = townbuild.load(srv.GD, srv.kits_folder(), _said)
+        with srv._lock:
+            which = body.get('set', 'beach')
+            if which not in modelsets.EXTRA:
+                raise ValueError('No set of plants called %s: there are %s.' % (which, ', '.join(modelsets.EXTRA)))
+            ops, report = modelsets.extra(srv.GD, srv.PR, w, cover, int(body.get('seed', 1)), _said, which, float(body.get('thick', 1.0)))
+            ops = landmarks.clear_of(ops, landmarks.standing(srv.GD, srv.PR, w) + modelsets.footprints(srv.PR, srv.GD, w))     # (nor in a hotel)
+            inside = osmdress._Stands(osmdress.standing(srv.GD, srv.PR, w, cat), margin=24.0)
+            ops = [o for o in ops if o.get('op') != 'add' or not inside.hit(o['p'][0], o['p'][1])]
+            report['plants'] = sum(1 for o in ops if o['op'] == 'add')
+            if not report['plants']:
+                raise ValueError("Nothing to plant: the map says nothing about this world's ground.")
+            _said('Putting it in the mod')
+            state = srv.edit(which.capitalize() + ' plants', ops)['state']
+        return {'state': state, 'report': report}
+    return _start(work, kind='plants')
+
+
 def dress_job(body, srv):
     """Things on the ground by what the map says it is, and along the streets (osmdress.py): one Undo."""
     srv.not_while_playing()
@@ -484,7 +559,18 @@ def dress_job(body, srv):
         cat = townbuild.load(srv.GD, srv.kits_folder(), _said)
         with srv._lock:
             seed = int(body.get('seed', 1))
-            ops, report = osmdress.ops(srv.GD, srv.PR, w, cover, lay['roads'], seed, _said)
+            # FOLab's own palms, banana plants, hibiscus and dune grass: 'beach' adds them to the game's plants,
+            # 'beach instead' puts them where the game's palms, banana plants, bushes and grass would have gone
+            first, swaps = [], None
+            if body.get('plants') == 'beach instead':
+                import modelsets
+                first, swaps = modelsets.swaps(srv.PR)
+            ops, report = osmdress.ops(srv.GD, srv.PR, w, cover, lay['roads'], seed, _said, swaps=swaps)
+            if body.get('plants') == 'beach':
+                import modelsets
+                more, report['beach'] = modelsets.extra(srv.GD, srv.PR, w, cover, seed, _said)
+                first = [o for o in more if o['op'] != 'add']
+                ops += [o for o in more if o['op'] == 'add']
             # (round each building what it was for, and a few places someone stopped at)
             more, report['footings'] = osmdress.footings(srv.GD, srv.PR, w, cover, cat, seed, _said)
             ops += more
@@ -503,7 +589,7 @@ def dress_job(body, srv):
             if not ops:
                 raise ValueError("Nothing to put down: the map says nothing about this world's ground.")
             _said('Putting it in the mod')
-            state = srv.edit('Things on the ground', ops)['state']
+            state = srv.edit('Things on the ground', first + ops)['state']
             kept = _kept(srv.PR, 'scenes.json')
             kept[srv.GD.edid(w)] = report['scenes'].get('spots', [])
             _kept(srv.PR, 'scenes.json', kept)
@@ -770,6 +856,12 @@ def post(path, body, srv):
         return {'job': landmarks_job(body, srv)}
     if path == '/api/maps/dress':
         return {'job': dress_job(body, srv)}
+    if path == '/api/maps/hotels':
+        return {'job': hotels_job(body, srv)}
+    if path == '/api/maps/green':
+        return {'job': green_job(body, srv)}
+    if path == '/api/maps/plants':
+        return {'job': plants_job(body, srv)}
     if path == '/api/maps/restore':
         with srv._lock:
             if not srv.PR or not os.path.isfile(os.path.join(_before(srv.PR.name), 'project.json')):

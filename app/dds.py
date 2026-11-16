@@ -127,6 +127,13 @@ def _half(px, w, h):
     nw, nh = max(1, w // 2), max(1, h // 2)
     fx, fy = w // nw, h // nh
     out = bytearray(nw * nh * 4)
+    if fx == 2 and fy == 2 and w == 2 * nw and h == 2 * nh:
+        # the usual case, a colour at a time over whole rows (a drawn 512 texture took seconds the slow way)
+        for y in range(nh):
+            a, b = px[2 * y * w * 4:(2 * y + 1) * w * 4], px[(2 * y + 1) * w * 4:(2 * y + 2) * w * 4]
+            for c in range(4):
+                out[y * nw * 4 + c:(y + 1) * nw * 4:4] = bytes((p + q + r + s) >> 2 for p, q, r, s in zip(a[c::8], a[c + 4::8], b[c::8], b[c + 4::8]))
+        return bytes(out), nw, nh
     for y in range(nh):
         for x in range(nw):
             for c in range(4):

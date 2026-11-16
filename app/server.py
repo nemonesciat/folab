@@ -15,6 +15,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import bsa
 import espwrite
 import gamedata
 import gameini
@@ -35,8 +36,10 @@ import adopt
 import api_scripts
 import api_quests
 import api_characters
+import radio
 import browse
 import library
+import modelsets
 import recordio
 import base64
 import hashlib
@@ -987,10 +990,19 @@ def door(rkey):
     return refinfo.door_target(GD, GD.from_key(rkey))
 
 
+def _mods_own(path):
+    """A file the open mod has of its own (its assets folder): it can be written afresh at any time (a piece remade), so
+    neither the browser nor the mesh cache keeps it."""
+    if not GD or not GD.overlay:
+        return False
+    rel = bsa.norm(path)
+    return bool(GD.overlay.path(rel) or GD.overlay.path('meshes\\' + rel))
+
+
 def mesh(path):
     key = path.lower()
     with _lock:
-        if key in _meshes:
+        if key in _meshes and not _mods_own(path):
             return _meshes[key]
     try:
         shapes = nif.mesh_from_nif(GD.read_file(path))
@@ -1798,6 +1810,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(api_quests.get(u.path, q, GD, PR, BR))
             if u.path.startswith('/api/library/'):
                 return self.send(*library.get(u.path[13:], q))
+            if u.path.startswith('/api/radio/'):
+                with _lock:
+                    got = radio.get(u.path, q, GD, PR, BR)
+                if got is None:
+                    return self.send({'error': 'not found'}, code=404)
+                return self.send(*got) if isinstance(got, tuple) else self.send(got)
+            if u.path.startswith('/api/models/'):
+                return self.send(modelsets.get(u.path[12:], q))
             if u.path == '/api/about':
                 return self.send(about())
             if u.path == '/api/report':
@@ -1909,9 +1929,9 @@ class Handler(BaseHTTPRequestHandler):
                 hits = [m for m in GD.mesh_list() if all(w in m for w in words)]
                 return self.send({'total': len(hits), 'paths': hits[:int(q.get('limit', 300))]})
             if u.path == '/api/mesh':
-                return self.send(mesh(q['path']), cache=True)
+                return self.send(mesh(q['path']), cache=not _mods_own(q['path']))
             if u.path == '/api/file':
-                return self.send(GD.read_file(q['path']), 'application/octet-stream', cache=True)
+                return self.send(GD.read_file(q['path']), 'application/octet-stream', cache=not _mods_own(q['path']))
             self.send(b'not found', 'text/plain', 404)
         except FileNotFoundError:
             self.send(b'not found', 'text/plain', 404)
@@ -1975,8 +1995,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(api_quests.post(u.path, body, GD, PR, BR, edit))
                 if u.path.startswith('/api/char/'):
                     return self.send(api_characters.post(u.path, body, GD, PR, BR, edit))
+                if u.path.startswith('/api/radio/'):
+                    return self.send(radio.post(u.path, body, GD, PR, BR, edit))
                 if u.path.startswith('/api/w/'):
                     return self.send(worldapi.post(u.path, body, GD, PR, WORLD_CTX))
+                if u.path.startswith('/api/models/'):
+                    return self.send(modelsets.post(u.path[12:], body, sys.modules[__name__]))
                 if u.path == '/api/world/new':
                     return self.send(new_world(body))
                 if u.path == '/api/newgame':

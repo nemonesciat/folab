@@ -144,7 +144,7 @@ class Writer:
                 used.add(gd.land[cell][0])
             for q in L['q']:
                 for k in [q.get('bkey')] + [l.get('key') for l in q['layers']]:
-                    if k:
+                    if k and not k.startswith('+'):         # (a ground texture of the mod's own needs no master)
                         used.add(gd.from_key(k) >> 24)
         for ckey, info in getattr(self.pr, 'cellinfo', {}).items():
             if not ckey.startswith('+'):
@@ -223,6 +223,9 @@ class Writer:
         if r.get('tel'):
             subs.append(('XTEL', self.tel(r)))
         subs += last
+        if r.get('radio'):                              # (where a radio station is heard: radio.py)
+            import radio
+            subs.append(('XRDO', radio.xrdo(r['radio'], self.link)))
         if r.get('s', 1.0) != 1.0:
             subs.append(('XSCL', struct.pack('<f', r['s'])))
         subs.append(('DATA', struct.pack('<6f', *r['p'])))

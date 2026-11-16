@@ -1,7 +1,8 @@
 // ---------- the 3D world view ----------
 // One place the way the game lays it out (every thing's mesh at its position, turn and scale, textured from the
 // game's archives), and the hands to change it, with the Workshop's controls: right-drag to look, WASD to fly,
-// click to select (Shift adds, drag a box on empty space), the handles to move and turn one thing or several.
+// click to select (Shift or Ctrl adds or takes away), drag anywhere for a box, the handles to move and turn one thing or
+// several.
 // Game units, Z up. It knows nothing of the server: app.js hands it things and listens for what the user did (W.on*).
 const T = THREE;
 const W = {scene: null, cam: null, ren: null, group: null, models: {}, mats: {}, tex: {}, yaw: 0, pitch: -0.3,
@@ -141,11 +142,18 @@ function worldInit(box){
   for (let i = 0; i < 12; i++){ const l = new T.PointLight(0xffffff, 0, 1, 2); W.scene.add(l); W.pool.push(l); }
   W.gameLight = true;
   W.outline = new T.Box3Helper(new T.Box3(), 0xf0cd87); W.outline.visible = false; W.scene.add(W.outline);
+  W.outlines = [];                                         // (several selected: a box round each, so it shows which)
   W.pivot = new T.Object3D(); W.scene.add(W.pivot);
   W.gizmo = new T.TransformControls(W.cam, W.ren.domElement);
   W.gizmo.setSize(0.9);
   W.gizmo.addEventListener('mouseDown', gizmoStart);
-  W.gizmo.addEventListener('dragging-changed', e => { W.dragging = e.value; if (!e.value) commitSelected(W.mode === 'rotate' ? 'Turn' : W.mode === 'scale' ? 'Scale' : 'Move'); });
+  W.gizmo.addEventListener('dragging-changed', e => {
+    W.dragging = e.value;
+    if (e.value) return;
+    if (W.cancelled){ W.cancelled = false; return; }
+    if (W.mode === 'translate' && W.landAfter && W.dragAxis !== 'Z') landSelected();
+    commitSelected(W.mode === 'rotate' ? 'Turn' : W.mode === 'scale' ? 'Scale' : 'Move');
+  });
   W.gizmo.addEventListener('objectChange', gizmoFollow);
   W.scene.add(W.gizmo);
   W.boxEl = document.createElement('div');
@@ -235,6 +243,8 @@ function controls(el){
   let drag = null;
   el.addEventListener('contextmenu', e => e.preventDefault());
   el.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
+  // (the right button while a handle is dragged puts it back; a second button pressed sends no pointerdown, so: mousedown)
+  addEventListener('mousedown', e => { if (e.button === 2 && W.dragging){ cancelDrag(); e.preventDefault(); } }, true);
   el.addEventListener('pointerdown', e => {
     el.focus();
     if (e.button === 1) e.preventDefault();
@@ -244,14 +254,16 @@ function controls(el){
       try { el.setPointerCapture(e.pointerId); } catch (err) {}
       return;
     }
-    drag = {b: e.button, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: 0, alt: e.altKey, shift: e.shiftKey};
+    drag = {b: e.button, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: 0, alt: e.altKey, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey};
     if (e.button === 0 && e.altKey){
       drag.pivot = W.sel.length ? selCenter() : (hitThing(e) || {}).point || W.cam.position.clone().addScaledVector(dir(), 600);
       drag.dist = W.cam.position.distanceTo(drag.pivot);
     } else if (e.button === 0 && !W.placing){
       const h = hitThing(e);
       drag.hit = h && h.group;
-      if (!drag.hit || e.shiftKey) drag.box = true;                   // empty space (or Shift): a box to select with
+      // A drag from anywhere draws a box to select with: outside there's hardly any empty space (in a town the ground
+      // itself is road and pavement, which are things), and dragging a thing by its body never did anything.
+      drag.box = true;
     }
     try { el.setPointerCapture(e.pointerId); } catch (err) {}
   });
@@ -270,7 +282,8 @@ function controls(el){
     } else if (drag.pivot){                                             // Alt+drag: circle what's selected
       W.yaw -= dx * 0.005; W.pitch = Math.max(-1.5, Math.min(1.5, W.pitch - dy * 0.005));
       W.cam.position.copy(drag.pivot).addScaledVector(dir(), -drag.dist);
-    } else if (drag.box && drag.moved > 4){
+    } else if (drag.box && (drag.boxed || boxBig(drag, e))){
+      drag.boxed = true;
       const r = W.box.getBoundingClientRect(), x = Math.min(drag.x0, e.clientX) - r.left, y = Math.min(drag.y0, e.clientY) - r.top;
       Object.assign(W.boxEl.style, {display: 'block', left: x + 'px', top: y + 'px', width: Math.abs(e.clientX - drag.x0) + 'px', height: Math.abs(e.clientY - drag.y0) + 'px'});
     }
@@ -284,25 +297,31 @@ function controls(el){
       if (W.placing) return stopPlacing();
       const h = hitThing(e);
       const key = h && h.group ? h.group.userData.thing.key : null;
-      if (key && !W.sel.some(g => g.userData.thing.key === key)) select([key]);
+      // (Shift or Ctrl: what's selected stays, and this one joins it)
+      if (key && !W.sel.some(g => g.userData.thing.key === key)) select(d.shift || d.ctrl ? W.sel.map(g => g.userData.thing.key).concat(key) : [key]);
       return W.onContext(e, key, h && h.point);
     }
     if (d.b !== 0 || d.pivot) return;
-    if (d.box && d.moved > 4) return boxSelect(d.x0, d.y0, e.clientX, e.clientY, d.shift);
-    if (d.moved > 4) return;
+    if (d.box && d.boxed) return boxSelect(d.x0, d.y0, e.clientX, e.clientY, d.ctrl ? 'take' : d.shift ? 'add' : '');
+    if (d.moved > 12) return;                             // (a drag that wasn't a box: nothing; a hand that shook is still a click)
     if (W.placing) return placeAt(e);
     const key = d.hit ? d.hit.userData.thing.key : null;
-    if (d.shift && key){
+    if ((d.shift || d.ctrl) && key){                      // Shift+click, Ctrl+click: this one joins what's selected, or leaves it
       const keys = W.sel.map(g => g.userData.thing.key);
       select(keys.includes(key) ? keys.filter(k => k !== key) : keys.concat(key));
-    } else if (!d.shift) select(key ? [key] : []);
+    } else if (!d.shift && !d.ctrl) select(key ? [key] : []);
   });
+  // (the button let go outside the window: no box left hanging)
+  el.addEventListener('pointercancel', () => { drag = null; W.boxEl.style.display = 'none'; });
   el.addEventListener('dblclick', e => { const h = hitThing(e); if (h && h.group) W.onOpen(h.group.userData.thing.key); });
   el.addEventListener('wheel', e => {
     e.preventDefault();
     if (W.placing) return placeWheel(e);                                // (placing: the wheel works on what's being placed)
     W.cam.position.addScaledVector(dir(), -Math.sign(e.deltaY) * (W.keys.shift ? 800 : 200));
   }, {passive: false});
+  addEventListener('keydown', e => {                                    // (heard first: Esc while a handle is dragged puts it back)
+    if (e.key === 'Escape' && W.dragging){ cancelDrag(); e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
   addEventListener('keydown', e => {                                    // (heard first: R turns the piece, not the tool)
     if (W.placing && !typing(e) && W.box.offsetParent && placeKey(e)){ e.preventDefault(); e.stopPropagation(); }
   }, true);
@@ -337,21 +356,75 @@ function controls(el){
   addEventListener('mousemove', e => { if (W.keys.shift && !e.shiftKey) W.keys.shift = false; }, true);
 }
 
-function boxSelect(x0, y0, x1, y1, add){
+// a drag is a box once it's 5 pixels each way (less is a click with a shaky hand)
+function boxBig(d, e){ return Math.abs(e.clientX - d.x0) >= 5 && Math.abs(e.clientY - d.y0) >= 5; }
+
+// Everything whose middle is inside the box and that can be seen from here: not what's hidden, locked against clicks,
+// or behind something (outside, a box drawn along a street would otherwise take the whole town behind the houses).
+// how: '' these and nothing else, 'add' these as well (Shift), 'take' these out of what's selected (Ctrl).
+function boxSelect(x0, y0, x1, y1, how){
   const r = W.ren.domElement.getBoundingClientRect();
   const lo = [Math.min(x0, x1), Math.min(y0, y1)], hi = [Math.max(x0, x1), Math.max(y0, y1)];
-  const keys = add ? W.sel.map(g => g.userData.thing.key) : [];
-  const v = new T.Vector3();
-  for (const g of visibleGroups()){
-    const b = new T.Box3().setFromObject(g);
-    (b.isEmpty() ? v.copy(g.position) : b.getCenter(v)).project(W.cam);
+  const cand = [], v = new T.Vector3(), can = new Set(pickable());
+  // (every thing's box, worked out once: what's in the rectangle, and what may stand in front of it)
+  const all = visibleGroups().map(g => { const b = new T.Box3().setFromObject(g); return {g, b, empty: b.isEmpty()}; });
+  for (const o of W.lands || []) all.push({g: o, b: new T.Box3().setFromObject(o), land: true});
+  for (const o of all){
+    if (o.land || !can.has(o.g)) continue;
+    const c = o.empty ? o.g.position.clone() : o.b.getCenter(new T.Vector3());
+    v.copy(c).project(W.cam);
     if (v.z > 1) continue;                                        // behind the camera
     const sx = r.left + (v.x + 1) / 2 * r.width, sy = r.top + (1 - v.y) / 2 * r.height;
-    if (sx >= lo[0] && sx <= hi[0] && sy >= lo[1] && sy <= hi[1]){
-      const k = g.userData.thing.key; if (!keys.includes(k)) keys.push(k);
-    }
+    if (sx >= lo[0] && sx <= hi[0] && sy >= lo[1] && sy <= hi[1]) cand.push([o, c]);
   }
+  const eye = W.cam.position, rc = new T.Raycaster(), d = new T.Vector3();
+  const clear = (o, pt) => {                                      // nothing between the eye and this point of it
+    const far = d.copy(pt).sub(eye).length(); if (far < 1) return true;
+    rc.set(eye, d.divideScalar(far)); rc.near = 0; rc.far = far - 2;
+    // (what last hid something is tried first: a wall that hides one thing mostly hides its neighbours too)
+    if (last && last !== o && rc.ray.intersectsBox(last.b) && rc.intersectObject(last.g, true).length) return false;
+    for (const x of all){
+      if (x === o || x === last || x.empty || !rc.ray.intersectsBox(x.b)) continue;
+      if (rc.intersectObject(x.g, true).length){ last = x; return false; }
+    }
+    return true;
+  };
+  let last = null;
+  const seen = ([o, c]) => {
+    if (clear(o, c)) return true;
+    if (o.empty) return false;
+    // (its middle is hidden: its top, then the middles of its sides)
+    const h = o.b.getSize(new T.Vector3()).multiplyScalar(0.45);
+    for (const [x, y, z] of [[0, 0, 1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]])
+      if (clear(o, new T.Vector3(c.x + x * h.x, c.y + y * h.y, c.z + z * h.z))) return true;
+    return false;
+  };
+  const inBox = cand.filter(seen).map(([o]) => o.g.userData.thing.key), hid = cand.length - inBox.length;
+  const was = W.sel.map(g => g.userData.thing.key);
+  let keys = inBox;
+  if (how === 'add') keys = was.concat(inBox.filter(k => !was.includes(k)));
+  if (how === 'take'){ const out = new Set(inBox); keys = was.filter(k => !out.has(k)); }
+  if (W.onNote){
+    if (!inBox.length) W.onNote('Nothing you can see inside the box' + (W.locked && W.locked.size ? ' (some kinds are locked against clicks: see the View tab).' : '.'));
+    else if (hid && how !== 'take') W.onNote(`${inBox.length} selected. ${hid} more behind other things were left: a box takes what you can see.`);
+  }
+  if (!inBox.length && how) return;
   select(keys);
+}
+
+// a handle let go of with Esc or the right button: everything back where it was, and nothing for Undo to keep
+function cancelDrag(){
+  if (!W.dragging || !W.dragFrom) return;
+  const s = new T.Vector3();
+  W.sel.forEach((g, i) => {
+    if (!W.dragFrom.each[i]) return;
+    W.dragFrom.each[i].decompose(g.position, g.quaternion, s); g.scale.copy(s);
+  });
+  if (W.sel.length > 1) W.dragFrom.pivot.decompose(W.pivot.position, W.pivot.quaternion, s);
+  W.cancelled = true;
+  W.gizmo.dragging = false; W.gizmo.axis = null;              // (tells the handles the drag is over: see dragging-changed)
+  refreshSel();
+  if (W.onNote) W.onNote('Put back.');
 }
 
 // ---------- the game's lights ----------
@@ -517,11 +590,20 @@ function showHidden(){ W.hidden.clear(); restyle(); }
 // ---------- selection ----------
 function selThings(){ return W.sel.map(g => g.userData.thing); }
 
+const OUTLINES = 400;                                       // (past this many, one box round them all)
 function refreshSel(){
+  const each = W.sel.length > 1 && W.sel.length <= OUTLINES ? W.sel.length : 0;
+  while (W.outlines.length < each){ const h = new T.Box3Helper(new T.Box3(), 0xf0cd87); W.scene.add(h); W.outlines.push(h); }
+  W.outlines.forEach((h, i) => { h.visible = i < each; });
   if (!W.sel.length){ W.outline.visible = false; return; }
-  const b = new T.Box3();
-  for (const g of W.sel){ g.updateMatrixWorld(true); const gb = new T.Box3().setFromObject(g); b.union(gb.isEmpty() ? new T.Box3().setFromCenterAndSize(g.position, new T.Vector3(16, 16, 16)) : gb); }
-  W.outline.box.copy(b); W.outline.visible = true;
+  const b = new T.Box3(), gb = new T.Box3();
+  W.sel.forEach((g, i) => {
+    g.updateMatrixWorld(true); gb.setFromObject(g);
+    if (gb.isEmpty()) gb.setFromCenterAndSize(g.position, new T.Vector3(16, 16, 16));
+    b.union(gb);
+    if (each) W.outlines[i].box.copy(gb);
+  });
+  W.outline.box.copy(b); W.outline.visible = !each;
 }
 
 function select(keys){
@@ -540,6 +622,7 @@ function select(keys){
 
 function gizmoStart(){
   W.pivot.updateMatrixWorld(true);
+  W.dragAxis = W.gizmo.axis; W.cancelled = false;
   snapPrepare();
   W.dragFrom = {pivot: W.pivot.matrixWorld.clone(), each: W.sel.map(g => { g.updateMatrixWorld(true); return g.matrixWorld.clone(); })};
 }
@@ -664,16 +747,32 @@ function focusSel(){
   W.cam.position.copy(c).addScaledVector(dir(), -r * 1.1);
 }
 
-// where g would sit if set down on whatever is under it; null when there's nothing below
-function dropDown(g){
+// where g would sit if set down on whatever is under it (outside, the ground too); null when there's nothing below.
+// fromTop: looking down from its top rather than its underside, so a thing moved over a table lands on the table.
+function dropDown(g, fromTop){
   g.updateMatrixWorld(true);
   const b = new T.Box3().setFromObject(g);
   if (b.isEmpty()) return null;
   const c = b.getCenter(new T.Vector3());
-  const r = new T.Raycaster(new T.Vector3(c.x, c.y, b.min.z + 1), new T.Vector3(0, 0, -1), 0, 20000);
-  const hit = r.intersectObjects(visibleGroups(W.sel), true)[0];
+  const r = new T.Raycaster(new T.Vector3(c.x, c.y, (fromTop ? b.max.z : b.min.z) + 2), new T.Vector3(0, 0, -1), 0, 20000);
+  const hit = r.intersectObjects(visibleGroups(W.sel).concat(W.lands ? [...W.lands] : []), true)[0];
   if (!hit) return null;
   return g.position.z - (b.min.z - hit.point.z);
+}
+
+// "Land on what's below": after a move, what was moved comes to rest. Several keep their places to each other: they
+// all come down (or up) by what the lowest of them needs.
+function landSelected(){
+  if (!W.sel.length) return;
+  let low = null, lz = Infinity;
+  const b = new T.Box3();
+  for (const g of W.sel){ g.updateMatrixWorld(true); b.setFromObject(g); if (!b.isEmpty() && b.min.z < lz){ lz = b.min.z; low = g; } }
+  if (!low) return;
+  const z = dropDown(low, true); if (z === null) return;
+  const dz = z - low.position.z;
+  if (Math.abs(dz) < 0.05) return;
+  for (const g of W.sel) g.position.z += dz;
+  refreshSel();
 }
 
 // the surface under the mouse (or the middle of the view): for pasting and dropping things in

@@ -201,14 +201,23 @@ $('#objects').addEventListener('click', e => {
 $('#f-objects').addEventListener('input', drawObjects);
 
 // ---------- selected ----------
+// (nothing selected: how to select, several above all)
+const SEL_HOW = `<div class="note"><b>Click</b> a thing in the view or in Objects to select it.</div>
+  <div class="h">Selecting several</div>
+  <div class="note" style="padding-top:0"><b>Drag a box</b> in the view, starting anywhere: everything whose middle is inside it is selected.<br>
+  <kbd>Ctrl+click</kbd> or <kbd>Shift+click</kbd> adds one more, or takes it out.<br>
+  <kbd>Shift</kbd>+drag a box adds to what's selected, <kbd>Ctrl</kbd>+drag takes away.<br>
+  <kbd>Ctrl+A</kbd> everything you can see · <kbd>Esc</kbd> none.<br>
+  A box takes roads and pavement with it? Lock them against clicks in the <b>View</b> tab (🔒), or <kbd>Ctrl+click</kbd> them out.</div>`;
 const deg = r => Math.round(r * 180 / Math.PI * 100) / 100;
 function drawSelected(list){
   const box = $('#selected');
-  if (!list.length){ box.innerHTML = '<div class="note">Click a thing in the view or in Objects. Shift adds; drag on empty space to select with a box.</div>'; return; }
+  if (!list.length){ box.innerHTML = SEL_HOW; return; }
   if (list.length > 1){
     const kinds = {}; for (const t of list) kinds[t.type] = (kinds[t.type] || 0) + 1;
     box.innerHTML = `<div class="h">${list.length} selected</div>
       <div class="kv">${Object.entries(kinds).map(([k, n]) => `${n} ${esc(k)}`).join(' · ')}</div>
+      <div class="note" style="padding-top:0">The handles in their middle move and turn them all, as one Undo. <kbd>Ctrl+click</kbd> takes one out or adds one; <kbd>Shift</kbd>+drag a box adds more, <kbd>Ctrl</kbd>+drag takes some out.</div>
       <div class="acts"><button class="btn" data-a="drop">⤓ Drop down</button><button class="btn" data-a="dup">⧉ Duplicate</button>
       <button class="btn" data-a="del">✕ Remove</button><button class="btn" data-a="focus">Focus</button><button class="btn" data-a="hide">Hide</button>
       <button class="btn" data-a="prefab">Save as a prefab</button></div>`;
@@ -306,6 +315,7 @@ W.onSelect = list => {
   A.sel = list.map(t => t.key);
   if (A.outside && list.length && list[0].cell) A.cellId = list[0].cell;   // (outside, a thing's own cell)
   drawSelected(list);
+  $('#s-sel').textContent = list.length > 1 ? `${list.length} selected` : list.length ? list[0].base + ' selected' : '';
   if (list.length) tab('right', 'selected');
   document.querySelectorAll('#objects .row').forEach(r => r.classList.toggle('on', A.sel.includes(r.dataset.key)));
 };
@@ -341,6 +351,7 @@ function sendMoves(moves, label){
   }));
 }
 W.onMove = (moves, label) => sendMoves(moves, label);
+W.onNote = text => toast(text);
 
 function needSel(){ if (!W.sel.length){ toast('Select something first.', true); return false; } return true; }
 async function dropSel(){
@@ -352,10 +363,21 @@ async function dropSel(){
   if (!moves.length) return toast('Nothing below to set it on.', true);
   sendMoves(moves, 'Drop down');
 }
+// The copy stands beside what it's a copy of, not inside it: one thing a width of its own along its own length (a wall's
+// copy joins its end), several the width of them all to the east.
 function dupSel(){
   if (!needSel()) return;
-  const step = +$('#t-grid').value || 32;
-  edit('Duplicate', selThings().map(t => { const p = t.p.slice(); p[0] += step; return {op: 'add', cell: A.cellId, base: t.bkey, p, s: t.s || 1}; }), true);
+  const step = +$('#t-grid').value || 32, d = new THREE.Vector3(step, 0, 0);
+  if (W.sel.length === 1){
+    const g = W.sel[0], b = new THREE.Box3();
+    for (const m of g.children) if (m.geometry && m.geometry.boundingBox) b.union(m.geometry.boundingBox);
+    if (!b.isEmpty() && b.max.x - b.min.x > 1) d.set((b.max.x - b.min.x) * g.scale.x, 0, 0).applyQuaternion(g.quaternion);
+  } else {
+    const b = new THREE.Box3(); for (const g of W.sel) b.expandByObject(g);
+    if (!b.isEmpty() && b.max.x - b.min.x > 1) d.set(b.max.x - b.min.x, 0, 0);
+  }
+  const r = v => Math.round(v * 100) / 100;
+  edit('Duplicate', selThings().map(t => { const p = t.p.slice(); p[0] = r(p[0] + d.x); p[1] = r(p[1] + d.y); p[2] = r(p[2] + d.z); return {op: 'add', cell: A.cellId, base: t.bkey, p, s: t.s || 1}; }), true);
 }
 function delSel(){
   if (!needSel()) return;
@@ -371,12 +393,25 @@ function hideSel(){ if (needSel()){ const n = A.sel.length; hideKeys(A.sel); toa
 // copy and paste: the things' bases, turns and sizes, kept in their places relative to each other
 function copySel(){
   if (!needSel()) return;
-  A.clip = selThings().map(t => ({base: t.bkey, p: t.p.slice(), s: t.s || 1, name: t.base}));
-  toast(`Copied ${A.clip.length}`);
+  A.clip = selThings().map(t => ({base: t.bkey, p: t.p.slice(), s: t.s || 1, name: t.base, model: t.model, type: t.type, tree: t.tree, light: t.light, actor: t.actor}));
+  // (their lowest point, to stand the copies on what's under the mouse)
+  A.clipLow = Math.min(...W.sel.map(g => new THREE.Box3().setFromObject(g).min.z).filter(isFinite), ...A.clip.map(c => c.p[2]));
+  toast(`Copied ${A.clip.length}. Ctrl+V: they come to the mouse, click where they go.`);
 }
+// Ctrl+V: the copies come to the mouse, as a prefab does: the wheel turns them, each click puts them down again, Esc stops
 function paste(){
   if (!A.clip || !A.clip.length) return toast('Copy something first (Ctrl+C).', true);
-  const at = pointUnder(W.mouse), lo = Math.min(...A.clip.map(c => c.p[2]));
+  if (!A.cellId && !A.outside) return toast('Open a place first.', true);
+  const n = A.clip.length, lo = A.clipLow === undefined ? Math.min(...A.clip.map(c => c.p[2])) : A.clipLow;
+  const cx = A.clip.reduce((s, c) => s + c.p[0], 0) / n, cy = A.clip.reduce((s, c) => s + c.p[1], 0) / n;
+  W.place.yaw = 0;
+  startPlacing({prefab: n > 1 ? `${n} copied things` : 'a copy of ' + A.clip[0].name, items: A.clip.map(c => Object.assign({}, c, {p: [c.p[0] - cx, c.p[1] - cy, c.p[2] - lo, c.p[3], c.p[4], c.p[5]]}))});
+  W.ren.domElement.focus();
+}
+// (the menu's Paste here: at once, on the spot that was clicked)
+function pasteHere(){
+  if (!A.clip || !A.clip.length) return toast('Copy something first (Ctrl+C).', true);
+  const at = pointUnder(W.mouse), lo = A.clipLow === undefined ? Math.min(...A.clip.map(c => c.p[2])) : A.clipLow;
   const cx = A.clip.reduce((s, c) => s + c.p[0], 0) / A.clip.length, cy = A.clip.reduce((s, c) => s + c.p[1], 0) / A.clip.length;
   edit(A.clip.length > 1 ? `Paste ${A.clip.length}` : 'Paste ' + A.clip[0].name, A.clip.map(c => {
     const p = c.p.slice(); p[0] += at.x - cx; p[1] += at.y - cy; p[2] += at.z - lo;
@@ -482,6 +517,8 @@ $('#t-grid').onchange = $('#t-angle').onchange = snapNow;
 $('#t-drop').onclick = dropSel; $('#t-dup').onclick = dupSel; $('#t-del').onclick = delSel;
 $('#t-markers').onchange = e => { setShow('markers', e.target.checked); drawObjects(); };
 $('#t-snap').onchange = e => { W.snapPieces = e.target.checked; try { localStorage.setItem('folab-snappieces', e.target.checked ? '1' : '0'); } catch (err) {} };
+$('#t-land').onchange = e => { W.landAfter = e.target.checked; try { localStorage.setItem('folab-land', e.target.checked ? '1' : '0'); } catch (err) {} };
+try { $('#t-land').checked = W.landAfter = localStorage.getItem('folab-land') === '1'; } catch (err) {}
 $('#t-removed').onchange = e => { setShow('removed', e.target.checked); drawObjects(); };
 $('#t-light').onchange = e => { setGameLight(e.target.checked); try { localStorage.setItem('folab-light', e.target.checked ? '1' : '0'); } catch (err) {} };
 function lightsRefresh(){ resync(); }
