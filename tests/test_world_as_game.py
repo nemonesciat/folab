@@ -159,6 +159,39 @@ for p in g4.plugins:
 with open(src, 'rb') as a, open(again, 'rb') as b:
     check('a world already right is written back byte for byte', a.read() == b.read())
 
+# ---------- any plugin opened as a mod, not one FOLab made: its land stored compressed when it's saved ----------
+# (a tester's San Francisco: every LAND uncompressed, fine in FOLab, the GECK crashed as its cells loaded, 16 Nov 2026)
+with open(src, 'wb') as f:
+    f.write(old.bytes())
+pr2.trim_masters = False
+g5 = gamedata.GameData(plugins=list(gamedata.OFFICIAL) + [src])
+espwrite.write(g5, pr2, out)
+for p in g5.plugins:
+    p.close()
+opened = survey(out)
+check('a plugin opened as it was: all its land stored compressed on save', len(opened['land']) == 32 and all(fl & tes4.COMPRESSED for fl in opened['land']))
+check('and not a height of its land has changed', opened['heights'] == before['heights'])
+
+# ---------- placed things held as nothing but a deleted mark (the GECK's "bad forms"): out, or the game's back disabled ----------
+withdel = plugintree.Plugin.read(src)
+own_b = sum(1 for t, _d in tes4.iter_subrecords(withdel.header.raw) if t == 'MAST')
+temp = next(path[-1] for r, _p, path in withdel.records() if r.tag == 'LAND')
+mine = (own_b << 24) | 0xFFF0
+game_ref = next(g for c in gd.grid(mojave).values() for g, (i, r) in gd.cell_refs.get(c, {}).items() if r.tag == 'REFR' and i == 0)
+temp.kids.append(plugintree.Rec.new('REFR', tes4.DELETED, mine, b'', espwrite.FORM_VERSION))
+temp.kids.append(plugintree.Rec.new('REFR', tes4.DELETED, game_ref, b'', espwrite.FORM_VERSION))
+with open(src, 'wb') as f:
+    f.write(withdel.bytes())
+g6 = gamedata.GameData(plugins=list(gamedata.OFFICIAL) + [src])
+espwrite.write(g6, pr2, out)
+for p in g6.plugins:
+    p.close()
+saved = {r.formid: r for r, _p, _path in plugintree.Plugin.read(out).records()}
+check('an empty deleted thing of the plugin\'s own is left out', mine not in saved)
+gr = saved.get(game_ref)
+check('a game thing deleted the same way is left as it is (as Dead Money deletes 51 of FalloutNV.esm\'s)',
+      gr is not None and gr.flags & tes4.DELETED and not gr.data())
+
 # ---------- a master file lists what it changes of other files' placed things (ONAM), as the game's DLCs do ----------
 pm = project.Project.create('As Master')
 saloon = next(c for c in gd.interiors if gd.edid(c) == 'GSProspectorSaloonInterior')

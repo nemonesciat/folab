@@ -497,6 +497,36 @@ def hotels_job(body, srv):
     return _start(work, kind='hotels')
 
 
+def coast_job(body, srv):
+    """The coast's own hotels and one-off things (coastplace) stood over a world made from a map: one Undo. body: world,
+    file (the OSM file the world was made with), seed, only [step names]."""
+    import coastplace
+    srv.not_while_playing()
+    name = body['file']
+    path = file_path(name)
+    w, side = _side_of(srv, body['world'])
+
+    def work():
+        cover, lay = map_cover(srv, body['world'], name, _said)
+        _said('Reading what the map has on the coast')
+        marks = coastplace.osm_marks(path)
+        geo = osmplace.Georef(side, _osm_data(name))
+        with srv._lock:
+            ops, report, hotels, things = coastplace.plan(srv.GD, srv.PR, w, cover, lay['roads'], geo.xy, marks, int(body.get('seed', 1)), _said,
+                                                          body.get('only'))
+            if not any(report.get(k) for k in ('hotels', 'lighthouse', 'aquarium', 'mast', 'groin', 'wreck')):
+                raise ValueError('Nothing of the coast found a place: this world has no shore with room on it.')
+            _said('Putting it in the mod')
+            state = srv.edit('The coast', ops)['state']
+            edid = srv.GD.edid(w)
+            for fname, value in (('hotels.json', hotels), ('coast.json', things)):
+                kept = _kept(srv.PR, fname)
+                kept[edid] = value
+                _kept(srv.PR, fname, kept)
+        return {'state': state, 'report': report}
+    return _start(work, kind='coast')
+
+
 def green_job(body, srv):
     """The Mojave's bare brown painted over on wild ground only (greenground.py: by the land point, with what the map
     says each is): one Undo. body: world, file (the map)."""
@@ -635,7 +665,8 @@ def _kept(pr, name, data=None):
 
 
 # what a landmark is on the map
-MARK_KIND = {'lucky38': 'monument', 'tops': 'urban ruins', 'tops_strip': 'urban ruins', 'grandhotel': 'urban ruins', 'ultraluxe': 'urban ruins',
+MARK_KIND = {'lucky38': 'monument', 'kilauea': 'monument', 'royal_hawaiian': 'monument', 'moana': 'monument', 'natatorium': 'monument',
+             'battery_randolph': 'military','tops': 'urban ruins', 'tops_strip': 'urban ruins', 'grandhotel': 'urban ruins', 'ultraluxe': 'urban ruins',
              'gomorrah': 'urban ruins', 'battery': 'military', 'pool': 'monument', 'lookout': 'military'}
 SCENE_MARK = {'raiders': ('Raider Camp', 'camp'), 'refuge': ('Refugee Camp', 'camp')}
 
@@ -858,6 +889,8 @@ def post(path, body, srv):
         return {'job': dress_job(body, srv)}
     if path == '/api/maps/hotels':
         return {'job': hotels_job(body, srv)}
+    if path == '/api/maps/coast':
+        return {'job': coast_job(body, srv)}
     if path == '/api/maps/green':
         return {'job': green_job(body, srv)}
     if path == '/api/maps/plants':

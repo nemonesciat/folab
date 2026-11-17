@@ -1139,7 +1139,9 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
             gone.add((c, r))
             ops.append({'op': 'remove', 'cell': c, 'ref': r})
     ops.append({'op': 'add', 'cell': ck, 'base': b['key'], 'p': [round(ox, 2), round(oy, 2), round(z, 2), 0.0, 0.0, round(rz, 4)], 's': 1})
-    w.add(fp, ck, '(new)')
+    # (each by a name of its own: near() passes over a name it has seen, and with one name for all only the first new
+    # building in a cell was ever looked at, so the rest stood in each other: 5,844 pairs over Koko Head)
+    w.add(fp, ck, '(new %d)' % rep['buildings'])
     for x, y in fp + [(ox, oy)]:
         if (int(x // 4096), int(y // 4096)) in w.grid:
             w.touched.add((int(x // 4096), int(y // 4096)))

@@ -129,9 +129,21 @@ class Tray : ApplicationContext
         // open the window as soon as FOLab answers, then quit when that window is closed
         new Thread(() =>
         {
+            // (for as long as FOLab is still reading, however long: through Mod Organizer a big load order's loose files
+            // took a tester's past the three minutes this once waited, and then the window never opened at all)
             var sw = Stopwatch.StartNew();
-            while (!quitting && Common.RunningUrl(Launcher.Root) == null && sw.ElapsedMilliseconds < 180000) Thread.Sleep(400);
+            while (!quitting && Common.RunningUrl(Launcher.Root) == null)
+            {
+                bool ended = true;
+                try { ended = proc.HasExited; } catch { }
+                if (ended) return;                       // (OnExited says why)
+                Thread.Sleep(400);
+                long s = sw.ElapsedMilliseconds / 1000;
+                if (s >= 60 && s % 30 == 0)
+                    ui.Post(_ => { icon.Text = "FOLab: still reading the game (" + (s / 60) + " min)"; }, null);
+            }
             if (quitting) return;
+            ui.Post(_ => { icon.Text = "FOLab"; }, null);
             ui.Post(_ => OpenFOLab(), null);
             bool seen = false;
             int gone = 0;

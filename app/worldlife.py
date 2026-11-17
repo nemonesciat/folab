@@ -13,6 +13,7 @@ safe settlement. All of it the game's own records, put together as ops for one U
 Nobody here can walk until the world has navmeshes (navbuild.generate_area): make those after."""
 import math
 import random
+import struct
 
 import roadgen
 import worldrec
@@ -58,6 +59,34 @@ def _find(gd, tags, edid):
         if r.tag in tags and gd.edid(f).lower() == low:
             return gd.key(f)
     return None
+
+
+def world_water_op(gd, pr, world, wkey):
+    """The world record with its own water (NAM2) and its far water (NAM3) made `wkey`, the water its cells are given, and
+    the far water's height (NAM4) at the sea's level (DNAM's second float). Past the loaded cells the game draws the sea
+    as one sheet from NAM3 at NAM4: a FOLab world kept the Mojave's (-2300 under a sea at 0) and its far sea lay under
+    the distant ground, the Mojave's murky water where the near sea was Zion's (16 Nov 2026)."""
+    import recordio
+    key = gd.key(world)
+    rec = pr.records.get(key) or recordio.load(gd, world)
+    rec = dict(rec, subs=[dict(s) for s in rec['subs']])
+    sea = None
+    for s in rec['subs']:
+        if s['tag'] == 'DNAM':
+            raw = bytes.fromhex(s['value']) if s.get('kind') == 'raw' else None
+            if raw and len(raw) >= 8:
+                sea = struct.unpack_from('<f', raw, 4)[0]
+    put = {'NAM2': {'kind': 'F', 'value': wkey}, 'NAM3': {'kind': 'F', 'value': wkey}}
+    if sea is not None:
+        put['NAM4'] = {'kind': 'raw', 'value': struct.pack('<f', sea).hex()}
+    for tag, v in put.items():
+        s = next((s for s in rec['subs'] if s['tag'] == tag), None)
+        if s is None:
+            rec['subs'].append(dict(v, tag=tag, label=tag))
+        else:
+            s.clear()
+            s.update(dict(v, tag=tag, label=tag))
+    return {'op': 'record', 'key': key, 'record': rec}
 
 
 class Life:
@@ -116,6 +145,8 @@ class Life:
                 info['XCWT'] = wkey
             if mkey:
                 info['XCMO'] = mkey
+        if wkey:
+            self.ops.append(world_water_op(self.gd, self.pr, self.world, wkey))
         self.report['air'] = {'weathers': [e for e, _c in weathers if self.key(('WTHR',), e)], 'sounds': len(sounds), 'water': bool(wkey), 'music': bool(mkey), 'cells': len(cells)}
 
     # ----- how hard -----

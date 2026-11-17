@@ -426,6 +426,7 @@ class Writer:
             node.set_data(join(subs), node.flags & ~tes4.COMPRESSED)
 
         self._drop(tree, found)
+        self._empty_deleted(tree, found)
         as_the_game_files(tree, len(self.masters) if self.source and getattr(self.pr, 'trim_masters', False) else None)
 
         # the header: an opened plugin's own, with its count and next ID brought up to date
@@ -466,6 +467,31 @@ class Writer:
                 return self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(p.data(rec))))
         return None
 
+    def _empty_deleted(self, tree, found):
+        """Placed things of an opened plugin's own held as nothing but a deleted mark (another tool's doing: FOLab never
+        marks one) are left out. The GECK takes them for bad forms it can't remove, and crashed loading the cells they're
+        in (a tester's San Francisco, 16 Nov 2026); the game's own files never hold one. A master's thing deleted that way
+        is left as it is: Dead Money deletes 51 of FalloutNV.esm's so, and the GECK loads it."""
+        gone = False
+        for r, parent, _path in list(tree.records()):
+            if r.tag not in REF_KINDS or not r.flags & tes4.DELETED or r.raw or parent is None:
+                continue
+            if r.formid >> 24 >= len(self.masters):
+                parent.kids.remove(r)
+                found.pop(r.formid, None)
+                gone = True
+        if gone:
+            def prune(kids):
+                keep = []
+                for k in kids:
+                    if isinstance(k, plugintree.Group):
+                        k.kids = prune(k.kids)
+                        if not k.kids and k.gtype != tes4.G_CELL_PERSISTENT:
+                            continue
+                    keep.append(k)
+                return keep
+            tree.tops = prune(tree.tops)
+
     def _drop(self, tree, found):
         """Records the mod has cleaned out of an opened plugin, and any groups that leaves empty."""
         gone = False
@@ -491,6 +517,15 @@ class Writer:
         """A place's NAVM, first in its temporary group as the game has it, and its doors told which triangle they stand by
         (a mesh only copied to change its links keeps its triangles, so its doors are right as they are)."""
         fid = self.link(nav['form'])
+        # (a door of the mod's own taken out since the mesh was made, e.g. cleared for a landmark, is left off it:
+        # nothing is written for it to point at)
+        def taken_out(d):                           # (the mod's own door, new or in the opened plugin, no longer written)
+            rid = self.link(d)
+            return rid not in found and (d.startswith('+') or rid >> 24 == len(self.masters))
+        gone = {d for d, _t in nav['doors'] if taken_out(d)} | {d for d in nav.get('no_door', []) if taken_out(d)}
+        if gone:
+            nav = dict(nav, doors=[dt for dt in nav['doors'] if dt[0] not in gone],
+                       no_door=[d for d in nav.get('no_door', []) if d not in gone])
         m = navbuild.to_record(nav, lid, self.link)
         data = navmesh.write_navm(m)
         have = found.get(fid)
@@ -694,6 +729,7 @@ def set_water(subs, h):
     return out
 
 
+REF_KINDS = ('REFR', 'ACHR', 'ACRE', 'PGRE', 'PMIS', 'PBEA', 'PFLA', 'PCBE')
 OVERRIDES_LISTED = ('REFR', 'ACHR', 'ACRE', 'PGRE', 'PMIS', 'PBEA', 'PFLA', 'PCBE', 'NAVM', 'LAND')
 
 
@@ -728,9 +764,10 @@ def as_the_game_files(tree, own=None):
     """Outside cells laid out the way every one of the game's is (measured over all its worlds; the GECK is less
     forgiving than the game about what it never made itself):
       - a world's persistent cell has a children group with a persistent group in it, even an empty one;
-      - a grid cell with nothing in it has no children group at all, and never an empty temporary group's parent alone.
+      - a grid cell with nothing in it has no children group at all, and never an empty temporary group's parent alone;
+      - every LAND stored compressed, in any plugin saved (an opened plugin's too: contents untouched).
     own (the plugin's own load-order byte, for a plugin FOLab made a world in) also brings what earlier FOLabs wrote
-    into line: its own land compressed, its own cells without water given a level far under the ground."""
+    into line: its own cells without water given a level far under the ground."""
     wtop = next((g for g in tree.tops if g.gtype == tes4.G_TOP and g.label == plugintree.type_label('WRLD')), None)
     if not wtop:
         return
@@ -752,17 +789,20 @@ def as_the_game_files(tree, own=None):
                         nxt = plugintree.Group(k.formid, tes4.G_CELL_CHILDREN)
                         kids.insert(n + 1, nxt)
                     nxt.kids.insert(0, plugintree.Group(k.formid, tes4.G_CELL_PERSISTENT))
+                if has:
+                    # (every LAND stored compressed, whoever's it is: the game's and the GECK's files never hold one
+                    # uncompressed, and a world with all its land uncompressed loaded in FOLab and crashed the GECK as its
+                    # cells loaded (a tester's San Francisco, 16 Nov 2026). Only the storage changes, never the contents.)
+                    for g in nxt.kids:
+                        for r in (g.kids if isinstance(g, plugintree.Group) else []):
+                            if isinstance(r, plugintree.Rec) and r.tag == 'LAND' and not r.flags & tes4.COMPRESSED:
+                                r.set_packed(r.raw)
                 if own is not None and k.formid >> 24 == own:
                     if grid and lowest is not None:
                         subs = list(tes4.iter_subrecords(k.data()))
                         flags = next((d for t, d in subs if t == 'DATA'), b'')
                         if flags and not flags[0] & 2:
                             k.set_data(join(dry(subs, lowest)), k.flags)
-                    if has:
-                        for g in nxt.kids:
-                            for r in (g.kids if isinstance(g, plugintree.Group) else []):
-                                if isinstance(r, plugintree.Rec) and r.tag == 'LAND' and not r.flags & tes4.COMPRESSED and r.formid >> 24 == own:
-                                    r.set_packed(r.raw)
             n += 1
 
     for n, k in enumerate(wtop.kids):

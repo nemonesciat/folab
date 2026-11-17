@@ -30,12 +30,13 @@ function texture(path){
   return W.tex[path];
 }
 
-function material(tex, alpha, double){
-  const k = tex + '|' + alpha + '|' + double;
+function material(tex, alpha, double, shaded){
+  const k = tex + '|' + alpha + '|' + double + (shaded ? '|c' : '');
   if (!tex && alpha === 'skin') return W.mats[k] = W.mats[k] || new T.MeshLambertMaterial({color: 0xc8a888});
   if (W.mats[k]) return W.mats[k];
   // plain sand colour until the texture arrives (and for the few shapes that have none)
   const m = new T.MeshLambertMaterial({color: 0xb8a888, side: double || alpha === 'blend' ? T.DoubleSide : T.FrontSide});
+  if (shaded) m.vertexColors = true;          // (the shade baked into a model's corners: the game multiplies by it)
   if (alpha === 'test') m.alphaTest = 0.5;
   if (alpha === 'blend'){ m.transparent = true; m.depthWrite = false; if (!tex) m.opacity = 0.25; }
   if (tex) texture(tex).then(t => { if (t){ m.map = t; m.color.set(0xffffff); m.needsUpdate = true; } });
@@ -61,10 +62,12 @@ function model(path, tex){
       const g = new T.BufferGeometry();
       g.setAttribute('position', new T.Float32BufferAttribute(s.p, 3));
       if (s.uv.length === s.p.length / 3 * 2) g.setAttribute('uv', new T.Float32BufferAttribute(s.uv, 2));
+      const shaded = !!(s.c && s.c.length === s.p.length);
+      if (shaded) g.setAttribute('color', new T.Float32BufferAttribute(s.c, 3));
       g.setIndex(s.i);
       g.computeVertexNormals();
       g.computeBoundingBox();
-      parts.push([g, material(s.tex, s.alpha, s.double), s.alpha === 'blend']);
+      parts.push([g, material(s.tex, s.alpha, s.double, shaded), s.alpha === 'blend']);
     }
     return parts;
   }).catch(() => { delete W.models[key]; return []; });
@@ -244,7 +247,7 @@ function controls(el){
   el.addEventListener('contextmenu', e => e.preventDefault());
   el.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
   // (the right button while a handle is dragged puts it back; a second button pressed sends no pointerdown, so: mousedown)
-  addEventListener('mousedown', e => { if (e.button === 2 && W.dragging){ cancelDrag(); e.preventDefault(); } }, true);
+  addEventListener('mousedown', e => { if (e.button === 2 && W.dragging && !W.grabbing){ cancelDrag(); e.preventDefault(); } }, true);
   el.addEventListener('pointerdown', e => {
     el.focus();
     if (e.button === 1) e.preventDefault();
@@ -255,7 +258,16 @@ function controls(el){
       return;
     }
     drag = {b: e.button, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, moved: 0, alt: e.altKey, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey};
-    if (e.button === 0 && e.altKey){
+    if (e.button === 1 && W.blenderMouse && W.blenderMouse() && !e.shiftKey){
+      // (Blender's mouse, chosen in the View tab: the middle button circles what's selected, else what's under it;
+      // with Ctrl it moves in and out; with Shift it slides, as the middle button always does otherwise)
+      drag.orbit = !(e.ctrlKey || e.metaKey);
+      drag.dolly = !drag.orbit;
+      const h = W.sel.length ? null : (hitThing(e) || {}).point;
+      // (what's under the mouse only when it's near: pointing at the far hills circled a spot 80,000 away)
+      drag.pivot = W.sel.length ? selCenter() : h && h.distanceTo(W.cam.position) < 6000 ? h : W.cam.position.clone().addScaledVector(dir(), 800);
+      drag.dist = W.cam.position.distanceTo(drag.pivot);
+    } else if (e.button === 0 && e.altKey){
       drag.pivot = W.sel.length ? selCenter() : (hitThing(e) || {}).point || W.cam.position.clone().addScaledVector(dir(), 600);
       drag.dist = W.cam.position.distanceTo(drag.pivot);
     } else if (e.button === 0 && !W.placing){
@@ -276,6 +288,13 @@ function controls(el){
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
     if (drag.b === 2){                                                  // right-drag: look around
       W.yaw -= dx * 0.005; W.pitch = Math.max(-1.55, Math.min(1.55, W.pitch - dy * 0.005));
+    } else if (drag.b === 1 && drag.dolly){                             // Blender's Ctrl+middle-drag: in and out
+      const step = Math.max(8, drag.dist * 0.01);
+      drag.dist = Math.max(16, drag.dist + dy * step);
+      W.cam.position.copy(drag.pivot).addScaledVector(dir(), -drag.dist);
+    } else if (drag.b === 1 && drag.orbit){                             // Blender's middle-drag: circle
+      W.yaw -= dx * 0.005; W.pitch = Math.max(-1.5, Math.min(1.5, W.pitch - dy * 0.005));
+      W.cam.position.copy(drag.pivot).addScaledVector(dir(), -drag.dist);
     } else if (drag.b === 1){                                           // middle-drag: slide
       const s = (W.keys.shift ? 6 : 2), r = new T.Vector3(Math.sin(W.yaw), -Math.cos(W.yaw), 0), u = new T.Vector3().crossVectors(r, dir());
       W.cam.position.addScaledVector(r, -dx * s).addScaledVector(u, dy * s);
@@ -320,7 +339,7 @@ function controls(el){
     W.cam.position.addScaledVector(dir(), -Math.sign(e.deltaY) * (W.keys.shift ? 800 : 200));
   }, {passive: false});
   addEventListener('keydown', e => {                                    // (heard first: Esc while a handle is dragged puts it back)
-    if (e.key === 'Escape' && W.dragging){ cancelDrag(); e.preventDefault(); e.stopImmediatePropagation(); }
+    if (e.key === 'Escape' && W.dragging && !W.grabbing){ cancelDrag(); e.preventDefault(); e.stopImmediatePropagation(); }   // (G/R's own: grab.js)
   }, true);
   addEventListener('keydown', e => {                                    // (heard first: R turns the piece, not the tool)
     if (W.placing && !typing(e) && W.box.offsetParent && placeKey(e)){ e.preventDefault(); e.stopPropagation(); }
@@ -613,7 +632,7 @@ function select(keys){
   if (W.sel.length === 1) W.gizmo.attach(W.sel[0]);
   else if (W.sel.length > 1){
     // several: one set of handles in their middle
-    W.pivot.position.copy(selCenter()); W.pivot.rotation.set(0, 0, 0); W.pivot.updateMatrixWorld(true);
+    W.pivot.position.copy(W.pivotAt ? W.pivotAt() : selCenter()); W.pivot.rotation.set(0, 0, 0); W.pivot.updateMatrixWorld(true);
     W.gizmo.attach(W.pivot);
   }
   refreshSel();
@@ -707,7 +726,11 @@ function gizmoFollow(){
   if (W.sel.length > 1 && W.dragFrom){
     W.pivot.updateMatrixWorld(true);
     const delta = W.pivot.matrixWorld.clone().multiply(new T.Matrix4().copy(W.dragFrom.pivot).invert()), s = new T.Vector3();
-    W.sel.forEach((g, i) => { new T.Matrix4().multiplyMatrices(delta, W.dragFrom.each[i]).decompose(g.position, g.quaternion, s); });
+    if (W.mode === 'rotate' && W.pivotEach && W.pivotEach()){
+      // (Individual origins: the turn the handles made, given to each where it stands; nothing swings round)
+      const dq = new T.Quaternion().setFromRotationMatrix(delta), p0 = new T.Vector3(), q0 = new T.Quaternion();
+      W.sel.forEach((g, i) => { W.dragFrom.each[i].decompose(p0, q0, s); g.position.copy(p0); g.quaternion.copy(dq).multiply(q0); });
+    } else W.sel.forEach((g, i) => { new T.Matrix4().multiplyMatrices(delta, W.dragFrom.each[i]).decompose(g.position, g.quaternion, s); });
   }
   refreshSel();
 }
@@ -736,7 +759,7 @@ function commitSelected(label){
     if (W.mode === 'scale' && Math.abs(s - (t.s || 1)) > 1e-3) moves.push([t, p, s]);
     else if (!p.every((v, i) => Math.abs(v - t.p[i]) < 1e-4)) moves.push([t, p]);
   }
-  if (W.sel.length > 1){ W.pivot.position.copy(selCenter()); W.pivot.rotation.set(0, 0, 0); }
+  if (W.sel.length > 1){ W.pivot.position.copy(W.pivotAt ? W.pivotAt() : selCenter()); W.pivot.rotation.set(0, 0, 0); }
   if (moves.length) W.onMove(moves, label);
 }
 

@@ -117,9 +117,16 @@ function gbPoints(px, py, R, side, step){
 }
 
 // ---------- strokes ----------
+// The brush looks at the ground alone, through whatever stands on it: asking for the nearest thing gave a tree, a rock
+// or a house first, and a stroke started on one turned into selecting it.
+function gbHit(e){
+  if (!W.lands || !W.lands.size) return null;
+  const hit = ray(e).intersectObjects([...W.lands], true)[0];
+  return hit ? {point: hit.point, land: true} : null;
+}
 const GROUND_TOOL = {
   down(e){
-    const h = hitThing(e); if (!h || !h.land) return false;
+    const h = gbHit(e); if (!h) return false;
     const c = gbCellAt(h.point.x, h.point.y);
     if (c && c.data && c.data.own_land === false){ toast('This cell borrows its ground from another worldspace: shape it there.', true); return true; }
     if (e.shiftKey && (GB.tool === 'paint' || GB.tool === 'tint')){ gbPick(h.point); return true; }
@@ -138,7 +145,7 @@ const GROUND_TOOL = {
     if (!GB.stroke) return;
     const now = performance.now(); if (now - GB.stroke.last < 40) return;
     GB.stroke.last = now;
-    const h = hitThing(e); if (h && h.land) gbApply(h.point);
+    const h = gbHit(e); if (h) gbApply(h.point);
   },
   up(){ if (GB.stroke) gbCommit(); },
   hover(e, dragging){ if (!dragging || !GB.stroke) gbRing(e); else gbRing(e); },
@@ -278,7 +285,7 @@ async function gbCommit(){
 // the brush's reach, drawn on the ground
 function gbRing(e){
   if (!GB.on) return;
-  const h = hitThing(e);
+  const h = gbHit(e);
   if (!GB.ring){
     GB.ring = new T.LineLoop(new T.BufferGeometry(), new T.LineBasicMaterial({color: 0xf0cd87, depthTest: false, transparent: true, opacity: 0.9}));
     GB.ring.renderOrder = 10; W.scene.add(GB.ring);

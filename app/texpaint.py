@@ -123,9 +123,13 @@ class Canvas:
     def text_wide(self, words, high):
         return sum(5.6 if ch != ' ' else 3.5 for ch in words) * high / 6.0 - 1.6 * high / 6.0
 
-    def files(self, bump=3.0, shine=40):
+    def files(self, bump=3.0, shine=40, game=False):
         """(colour DDS, normal map DDS). bump: how strongly heights lean the light; shine: the normal map's fourth
-        number, which the game reads as how much the surface gleams."""
+        number, which the game reads as how much the surface gleams. game: as the game's own models' are (`normal_map`):
+        relief from the painting too, as strong as the game's, the normal map half the size."""
+        if game:
+            gl = self.gloss if hasattr(self, 'gloss') and shine is None else [shine if shine is not None else 40] * (self.w * self.h)
+            return colour_map(self), normal_map(self, gl, bump)
         w, h = self.w, self.h
         col = bytearray(w * h * 4)
         nor = bytearray(w * h * 4)
@@ -141,7 +145,99 @@ class Canvas:
                 sy = (ht[dn + x] - ht[up + x]) * bump
                 ln = math.sqrt(sx * sx + sy * sy + 1)
                 nor[4 * i:4 * i + 4] = bytes((clamp(127.5 - 127.5 * sx / ln), clamp(127.5 - 127.5 * sy / ln), clamp(127.5 + 127.5 / ln), shine))
-        return dds.encode(w, h, bytes(col)), dds.encode(w, h, bytes(nor))
+        return dds.compress(dds.encode(w, h, bytes(col))), dds.compress(dds.encode(w, h, bytes(nor)))   # (compressed as the game keeps its own: dds.compress)
+
+
+# ---------- the files, as the game's own models have them ----------
+# Measured over the normal maps of the game's buildings, plants and clutter (45 of the most used): the light leans by 5 to
+# 12 degrees on average over a picture, a tenth of it by 15 to 30; and the normal map is half the colour picture's size
+# (1024 colour, 512 normal), which halves what a texture costs the game's memory. FOLab's pictures leaned by 2 to 4 (the
+# ship's hull 2.6): heights only where something was drawn standing proud, flat between, so they read as painted on.
+
+TILT_WANT = 7.0             # (degrees) the mean lean a picture's normal map is brought up to, if under it
+TILT_MOST_GAIN = 5.0        # (never more than this many times the painter's own)
+RELIEF = 0.35               # how much the painting's own light and dark stand in for height (rust, chips and grime have depth)
+RELIEF_REACH = 3            # (pixels: what is lighter or darker than round it, within this, is raised or sunk)
+HALF_FROM = 512             # a picture this wide or more has its normal map at half its size
+
+
+def colour_map(c):
+    w, h = c.w, c.h
+    col = bytearray(w * h * 4)
+    cl = lambda v: 0 if v < 0 else 255 if v > 255 else int(v + 0.5)
+    for i, (r, g, b) in enumerate(c.rgb):
+        col[4 * i:4 * i + 4] = bytes((cl(r), cl(g), cl(b), cl(255 * c.a[i]) if c.a else 255))
+    return dds.compress(dds.encode(w, h, bytes(col)))
+
+
+def _blur(v, w, h, r):
+    """A box blur, wrapping round (the pictures repeat)."""
+    out = [0.0] * (w * h)
+    n = 2 * r + 1
+    for y in range(h):
+        row = v[y * w:(y + 1) * w]
+        s = sum(row[k % w] for k in range(-r, r + 1))
+        for x in range(w):
+            out[y * w + x] = s / n
+            s += row[(x + r + 1) % w] - row[(x - r) % w]
+    res = [0.0] * (w * h)
+    for x in range(w):
+        col = out[x::w]
+        s = sum(col[k % h] for k in range(-r, r + 1))
+        for y in range(h):
+            res[y * w + x] = s / n
+            s += col[(y + r + 1) % h] - col[(y - r) % h]
+    return res
+
+
+def heights(c):
+    """The picture's heights with relief from its painting: what is darker than round it a little sunk (seams, pits, rust
+    runs, grime in the grain), what is lighter a little raised. Not where it is see-through."""
+    w, h = c.w, c.h
+    lum = [(0.3 * r + 0.59 * g + 0.11 * b) / 255.0 for r, g, b in c.rgb]
+    near = _blur(lum, w, h, RELIEF_REACH)
+    return [c.ht[i] + RELIEF * (lum[i] - near[i]) * (0 if c.a and c.a[i] < 0.5 else 1) for i in range(w * h)]
+
+
+def _half(v, w, h):
+    return [(v[(2 * y) * w + 2 * x] + v[(2 * y) * w + 2 * x + 1] + v[(2 * y + 1) * w + 2 * x] + v[(2 * y + 1) * w + 2 * x + 1]) / 4
+            for y in range(h // 2) for x in range(w // 2)]
+
+
+def normal_map(c, gloss, bump):
+    """The normal map of a Canvas as the game's own models have theirs (see above): heights with the painting's relief,
+    leaning on average by TILT_WANT degrees at least, half the size from HALF_FROM. gloss: a number 0-255 a pixel."""
+    w, h = c.w, c.h
+    ht = heights(c)
+    if w >= HALF_FROM and h >= 8:
+        ht, gloss, w, h = _half(ht, w, h), _half(gloss, w, h), w // 2, h // 2
+        bump *= 0.5                     # (a pixel twice as far across: the same slope is half the step)
+
+    def slopes(i):
+        y, x = divmod(i, w)
+        return ((ht[y * w + (x + 1) % w] - ht[y * w + (x - 1) % w]), (ht[(y + 1) % h * w + x] - ht[(y - 1) % h * w + x]))
+    sample = [slopes(i) for i in range(0, w * h, 13)]
+
+    def mean_tilt(b):
+        return sum(math.degrees(math.atan(b * math.hypot(sx, sy))) for sx, sy in sample) / len(sample)
+    have = mean_tilt(bump)
+    if have < TILT_WANT:
+        lo, hi = bump, bump * TILT_MOST_GAIN
+        if mean_tilt(hi) <= TILT_WANT:
+            bump = hi
+        else:
+            for _ in range(14):
+                mid = (lo + hi) / 2
+                lo, hi = (mid, hi) if mean_tilt(mid) < TILT_WANT else (lo, mid)
+            bump = hi
+    nor = bytearray(w * h * 4)
+    cl = lambda v: 0 if v < 0 else 255 if v > 255 else int(v + 0.5)
+    for i in range(w * h):
+        sx, sy = slopes(i)
+        sx, sy = sx * bump, sy * bump
+        ln = math.sqrt(sx * sx + sy * sy + 1)
+        nor[4 * i:4 * i + 4] = bytes((cl(127.5 - 127.5 * sx / ln), cl(127.5 - 127.5 * sy / ln), cl(127.5 + 127.5 / ln), cl(gloss[i])))
+    return dds.compress(dds.encode(w, h, bytes(nor)))
 
 
 # block capitals as strokes on a grid 4 wide and 6 tall (y down)
@@ -178,7 +274,13 @@ LETTERS = {
     '0': [_O],
     '1': [[(1, 1), (2, 0), (2, 6)]],
     '2': [[(0, 1), (1, 0), (3, 0), (4, 1), (4, 2), (0, 6), (4, 6)]],
+    '3': [[(0, 1), (1, 0), (3, 0), (4, 1), (4, 2), (3, 3), (1.5, 3)], [(3, 3), (4, 4), (4, 5), (3, 6), (1, 6), (0, 5)]],
+    '4': [[(3, 6), (3, 0), (0, 4), (4, 4)]],
     '5': [[(4, 0), (0, 0), (0, 3), (3, 3), (4, 4), (4, 5), (3, 6), (0, 6)]],
+    '6': [[(4, 1), (3, 0), (1, 0), (0, 1), (0, 5), (1, 6), (3, 6), (4, 5), (4, 4), (3, 3), (1, 3), (0, 4)]],
+    '7': [[(0, 0), (4, 0), (1.5, 6)]],
+    '8': [[(1, 3), (0, 2), (0, 1), (1, 0), (3, 0), (4, 1), (4, 2), (3, 3), (1, 3), (0, 4), (0, 5), (1, 6), (3, 6), (4, 5), (4, 4), (3, 3)]],
+    '9': [[(4, 2), (3, 3), (1, 3), (0, 2), (0, 1), (1, 0), (3, 0), (4, 1), (4, 5), (3, 6), (1, 6), (0, 5)]],
     '-': [[(1, 3), (3, 3)]],
     '.': [[(2, 5.6), (2, 6)]],
 }

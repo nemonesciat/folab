@@ -17,6 +17,11 @@ import struct
 
 import roadgen
 
+# models the game splits in parts and always stands together at one spot and turn: an 'extra' of the first brings the
+# rest (the guard tower alone is its frame and net; its stairs and floors are a-d: without them, invisible ramps to climb)
+LEVEL_DRY = 16.0        # (land lower than this, the sea and the wet sand, is never levelled up to a set)
+PARTS_OF = {'NVGuardTower01': ('NVGuardTower01a', 'NVGuardTower01b', 'NVGuardTower01c', 'NVGuardTower01d')}
+
 # set: what it's called, the world the game has it in, which things are its pieces (editor IDs, lower case), and things
 # added round it: (editor ID, east, north of its middle, turn)
 SETS = {
@@ -43,6 +48,15 @@ SETS = {
     'pool': {'label': 'Swimming baths', 'extra': [('TheTopsPool', 0, 0, 0.0, 18.0), ('NVMojOutpostStatue01', 0, 2100, 3.14), ('FlagPole', -1500, 1700, 0.0),
                                                   ('FlagPole', 1500, 1700, 0.0), ('umbrellaNV', -2500, 300, 0.0), ('umbrellaNV', 2500, -200, 0.0),
                                                   ('dlc04lawnchair01', -2500, -300, 1.0), ('dlc04lawnchair01', 2550, 400, 4.0)]},
+    # (FOLab's own: a piece of modelsets, made into the mod's files and a STAT of the mod's own when stood. The Kilauea,
+    # towerset, is the city's great tower where the Lucky 38 stood: the Strip's own tower read as Vegas on the beach)
+    'kilauea': {'label': 'The Kilauea', 'own': 'kilauea'},
+    # (Waikiki's own historic buildings, historicset, where the map has the real ones: before them the game's Vegas
+    # buildings stood in, the grand hotel for the Royal Hawaiian, the Tops for the Moana, the swimming baths, the battery)
+    'royal_hawaiian': {'label': 'The Royal Hawaiian', 'own': 'royal_hawaiian'},
+    'moana': {'label': 'The Moana', 'own': 'moana'},
+    'natatorium': {'label': 'Waikiki Natatorium', 'own': 'natatorium'},
+    'battery_randolph': {'label': 'Battery Randolph', 'own': 'battery_randolph'},
     'lookout': {'label': 'Lookout station', 'extra': [('RadioTower01', 0, 0, 0.0), ('HVBunkerNV3', 1500, -300, 1.6), ('HVBunkerNV', -1500, 300, 4.7),
                                                       ('NVGuardTower01', 300, 1500, 0.0), ('truckarmy02Static', -500, -1300, 0.7),
                                                       ('SandbagStraight', 900, 900, 0.8), ('SandbagStraight', -900, 900, 5.5), ('CampfireCrafting03', 200, -500, 0.0)]},
@@ -178,6 +192,10 @@ def lift(gd, name):
         o = _obnd(gd, base)
         up = -float(o[2]) - BEDDED if o else 0.0
         pieces.append((gd.key(base), float(dx), float(dy), up, 0.0, 0.0, rz, 1.0))
+        for part in PARTS_OF.get(edid, ()):    # (what the game always stands with it, at its own spot)
+            pb = _base(gd, part)
+            if pb is not None:
+                pieces.append((gd.key(pb), float(dx), float(dy), up, 0.0, 0.0, rz, 1.0))
         b = _doors.get(gd.key(base))
         for d in (list(b['doors']) + list(b.get('shut', ())) if b else ()):
             tx, ty = _turn(d['x'], d['y'], rz)
@@ -283,6 +301,7 @@ class Batch:
         self.rng = random.Random(seed * 2654435761 % (2 ** 31) + 11)
         self.forms, self.cache = {}, {}
         self.ops, self.gone, self.keep, self.made = [], set(), [], []
+        self.records, self.own = [], {}         # (record ops for FOLab's own pieces, first in done; {piece: lifted})
         # every 128-unit square a road covers (a road is narrower than a landmark's box is sampled, unless it's sampled this finely)
         self.roads = set()
         reach = int(ROAD_HALF // 128) + 1
@@ -329,7 +348,8 @@ class Batch:
         return self.forms[k]
 
     def level(self, x, y, rz, box, z, margin=MARGIN):
-        """The ground inside a box (in a frame turned rz at x, y) brought to z."""
+        """The ground inside a box (in a frame turned rz at x, y) brought to z; sea and wet sand (under LEVEL_DRY) left as
+        they are, so a set by the shore doesn't stand on a square platform built out into the water (Fort DeRussy)."""
         x0, y0, x1, y1 = box[0] - margin, box[1] - margin, box[2] + margin, box[3] + margin
         rad = math.hypot(max(abs(x0), abs(x1)), max(abs(y0), abs(y1)))
         for gy in range(int((y - rad) // 128), int((y + rad) // 128) + 2):
@@ -341,8 +361,9 @@ class Batch:
                 for cx in {gx // 32, (gx - 1) // 32} if gx % 32 == 0 else {gx // 32}:
                     for cy in {gy // 32, (gy - 1) // 32} if gy % 32 == 0 else {gy // 32}:
                         f = self._form((cx, cy))
-                        if f:
-                            f['h'][(gy - cy * 32) * 33 + (gx - cx * 32)] = float(z)
+                        k = (gy - cy * 32) * 33 + (gx - cx * 32)
+                        if f and f['h'][k] >= LEVEL_DRY:
+                            f['h'][k] = float(z)
 
     def clear(self, x, y, rz, box):
         """What the mod has standing inside a box goes."""
@@ -366,7 +387,7 @@ class Batch:
             return False
         o = {'op': 'add', 'cell': self.gd.key(cell), 'base': key,
              'p': [round(x, 1), round(y, 1), round(z, 1), round(rx, 4), round(ry, 4), round(rz % math.tau, 4)], 's': round(scale, 3)}
-        fid = self.gd.from_key(key)
+        fid = None if key[:1] in ('$', '+') else self.gd.from_key(key)
         if fid in self.gd.forms and self.gd.forms[fid][1].tag == 'DOOR':
             o['extra'] = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}      # (a door with nothing behind it stays shut)
         self.ops.append(o)
@@ -395,7 +416,8 @@ class Batch:
 
     def stand(self, name, x, y, turn=None, scale=1.0, nudge=NUDGE, level=True):
         """Stand a set at x, y (or near it). Returns what was done, in words' worth: {'label', 'x', 'y', 'turn', 'moved', 'pieces'} or None."""
-        got = lift(self.gd, name)
+        own = SETS[name].get('own')
+        got = self._own(own) if own else lift(self.gd, name)
         if not got:
             return None
         box = tuple(v * scale for v in got['box'])
@@ -426,9 +448,29 @@ class Batch:
             tx, ty = _turn(dx * scale, dy * scale, rz)
             base_z = z if level else (self.height(sx + tx, sy + ty) or z)
             n += self.add(key, sx + tx, sy + ty, base_z + dz * scale, rx, ry, prz + rz, sc * scale)
+        if own:
+            import waikikiset
+            cell = self.grid.get((int(sx // 4096), int(sy // 4096)))
+            self.ops += waikikiset.lights(self.gd, self.pr, own, sx, sy, z, rz, s=scale, cell=self.gd.key(cell) if cell is not None else None)
+            if got['ops'] and got['ops'][0] not in self.records:
+                self.records += got['ops']
         self.made.append((sx, sy, rz, box))
         self.keep.append((sx, sy, rz, box[0], box[1], box[2], box[3]))
-        return {'set': name, 'label': got['label'], 'x': round(sx), 'y': round(sy), 'turn': round(rz, 3), 'moved': round(ring * step), 'pieces': n, 'level': z}
+        return {'set': name, 'label': got['label'], 'x': round(sx), 'y': round(sy), 'turn': round(rz, 3), 'moved': round(ring * step), 'pieces': n, 'level': z,
+                'scale': scale}
+
+    def _own(self, piece):
+        """One of FOLab's own pieces as a set of one: its files put among the mod's, the op making its record (none if
+        the mod has it already), the record's key (or the name that op gives it)."""
+        if piece not in self.own:
+            import modelsets
+            modelsets._all_sets()
+            ops, info = modelsets.put(self.pr, piece)
+            key = info['key'] or '$model_' + piece
+            b = info['box']
+            self.own[piece] = {'label': modelsets.PIECES[piece]['label'], 'pieces': [(key, 0.0, 0.0, -BEDDED, 0.0, 0.0, 0.0, 1.0)],
+                               'box': (b[0], b[1], b[3], b[4]), 'ops': ops}
+        return self.own[piece]
 
     # ----- a harbour -----
 
@@ -553,7 +595,7 @@ class Batch:
     def done(self):
         """Every op: what goes, the ground, then what's stood."""
         lands = [{'op': 'land', 'cell': self.gd.key(self.grid[k]), 'land': f} for k, f in sorted(self.forms.items())]
-        return [o for o in self.ops if o['op'] == 'remove'] + lands + [o for o in self.ops if o['op'] == 'add']
+        return self.records + [o for o in self.ops if o['op'] == 'remove'] + lands + [o for o in self.ops if o['op'] == 'add']
 
 
 def clear_of(ops, boxes):
@@ -583,6 +625,15 @@ def standing(gd, pr, world):
     crane = _base(gd, CRANE[0])
     if crane is not None:
         keys[gd.key(crane)] = _obnd(gd, crane)
+    own = [spec['own'] for spec in SETS.values() if spec.get('own')]
+    if own:                                     # (FOLab's own landmarks: by the mod's record for each, its bounds)
+        import modelsets
+        modelsets._all_sets()
+        for piece in own:
+            rk = modelsets.record_of(pr, piece)
+            ob = next((s for s in pr.records[rk]['subs'] if s['tag'] == 'OBND'), None) if rk else None
+            if ob:
+                keys[rk] = [f['value'] for f in ob['fields'] if 'name' in f]
     out = []
     for cell in gd.grid(world).values():
         c = pr.cells.get(gd.key(cell))
@@ -592,7 +643,8 @@ def standing(gd, pr, world):
             if b and p and rk.startswith('+'):
                 s = float(r.get('s') or 1.0)
                 out.append((p[0], p[1], p[5], b[0] * s, b[1] * s, b[3] * s, b[4] * s))
-    return out
+    import modelsets                            # (and FOLab's own hotels, coast pieces and city landmarks, kept off alike)
+    return out + modelsets.footprints(pr, gd, world)
 
 
 SIDE_GRID = 40

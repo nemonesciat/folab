@@ -92,6 +92,11 @@ TEXTURES = {
     'hotel/far_plain_coral': lambda: tp.stucco(tp.CORAL, size=32, seed=78),
 }
 
+# The hotels' and the shore's pictures in texwear's worn paint (same names, purpose and layout: the models are as they
+# were). The coast's are put in by coastset, after its own.
+import texwear  # noqa: E402
+TEXTURES.update({k: v for k, v in texwear.UPGRADE().items() if not k.startswith('coast/')})
+
 
 def tex_path(name, normal=False):
     """Where a texture goes: in the beach set's folder, or for 'jungle/canopy' and the like in that set's."""
@@ -165,7 +170,7 @@ def umbrella():
     return {'name': 'FOLabBeachUmbrella', 'looks': looks, 'parts': parts}
 
 
-def palm(name, tall=640, lean=22, fronds=16, seed=1):
+def palm(name, tall=640, lean=22, fronds=21, seed=1):
     """A coconut palm: a ringed trunk that leaves the ground leaning (towards +x) and straightens as it climbs, a head
     of long leaves from upright young ones to old ones hanging brown, nuts under them. Only the trunk is solid."""
     rnd = random.Random(seed)
@@ -248,7 +253,8 @@ def leaves(at, r, look, rnd, flat=2, look2=None):
     of leaves standing through each other: a tree of overlapping discs.) look2: every other spray in a second look."""
     x, y, z = at
     parts = []
-    lean = [rnd.uniform(-20, 20), rnd.uniform(10, 30)] + [rnd.uniform(52, 84) for _ in range(3 + flat)] + [rnd.uniform(96, 124) for _ in range(2)]
+    # (two more leaning sprays than at first, so a crown is fuller from the side; its inside is shaded by shade.py)
+    lean = [rnd.uniform(-20, 20), rnd.uniform(10, 30)] + [rnd.uniform(48, 86) for _ in range(5 + flat)] + [rnd.uniform(96, 124) for _ in range(2)]
     start = rnd.uniform(0, 360)
     for k, tilt in enumerate(lean):
         parts.append({'shape': 'card', 'size': [r * rnd.uniform(1.15, 1.5), r * rnd.uniform(1.25, 1.6)], 'at': [x, y, z],
@@ -378,7 +384,7 @@ def shrub(name, looks, stems=7, tall=(110, 170), lean=(15, 50), spray=(55, 80), 
         parts += leaves(end, rnd.uniform(*spray), 'leaf', rnd, flat=1, look2='leaf2')
         for t in [0.55, 0.8][:max(0, sprays - 1)]:
             mid = tuple(v * t for v in end)
-            parts += leaves(mid, rnd.uniform(*spray) * 0.8, 'leaf', rnd, flat=0, look2='leaf2')[::2]
+            parts += leaves(mid, rnd.uniform(*spray) * 0.8, 'leaf', rnd, flat=0, look2='leaf2')[::2] + leaves(mid, rnd.uniform(*spray) * 0.6, 'leaf2', rnd, flat=0)[1::3]
     return {'name': name, 'looks': looks, 'parts': parts}
 
 
@@ -464,8 +470,9 @@ FLOOR = 256.0
 
 def _hotel_looks():
     return {
-        'lanai': look('hotel/lanai', tile=256, far='hotel/far_cream'), 'lanai_t': look('hotel/lanai_turquoise', tile=256, far='hotel/far_turquoise'),
-        'lanai_c': look('hotel/lanai_coral', tile=256, far='hotel/far_coral'), 'arch': look('hotel/arch', tile=256, far='hotel/far_pink'),
+        # (the lanai pictures are eight bays by eight floors, each room its own: texwear.facade_sheet, FRONT_TILE)
+        'lanai': look('hotel/lanai', tile=2048, far='hotel/far_cream'), 'lanai_t': look('hotel/lanai_turquoise', tile=2048, far='hotel/far_turquoise'),
+        'lanai_c': look('hotel/lanai_coral', tile=2048, far='hotel/far_coral'), 'arch': look('hotel/arch', tile=256, far='hotel/far_pink'),
         'pink': look('hotel/stucco_pink', tile=512, far='hotel/far_plain_pink'), 'white': look('hotel/stucco_white', tile=512, far='hotel/far_plain_white'),
         'blocks': look('hotel/blocks', tile=128), 'lava': look('hotel/lava', tile=300, far='hotel/far_plain_lava'),
         'shop': look('hotel/shopfront', tile=300, far='hotel/far_plain_glass'), 'slab': look('hotel/stucco_white', tile=512),
@@ -476,6 +483,58 @@ def _hotel_looks():
         'sign_pink': look('hotel/signs', region=(0, 0.5, 1, 0.75)), 'sign_kahuna': look('hotel/signs', region=(0, 0.75, 1, 1))}
 
 
+BAY = 256.0            # (a room's width on the fronts: texwear.facade_sheet's bays, FRONT_TILE over FRONT_BAYS)
+
+
+def lanai_detail(parts, x, y, z, wide, deep, floors, turn=0.0, lanai=70, look_name='white', rail='white', sides=(-1, 1)):
+    """What makes a block of rooms read as rooms from the street: a wall between each room's lanai and the next (a fin
+    as deep as the lanai, up the whole front), and a railing along every floor's lanai, top rail and middle rail. Nothing
+    solid. sides: -1 the front, 1 the back."""
+    c, sn = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+    at = lambda lx, ly, lz: [round(x + lx * c - ly * sn, 1), round(y + lx * sn + ly * c, 1), round(lz, 1)]
+    bays = max(1, int(round(wide / BAY)))
+    step = wide / bays
+    for sd in sides:
+        for k in range(bays + 1):
+            parts.append({'shape': 'box', 'size': [10, lanai, floors * FLOOR], 'at': at(-wide / 2 + k * step, sd * (deep / 2 + lanai / 2), z),
+                          'turn': [0, 0, turn], 'look': look_name, 'solid': False, 'bevel': 0})
+        for f in range(1, floors):
+            for hgt, thick in ((92, 7), (48, 4)):
+                parts.append({'shape': 'box', 'size': [wide, thick, thick], 'at': at(0, sd * (deep / 2 + lanai - 4), z + f * FLOOR + hgt),
+                              'turn': [0, 0, turn], 'look': rail, 'solid': False})
+
+
+def roof_plant(parts, x, y, z, wide, deep, turn=0.0, seed=1, body='white', metal='white', far=False):
+    """What stands on a hotel's flat roof: the lift's motor room, water tanks on legs, cooling plant, vent stacks, a
+    parapet round the edge. In the roof's frame (wide along x, deep along y), turned by `turn`."""
+    rnd = random.Random(seed)
+    c, sn = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+    at = lambda lx, ly, lz: [round(x + lx * c - ly * sn, 1), round(y + lx * sn + ly * c, 1), round(lz, 1)]
+    for sd in (-1, 1):                                       # (the parapet)
+        parts.append({'shape': 'box', 'size': [wide, 18, 70], 'at': at(0, sd * (deep / 2 - 9), z), 'turn': [0, 0, turn], 'look': body, 'solid': False})
+        parts.append({'shape': 'box', 'size': [18, deep - 36, 70], 'at': at(sd * (wide / 2 - 9), 0, z), 'turn': [0, 0, turn], 'look': body, 'solid': False})
+    room = min(420, wide * 0.3)
+    mx = rnd.uniform(-0.25, 0.25) * wide
+    parts.append({'shape': 'box', 'size': [room, min(360, deep * 0.6), 240], 'at': at(mx, 0, z), 'turn': [0, 0, turn], 'look': body, 'far': far})
+    spots = []
+    for _ in range(int(max(2, wide / 600))):
+        for _try in range(12):
+            px, py = rnd.uniform(-0.42, 0.42) * wide, rnd.uniform(-0.3, 0.3) * deep
+            if abs(px - mx) > room / 2 + 160 and all(abs(px - a) > 260 for a, _b in spots):
+                spots.append((px, py))
+                break
+    for n, (px, py) in enumerate(spots):
+        if n % 3 == 0:                                       # a water tank on four legs
+            for lx, ly in ((-50, -50), (50, -50), (50, 50), (-50, 50)):
+                parts.append({'shape': 'box', 'size': [8, 8, 110], 'at': at(px + lx, py + ly, z), 'turn': [0, 0, turn], 'look': metal, 'solid': False})
+            parts.append({'shape': 'cylinder', 'r': 90, 'h': 150, 'sides': 14, 'at': at(px, py, z + 110), 'look': metal, 'solid': False})
+            parts.append({'shape': 'cone', 'r': 96, 'h': 30, 'sides': 14, 'at': at(px, py, z + 260), 'look': metal, 'solid': False})
+        else:                                                # a cooling unit, its fan on top
+            parts.append({'shape': 'box', 'size': [170, 110, 90], 'at': at(px, py, z), 'turn': [0, 0, turn + rnd.choice((0, 90))], 'look': metal, 'solid': False})
+            parts.append({'shape': 'cylinder', 'r': 38, 'h': 10, 'sides': 12, 'at': at(px, py, z + 90), 'look': body, 'solid': False})
+        parts.append({'shape': 'cylinder', 'r': 10, 'h': 120, 'sides': 6, 'at': at(px + 120, py - 60, z), 'look': metal, 'solid': False})
+
+
 def _slab_tower(parts, x, y, z, wide, deep, floors, front, back, turn=0.0, lanai=70, ends='white'):
     """A block of rooms: its mass, and a slab at every floor reaching out front and back."""
     parts.append({'shape': 'box', 'size': [wide, deep, floors * FLOOR], 'at': [x, y, z], 'turn': [0, 0, turn], 'look': ends,
@@ -483,6 +542,8 @@ def _slab_tower(parts, x, y, z, wide, deep, floors, front, back, turn=0.0, lanai
     for f in range(1, floors + 1):
         parts.append({'shape': 'slab', 'size': [wide + 24, deep + 2 * lanai, 12], 'at': [x, y, z + f * FLOOR - 12], 'turn': [0, 0, turn], 'look': 'slab',
                       'solid': False})
+    lanai_detail(parts, x, y, z, wide, deep, floors, turn, lanai)
+    roof_plant(parts, x, y, z + floors * FLOOR, wide, deep, turn, seed=int(wide + floors))
 
 
 def makai_tower():
@@ -576,13 +637,44 @@ def far_of(desc):
     parts = [dict(p, solid=False) for p in desc['parts'] if p.get('far')]
     if not parts:
         return None
+    # each look's own picture, repeated as on the model itself but never more than FAR_REPEAT times across a face (the
+    # distant blocks bake a picture's repeats into its square of their sheet, at most lodobj.MAX_REPEAT): a hotel's front
+    # reads as its windows from afar. Its 'far' picture only where it asks for one ('far_keep'): the far pictures were
+    # flat swatches, and the skyline was plain blocks in the game (17 Nov 2026).
+    reach = {}
+    for p in parts:
+        sc = max(abs(v) for v in p.get('scale', (1, 1, 1)))
+        if p['shape'] in ('box', 'slab'):
+            ext = max(p['size']) * sc
+        elif p['shape'] in ('cylinder', 'cone'):
+            r = max(float(p.get('r', 0)), float(p.get('r2', p.get('r', 0))))
+            ext = max(2 * math.pi * r, float(p.get('h', 0))) * sc
+        elif p['shape'] == 'ball':
+            ext = 2 * math.pi * float(p['r']) * sc
+        elif p['shape'] == 'hull':
+            ys = [s['y'] for s in p['stations']]
+            ext = (max(ys) - min(ys)) * sc
+        else:
+            ext = 0.0
+        names = [p.get('look'), p.get('cap_look'), p.get('under_look'), p.get('deck_look'), p.get('end_look')]
+        names += list((p.get('faces') or {}).values()) + [lk for _z, lk in (p.get('bands') or ())]
+        for n in names:
+            if n is not None:
+                reach[n] = max(reach.get(n, 0.0), ext)
     looks = {}
     for k, v in desc['looks'].items():
-        if v.get('far'):
+        if v.get('far') and v.get('far_keep'):
             looks[k] = dict({f: v[f] for f in ('region', 'turned') if f in v}, tex=tex_path(v['far']), normal=tex_path(v['far'], True))
-        else:
-            looks[k] = {f: v[f] for f in ('tex', 'normal', 'region', 'turned') if f in v}        # (a sign: itself, fitted as it is)
-    return {'name': desc['name'] + 'Far', 'looks': looks, 'parts': parts}
+            continue
+        looks[k] = {f: v[f] for f in ('tex', 'normal', 'region', 'turned', 'alpha') if f in v}
+        if v.get('tile'):
+            # (one repeat kept for a face whose picture starts part way through one: a round cap's is laid from its middle)
+            looks[k]['tile'] = max(float(v['tile']), reach.get(k, 0.0) / (FAR_REPEAT - 1))
+    # (masses only: no rounded edges or baked shade, which the distant blocks' one picture can't hold)
+    return {'name': desc['name'] + 'Far', 'looks': looks, 'parts': parts, 'bevel': 0, 'shade': False}
+
+
+FAR_REPEAT = 4          # (lodobj.MAX_REPEAT)
 
 
 def combine(name, items):
@@ -599,7 +691,7 @@ def combine(name, items):
                 if q.get(f) is not None:
                     q[f] = '%d_%s' % (n, q[f])
             if q.get('faces'):
-                q['faces'] = {side: '%d_%s' % (n, v) for side, v in q['faces'].items()}
+                q['faces'] = {side: (None if v is None else '%d_%s' % (n, v)) for side, v in q['faces'].items()}      # (None: a face left out)
             ax, ay, az = q.get('at', (0, 0, 0))
             q['at'] = [x + (ax * c - ay * sn) * size, y + (ax * sn + ay * c) * size, az * size]
             t = q.get('turn', (0, 0, 0))
@@ -651,9 +743,9 @@ PIECES = {
     'kiosk': {'label': 'Beach kiosk', 'edid': 'FOLabBeachKiosk', 'file': 'kiosk', 'describe': kiosk},
     'umbrella': {'label': 'Beach umbrella', 'edid': 'FOLabBeachUmbrella', 'file': 'umbrella', 'describe': umbrella},
     'palm_tall': {'label': 'Coconut palm, tall', 'edid': 'FOLabBeachPalmTall', 'file': 'palm_tall',
-                  'describe': lambda: palm('FOLabBeachPalmTall', tall=660, lean=24, fronds=17, seed=1)},
+                  'describe': lambda: palm('FOLabBeachPalmTall', tall=660, lean=24, fronds=22, seed=1)},
     'palm_young': {'label': 'Coconut palm, young', 'edid': 'FOLabBeachPalmYoung', 'file': 'palm_young',
-                   'describe': lambda: palm('FOLabBeachPalmYoung', tall=400, lean=12, fronds=14, seed=2)},
+                   'describe': lambda: palm('FOLabBeachPalmYoung', tall=400, lean=12, fronds=19, seed=2)},
     'banana': {'label': 'Banana plant', 'edid': 'FOLabBeachBanana', 'file': 'banana', 'describe': banana},
     'hibiscus': {'label': 'Hibiscus bush', 'edid': 'FOLabBeachHibiscus', 'file': 'hibiscus',
                  'describe': lambda: shrub('FOLabBeachHibiscus', _bush_looks('jungle/spray_hibiscus', 'jungle/spray_bush'), stems=8, tall=(95, 140), lean=(15, 50),
@@ -895,6 +987,150 @@ def _best_site(spots, wx, stood, apart, shore, to_sea, in_the_way, batch, box, l
     return best
 
 
+class Obstacles:
+    """What a big thing of the mod's own (a hotel, a landmark of the coast) may not stand on, in a world.
+
+    Clearing a footprint takes out whatever the mod has there, which is right for a shack or a palm; but a building
+    someone can go into is more than what stands outside: behind its door are a place of its own, that place's navmesh
+    and a door leading back, all naming the door outside. Take the door and the mod can no longer be saved (it was: a
+    build with 300 such buildings). So nothing goes where a linked door is, and nothing on a landmark either.
+    own: also keep off what the mod has made of its own that is big (the hotels and the coast's things, by
+    maps\\hotels.json and maps\\coast.json, and what was borrowed from another game: the carrier), which are never
+    cleared."""
+
+    def __init__(self, gd, pr, world, own=False):
+        import landmarks
+        import townbuild
+        self.landmarks = landmarks
+        grid = gd.grid(world)
+        self.doors = doors = []
+        for cell in grid.values():
+            c = pr.cells.get(gd.key(cell))
+            for rk, r in (c['refs'].items() if c else ()):
+                if r.get('tel') and r.get('p') and not r.get('removed'):
+                    doors.append((r['p'][0], r['p'][1]))
+        self.marks = [(mx, my, math.hypot(max(abs(x0), abs(x1)), max(abs(y0), abs(y1)))) for mx, my, _rz, x0, y0, x1, y1 in landmarks.standing(gd, pr, world)]
+        try:                                    # (where the landmarks step says it stood each: a set is many pieces, not all big)
+            import api_maps
+            kept = api_maps._kept(pr, 'landmarks.json').get(gd.edid(world)) or {}
+            self.marks += [(float(m['x']), float(m['y']), MARK_ROOM) for m in (kept.get('stood') if isinstance(kept, dict) else kept) or [] if 'x' in m and 'y' in m]
+        except Exception:
+            pass
+        if own:
+            for x, y, _rz, x0, y0, x1, y1 in footprints(pr, gd, world):
+                self.marks.append((x, y, math.hypot(max(abs(x0), abs(x1)), max(abs(y0), abs(y1)))))
+        # every building the mod has standing: where, how turned, how big, and whether someone can go into it
+        sizes, self.bigs = {}, []
+        for cell in grid.values():
+            ck = gd.key(cell)
+            c = pr.cells.get(ck)
+            for rk, r in (c['refs'].items() if c else ()):
+                q, base = r.get('p'), r.get('base')
+                if not rk.startswith('+') or not q or not base or r.get('removed'):
+                    continue
+                if base not in sizes:
+                    o = None
+                    try:
+                        if not str(base).startswith('+'):
+                            o = townbuild.obnd(gd, base)
+                        elif own:
+                            o = self._own_bounds(pr, base)
+                    except Exception:
+                        o = None
+                    sizes[base] = o if o and max(o[3] - o[0], o[4] - o[1]) >= BIG else None
+                o = sizes[base]
+                if o:
+                    sc = float(r.get('s') or 1.0)
+                    keep = str(base).startswith('+')    # (the mod's own: kept, never cleared)
+                    self.bigs.append((q[0], q[1], q[5] if len(q) > 5 else 0.0, (o[0] * sc, o[1] * sc, o[3] * sc, o[4] * sc), ck, rk,
+                                      keep or any(math.hypot(dx - q[0], dy - q[1]) < DOOR_NEAR for dx, dy in doors)))
+        # (by square, so that a search over thousands of spots doesn't look at every building for each)
+        self.by, self.big_r = {}, 0.0
+        for n, (bx, by, _r, bb, _c, _k, _l) in enumerate(self.bigs):
+            self.by.setdefault((int(bx // self.SQ), int(by // self.SQ)), []).append(n)
+            self.big_r = max(self.big_r, math.hypot(max(abs(bb[0]), abs(bb[2])), max(abs(bb[1]), abs(bb[3]))))
+
+    SQ = 2048.0
+
+    def _near(self, x, y, reach):
+        r = reach + self.big_r
+        for i in range(int((x - r) // self.SQ), int((x + r) // self.SQ) + 1):
+            for j in range(int((y - r) // self.SQ), int((y + r) // self.SQ) + 1):
+                for n in self.by.get((i, j), ()):
+                    yield self.bigs[n]
+
+    @staticmethod
+    def _own_bounds(pr, base):
+        """A record of the mod's own that is a big thing to keep off: a hotel's, a coast piece's, or one from another
+        game (not under meshes\\folab); not the plants', which are cleared like anything else."""
+        rec = pr.records.get(base)
+        if not rec or rec.get('type') != 'STAT':
+            return None
+        model = (recordio.field(rec, 'MODL') or '').lower()
+        if model.startswith('folab\\') and not model.startswith(('folab\\hotel\\', 'folab\\coast\\', 'folab\\resort\\')):
+            return None
+        for sub in rec['subs']:
+            if sub['tag'] == 'OBND':
+                return [f['value'] for f in sub['fields'] if 'name' in f]
+        return None
+
+    def through(self, x, y, rz, box):
+        """The buildings a thing standing so would stand partly through: [(cell, ref, someone can go in, or it is kept)]."""
+        landmarks = self.landmarks
+        reach = math.hypot(max(abs(box[0]), abs(box[2])), max(abs(box[1]), abs(box[3])))
+        out = []
+        for bx, by, brz, bb, ck, rk, linked in self._near(x, y, reach):
+            br = math.hypot(max(abs(bb[0]), abs(bb[2])), max(abs(bb[1]), abs(bb[3])))
+            if math.hypot(bx - x, by - y) > reach + br:
+                continue
+            hit = False
+            for u in (0.0, 0.5, 1.0):               # the building's outline against the box
+                for v in (0.0, 0.5, 1.0):
+                    tx, ty = landmarks._turn(bb[0] + (bb[2] - bb[0]) * u, bb[1] + (bb[3] - bb[1]) * v, brz)
+                    lx, ly = landmarks._turn(bx + tx - x, by + ty - y, -rz)
+                    if box[0] - 60 <= lx <= box[2] + 60 and box[1] - 60 <= ly <= box[3] + 60:
+                        hit = True
+                    tx, ty = landmarks._turn(box[0] + (box[2] - box[0]) * u, box[1] + (box[3] - box[1]) * v, rz)     # and the other way round
+                    lx, ly = landmarks._turn(x + tx - bx, y + ty - by, -brz)
+                    if bb[0] <= lx <= bb[2] and bb[1] <= ly <= bb[3]:
+                        hit = True
+            if hit:
+                out.append((ck, rk, linked))
+        return out
+
+    def in_the_way(self, x, y, rz, box):
+        if any(linked for _c, _r, linked in self.through(x, y, rz, box)):
+            return 'a building with a way in'
+        reach = math.hypot(max(abs(box[0]), abs(box[2])), max(abs(box[1]), abs(box[3]))) + KEEP_OFF
+        for mx, my, mr in self.marks:
+            if math.hypot(mx - x, my - y) < reach + mr:
+                return 'a landmark'
+        for dx, dy in self.doors:
+            if abs(dx - x) < reach and abs(dy - y) < reach:
+                lx, ly = self.landmarks._turn(dx - x, dy - y, -rz)
+                if box[0] - KEEP_OFF <= lx <= box[2] + KEEP_OFF and box[1] - KEEP_OFF <= ly <= box[3] + KEEP_OFF:
+                    return 'a building with a way in'
+        return None
+
+
+def reseat(gd, pr, grid, batch):
+    """'move' ops for what stands on ground a batch moved: levelling reaches a margin past each footprint, and a bush
+    left where it was would hang in the air over ground brought down (or be buried under ground brought up)."""
+    seats = []
+    for k in batch.forms:
+        ck = gd.key(grid[k])
+        c = pr.cells.get(ck)
+        for rk, r in (c['refs'].items() if c else ()):
+            q = r.get('p')
+            if not rk.startswith('+') or not q or r.get('removed') or (ck, rk) in batch.gone:
+                continue
+            was, now = batch.ground.at(q[0], q[1]), batch.height(q[0], q[1])
+            if was is None or now is None or abs(now - was) < RESEAT:
+                continue
+            seats.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [q[0], q[1], round(q[2] + now - was, 1)] + list(q[3:])})
+    return seats
+
+
 def skyline(gd, pr, world, cover, roads=(), count=4, seed=1, progress=None, sites=None):
     """(ops, report): hotels stood in a world, each on ground levelled for it, facing the sea, what the mod had standing
     there cleared. sites: [(piece, x, y)] to say where; otherwise the best places near the shore are found, clear of
@@ -919,85 +1155,9 @@ def skyline(gd, pr, world, cover, roads=(), count=4, seed=1, progress=None, site
         d = math.sqrt(best[0]) or 1.0
         return d, ((best[1] - x) / d, (best[2] - y) / d)
 
-    # What a hotel may not stand on. Clearing its footprint takes out whatever the mod has there, which is right for a
-    # shack or a palm; but a building someone can go into is more than what stands outside: behind its door are a place
-    # of its own, that place's navmesh and a door leading back, all naming the door outside. Take the door and the mod
-    # can no longer be saved (it was: a build with 300 such buildings). So no hotel goes where a linked door is, and
-    # none on a landmark either.
     grid = gd.grid(world)
-    doors = []
-    for cell in grid.values():
-        c = pr.cells.get(gd.key(cell))
-        for rk, r in (c['refs'].items() if c else ()):
-            if r.get('tel') and r.get('p') and not r.get('removed'):
-                doors.append((r['p'][0], r['p'][1]))
-    marks = [(mx, my, math.hypot(max(abs(x0), abs(x1)), max(abs(y0), abs(y1)))) for mx, my, _rz, x0, y0, x1, y1 in landmarks.standing(gd, pr, world)]
-
-    try:                                        # (where the landmarks step says it stood each: a set is many pieces, not all big)
-        import api_maps
-        kept = api_maps._kept(pr, 'landmarks.json').get(gd.edid(world)) or {}
-        marks += [(float(m['x']), float(m['y']), MARK_ROOM) for m in (kept.get('stood') if isinstance(kept, dict) else kept) or [] if 'x' in m and 'y' in m]
-    except Exception:
-        pass
-
-    # every building the mod has standing: where, how turned, how big, and whether someone can go into it
-    import townbuild
-    sizes, bigs = {}, []
-    for cell in grid.values():
-        ck = gd.key(cell)
-        c = pr.cells.get(ck)
-        for rk, r in (c['refs'].items() if c else ()):
-            q, base = r.get('p'), r.get('base')
-            if not rk.startswith('+') or not q or not base or r.get('removed'):
-                continue
-            if base not in sizes:
-                try:
-                    o = None if str(base).startswith('+') else townbuild.obnd(gd, base)
-                except Exception:
-                    o = None
-                sizes[base] = o if o and max(o[3] - o[0], o[4] - o[1]) >= BIG else None
-            o = sizes[base]
-            if o:
-                sc = float(r.get('s') or 1.0)
-                bigs.append((q[0], q[1], q[5] if len(q) > 5 else 0.0, (o[0] * sc, o[1] * sc, o[3] * sc, o[4] * sc), ck, rk,
-                             any(math.hypot(dx - q[0], dy - q[1]) < DOOR_NEAR for dx, dy in doors)))
-
-    def through(x, y, rz, box):
-        """The buildings a hotel standing so would stand partly through: [(cell, ref, someone can go in)]."""
-        reach = math.hypot(max(abs(box[0]), abs(box[2])), max(abs(box[1]), abs(box[3])))
-        out = []
-        for bx, by, brz, bb, ck, rk, linked in bigs:
-            br = math.hypot(max(abs(bb[0]), abs(bb[2])), max(abs(bb[1]), abs(bb[3])))
-            if math.hypot(bx - x, by - y) > reach + br:
-                continue
-            hit = False
-            for u in (0.0, 0.5, 1.0):               # the building's outline against the hotel's box
-                for v in (0.0, 0.5, 1.0):
-                    tx, ty = landmarks._turn(bb[0] + (bb[2] - bb[0]) * u, bb[1] + (bb[3] - bb[1]) * v, brz)
-                    lx, ly = landmarks._turn(bx + tx - x, by + ty - y, -rz)
-                    if box[0] - 60 <= lx <= box[2] + 60 and box[1] - 60 <= ly <= box[3] + 60:
-                        hit = True
-                    tx, ty = landmarks._turn(box[0] + (box[2] - box[0]) * u, box[1] + (box[3] - box[1]) * v, rz)     # and the other way round
-                    lx, ly = landmarks._turn(x + tx - bx, y + ty - by, -brz)
-                    if bb[0] <= lx <= bb[2] and bb[1] <= ly <= bb[3]:
-                        hit = True
-            if hit:
-                out.append((ck, rk, linked))
-        return out
-
-    def in_the_way(x, y, rz, box):
-        if any(linked for _c, _r, linked in through(x, y, rz, box)):
-            return 'a building with a way in'
-        reach = math.hypot(max(abs(box[0]), abs(box[2])), max(abs(box[1]), abs(box[3]))) + KEEP_OFF
-        for mx, my, mr in marks:
-            if math.hypot(mx - x, my - y) < reach + mr:
-                return 'a landmark'
-        for dx, dy in doors:
-            if abs(dx - x) < reach and abs(dy - y) < reach:
-                lx, ly = landmarks._turn(dx - x, dy - y, -rz)
-                if box[0] - KEEP_OFF <= lx <= box[2] + KEEP_OFF and box[1] - KEEP_OFF <= ly <= box[3] + KEEP_OFF:
-                    return 'a building with a way in'
-        return None
+    obs = Obstacles(gd, pr, world)
+    through, in_the_way = obs.through, obs.in_the_way
 
     first, adds, stood, refused = [], [], [], []
     want = list(sites) if sites else [(SKYLINE[k % len(SKYLINE)], None, None) for k in range(count)]
@@ -1037,20 +1197,7 @@ def skyline(gd, pr, world, cover, roads=(), count=4, seed=1, progress=None, site
         adds.append({'op': 'add', 'cell': gd.key(cell), 'base': key, 'p': [round(x, 1), round(y, 1), z, 0.0, 0.0, round(rz, 4)], 's': 1.0})
         batch.made.append((x, y, rz, box))
         stood.append((piece, x, y, rz))
-    # what stands on ground that was moved goes with it: levelling reaches a margin past each footprint, and a bush
-    # left where it was would hang in the air over ground brought down (or be buried under ground brought up)
-    seats = []
-    for k in batch.forms:
-        ck = gd.key(grid[k])
-        c = pr.cells.get(ck)
-        for rk, r in (c['refs'].items() if c else ()):
-            q = r.get('p')
-            if not rk.startswith('+') or not q or r.get('removed') or (ck, rk) in batch.gone:
-                continue
-            was, now = batch.ground.at(q[0], q[1]), batch.height(q[0], q[1])
-            if was is None or now is None or abs(now - was) < RESEAT:
-                continue
-            seats.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [q[0], q[1], round(q[2] + now - was, 1)] + list(q[3:])})
+    seats = reseat(gd, pr, grid, batch)
     # (and to be sure of it: nothing taken out may be a door something still leads to)
     gone = {(o['cell'], o['ref']) for o in batch.ops if o['op'] == 'remove'}
     for ck, c in pr.cells.items():
@@ -1068,7 +1215,7 @@ _drawn = {}             # texture name -> (colour DDS, normal DDS): each is draw
 
 def texture_files(name):
     if name not in _drawn:
-        _drawn[name] = TEXTURES[name]().files()
+        _drawn[name] = TEXTURES[name]().files(game=True)       # (relief and size as the game's: texpaint.normal_map)
     return _drawn[name]
 
 
@@ -1095,8 +1242,11 @@ def build(piece):
     return made
 
 
-def _static(edid, model, box):
-    return {'type': 'STAT', 'flags': 0, 'src': '', 'subs': [
+VWD = 0x8000           # (a static's 'visible when distant': the game's own carry it where they have a far model, 485 of 571)
+
+
+def _static(edid, model, box, flags=0):
+    return {'type': 'STAT', 'flags': flags, 'src': '', 'subs': [
         {'tag': 'EDID', 'label': 'Editor ID', 'kind': 'z', 'value': edid},
         {'tag': 'OBND', 'label': 'Bounds', 'kind': 'struct', 'fields': [{'name': n, 'code': 'h', 'value': int(v)} for n, v in zip(('X1', 'Y1', 'Z1', 'X2', 'Y2', 'Z2'), box)]},
         {'tag': 'MODL', 'label': 'Model', 'kind': 'z', 'value': model}]}
@@ -1122,7 +1272,7 @@ def put(pr, piece):
             library._put(root, rel, data)
     key = record_of(pr, piece)
     what = PIECES[piece]
-    ops = [] if key else [{'op': 'record_new', 'record': _static(what['edid'], made['mesh'][7:], made['box']), 'name': 'model_' + piece}]
+    ops = [] if key else [{'op': 'record_new', 'record': _static(what['edid'], made['mesh'][7:], made['box'], VWD if made.get('far') else 0), 'name': 'model_' + piece}]
     return ops, {'key': key, 'piece': piece, 'label': what['label'], 'edid': what['edid'], 'mesh': made['mesh'],
                  'files': sorted(made['files']), 'box': made['box'], 'triangles': made['triangles'], 'solids': len(made['solids'])}
 
@@ -1134,8 +1284,10 @@ def footprints(pr, gd, world):
     """Where the hotels stand in a world, as boxes for landmarks.clear_of ((x, y, turn, x0, y0, x1, y1), a little over
     each one's footprint): what is planted afterwards keeps out of them."""
     import api_maps
+    _all_sets()
     out = []
-    for h in api_maps._kept(pr, 'hotels.json').get(gd.edid(world)) or []:
+    # (and the coast's own things, maps\\coast.json: coastplace; the city's landmarks, maps\\resort.json: resortplace)
+    for h in [h for f in ('hotels.json', 'coast.json', 'resort.json') for h in (api_maps._kept(pr, f).get(gd.edid(world)) or [])]:
         if h.get('piece') not in PIECES:
             continue
         if h['piece'] not in _foot:
@@ -1143,6 +1295,24 @@ def footprints(pr, gd, world):
         b = _foot[h['piece']]
         out.append((h['x'], h['y'], h.get('turn', 0.0), b[0] - 120, b[1] - 120, b[3] + 120, b[4] + 120))
     return out
+
+
+def distant_ops(pr):
+    """Ops that mark the mod's records of every piece with a far model 'visible when distant' (VWD), as the game marks its
+    own: records made before put set it had none."""
+    import copy
+    _all_sets()
+    ops = []
+    for piece, what in PIECES.items():
+        key = record_of(pr, piece)
+        if not key or pr.records[key].get('flags', 0) & VWD:
+            continue
+        if far_of(what['describe']()) is None:
+            continue
+        rec = copy.deepcopy(pr.records[key])
+        rec['flags'] = rec.get('flags', 0) | VWD
+        ops.append({'op': 'record', 'key': key, 'record': rec})
+    return ops
 
 
 def remake(pr, which=None):
@@ -1169,6 +1339,12 @@ def _all_sets():
     """The sets that register their pieces here when imported (they import this module, so not at its top)."""
     import citypieces  # noqa: F401
     import waikikiset  # noqa: F401
+    import coastset  # noqa: F401
+    import resortset  # noqa: F401
+    import towerset  # noqa: F401
+    import historicset  # noqa: F401
+    import battleship  # noqa: F401
+    import shipinside  # noqa: F401
 
 
 def get(path, q):

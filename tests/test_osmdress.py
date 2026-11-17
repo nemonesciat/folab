@@ -183,12 +183,17 @@ lops = []
 for k, e in enumerate(('RubblePile02', 'SWSingleRubble', 'SuburbanRubblePileSm01')):
     px, py = lx0 + k * 600, ly0
     lops.append({'op': 'add', 'cell': gd.key(grid[(int(px // 4096), int(py // 4096))]), 'base': bases[e.lower()], 'p': [px, py, g0.at(px, py) + 30.0, 0.0, 0.0, 0.4], 's': 1.0})
-# (and one well up, as on a roof: left where it is)
+# (and one well up, as on a roof: a rubble pile, which the game always sets on the ground, is taken out; a kind the game
+# stacks on things, small chunks, is left where it is)
 lops.append({'op': 'add', 'cell': gd.key(grid[(int(lx0 // 4096), int((ly0 + 900) // 4096))]), 'base': bases['rubblepile02'], 'p': [lx0, ly0 + 900, g0.at(lx0, ly0 + 900) + 400.0, 0.0, 0.0, 0.0], 's': 1.0})
+chunk = next((gd.key(f) for f, (_i, r) in gd.forms.items() if r.tag == 'STAT' and gd.edid(f).lower() == 'rubchunk03'), None)
+if chunk:
+    lops.append({'op': 'add', 'cell': gd.key(grid[(int((lx0 + 600) // 4096), int((ly0 + 900) // 4096))]), 'base': chunk, 'p': [lx0 + 600, ly0 + 900, g0.at(lx0 + 600, ly0 + 900) + 400.0, 0.0, 0.0, 0.0], 's': 1.0})
+check('the game sets rubble piles on the ground and stacks small chunks on things', not osmdress.rides('RubblePile02') and osmdress.rides('RubChunk03'))
 pr2 = lp
 pr2.apply('lying', lops)
 sops, srep = osmdress.seat_lying(gd, pr2, world)
-check('things left hanging over the ground are laid on it or taken out', srep['laid'] + srep['taken_out'] == 3 and srep['looked'] == 3, srep)
+check('things left hanging over the ground are laid on it or taken out', srep['laid'] + srep['taken_out'] == 4 and srep['looked'] == 3 and srep['perched'] == 1, srep)
 pr2.apply('seat', sops)
 again, arep = osmdress.seat_lying(gd, pr2, world)
 check('done again, nothing more to do', arep['laid'] == 0 and arep['taken_out'] == 0, arep)

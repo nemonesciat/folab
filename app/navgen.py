@@ -608,6 +608,24 @@ def _solid_of(gd, base, cache, report):
     return out
 
 
+def _solid_of_file(gd, path, cache, report):
+    """The same as _solid_of for a model by its path under Data (the mod's own, read through the game's view of files)."""
+    key = ('file', path.lower())
+    if key in cache:
+        return cache[key]
+    out = []
+    try:
+        data = gd.read_file(path)
+        for s in hkshape.collision_shapes(data):
+            if s['layer'] in hkshape.LAYERS_SOLID and s['i']:
+                out.append((s['v'], s['i'], s['soup']))
+        report['collision'] += 1
+    except (FileNotFoundError, OSError, hkshape.Unread, nif.NifError, struct.error, IndexError):
+        report['unread'] += 1
+    cache[key] = out
+    return out
+
+
 def _lay_ref(field, r, solid):
     (r00, r01, r02), (r10, r11, r12), (r20, r21, r22) = _turn(*r['rot'])
     tx, ty, tz = r['pos']
@@ -628,7 +646,7 @@ def _lay_ref(field, r, solid):
 
 def _usable(gd, r):
     """A placed thing that's really there when the game starts."""
-    if r.get('pos') is None or r.get('rot') is None or r.get('base') is None:
+    if r.get('pos') is None or r.get('rot') is None or (r.get('base') is None and not r.get('model')):
         return False
     entry = gd.forms.get(r['ref'])
     return not (entry and entry[1].flags & INITIALLY_DISABLED)
@@ -644,6 +662,12 @@ def _lay_refs(gd, field, refs, cache, report, any_door=False):
                 seeds.append(r['pos'])
             continue
         if r['type'] != 'REFR' or not _usable(gd, r):
+            continue
+        if r['base'] is None and r.get('model'):            # (one of the mod's own models)
+            solid = _solid_of_file(gd, r['model'], cache, report)
+            if solid:
+                _lay_ref(field, r, solid)
+                report['placed'] += 1
             continue
         try:
             btype = gd.forms[r['base']][1].tag

@@ -166,7 +166,7 @@ def cabana(stripes='waikiki/canvas_blue'):
     parts = [{'shape': 'box', 'size': [8, 8, h + 20], 'at': [x, y, 0], 'look': 'pole', 'solid': False} for x in (-w / 2, w / 2) for y in (-d / 2, d / 2)]
     parts.append({'shape': 'box', 'size': [w, 4, h], 'at': [0, d / 2, 0], 'look': 'canvas', 'material': 'cloth'})
     parts += [{'shape': 'box', 'size': [4, d, h], 'at': [x, 0, 0], 'look': 'canvas', 'material': 'cloth'} for x in (-w / 2, w / 2)]
-    parts.append({'shape': 'cone', 'r': (w + 40) / math.sqrt(2), 'h': 50, 'sides': 4, 'turn': [0, 0, 45], 'scale': [1, d / w, 1], 'at': [0, 0, h + 16],
+    parts.append({'shape': 'cone', 'r': (w + 40) / math.sqrt(2), 'h': 50, 'sides': 4, 'phase': 45, 'scale': [1, d / w, 1], 'at': [0, 0, h + 16],
                   'look': 'canvas', 'under': True, 'solid': False})
     parts.append({'shape': 'box', 'size': [w + 20, 3, 34], 'at': [0, -d / 2 - 8, h - 18], 'look': 'canvas', 'solid': False})
     parts.append({'shape': 'slab', 'size': [w - 20, d - 20, 3], 'at': [0, 0, 0], 'look': 'wood', 'solid': False})
@@ -237,7 +237,7 @@ def tiki_bar():
     for x in (-260, 260):
         for y in (-200, 200):
             parts.append({'shape': 'cylinder', 'r': 7, 'h': 250, 'sides': 6, 'at': [x, y, 0], 'look': 'bamboo', 'material': 'wood'})
-    parts.append({'shape': 'cone', 'r': 430, 'h': 190, 'sides': 4, 'turn': [0, 0, 45], 'scale': [1, 0.82, 1], 'at': [0, 0, 240], 'look': 'thatch', 'under': True, 'solid': False})
+    parts.append({'shape': 'cone', 'r': 430, 'h': 190, 'sides': 4, 'phase': 45, 'scale': [1, 0.82, 1], 'at': [0, 0, 240], 'look': 'thatch', 'under': True, 'solid': False})
     parts.append({'shape': 'box', 'size': [440, 60, 108], 'at': [0, -120, 0], 'look': 'bamboo', 'faces': {'top': 'wood'}, 'material': 'wood'})
     parts.append({'shape': 'slab', 'size': [480, 90, 6], 'at': [0, -125, 108], 'look': 'wood', 'solid': False})
     parts.append({'shape': 'box', 'size': [440, 40, 180], 'at': [0, 175, 0], 'look': 'wood', 'material': 'wood'})
@@ -387,7 +387,7 @@ def hale():
     for sx in (-1, 1):                                          # the front, a doorway in its middle
         parts.append({'shape': 'box', 'size': [(w - door) / 2, 8, wall], 'at': [sx * (w + door) / 4, -d / 2, up], 'look': 'wicker', 'material': 'wood'})
     parts.append({'shape': 'box', 'size': [door + 20, 8, 30], 'at': [0, -d / 2, up + wall - 30], 'look': 'wood', 'solid': False})
-    parts.append({'shape': 'cone', 'r': (w + 120) / math.sqrt(2), 'h': 300, 'sides': 4, 'turn': [0, 0, 45], 'scale': [1, (d + 120) / (w + 120), 1],
+    parts.append({'shape': 'cone', 'r': (w + 120) / math.sqrt(2), 'h': 300, 'sides': 4, 'phase': 45, 'scale': [1, (d + 120) / (w + 120), 1],
                   'at': [0, 0, up + wall - 10], 'look': 'thatch', 'under': True, 'solid': False})
     return {'name': 'FOLabWaikikiHale', 'looks': looks, 'parts': parts}
 
@@ -449,7 +449,7 @@ def tiki_gate():
             a = q.get('at', (0, 0, 0))
             parts.append(dict(q, at=[x + (1 if x > 0 else -1) * 85 + a[0], a[1], a[2]]))
     parts.append({'shape': 'box', 'size': [560, 110, 60], 'at': [0, 0, 330], 'look': 'tiki_wood', 'material': 'wood'})
-    parts.append({'shape': 'cone', 'r': 330, 'h': 90, 'sides': 4, 'turn': [0, 0, 45], 'scale': [1, 0.3, 1], 'at': [0, 0, 386], 'look': 'thatch', 'under': True, 'solid': False})
+    parts.append({'shape': 'cone', 'r': 330, 'h': 90, 'sides': 4, 'phase': 45, 'scale': [1, 0.3, 1], 'at': [0, 0, 386], 'look': 'thatch', 'under': True, 'solid': False})
     return desc
 
 

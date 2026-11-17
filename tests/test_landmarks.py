@@ -17,7 +17,7 @@ def check(what, ok, detail=''):
 
 
 gd = gamedata.GameData()
-got = {name: landmarks.lift(gd, name) for name in landmarks.SETS}
+got = {name: landmarks.lift(gd, name) for name in landmarks.SETS if not landmarks.SETS[name].get('own')}     # (FOLab's own: test_towerset)
 check('every set is found in the game', all(got.values()), [n for n, g in got.items() if not g])
 lucky = got['lucky38']
 names = sorted(gd.edid(gd.from_key(p[0])) for p in lucky['pieces'])
@@ -26,7 +26,9 @@ check('none of its signs from other worlds, and the far model once', not any('Si
 check('it stands on the ground, not far over or under it', all(-100 < p[3] < 200 for p in lucky['pieces']), [round(p[3]) for p in lucky['pieces']])
 check('and is as wide as the game has it', 5000 < lucky['box'][2] - lucky['box'][0] < 7500, lucky['box'])
 check('The Tops as on the Strip is many pieces spread over its block', len(got['tops_strip']['pieces']) >= 10 and got['tops_strip']['box'][2] - got['tops_strip']['box'][0] > 5000)
-check('a set put together here seats each thing as the game does', all(abs(p[3]) < 2600 for p in got['lookout']['pieces']) and len(got['lookout']['pieces']) == 8)
+check('a set put together here seats each thing as the game does', all(abs(p[3]) < 2600 for p in got['lookout']['pieces']) and len(got['lookout']['pieces']) == 12)     # (8, and its guard tower's four parts)
+tower = [gd.edid(gd.from_key(p[0])) for p in got['battery']['pieces'] if gd.edid(gd.from_key(p[0])).startswith('NVGuardTower01')]
+check('a guard tower comes with its stairs and floors (a to d), as the game stands it', sorted(tower) == ['NVGuardTower01'] + ['NVGuardTower01' + s for s in 'abcd'], tower)
 
 # ---------- one stood somewhere else ----------
 world = next(w for w in gd.worlds() if gd.edid(w) == 'WastelandNV')

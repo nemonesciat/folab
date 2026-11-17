@@ -62,6 +62,23 @@ def add_world(gd, tree, writer, next_id, opts):
             water = d[4:8] if opts.get('water') is None else struct.pack('<f', float(opts['water']))
             d = struct.pack('<f', float(opts['height'])) + water                  # (default land height; its water)
         body.append((t, d))
+    # the far water (NAM4, the height the sea past the loaded cells is drawn at) at the world's own water: the template's
+    # -2300 put a new world's distant sea under its distant ground, a brown floor to the horizon
+    dn = next((d for t, d in body if t == 'DNAM' and len(d) >= 8), None)
+    if dn is not None:
+        far = ('NAM4', dn[4:8])
+        at = next((k for k, (t, _d) in enumerate(body) if t == 'NAM4'), None)
+        if at is None:
+            body.append(far)
+        else:
+            body[at] = far
+    # a world set under another (opts 'parent', a WRLD fid), as the game sets the Strip, Freeside and the Lucky 38's top
+    # floors under the Mojave: the parent's map (PNAM 4, what every one of the game's does), and DATA's flags as asked
+    # (Lucky38World: 0x13, small world, no fast travel, no far water). The land is the world's own all the same.
+    if opts.get('parent') is not None:
+        # (in the game's order: WNAM and PNAM straight after the names, DATA where the template has it)
+        body = [(t, bytes([opts.get('flags', 0x01)]) + d[1:] if t == 'DATA' else d) for t, d in body]
+        head += [('WNAM', struct.pack('<I', writer.link(gd.key(opts['parent'])))), ('PNAM', struct.pack('<H', opts.get('use', 4)))]
     wid = new_id()
     wrld = plugintree.Rec.new('WRLD', 0, wid, espwrite.join(head + body), espwrite.FORM_VERSION)
     top = tree.top('WRLD', order)
@@ -92,7 +109,13 @@ def add_world(gd, tree, writer, next_id, opts):
     for done, (x, y) in enumerate(cells):
         csubs = [(t, struct.pack('<iiI', x, y, 0) if t == 'XCLC' else d) for t, d in psubs]
         if wet:
-            csubs = espwrite.set_water(csubs, None) if wet(x, y) else espwrite.dry(csubs, lowest)
+            w_ = wet(x, y)              # (True: the world's level; a number: a level of the cell's own; False: none)
+            if w_ is True:
+                csubs = espwrite.set_water(csubs, None)
+            elif w_ is False or w_ is None:
+                csubs = espwrite.dry(csubs, lowest)
+            else:
+                csubs = espwrite.set_water(csubs, float(w_))
         cid = new_id()
         block = writer._group(wkids, label(y // 32, x // 32), tes4.G_EXT_BLOCK)
         sub = writer._group(block, label(y // 8, x // 8), tes4.G_EXT_SUBBLOCK)

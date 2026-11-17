@@ -43,25 +43,23 @@ GROUND = {
 # all of that ground gets, [(editor ID, how often, smallest, biggest, sunk by)]). The green is the game's own: Zion's
 # trees and bushes, Vault 22's ferns and grass (grown far past their size: what the bombs left in the soil), banana
 # plants, the lake's water plants in the shallows; some of it can be picked. Things in CLUMPS come several together.
+# (no Zion cliff trees, NVDLC02TreeG*/I*, nor Big MT's vines here: the game grows the first out of ledges and hangs the
+# second on walls and cliffs, and sown on open ground their trunks ended in the air and the vines hung from nothing)
 PLANTS = {
     'sand': (12.0, [('NVQueenPalm01', 6, 0.9, 1.4, 4), ('NVDatePalm01', 2, 0.9, 1.3, 4), ('NVDatePalm02', 2, 0.9, 1.3, 4), ('NVDatePalm03', 2, 0.9, 1.3, 4),
                    ('NVSagoPalm01', 3, 0.8, 1.4, 2), ('NVGoldfingerBanana', 2, 1.0, 1.6, 2), ('v22Grass', 3, 1.5, 3.0, 2), ('BuffaloGourdPickable', 1, 0.8, 1.2, 0),
                    ('NVAloeVera', 2, 1.0, 2.0, 0), ('NVFrailejon', 1, 1.0, 1.8, 0)]),
     'grass': (100.0, [('v22Grass', 9, 1.5, 3.5, 2), ('v22Fern', 7, 1.5, 4.0, 2), ('NVGoldfingerBanana', 5, 1.0, 2.0, 2), ('NVQueenPalm01', 3, 0.9, 1.5, 4),
                      ('NVDatePalm01', 1, 0.9, 1.3, 4), ('NVDatePalm02', 1, 0.9, 1.3, 4), ('NVSagoPalm01', 2, 0.8, 1.5, 2), ('NVSagoPalm02', 2, 0.8, 1.5, 2),
-                     ('NVDLC02TreeA1', 1, 1.2, 2.2, 6), ('NVDLC02TreeA2', 1, 1.2, 2.2, 6), ('NVDLC02TreeA3', 1, 1.2, 2.2, 6), ('NVDLC02TreeA4', 1, 1.2, 2.2, 6), ('NVDLC02TreeA5', 1, 1.2, 2.2, 6), ('NVDLC02TreeA6', 1, 1.2, 2.2, 6), ('NVDLC02TreeB1', 1, 1.2, 2.2, 6), ('NVDLC02TreeB2', 1, 1.2, 2.2, 6), ('NVDLC02TreeB3', 1, 1.2, 2.2, 6), ('NVDLC02TreeF2', 1, 1.2, 2.2, 6), ('NVDLC02TreeF3', 1, 1.2, 2.2, 6), ('NVDLC02TreeG2', 1, 1.2, 2.2, 6), ('NVDLC02TreeG3', 1, 1.2, 2.2, 6), ('NVDLC02TreeI2', 1, 1.2, 2.2, 6), ('NVDLC02TreeI3', 1, 1.2, 2.2, 6),
-                     ('NVFicus01', 2, 0.8, 1.4, 6), ('NVFicus02', 2, 0.8, 1.4, 6), ('NVSassafras01', 2, 0.8, 1.4, 6), ('NVSassafras02', 2, 0.8, 1.4, 6), ('NVGreyBirch01', 2, 0.8, 1.4, 6), ('NVGreyBirch02', 2, 0.8, 1.4, 6),
+                     ('NVDLC02TreeA1', 1, 1.2, 2.2, 6), ('NVDLC02TreeA2', 1, 1.2, 2.2, 6), ('NVDLC02TreeA3', 1, 1.2, 2.2, 6), ('NVDLC02TreeA4', 1, 1.2, 2.2, 6), ('NVDLC02TreeA5', 1, 1.2, 2.2, 6), ('NVDLC02TreeA6', 1, 1.2, 2.2, 6), ('NVDLC02TreeB1', 1, 1.2, 2.2, 6), ('NVDLC02TreeB2', 1, 1.2, 2.2, 6), ('NVDLC02TreeB3', 1, 1.2, 2.2, 6), ('NVDLC02TreeF2', 1, 1.2, 2.2, 6), ('NVDLC02TreeF3', 1, 1.2, 2.2, 6),                      ('NVFicus01', 2, 0.8, 1.4, 6), ('NVFicus02', 2, 0.8, 1.4, 6), ('NVSassafras01', 2, 0.8, 1.4, 6), ('NVSassafras02', 2, 0.8, 1.4, 6), ('NVGreyBirch01', 2, 0.8, 1.4, 6), ('NVGreyBirch02', 2, 0.8, 1.4, 6),
                      ('NVDLC02BushA01LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushA02LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushEVA01LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushEVA02LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushMA01LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC02BushMA02LeavesOnly', 2, 1.0, 1.8, 4), ('NVDLC03Leaves', 2, 1.0, 1.8, 4), ('NVDLC03LeavesLow', 2, 1.0, 1.8, 4),
-                     ('NVDLC03VinesA', 1, 0.5, 1.0, 8), ('NVDLC03VinesB', 1, 0.5, 1.0, 8), ('NVDLC03VinesC', 1, 0.5, 1.0, 8),
-                     ('NVFungusStalk01', 1, 2.0, 5.0, 0), ('NVFungusStalk02', 1, 2.0, 5.0, 0), ('NVFungusStalk03', 1, 2.0, 5.0, 0), ('NVFungusStalk04', 1, 2.0, 5.0, 0),
+                                          ('NVFungusStalk01', 1, 2.0, 5.0, 0), ('NVFungusStalk02', 1, 2.0, 5.0, 0), ('NVFungusStalk03', 1, 2.0, 5.0, 0), ('NVFungusStalk04', 1, 2.0, 5.0, 0),
                      ('NVDLC02SacredDaturaPlant', 1, 1.2, 2.2, 0), ('BananaYuccaPickable', 1, 1.2, 2.2, 0), ('BrocFlowerPlant', 1, 1.2, 2.2, 0), ('XanderRootPlant', 1, 1.2, 2.2, 0), ('HoneyMesquitePickable', 1, 1.2, 2.2, 0), ('CoyoteTobaccoPickable', 1, 1.2, 2.2, 0), ('JalapenoPickable', 1, 1.2, 2.2, 0),
                      ('EuonymusBush01', 2, 0.8, 1.4, 2), ('NVFalseSpireaPlant', 3, 1.0, 2.0, 2), ('NVAloeVera', 2, 1.0, 2.2, 0), ('NVFrailejon', 2, 1.0, 2.0, 0),
                      ('NVItalianCypress01', 1, 0.9, 1.5, 4), ('NVItalianCypress02', 1, 0.9, 1.5, 4), ('CaveFungusPlant', 1, 2.0, 4.0, 0)]),
-    'trees': (130.0, [('NVDLC02TreeA1', 3, 1.5, 3.0, 6), ('NVDLC02TreeA2', 3, 1.5, 3.0, 6), ('NVDLC02TreeA3', 3, 1.5, 3.0, 6), ('NVDLC02TreeA4', 3, 1.5, 3.0, 6), ('NVDLC02TreeA5', 3, 1.5, 3.0, 6), ('NVDLC02TreeA6', 3, 1.5, 3.0, 6), ('NVDLC02TreeB1', 3, 1.5, 3.0, 6), ('NVDLC02TreeB2', 3, 1.5, 3.0, 6), ('NVDLC02TreeB3', 3, 1.5, 3.0, 6), ('NVDLC02TreeF2', 3, 1.5, 3.0, 6), ('NVDLC02TreeF3', 3, 1.5, 3.0, 6), ('NVDLC02TreeG2', 3, 1.5, 3.0, 6), ('NVDLC02TreeG3', 3, 1.5, 3.0, 6), ('NVDLC02TreeI2', 3, 1.5, 3.0, 6), ('NVDLC02TreeI3', 3, 1.5, 3.0, 6),
-                     ('NVFicus01', 4, 0.9, 1.6, 6), ('NVFicus02', 4, 0.9, 1.6, 6), ('NVSassafras01', 4, 0.9, 1.6, 6), ('NVSassafras02', 4, 0.9, 1.6, 6), ('NVGreyBirch01', 4, 0.9, 1.6, 6), ('NVGreyBirch02', 4, 0.9, 1.6, 6),
+    'trees': (130.0, [('NVDLC02TreeA1', 3, 1.5, 3.0, 6), ('NVDLC02TreeA2', 3, 1.5, 3.0, 6), ('NVDLC02TreeA3', 3, 1.5, 3.0, 6), ('NVDLC02TreeA4', 3, 1.5, 3.0, 6), ('NVDLC02TreeA5', 3, 1.5, 3.0, 6), ('NVDLC02TreeA6', 3, 1.5, 3.0, 6), ('NVDLC02TreeB1', 3, 1.5, 3.0, 6), ('NVDLC02TreeB2', 3, 1.5, 3.0, 6), ('NVDLC02TreeB3', 3, 1.5, 3.0, 6), ('NVDLC02TreeF2', 3, 1.5, 3.0, 6), ('NVDLC02TreeF3', 3, 1.5, 3.0, 6),                      ('NVFicus01', 4, 0.9, 1.6, 6), ('NVFicus02', 4, 0.9, 1.6, 6), ('NVSassafras01', 4, 0.9, 1.6, 6), ('NVSassafras02', 4, 0.9, 1.6, 6), ('NVGreyBirch01', 4, 0.9, 1.6, 6), ('NVGreyBirch02', 4, 0.9, 1.6, 6),
                      ('NVDLC02BushA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushEVA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushEVA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushMA01LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC02BushMA02LeavesOnly', 3, 1.0, 2.0, 4), ('NVDLC03Leaves', 3, 1.0, 2.0, 4), ('NVDLC03LeavesLow', 3, 1.0, 2.0, 4),
-                     ('NVDLC03VinesA', 2, 0.6, 1.2, 8), ('NVDLC03VinesB', 2, 0.6, 1.2, 8), ('NVDLC03VinesC', 2, 0.6, 1.2, 8),
-                     ('NVFungusStalk01', 2, 2.5, 6.0, 0), ('NVFungusStalk02', 2, 2.5, 6.0, 0), ('NVFungusStalk03', 2, 2.5, 6.0, 0), ('NVFungusStalk04', 2, 2.5, 6.0, 0),
+                                          ('NVFungusStalk01', 2, 2.5, 6.0, 0), ('NVFungusStalk02', 2, 2.5, 6.0, 0), ('NVFungusStalk03', 2, 2.5, 6.0, 0), ('NVFungusStalk04', 2, 2.5, 6.0, 0),
                      ('WhiteOak01', 1, 0.5, 0.9, 10), ('NVDLC03WestJuniperLOW', 2, 0.8, 1.4, 6), ('NVQueenPalm01', 3, 1.0, 1.6, 4), ('NVDatePalm01', 2, 1.0, 1.4, 4),
                      ('NVGoldfingerBanana', 6, 1.2, 2.4, 2), ('v22Fern', 8, 2.0, 5.0, 2), ('v22Grass', 6, 2.0, 4.0, 2),
                      ('CaveFungusPlant', 2, 2.0, 4.0, 0), ('NVDLC02SacredDaturaPlant', 2, 1.5, 3.0, 0)]),
@@ -74,21 +72,19 @@ PLANTS = {
                     ('NVDLC02BushA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushA02LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA01LeavesOnly', 1, 0.8, 1.5, 4), ('NVDLC02BushEVA02LeavesOnly', 1, 0.8, 1.5, 4),
                     ('NVDLC02SacredDaturaPlant', 1, 1.2, 2.2, 0), ('BananaYuccaPickable', 1, 1.2, 2.2, 0), ('BrocFlowerPlant', 1, 1.2, 2.2, 0), ('XanderRootPlant', 1, 1.2, 2.2, 0), ('HoneyMesquitePickable', 1, 1.2, 2.2, 0), ('CoyoteTobaccoPickable', 1, 1.2, 2.2, 0), ('JalapenoPickable', 1, 1.2, 2.2, 0),
                     ('BuffaloGourdPickable', 1, 0.8, 1.2, 0), ('NVFicus01', 1, 0.8, 1.3, 6), ('NVFicus02', 1, 0.8, 1.3, 6), ('NVItalianCypress01', 1, 0.9, 1.3, 4),
-                    ('NVAloeVera', 2, 1.0, 1.8, 0), ('MaizeHealthyPGroup1', 1, 1.0, 1.4, 0), ('NVDLC03VinesC', 1, 0.5, 0.9, 6), ('NVFungusStalk01', 1, 2.0, 4.0, 0)]),
+                    ('NVAloeVera', 2, 1.0, 1.8, 0), ('MaizeHealthyPGroup1', 1, 1.0, 1.4, 0), ('NVFungusStalk01', 1, 2.0, 4.0, 0)]),
     'paved': (9.0, [('v22Grass', 6, 1.0, 2.0, 2), ('v22Fern', 2, 1.0, 2.0, 2), ('NVFalseSpireaPlant', 2, 0.8, 1.4, 2), ('NVAloeVera', 1, 0.8, 1.4, 0)]),
-    'scrub': (46.0, [('NVDLC02TreeA1', 2, 1.0, 1.8, 6), ('NVDLC02TreeB2', 2, 1.0, 1.8, 6), ('NVDLC02TreeG2', 2, 1.0, 1.8, 6), ('NVDLC02BushA01LeavesOnly', 4, 1.0, 1.8, 4), ('NVDLC02BushMA02LeavesOnly', 4, 1.0, 1.8, 4), ('NVDLC03LeavesLow', 3, 1.0, 1.8, 4), ('v22Grass', 8, 1.5, 3.5, 2), ('NVGoldfingerBanana', 2, 1.0, 1.8, 2), ('NVDLC03VinesC', 1, 0.5, 1.0, 8),
-                     ('CreosoteBushSm', 6, 0.8, 1.4, 2), ('CreosoteBushLg', 3, 0.8, 1.3, 2), ('YuccaANV', 2, 0.8, 1.3, 2), ('YuccaBNV', 2, 0.8, 1.3, 2),
+    'scrub': (46.0, [('NVDLC02TreeA1', 2, 1.0, 1.8, 6), ('NVDLC02TreeB2', 2, 1.0, 1.8, 6), ('NVDLC02BushA01LeavesOnly', 4, 1.0, 1.8, 4), ('NVDLC02BushMA02LeavesOnly', 4, 1.0, 1.8, 4), ('NVDLC03LeavesLow', 3, 1.0, 1.8, 4), ('v22Grass', 8, 1.5, 3.5, 2), ('NVGoldfingerBanana', 2, 1.0, 1.8, 2),                      ('CreosoteBushSm', 6, 0.8, 1.4, 2), ('CreosoteBushLg', 3, 0.8, 1.3, 2), ('YuccaANV', 2, 0.8, 1.3, 2), ('YuccaBNV', 2, 0.8, 1.3, 2),
                      ('YuccaCNV', 2, 0.8, 1.3, 2), ('NVbarrelcactus02', 2, 0.8, 1.4, 2), ('pricklypearcactus03', 2, 0.8, 1.3, 2), ('NVFalseSpireaPlant', 3, 1.0, 1.8, 2),
                      ('nevadaagave02', 2, 1.0, 2.0, 0), ('BananaYuccaPickable', 1, 1.0, 1.4, 0), ('v22Fern', 2, 1.5, 3.0, 2), ('NVSagebrush', 5, 0.8, 1.5, 2),
                      ('NVAloeVera', 2, 1.0, 2.0, 0), ('NVFrailejon', 2, 1.0, 1.8, 0), ('NVDLC03WestJuniperLOW', 1, 0.7, 1.2, 6), ('HoneyMesquitePickable', 1, 1.0, 1.5, 0)]),
     # (the mountain's bare rock and steep ground: what holds on there)
     'rock': (30.0, [('v22Grass', 8, 1.5, 3.0, 2), ('v22Fern', 5, 1.5, 3.5, 2), ('NVSagebrush', 5, 0.8, 1.5, 2), ('NVAloeVera', 3, 1.0, 2.0, 0), ('NVFrailejon', 3, 1.0, 2.0, 0),
                     ('nevadaagave02', 2, 1.0, 2.0, 0), ('NVDLC03WestJuniperLOW', 2, 0.7, 1.2, 6), ('NVDLC02BushA02LeavesOnly', 4, 0.9, 1.6, 4), ('NVDLC03LeavesLow', 3, 0.9, 1.6, 4),
-                    ('NVDLC03VinesC', 2, 0.5, 1.0, 8), ('NVDLC02TreeI2', 1, 1.0, 1.6, 6), ('CreosoteBushSm', 3, 0.8, 1.4, 2), ('NVFalseSpireaPlant', 3, 1.0, 1.8, 2)]),
+                    ('CreosoteBushSm', 3, 0.8, 1.4, 2), ('NVFalseSpireaPlant', 3, 1.0, 1.8, 2)]),
     'farm': (50.0, [('MaizeHealthyPGroup1', 8, 1.0, 1.5, 0), ('NVGoldfingerBanana', 8, 1.0, 2.0, 2), ('v22Grass', 6, 1.5, 3.0, 2), ('JalapenoPickable', 2, 1.2, 2.0, 0),
                     ('MaizePickable', 3, 1.0, 1.5, 0), ('BuffaloGourdPickable', 2, 0.8, 1.2, 0), ('NVDLC02BushA01LeavesOnly', 2, 1.0, 1.6, 4)]),
-    'wet': (60.0, [('v22Grass', 10, 2.0, 4.0, 2), ('v22Fern', 8, 2.0, 5.0, 2), ('NVGoldfingerBanana', 4, 1.2, 2.2, 2), ('NVDLC03VinesA', 1, 0.5, 1.0, 8),
-                   ('NVDLC02BushEVA01LeavesOnly', 4, 1.0, 2.0, 4), ('NVFungusStalk02', 2, 2.0, 5.0, 0), ('NVDLC02TreeF2', 2, 1.2, 2.2, 6), ('NVSassafras01', 1, 0.8, 1.3, 6)]),
+    'wet': (60.0, [('v22Grass', 10, 2.0, 4.0, 2), ('v22Fern', 8, 2.0, 5.0, 2), ('NVGoldfingerBanana', 4, 1.2, 2.2, 2),                    ('NVDLC02BushEVA01LeavesOnly', 4, 1.0, 2.0, 4), ('NVFungusStalk02', 2, 2.0, 5.0, 0), ('NVDLC02TreeF2', 2, 1.2, 2.2, 6), ('NVSassafras01', 1, 0.8, 1.3, 6)]),
     'seabed': (10.0, [('NVSeaPlant01', 5, 1.0, 2.5, 0), ('NVSeaPlant02', 5, 1.0, 2.5, 0)]),
 }
 CLUMPS = ('v22grass', 'v22fern', 'nvdlc02busha01leavesonly', 'nvdlc02busha02leavesonly', 'nvdlc02busheva01leavesonly', 'nvdlc02busheva02leavesonly',
@@ -157,6 +153,37 @@ def lie(ground, edid, x, y, yaw, scale=1.0):
 SEAT_GAP = 6.0              # (a lying thing whose underside is further than this over the ground anywhere is let down)
 SEAT_DEEP = 0.6             # (but never sunk by more than this share of its own height)
 SEAT_ON = 40.0              # (one whose underside is this far over the ground everywhere stands on something: a roof, a pier)
+SEAT_HIGH = 150.0           # (...and this far, it is up on a roof or a pier, not resting on a slab or a kerb)
+_LIES_ON = None
+SINK_FROM = 40.0            # (a thing lower than this is laid on the ground, never sunk: litter, a plank)
+
+
+def _lies_on():
+    global _LIES_ON
+    if _LIES_ON is None:
+        import json
+        import os
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lies_on.json'), encoding='utf-8') as f:
+                d = json.load(f)
+            _LIES_ON = (set(d.get('rides', {})), d.get('sink', {}))
+        except (OSError, ValueError):
+            _LIES_ON = (set(), {})
+    return _LIES_ON
+
+
+def rides(edid):
+    """Does the game set this kind on top of other things (lies_on.json, measured over every world of the game)? Rubble
+    piles, road chunks, rocks and litter clusters it sets on the ground; planks, small chunks, mattresses it stacks.
+    One of the ground kinds found over the ground was resting on a slab's or a car's edge with its flat bottom in the air."""
+    return edid.lower() in _lies_on()[0]
+
+
+def sink(edid):
+    """How much of its height the game usually sinks this kind into the land (0 for none). A rubble pile's mesh has a deep
+    base under its visible bottom: SuburbanRubblePileCanyon01 sat on its bounds stood with its flat bottom at head height
+    at Waikiki's start, where the game sinks it by 44% of its height."""
+    return float(_lies_on()[1].get(edid.lower(), 0.0))
 
 
 def seat_lying(gd, pr, world, progress=None):
@@ -171,7 +198,7 @@ def seat_lying(gd, pr, world, progress=None):
     g = roadgen.Ground(gd, pr, world)
     keys = {gd.key(c) for c in gd.grid(world).values()}
     names, boxes = {}, {}
-    ops, moved, gone, looked = [], 0, 0, 0
+    ops, moved, gone, looked, perched = [], 0, 0, 0, 0
     for ck, c in pr.cells.items():
         if ck not in keys:
             continue
@@ -199,8 +226,18 @@ def seat_lying(gd, pr, world, progress=None):
             if gz0 is None:
                 continue
             under = [p[2] + R0[2][0] * lx + R0[2][1] * ly + R0[2][2] * o[2] * s for lx, ly in spots]
-            if min(u - (g.at(p[0] + R0[0][0] * lx + R0[0][1] * ly, p[1] + R0[1][0] * lx + R0[1][1] * ly) or u) for u, (lx, ly) in zip(under, spots)) > SEAT_ON:
-                continue                        # (it stands on something: a roof, a pier)
+            over = min(u - (g.at(p[0] + R0[0][0] * lx + R0[0][1] * ly, p[1] + R0[1][0] * lx + R0[1][1] * ly) or u) for u, (lx, ly) in zip(under, spots))
+            if over > SEAT_ON:
+                if rides(name):
+                    continue                    # (it stands on something, as the game stacks its kind: a plank on a heap)
+                if over > SEAT_HIGH or g.water(p[0], p[1]) is not None and g.water(p[0], p[1]) > gz0:
+                    # (up on a roof or a pier, where its kind never goes: no loss, or else left)
+                    if GONE_IF_HANGING.search(name):
+                        ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
+                        gone += 1
+                        perched += 1
+                    continue
+                # (resting on a slab, a kerb or a wreck's edge: its kind goes on the ground, under such things)
             looked += 1
             # its heading kept, its tilt the ground's under it
             yaw = math.atan2(R0[0][0], R0[1][0])
@@ -227,8 +264,13 @@ def seat_lying(gd, pr, world, progress=None):
                     worst = max(worst, wz - gz)
             # origin height so that the highest point of its underside over the ground is 2 under it
             z = -worst - 2.0
+            height = (o[5] - o[2]) * s
+            deep = sink(name) if height >= SINK_FROM else 0.0
+            if deep:
+                # (and as deep as the game sinks its kind: its middle's underside that share of its height under the land)
+                z = min(z, gz0 - deep * height - R[2][2] * o[2] * s)
             sunk = (gz0 - (z + R[2][2] * o[2] * s))     # (how far its middle's underside is now under the ground)
-            room = (o[5] - o[2]) * s * SEAT_DEEP
+            room = height * max(SEAT_DEEP, deep + 0.15)
             if sunk > room:
                 if GONE_IF_HANGING.search(name):
                     ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
@@ -240,7 +282,7 @@ def seat_lying(gd, pr, world, progress=None):
             if abs(new[2] - p[2]) > 1.0 or any(abs(u - v) > 0.01 for u, v in zip(new[3:], p[3:6])):
                 ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': new + list(p[6:])})
                 moved += 1
-    return ops, {'looked': looked, 'laid': moved, 'taken_out': gone}
+    return ops, {'looked': looked, 'laid': moved, 'taken_out': gone, 'perched': perched}
 
 
 def _bases(gd):

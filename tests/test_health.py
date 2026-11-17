@@ -206,6 +206,32 @@ check('real content: scripts all compiled', n.get('no_compile', 0) < 5, n.get('n
 os.remove(theirs)
 
 # ---------- getting it ready to share: a zip in FOLab's own folder ----------
+# ---------- a model named under the wrong folder: the file of that name offered, every record naming it fixed ----------
+was_pr, Server.PR = Server.PR, pr
+tower = next(f for f, (i, r) in gd.forms.items() if r.tag == 'STAT' and gd.edid(f) == 'NVGuardTower01a')
+real = tes4.zstr(gd.fields(tower)['MODL'])
+wrong = 'architecture\\wrongfolder\\' + real.split('\\')[-1]
+made = []
+for n in range(2):
+    rec_w = copy.deepcopy(recordio.load(gd, tower))
+    recordio.set_field(rec_w, 'EDID', 'FolabWrongPath%d' % n)
+    for s in rec_w['subs']:
+        if s['tag'] == 'MODL':
+            s['value'] = wrong
+    made.append(rec_w)
+keys_w = pr.apply('wrong paths', [{'op': 'record_new', 'record': r} for r in made])
+rep_w = health.check_mod(Server)
+row_w = next((r for r in rows(rep_w, 'mesh') if wrong.lower() in r['text'].lower()), None)
+check('a model under the wrong folder: the real file offered, for both records', row_w is not None and row_w.get('fix') and
+      row_w['fix']['new'].lower() == real.lower() and len(row_w['fix']['items']) == 2, row_w)
+out_w = health.apply_fixes(Server, [row_w['fix']]) if row_w and row_w.get('fix') else {'failed': ['no fix']}
+fixed = [k for k, r in pr.records.items() if recordio.field(r, 'EDID') in ('FolabWrongPath0', 'FolabWrongPath1')
+         and any(s['tag'] == 'MODL' and s['value'] == row_w['fix']['new'] for s in r['subs'])]
+check('… and both point at it after the fix', not out_w['failed'] and len(fixed) == 2, out_w)
+check('models of the game\'s that read are not called damaged', not rows(health.check_mod(Server), 'mesh_broken'))
+pr.undo(); pr.undo()
+Server.PR = was_pr
+
 import release, zipfile
 
 

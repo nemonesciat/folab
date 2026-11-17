@@ -11,15 +11,18 @@ The file is laid out as the game's own plain statics are (measured over its arch
   bhkCollisionObject            ties the body to the node
   then for each shape:
   NiTriStrips                   properties: material, shader
-  BSShaderPPLightingProperty    type 1, flags 0x82000000 / 1, clamp 3 (the texture repeats)
+  BSShaderPPLightingProperty    type 1, flags 0x82000001 / 1 (the low bit: it shines as much as its normal map's fourth
+                                number says, as most of the game's building shapes do), clamp 3 (the texture repeats)
   BSShaderTextureSet            six paths: colour, normal map, four unused
   NiMaterialProperty            no shine of its own, gloss 10
   NiAlphaProperty               only on a shape with 'alpha' (leaves): flags 4844, cut at 64, and the shader's flags
                                 0x82000101 as the game's plants have; such a shape's properties go alpha first
   NiTriStripsData               corners, normals, the two directions of the texture across the surface (the field the
                                 format calls tangents runs down the picture, bitangents across it: measured), a sphere
-                                round it all (middle of its box), texture coordinates, and one strip of corners whose
-                                triangles are joined by ones of no area
+                                round it all (middle of its box), a colour at each corner if the shape has 'c' (the
+                                shade baked in, as 95 in 100 of the game's building shapes have, with no other block or
+                                flag for it), texture coordinates, and one strip of corners whose triangles are joined
+                                by ones of no area
 
 A front face's corners go anticlockwise seen from outside. `build` makes the bytes; `check` reads them back."""
 import math
@@ -154,8 +157,8 @@ def _strips_data(shape):
         raise MakeError('a shape with nothing in it')
     if n > 65535:
         raise MakeError('a shape has %d corners: one shape holds 65,535 at most' % n)
-    if len(nm) != 3 * n or len(uv) != 2 * n or max(tris) >= n:
-        raise MakeError('a shape\'s corners, normals and texture coordinates don\'t go together')
+    if len(nm) != 3 * n or len(uv) != 2 * n or max(tris) >= n or (shape.get('c') and len(shape['c']) != 4 * n):
+        raise MakeError('a shape\'s corners, normals, colours and texture coordinates don\'t go together')
     s = strip(tris)
     if len(s) - 2 > 65535:
         raise MakeError('a shape has too many triangles for one strip')
@@ -169,7 +172,7 @@ def _strips_data(shape):
         struct.pack('<iHBBB', 0, n, 0, 0, 1), f(pos),
         struct.pack('<HB', 0x1001, 1), f(nm), f(dv), f(du),         # one set of texture coordinates, and the directions
         f(mid + [rad]),
-        b'\0',                                                      # no colours at the corners
+        (b'\1' + f(shape['c'])) if shape.get('c') else b'\0',       # a colour at every corner (baked shade), or none
         f(uv),
         struct.pack('<HiH', 0x4000, -1, len(s) - 2),                # never changes; nothing more; triangles in the strip
         struct.pack('<HHB', 1, len(s), 1), struct.pack('<%dH' % len(s), *s)))
@@ -300,7 +303,7 @@ def build(name, shapes, solids=()):
         add('NiTriStrips', struct.pack('<iIiI', text('%s:%d' % (name, k)), 0, -1, 0x8000E) + identity
             + struct.pack('<I%dii' % len(props), len(props), *props, -1) + struct.pack('<iiIiB', me + (5 if cut else 4), -1, 0, 0, 0))
         add('BSShaderPPLightingProperty', struct.pack('<iIi', -1, 0, -1)
-            + struct.pack('<HIIIfIi', 1, 1, 0x82000101 if cut else 0x82000000, 1, 1.0, 3, me + 2) + struct.pack('<fiff', 0.0, 0, 4.0, 1.0))
+            + struct.pack('<HIIIfIi', 1, 1, 0x82000101 if cut else 0x82000001, 1, 1.0, 3, me + 2) + struct.pack('<fiff', 0.0, 0, 4.0, 1.0))
         # (a glowing shape, as the game's lamps and neon: a glow map in the third slot, the material's emissive white and
         # its multiplier how bright)
         add('BSShaderTextureSet', struct.pack('<i', 6) + _sized(s['tex']) + _sized(s.get('normal', '')) + _sized(s.get('glow', '')) + _sized('') * 3)

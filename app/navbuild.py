@@ -20,6 +20,7 @@ import json
 import struct
 
 import navgen
+import recordio
 import navmesh as N
 import tes4
 
@@ -39,15 +40,22 @@ def _base_type(gd, project, bkey):
 
 def place_refs(gd, project, ckey):
     """Everything in a place as the mod leaves it, in the form navgen reads, with refs named by key. Things made from
-    the mod's own records have no shape FOLab can read yet, so only their being there as actors or doors counts."""
+    the mod's own records count as actors or doors, and a static of its own with a model ('model': its path) by that
+    model's collision, read from the mod's own files."""
     cell = None if ckey.startswith('+') else gd.from_key(ckey)
     mine = (project.cells.get(ckey) or {}).get('refs', {})
     out = []
 
     def add(key, bkey, p, s, leads):
-        out.append({'ref': key, 'type': ACTORS.get(_base_type(gd, project, bkey), 'REFR'),
-                    'base': None if bkey.startswith('+') else gd.from_key(bkey),
-                    'pos': tuple(p[:3]), 'rot': tuple(p[3:6]), 'scale': s, 'leads': leads, 'bkey': bkey})
+        row = {'ref': key, 'type': ACTORS.get(_base_type(gd, project, bkey), 'REFR'),
+               'base': None if bkey.startswith('+') else gd.from_key(bkey),
+               'pos': tuple(p[:3]), 'rot': tuple(p[3:6]), 'scale': s, 'leads': leads, 'bkey': bkey}
+        rec = project.records.get(bkey) if bkey.startswith('+') else None
+        if rec and rec.get('type') in ('STAT', 'MSTT', 'ACTI'):
+            model = recordio.field(rec, 'MODL')     # (a model of the mod's own making: its collision read from the mod's files)
+            if model:
+                row['model'] = 'meshes\\' + model.replace('/', '\\').lstrip('\\')
+        out.append(row)
     if cell is not None:
         for r in gd.refs(cell):
             if r['base'] not in gd.forms or not r['pos']:
@@ -178,7 +186,7 @@ def _make_one(gd, project, ckey, meshes_now):
     outside = is_outside(gd, ckey)
     cell = ckey
     refs = place_refs(gd, project, ckey)
-    usable = [dict(r) for r in refs if r['base'] is not None or r['type'] != 'REFR']
+    usable = [dict(r) for r in refs if r['base'] is not None or r['type'] != 'REFR' or r.get('model')]
     if outside:
         cell = gd.from_key(ckey)
 
@@ -188,7 +196,7 @@ def _make_one(gd, project, ckey, meshes_now):
             return mine['h'] if mine else None
 
         def refs_of(c):
-            return [r for r in place_refs(gd, project, gd.key(c)) if r['base'] is not None or r['type'] != 'REFR']
+            return [r for r in place_refs(gd, project, gd.key(c)) if r['base'] is not None or r['type'] != 'REFR' or r.get('model')]
         water = False
         if ckey in project.water:
             h = project.water[ckey]

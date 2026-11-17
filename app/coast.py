@@ -129,6 +129,26 @@ def shape_sea(grid, lines, depth=None, slope=SLOPE, beach=BEACH):
         if both >= 40 and min(wet_votes, dry_votes) > LEAK_SHARE * both:
             return {'leak': True}               # (a stretch the line calls both: it has a gap, and land and sea run together)
     is_sea = [w > d for w, d in votes]
+    # a stretch no point fell in (a pocket the lines close off between them, narrower than the points are set off) takes
+    # after what lies round it across the line: off Waikiki's Natatorium one stood out to sea as a little island
+    unvoted = set(k + 1 for k, (w, d) in enumerate(votes) if not w and not d)
+    if unvoted:
+        near = {k: [0, 0] for k in unvoted}
+        for t in range(n):                                  # (each wall square: the stretches on either side of it)
+            if not wall[t]:
+                continue
+            tx = t % across
+            round_it = [part[u] for u in (t - 1 if tx else -1, t + 1 if tx < across - 1 else -1, t - across, t + across)
+                        if 0 <= u < n and part[u]]
+            mine = [p for p in round_it if p in unvoted]
+            if not mine:
+                continue
+            says = [0 if votes[p - 1][0] > votes[p - 1][1] else 1 for p in round_it if p not in unvoted]
+            for p in mine:
+                for s in says:
+                    near[p][s] += 1
+        for k, (wet_n, dry_n) in near.items():
+            is_sea[k - 1] = wet_n > dry_n
     sea = bytearray(n)
     for q in range(n):
         if part[q] and is_sea[part[q] - 1]:

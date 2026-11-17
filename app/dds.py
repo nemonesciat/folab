@@ -172,3 +172,105 @@ def average_colour(data, want=16):
             tot[0] += px[0]; tot[1] += px[1]; tot[2] += px[2]
             k += 1
     return tuple(v // k for v in tot) if k else None
+
+
+# --- compressed, as the game keeps its own ---
+# FOLab wrote its own pictures plain (32 bits a pixel), 4 to 8 times what the game's compressed ones take: a city of
+# them (348 MB on Waikiki) ran the 32-bit game out of texture memory, so its own buildings and ships lost their pictures
+# far off and then near too. A picture with no transparency becomes DXT1 (8 bytes a 4 x 4 block), one with any (a
+# normal map keeps its shine there, glass and leaves their cut-outs) DXT5 (16 bytes).
+
+def _colour_block(px, four):
+    """Sixteen (r, g, b, a) as DXT colour: the corners of their colour box as the two ends, each pixel the nearest step
+    along the line between them. four: always the four-colour order (c0 > c1), which DXT1 needs and DXT5 ignores."""
+    r0 = max(p[0] for p in px); g0 = max(p[1] for p in px); b0 = max(p[2] for p in px)
+    r1 = min(p[0] for p in px); g1 = min(p[1] for p in px); b1 = min(p[2] for p in px)
+    c0 = (r0 >> 3) << 11 | (g0 >> 2) << 5 | b0 >> 3
+    c1 = (r1 >> 3) << 11 | (g1 >> 2) << 5 | b1 >> 3
+    if c0 == c1:
+        return struct.pack('<HHI', c0, c1, 0)
+    if c0 < c1:
+        c0, c1 = c1, c0
+        r0, g0, b0, r1, g1, b1 = r1, g1, b1, r0, g0, b0
+    dr, dg, db = r0 - r1, g0 - g1, b0 - b1
+    n = dr * dr + dg * dg + db * db
+    bits = 0
+    order = (1, 3, 2, 0)                        # (step 0 is the far end c1, step 3 the near end c0)
+    for k, p in enumerate(px):
+        t = ((p[0] - r1) * dr + (p[1] - g1) * dg + (p[2] - b1) * db) * 3 / n if n else 0
+        s = 0 if t < 0.5 else 1 if t < 1.5 else 2 if t < 2.5 else 3
+        bits |= order[s] << (2 * k)
+    return struct.pack('<HHI', c0, c1, bits)
+
+
+def _alpha_block(px):
+    """Sixteen alphas as DXT5's 8 bytes: the highest and lowest, and 3 bits a pixel among the eight steps between."""
+    a0 = max(p[3] for p in px)
+    a1 = min(p[3] for p in px)
+    if a0 == a1:
+        return struct.pack('<BB', a0, a1) + b'\0' * 6
+    bits = 0
+    for k, p in enumerate(px):
+        step = int(round((p[3] - a1) * 7.0 / (a0 - a1)))   # 0 at a1 .. 7 at a0
+        idx = 0 if step == 7 else 1 if step == 0 else 8 - step
+        bits |= idx << (3 * k)
+    return struct.pack('<BB', a0, a1) + bits.to_bytes(6, 'little')
+
+
+def _levels_plain(data):
+    """A plain 32-bit DDS's pictures, largest first: [(w, h, rgba bytes)]."""
+    h, w = struct.unpack_from('<2I', data, 12)
+    mips = max(1, struct.unpack_from('<I', data, 28)[0])
+    bits = struct.unpack_from('<I', data, 88)[0]
+    masks = struct.unpack_from('<4I', data, 92)
+    if bits != 32:
+        return None
+    sh = [_shift(m) for m in masks]
+    out, off = [], 128
+    for m in range(mips):
+        mw, mh = max(1, w >> m), max(1, h >> m)
+        n = mw * mh * 4
+        raw = data[off:off + n]
+        off += n
+        if len(raw) < n:
+            break
+        if masks == (0xFF0000, 0xFF00, 0xFF, 0xFF000000):
+            rgba = bytearray(raw)
+            rgba[0::4], rgba[2::4] = raw[2::4], raw[0::4]
+        else:
+            vals = struct.unpack('<%dI' % (mw * mh), raw)
+            rgba = bytearray()
+            for v in vals:
+                rgba += bytes(((v & masks[i]) >> sh[i][0] if masks[i] else 255) & 255 for i in range(4))
+        out.append((mw, mh, bytes(rgba)))
+    return out
+
+
+def compress(data):
+    """A plain 32-bit DDS (as encode() writes) made DXT1, or DXT5 if any pixel isn't fully opaque, every mipmap kept as it
+    was. Anything else comes back as it was."""
+    if data[:4] != b'DDS ' or struct.unpack_from('<I', data, 80)[0] & 4:
+        return data
+    levels = _levels_plain(data)
+    if not levels:
+        return data
+    alpha = any(a != 255 for a in levels[0][2][3::4])
+    out = []
+    for w, h, px in levels:
+        for by in range(0, max(4, h), 4):
+            for bx in range(0, max(4, w), 4):
+                blk = []
+                for y in range(4):
+                    yy = min(by + y, h - 1)
+                    for x in range(4):
+                        o = (yy * w + min(bx + x, w - 1)) * 4
+                        blk.append(px[o:o + 4])
+                if alpha:
+                    out.append(_alpha_block(blk))
+                out.append(_colour_block(blk, True))
+    h0, w0 = levels[0][1], levels[0][0]
+    size = max(1, w0 // 4) * max(1, h0 // 4) * (16 if alpha else 8)
+    head = b'DDS ' + struct.pack('<7I', 124, 0xA1007, h0, w0, size, 0, len(levels)) + b'\0' * 44
+    head += struct.pack('<2I4s5I', 32, 4, b'DXT5' if alpha else b'DXT1', 0, 0, 0, 0, 0)
+    head += struct.pack('<5I', 0x401008, 0, 0, 0, 0)
+    return head + b''.join(out)

@@ -307,10 +307,13 @@ def things_of(gd, pr, world):
     return out
 
 
-def generate(gd, pr, world, out, progress=None, trees=False):
+def generate(gd, pr, world, out, progress=None, trees=False, like=None):
     """Write a world's distant buildings into a folder laid out as Data is. Returns a report. trees: far plants too (the
-    game shows its own trees another way; as plain models they cost a lot for what they add)."""
+    game shows its own trees another way; as plain models they cost a lot for what they add). like: another world whose
+    things this one shows far off (as lodgen's like), named for this one."""
     edid = gd.edid(world)
+    if like is not None:
+        world = like
     stand = StandIns(gd, pr)
     sheet = Sheet(gd)
     blocks = {}

@@ -48,7 +48,9 @@ for piece in ('kiosk', 'umbrella'):
     data = m['nif']
     check('%s: reads back as what was asked for (corners, facing, textures, collision)' % piece, nifmake.check(data, m['shapes'], m['solids']) == [])
     back = nif.mesh_from_nif(data)
-    check('%s: %d triangles' % (piece, want_tris[piece]), sum(len(s['i']) // 3 for s in back) == want_tris[piece] == m['triangles'])
+    plain = modelmake.make(dict(modelsets.PIECES[piece]['describe'](), shade=False, bevel=0))
+    check('%s: %d triangles as drawn, sharp and unshaded; all of them read back as built' % (piece, want_tris[piece]),
+          plain['triangles'] == want_tris[piece] and sum(len(s['i']) // 3 for s in back) == m['triangles'] <= modelmake.MOST_THING, (plain['triangles'], m['triangles']))
     names = sorted({s['tex'] for s in back})
     check('%s: its textures are the set\'s own' % piece, names and all(t.startswith('textures\\folab\\beach\\') and t in m['files'] for t in names))
     n = nif.Nif(data)
@@ -127,7 +129,7 @@ check('every leaf is there twice, once for each side', all(len(v) == 2 for v in 
 
 # --- parts ---
 one = modelmake.make({'name': 'T', 'looks': {'a': {'tex': 'textures\\a.dds', 'tile': 64}, 'b': {'tex': 'textures\\b.dds', 'region': (0, 0, 0.5, 1)}},
-                      'parts': [{'shape': 'box', 'size': [10, 20, 30], 'at': [100, 0, 0], 'look': 'a', 'faces': {'front': 'b'}}]})
+                      'parts': [{'shape': 'box', 'size': [10, 20, 30], 'at': [100, 0, 0], 'look': 'a', 'faces': {'front': 'b'}}], 'shade': False, 'bevel': 0})
 back = {s['tex']: s for s in nif.mesh_from_nif(one['nif'])}
 b = back['textures\\b.dds']
 check('a box has six faces, the one named apart in its own look', len(back['textures\\a.dds']['i']) == 30 and len(b['i']) == 6)
@@ -218,9 +220,9 @@ bad = []
 for piece in jungle:
     m = made[piece] = modelsets.build(piece)
     wrong = nifmake.check(m['nif'], m['shapes'], m['solids'])
-    if wrong or not m['mesh'].startswith('meshes\\folab\\jungle\\') or not any(s.get('alpha') for s in m['shapes']) or m['triangles'] > 5000:
+    if wrong or not m['mesh'].startswith('meshes\\folab\\jungle\\') or not any(s.get('alpha') for s in m['shapes']) or m['triangles'] > modelmake.MOST_THING:
         bad.append((piece, wrong, m['triangles']))
-check('%d jungle pieces build and read back, each with leaves, none over 5,000 triangles' % len(jungle), len(jungle) >= 15 and not bad, bad)
+check('%d jungle pieces build and read back, each with leaves, none over MOST_THING triangles' % len(jungle), len(jungle) >= 15 and not bad, bad)
 check('editor IDs all their own', len({v['edid'] for v in modelsets.PIECES.values()}) == len(modelsets.PIECES) and all(v['edid'] for v in modelsets.PIECES.values()))
 big = made['jungle_tree']
 check('a forest tree: 13 metres up, its crown 15 across, only the trunk in the way', 850 < big['box'][5] < 1300 and big['box'][3] - big['box'][0] > 1000 and len(big['solids']) == 1)
@@ -251,9 +253,9 @@ for piece in hotels:
     m = made[piece] = modelsets.build(piece)
     far_rel = m['mesh'][:-4] + '_lod.nif'
     wrong = nifmake.check(m['nif'], m['shapes'], m['solids']) + (nifmake.check(m['files'][far_rel], m['far']['shapes'], []) if far_rel in m['files'] else ['no far model'])
-    if wrong or m['box'][5] < 2500 or not 4 <= len(m['solids']) <= 40 or m['far']['triangles'] > m['triangles'] or any(max(abs(u) for u in sh['uv']) > 1.001 for sh in m['far']['shapes']):
+    if wrong or m['box'][5] < 2500 or not 4 <= len(m['solids']) <= 40 or m['far']['triangles'] > m['triangles'] or any(max(sh['uv'][a::2]) - math.floor(min(sh['uv'][a::2])) > modelsets.FAR_REPEAT + 0.001 for sh in m['far']['shapes'] for a in (0, 1)):
         bad.append((piece, wrong, m['box'], len(m['solids'])))
-check('%d hotels build, each over 35 metres, solid, with a far model that repeats no texture' % len(hotels), len(hotels) == 4 and not bad, bad)
+check('%d hotels build, each over 35 metres, solid, with a far model of their own pictures, repeated no more than the distant blocks bake (FAR_REPEAT)' % len(hotels), len(hotels) == 4 and not bad, bad)
 ph = project.Project.create('Hotel Test')
 gd.overlay = library.Overlay(lambda: ph)
 hops, hinfo = modelsets.put(ph, 'makai_tower')
@@ -439,9 +441,9 @@ import waikikiset  # noqa: E402
 bad = []
 for piece in waikikiset.PIECES:
     wm = modelsets.build(piece)
-    if nifmake.check(wm['nif'], wm['shapes'], wm['solids']) or wm['triangles'] > 5000:
-        bad.append(piece)
-check('every Waikiki piece builds, every block checked, none over 5000 triangles', not bad, bad)
+    if nifmake.check(wm['nif'], wm['shapes'], wm['solids']) or wm['triangles'] > modelmake.MOST_THING:
+        bad.append((piece, wm['triangles']))
+check('every Waikiki piece builds, every block checked, none over MOST_THING triangles', not bad, bad)
 walk_bad = []
 for piece, deck in (('lifeguard_tower', 210), ('hale', 24), ('hula_stage', 40)):
     f = walkcheck.Walk(modelsets.build(piece)['solids']).floors([deck], band=4)[0]
@@ -467,4 +469,43 @@ fx, fy = landmarks._turn(0.0, -1.0, waikikiplace.facing(0.6, 0.8))
 check('facing turns a piece so its front looks the way asked', abs(fx - 0.6) < 1e-6 and abs(fy - 0.8) < 1e-6, (fx, fy))
 lx, ly = landmarks._turn(-1.0, 0.0, waikikiplace.facing(-0.8, 0.6))
 check("a street lamp turned to a road's way has its arm out over the road", abs(lx - 0.6) < 1e-6 and abs(ly - 0.8) < 1e-6, (lx, ly))
+import coastset  # noqa: E402
+bad, built = [], {}
+for piece in list(coastset.HOTELS) + list(coastset.PIECES):
+    built[piece] = cm = modelsets.build(piece)
+    if nifmake.check(cm['nif'], cm['shapes'], cm['solids']) or cm['triangles'] > modelmake.MOST_BUILDING:
+        bad.append((piece, cm['triangles'], nifmake.check(cm['nif'], cm['shapes'], cm['solids'])))
+check('every coast piece and new hotel builds, every block checked, none over MOST_BUILDING triangles', not bad, bad)
+nofar = [p for p in list(coastset.HOTELS) + ['lighthouse', 'signal_mast', 'wreck', 'aquarium', 'groin_pavilion'] if not built[p].get('far')]
+check('every hotel and every one-off that reads from far off has a far model', not nofar, nofar)
+hb = {p: modelsets.build(p)['box'] for p in ('makai_tower', 'blue_lagoon', 'kahuna_palms', 'pink_pearl')}
+check('Moana Kai is the tallest hotel, Kahala Reef the longest and lowest of them',
+      built['moana_kai']['box'][5] > max(b[5] for b in hb.values()) and built['kahala_reef']['box'][3] - built['kahala_reef']['box'][0] > max(b[3] - b[0] for b in hb.values())
+      and built['kahala_reef']['box'][5] < min(b[5] for b in hb.values()))
+walk_bad = []
+for piece, deck in (('groin_walk', 0), ('groin_pavilion', 0), ('kahala_reef', 120)):
+    f = walkcheck.Walk(built[piece]['solids']).floors([deck], band=4)[0]
+    if not f[0] or f[1] < 0.6 * f[0]:
+        walk_bad.append((piece, f))
+check("the groin's walk, the pavilion's deck and the resort's terrace (up its ramps) are walked", not walk_bad, walk_bad)
+wd = walkcheck.Walk(built['wreck']['solids']).floors([coastset.WRECK_HIGH], band=4)[0]
+check("the wreck has a deck to stand on (got to from the water, so not walked from the ground)", wd[0] > 3000, wd)
+gb = built['groin_walk']['box']
+check("a length of groin is GROIN_STEP long, its top at its origin, its sides reaching far under",
+      abs(gb[4] - gb[1] - coastset.GROIN_STEP) < 1 and gb[2] <= -coastset.GROIN_DOWN + 1 and gb[5] <= 41, gb)
+lt = waikikiset.lights(gdw, None, 'lighthouse', 0.0, 0.0, 0.0, 0.0, cell='+000800')
+check('the lighthouse and the mast are lit by the game\'s own lights', len(lt) == 1 and len(waikikiset.lights(gdw, None, 'signal_mast', 0.0, 0.0, 0.0, 0.0, cell='+000800')) == 1)
+import coastplace  # noqa: E402
+import tempfile  # noqa: E402
+_osm = os.path.join(tempfile.mkdtemp(), 'coast.osm')
+with open(_osm, 'w', encoding='utf-8') as f_:
+    f_.write('<osm><node id="1" lat="21.255" lon="-157.81"><tag k="man_made" v="lighthouse"/><tag k="name" v="Point Light"/></node>'
+             '<node id="2" lat="21.27" lon="-157.82"/><node id="3" lat="21.271" lon="-157.823"/>'
+             '<node id="4" lat="21.28" lon="-157.80"><tag k="tourism" v="hotel"/><tag k="name" v="The Kahala"/></node>'
+             '<node id="5" lat="21.26" lon="-157.83"><tag k="natural" v="reef"/></node>'
+             '<way id="9"><nd ref="2"/><nd ref="3"/><tag k="man_made" v="groyne"/><tag k="name" v="Kapahulu Groin"/></way></osm>')
+om = coastplace.osm_marks(_osm)
+check('the coast reads its marks from a map: a lighthouse, a named hotel, a reef, a groyne as a line',
+      len(om['lighthouse']) == 1 and om['hotel'][0][2] == 'The Kahala' and len(om['reef']) == 1 and len(om['groyne']) == 1 and len(om['groyne'][0][0]) == 2
+      and not om['aquarium'], om)
 check('and still nothing written into the game', in_game() == game_before)

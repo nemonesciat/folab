@@ -59,6 +59,14 @@ check('the region has the weathers the game has, by chance, and the sounds of th
 infos = [pr.cellinfo.get(gd.key(c)) or {} for c in grid.values()]
 check('every cell is in it, with the water and the music', all(regions[0] in i.get('XCLR', []) and gd.edid(gd.from_key(i['XCWT'])) == 'NVDLC02Water'
                                                                and gd.edid(gd.from_key(i['XCMO'])) == 'NVDLC02ZionPeaceful' for i in infos), len(infos))
+import struct, recordio  # noqa: E402
+wr = pr.records.get(gd.key(world)) or {'subs': []}
+ws = {s['tag']: s for s in wr['subs']}
+dn = bytes.fromhex(ws['DNAM']['value']) if 'DNAM' in ws and ws['DNAM']['kind'] == 'raw' else b''
+wbytes = dict(recordio.to_bytes(wr, lambda k: gd.from_key(k))) if wr['subs'] else {}
+check("the world's own and far water are the cells' water, the far water at the sea's level (it lay under the ground)",
+      all(ws.get(t, {}).get('value') and gd.edid(gd.from_key(ws[t]['value'])) == 'NVDLC02Water' for t in ('NAM2', 'NAM3'))
+      and len(dn) >= 8 and wbytes.get('NAM4') == dn[4:8] and len(wbytes.get('NAM3', b'')) == 4, {t: ws.get(t) for t in ('NAM2', 'NAM3', 'NAM4')})
 level = lambda k: next(s for s in pr.records[pr.cellinfo[gd.key(grid[k])]['XEZN']]['subs'] if s['tag'] == 'DATA')
 lv = lambda k: next(f['value'] for f in level(k)['fields'] if f.get('name') == 'Min level')
 check('the start is the easiest zone, the far side harder', lv(mid) == 1 and lv(far) > lv(mid), (lv(mid), lv(far)))

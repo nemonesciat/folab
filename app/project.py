@@ -225,6 +225,8 @@ class Project:
             lock = ((o.get('extra') or {}).get('props') or {}).get('lock') or {}
             if lock.get('key') == '$made':             # (a lock whose key is that record: a generated vault's office)
                 o = dict(o, extra=dict(o['extra'], props=dict(o['extra']['props'], lock=dict(lock, key=new_record))))
+            elif names and lock.get('key') and named(lock['key']) != lock['key']:     # (a key made earlier in these ops, by name)
+                o = dict(o, extra=dict(o['extra'], props=dict(o['extra']['props'], lock=dict(lock, key=named(lock['key'])))))
             refs = self._refs(o['cell'])
             if o['op'] == 'tel':                     # a door's link: where it leads, or (None) nowhere new
                 r = refs.setdefault(o['ref'], {})

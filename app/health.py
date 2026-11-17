@@ -36,6 +36,8 @@ KINDS = {
     'no_compile': (ERROR, 'Scripts with no compiled code', 'Scripts with text but nothing the game can run. They do nothing in game.'),
     'door_gone': (ERROR, 'Doors to removed doors', 'A door leads to a door that has been removed, deep under the floor.'),
     'mesh': (ERROR, 'Missing meshes', 'Models no file can be found for, loose or in an archive. The game shows a bright "!" or nothing, or can crash.'),
+    'mesh_broken': (ERROR, 'Damaged models', 'Model files that stop short or won\'t read. The game crashes when it loads one: in the place it stands, or as it comes into view.'),
+    'mesh_collision': (ERROR, 'Models with collision the game crashes on', 'Models whose collision is a kind New Vegas can\'t handle (an Oblivion convex list shape: none of the game\'s own 20,745 models has one). The game crashes as one loads. Remake its collision in the model, or use another model.'),
     'texture': (WARN, 'Missing textures', 'Pictures no file can be found for. The game shows purple or nothing.'),
     'navmesh_missing': (WARN, 'Characters with no navmesh', 'Places with characters and no navmesh. Characters can\'t find their way: they stand still or walk into walls.'),
     'navmesh_old': (WARN, 'Navmesh out of date', 'What\'s in the place has changed since its navmesh was made.'),
@@ -260,6 +262,7 @@ class Scan:
                         self.nav_cells.add(c)
         self.check_masters()
         self.assets = {}
+        self.asset_field = {}
         used, edids, overrides, doors, scripts = set(), {}, [], [], []
         place_refs = {}
         for v, (rec, path) in self.here.items():
@@ -283,6 +286,8 @@ class Scan:
                 a = asset_path(rec.tag, t, d)
                 if a:
                     self.assets.setdefault(a, (rec, path))
+                    if rec.tag not in PLACED:
+                        self.asset_field.setdefault(a, []).append((self.key(rec.formid), t, tes4.zstr(d)))
             if rec.tag in PLACED:
                 if len(f.get('XTEL', b'')) >= 4:
                     doors.append((rec, path, f))
@@ -382,8 +387,69 @@ class Scan:
     def check_assets(self):
         for (kind, rel), (rec, path) in sorted(self.assets.items()):
             if self.gd.find_file(rel) or (self.pr and os.path.isfile(os.path.join(projectmod.PROJECTS_DIR, self.pr.name + ' files', rel))):
+                if kind == 'mesh' and rel.endswith('.nif'):
+                    self.check_model(rec, path, rel)
                 continue
-            self.add(kind, '%s needs %s, and there\'s no such file.' % (self.what(rec), rel), self.where(rec, path))
+            text = '%s needs %s, and there\'s no such file.' % (self.what(rec), rel)
+            fix = None
+            near = self.near_model(rel) if kind == 'mesh' else None
+            if near:
+                users = self.asset_field.get((kind, rel)) or []
+                text += ' There is one of that name at meshes\\%s.' % near
+                if len(users) > 1:
+                    text += ' %d records name it.' % len(users)
+                if self.pr and users:
+                    fix = {'action': 'repath', 'items': [list(u) for u in users], 'new': near,
+                           'label': 'Point %s at that file' % ('them' if len(users) > 1 else 'it')}
+            self.add(kind, text, self.where(rec, path), fix)
+
+    # (kinds of a model's blocks the game can't take: none of its own 20,745 models has one)
+    BAD_BLOCKS = {'bhkConvexListShape': 'an Oblivion convex list shape'}
+
+    def check_model(self, rec, path, rel):
+        """A model that's there, read through its header and block table: one cut short, or with collision the game can't
+        take, crashes the game when it loads (a tester's Iris door and mine cart, 16 Nov 2026)."""
+        import nif
+        try:
+            m = nif.Nif(self.gd.read_file(rel))
+        except Exception as e:
+            self.add('mesh_broken', '%s uses %s, which won\'t read: %s.' % (self.what(rec), rel, str(e)[:120]), self.where(rec, path))
+            return
+        bad = sorted(set(self.BAD_BLOCKS[t] for t in m.types if t in self.BAD_BLOCKS))
+        if bad:
+            self.add('mesh_collision', '%s uses %s, whose collision is %s.' % (self.what(rec), rel, ', '.join(bad)), self.where(rec, path))
+
+    def near_model(self, rel):
+        """A model the game can load with the same file name as a missing one, under the path most like it (a record naming
+        dungeons\\dungeons\\... for dungeons\\..., or a folder the files were moved out of); None if none, or two as like."""
+        if getattr(self, '_by_name', None) is None:
+            self._by_name = {}
+            try:
+                for m in self.gd.mesh_list():
+                    self._by_name.setdefault(m.lower().rsplit('\\', 1)[-1], []).append(m)
+            except Exception:
+                pass
+        want = rel.lower()[7:] if rel.lower().startswith('meshes\\') else rel.lower()
+        cands = self._by_name.get(want.rsplit('\\', 1)[-1], [])
+        if not cands:
+            return None
+        parts = want.split('\\')
+
+        def like(c):
+            q = c.lower().split('\\')
+            tail = 0
+            while tail < min(len(q), len(parts)) and q[-1 - tail] == parts[-1 - tail]:
+                tail += 1
+            return (tail, len(set(q) & set(parts)), -abs(len(q) - len(parts)))
+        # (never one for the other kind of body: a female race's hands aren't the male ones of the same name)
+        sexed = lambda ps: {('female' if 'female' in w else 'male') for w in ps if 'male' in w}
+        cands = [c for c in cands if sexed(c.lower().split('\\')) == sexed(parts)]
+        if not cands:
+            return None
+        ranked = sorted(cands, key=like, reverse=True)
+        if len(ranked) > 1 and like(ranked[0]) == like(ranked[1]):
+            return None
+        return ranked[0]
 
     # ---- the same as the game ----
 
@@ -842,6 +908,16 @@ def fix_ops(S, fixes):
             elif a == 'navmesh':
                 data, _report = navbuild.generate(gd, pr, f['cell'])
                 ops.append({'op': 'navmesh', 'cell': f['cell'], 'mesh': data})
+            elif a == 'repath':
+                for key, tag, old in f.get('items') or [[f['key'], f['tag'], f['old']]]:
+                    rec = record(key)
+                    hit = False
+                    for sub in rec['subs']:
+                        if sub['tag'] == tag and sub.get('kind') == 'z' and (sub.get('value') or '').lower() == old.lower():
+                            sub['value'] = f['new']
+                            hit = True
+                    if not hit:
+                        why.append('%s: its model is no longer %s.' % (key, old))
             elif a == 'compile':
                 recs[f['key']] = script_record(gd, pr, f['key'], record(f['key']))
             else:
