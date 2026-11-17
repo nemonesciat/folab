@@ -62,6 +62,6 @@ rep = W.walk(gd, [model(short)], goals=[('the platform', (0, 0, TOP))])
 check('a ramp that stops short of its deck: the deck not reached, a fault', not rep['ok'] and not rep['goals'][0]['reached'])
 
 # ---------- FOLab's own ----------
-for name in ('natatorium', 'battery_randolph'):
+for name in ('natatorium', 'battery_randolph', 'missouri'):
     rep = W.check_piece(gd, name)
     check("%s walks with no faults%s" % (name, '' if rep['ok'] else ': ' + W.say(name, rep)), rep['ok'])

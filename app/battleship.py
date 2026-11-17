@@ -570,6 +570,10 @@ def missouri():
     _box(parts, [1700, 260, 22], [0, -1700, Z3 - 18], 'deck', faces={'top': 'teak'})        # bridge wings (4 over 03's roof: walked onto, no step)
     for sx in (-1, 1):
         _box(parts, [8, 260, 70], [sx * 850, -1700, Z3 + 4], 'white', solid=True)
+        # (a catwalk from 03's roof by the bridge door forward to each wing, beside the pilot house: without it the way
+        # was the 30 between the pilot house and 03's edge, narrower than anyone, and walkcheck reached neither wing)
+        _box(parts, [200, 540, 22], [sx * 520, -1330, Z3 - 18], 'deck', faces={'top': 'teak'})
+        _box(parts, [8, 540, 70], [sx * 616, -1330, Z3 + 4], 'white', solid=True)
     # the fire-control tower: four levels narrowing, a platform round each, the main battery director on top
     for z0, z1, y0, y1, w in ((Z4, Z5, -1760, -1120, 720), (Z5, Z6, -1720, -1160, 620), (Z6, Z7, -1680, -1200, 540), (Z7, Z8, -1640, -1240, 460)):
         _round_house(parts, y0, y1, w, z0, z1 - z0)
@@ -618,7 +622,8 @@ def missouri():
     # Tomahawk launchers and Harpoon canisters amidships, four Phalanx (all on what is under them: the after Phalanx
     # stood half off the 02 level's end, over a ladder, and read as a funnel hanging in the air)
     for sx in (-1, 1):
-        _box(parts, [240, 300, 170], [sx * 330, 2620, Z1 + 250], 'dark', faces={'front': 'deck'})
+        # (narrow, against the director's sides: 30 from it, they shut the roof's after part off, but for a ledge)
+        _box(parts, [150, 300, 170], [sx * 256, 2620, Z1 + 250], 'dark', faces={'front': 'deck'})
         for k in range(4):
             _cyl(parts, 32, 520, [sx * (380 + k * 70), 1250, Z2 + 30], 'dark', sides=8, turn=[90, 0, 0], caps=True)
         ciws(parts, sx * 520, -1050, Z2)
