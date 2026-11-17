@@ -4,7 +4,7 @@ A test build of FOLab, an editor for Fallout: New Vegas. Unzip it anywhere and r
 your game until you choose to.
 
 **Download:** `FOLab-0.6.0-test18-portable.zip`
-SHA-256: (filled in when the zip is built)
+SHA-256: `ee70077286b74f51994e71e546db919a22923eedb34abda0e3dd94014dd792ff`
 
 Since test 16 FOLab has grown most in making whole places from real maps: a city that stands properly on its ground,
 buildings and ships of FOLab's own, far views that look like the game's, and many fixes found by walking a large
@@ -27,6 +27,10 @@ FOLab now makes models of its own, with their textures, collision and far models
   street lamps, loungers, stalls and signs.
 - **A battleship** with insides you can walk round: a second deck, an engine room, a gun turret and the pilot house,
   joined by doors, with a gangway and a pier to the shore.
+- **More detail:** bevelled edges, baked shading, surface detail and shine, and far models that keep their
+  textures, so FOLab's own buildings no longer show bare at a distance.
+- **Hotels you can go into:** the grand hotel, the beachfront hotel and the tower open into lobbies that look out on
+  the city, with floors above and a lookout at the top.
 - **Textures are stored compressed**, as the game's own are. Uncompressed ones took 4 to 8 times the memory, and in a
   big world the game ran out and dropped them, far off first and then close up.
 
@@ -60,8 +64,8 @@ FOLab now makes models of its own, with their textures, collision and far models
 - **FOLab.exe opens its window however long the game takes to load.**
 
 ## Known limits
-- **Much of this hasn't been seen in the game yet:** the far water, the raised ground under buildings and the
-  battleship's insides. The far water writes exactly what the game's own distant land holds over Lake Mead
+- **Much of this hasn't been seen in the game yet:** the far water, the raised ground under buildings, the
+  hotels' insides, the far models and the battleship's insides. The far water writes exactly what the game's own distant land holds over Lake Mead
   (the Mojave's water chunks rebuilt byte for byte), which is strong evidence but not the same as seeing it.
 - **People only walk where there are navmeshes.** The roofs, walkways and the ship's decks outside have none, so
   only the player goes up there.
@@ -72,4 +76,4 @@ FOLab now makes models of its own, with their textures, collision and far models
 ## Checked
 - The distant land's tests (29), including rebuilding every one of the Mojave's water chunks byte for byte.
 - Tests for the buildings, landmarks, plants, models, battleship, navmesh writing and health check pass.
-- The full test run: (filled in before release)
+- The full test run: all 79 test files pass.
