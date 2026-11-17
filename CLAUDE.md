@@ -138,6 +138,13 @@ the model for style, UI and approach. Python, standard library first, code in `a
   bits cleared); doors and anything named, locked or linked kept; navmeshes stay current. Runs at the end of
   `/api/maps/buildings`; a copy no longer like the first is left alone. townbuild stands a door the catalogue has twice
   in one doorway once (`TWIN`: Waikiki had 80 doubled: office doors, shop-front door statics, planks).
+- Walk before navmesh (`walkcheck.py`, `tests/test_walkcheck.py`; `py -3 app/walkcheck.py [name ...]`): a set's real
+  collision walked as navgen sees it (Field, Graph, erosion), from flat ground round it or given starts (a ship's
+  gangway, an open hotel's `arrive_in`). Faults: `invisible` (walked on, nothing drawn within `SEEN`: the guard tower
+  without its parts), `short` (reached only if actors were thin: a way narrower than an actor), unreached `goals`.
+  Other areas out of reach (roofs, closed insides, the guard tower's top deck, which the game's own navmeshes don't
+  reach either) are listed only. Run it on anything people walk on before a navmesh run: a remake of Waikiki's took
+  2.5 hours. Found 17 Nov 2026: the Missouri's bridge wings join the 03 level only through a gap ~32 wide.
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by

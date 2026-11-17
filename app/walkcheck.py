@@ -1,214 +1,307 @@
-"""Can someone walk it? A check over a model's own collision, before anyone has to try it in the game.
+"""Walks a set of things from its real collision before anything is navmeshed: stairs, ladders, decks, platforms.
 
-A thing made to be climbed (citypieces: ramps, shanties, walkways) is only that if a body gets from the ground to
-every floor: a ramp that runs up under the next ramp has no headroom, a room walled all round has no way in, and
-neither shows in a picture of the model. This walks the solids a model is made with (modelmake's: convex pieces, here
-boxes and slabs, level or tilted):
+A navmesh remake of a big world takes hours (Waikiki's 1,407 meshes, 17 Nov 2026), and a walkable piece fixed after the
+meshes were made means making them again: the Missouri's ladders stood on the deck's last 20 units, the guard towers
+went up without the parts that carry their stairs and floors, and both were found in the game. So a set is walked first,
+the way navgen sees it:
 
-  the model's footprint is sampled every STEP units; at each sample every solid over it is a span from its underside
-      to its top there;
-  a place to stand is the top of a solid no steeper than SLOPE, or the ground, with nothing in the HEAD units over it;
-  from one place to the next sample over, a body goes if the height differs by no more than CLIMB (or drops no more
-      than DROP) and nothing solid crosses between them from knee to head;
-  `reach` floods from the ground outside the model and says which places were got to.
+  - its collision is laid into columns (navgen.Field) and the places to stand joined by steps (navgen.Graph), eroded by
+    an actor's radius, exactly as a navmesh is made;
+  - the walk starts from the ground round it (flat ground at z 0 in the set's frame, a margin past its box) or from
+    given start points (a ship's gangway: there is no ground);
+  - short: every area big enough to stand about on (MIN_AREA places) that the walk doesn't come to, though it would if
+    actors were thin: the way there is narrower than an actor (a ladder whose feet are on a deck's last few units). A fault;
+  - unreached: the other areas out of reach (roofs, truck beds): listed, not a fault, since many are meant to be;
+  - invisible: every place walked to where nothing is drawn within SEEN of it (its own column or one round it). Collision
+    with no model over it: the guard tower's ramps without its parts, a solid left where a model moved. A fault;
+  - goals: points the set promises can be walked to (a lookout, a bridge door), each reached or not.
 
-It is rougher than the game (a body there is a capsule with its own step and slope limits, and this knows no doors),
-and is meant to catch what cannot be right, not to promise what is: it is a test's tool."""
+Items are dicts: 'base' (a form key of the game's) or 'nif' (a model's bytes: FOLab's own, made by modelmake) or 'model'
+(a path under Data), with 'pos', 'rot' (radians, the game's x, y, z) and 'scale'. `of_set` and `of_piece` make them from
+a landmark set (landmarks.lift) and from one of FOLab's own pieces (modelsets.build). `py -3 app/walkcheck.py [name ...]`
+walks FOLab's own walkable pieces and the landmark sets, or the ones named."""
 import math
+import struct
+import sys
 
-STEP = 16.0                 # between samples
-HEAD = 150.0                # a body's height: there must be this much clear over where it stands
-KNEE = 26.0                 # what a body steps over without noticing
-CLIMB = 14.0                # up between two samples (a slope of about 40 degrees)
-DROP = 40.0                 # down between two samples
-SLOPE = 40.0                # degrees: steeper than this is not floor
-BODY = 14.0                 # a body's half width: a way must be this clear each side
-LIP = 8.0                   # a solid reaching less than this over where a body stands is a lip it stands on, not a thing it is inside
+import hkshape
+import navgen
+import nif
 
-
-class _Solid:
-    """A convex piece as two surfaces over its outline: its top and its underside."""
-
-    def __init__(self, points):
-        self.pts = points
-        xs, ys = [p[0] for p in points], [p[1] for p in points]
-        self.box = (min(xs), min(ys), max(xs), max(ys))
-        self.z0, self.z1 = min(p[2] for p in points), max(p[2] for p in points)
-        self.hull = _hull([(p[0], p[1]) for p in points])
-        self.tris = _faces(points)
-
-    def span(self, x, y):
-        """(underside, top) at a spot, or None when the piece isn't over it."""
-        b = self.box
-        if not (b[0] <= x <= b[2] and b[1] <= y <= b[3]) or not _inside(self.hull, x, y):
-            return None
-        zs = []
-        for a, b_, c in self.tris:
-            z = _plane_z(a, b_, c, x, y)
-            if z is not None:
-                zs.append(z)
-        if not zs:
-            return None
-        return min(zs), max(zs)
-
-    def steep(self, x, y):
-        """How steep its top is at a spot, in degrees: from its top a few units each way (one way, at an edge), so the
-        sliver of a tilted slab's end face, a few units wide, reads as the slab it ends and not as a wall."""
-        here = self.span(x, y)
-        if not here:
-            return 90.0
-        d, slopes = 4.0, []
-        for dx, dy in ((d, 0.0), (0.0, d)):
-            a, b = self.span(x + dx, y + dy), self.span(x - dx, y - dy)
-            if a and b:
-                slopes.append((a[1] - b[1]) / (2 * d))
-            elif a or b:
-                slopes.append(((a or b)[1] - here[1]) / d)
-        if len(slopes) < 2:
-            return 0.0
-        return math.degrees(math.atan(math.hypot(*slopes)))
+VOXEL = 16.0
+MARGIN = 512.0          # flat ground this far past the set's box all round
+MIN_AREA = 40           # places (16 x 16 each): an area smaller than this isn't somewhere to stand about (navgen's MIN_REGION)
+SEEN = 24.0             # a place to stand with nothing drawn this close above or below it is invisible
+MIN_INVISIBLE = 12      # places joined together: fewer is a seam or a rounded edge, not a floor
+GOAL_REACH = 160.0      # a goal counts as reached if a place walked to is this close to it (seen from above)...
+GOAL_UP = 64.0          # ...and this close in height (not the deck inside a closed house beside it)
+SAY_OUT = 6             # how many areas out of reach `say` lists
+# (An area out of reach any other way is only listed: a bunker's roof, a truck's bed, the guard tower's top deck. The
+# game's own navmeshes round its guard towers stop at the last landing too, about 760 over the tower's origin.)
 
 
-def _normal(a, b, c):
-    u = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
-    v = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
-    n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
-    ln = math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]) or 1.0
-    return (n[0] / ln, n[1] / ln, n[2] / ln)
+def _solid_and_drawn(gd, item, cache):
+    """(solid pieces [(flat points, corners, soup)], drawn pieces) of an item's model, in its own frame."""
+    if 'nif' in item:
+        key = ('nif', id(item['nif']))
+        data = item['nif']
+    else:
+        path = item.get('model')
+        if path is None:
+            try:
+                btype, _e, _f, model = gd.describe(gd.from_key(item['base']))
+            except (KeyError, IndexError, ValueError):
+                return [], []
+            if btype not in navgen.SOLID_BASES or not model:
+                return [], []
+            path = gd.model_path(btype, model)
+        key = ('path', path.lower())
+        if key in cache:
+            return cache[key]
+        try:
+            data = gd.read_file(path)
+        except (FileNotFoundError, OSError):
+            cache[key] = ([], [])
+            return cache[key]
+    if key in cache:
+        return cache[key]
+    solid, drawn = [], []
+    try:
+        for s in hkshape.collision_shapes(data):
+            if s['layer'] in hkshape.LAYERS_SOLID and s['i']:
+                solid.append((s['v'], s['i'], s['soup']))
+    except (hkshape.Unread, nif.NifError, struct.error, IndexError):
+        pass
+    try:
+        for s in nif.mesh_from_nif(data):
+            drawn.append((s['p'], s['i'], True))
+    except (nif.NifError, struct.error, IndexError):
+        pass
+    cache[key] = (solid, drawn)
+    return cache[key]
 
 
-def _plane_z(a, b, c, x, y):
-    """The height of a triangle at a spot inside its outline seen from above, or None."""
-    d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
-    if abs(d) < 1e-9:
+def _ref(item):
+    return {'pos': tuple(item.get('pos', (0.0, 0.0, 0.0))), 'rot': tuple(item.get('rot', (0.0, 0.0, 0.0))),
+            'scale': item.get('scale', 1.0)}
+
+
+def _box(field):
+    v = field.v
+    iys = [k[0] for k in field.cols]
+    ixs = [k[1] for k in field.cols]
+    return min(ixs) * v, min(iys) * v, (max(ixs) + 1) * v, (max(iys) + 1) * v
+
+
+def walk(gd, items, ground=0.0, starts=None, goals=None, labels=None):
+    """{'reached', 'standing' (places), 'unreached': [area], 'invisible': [area], 'goals': [{'label', 'at', 'reached'}],
+    'ok'}. An area is {'at': (x, y, z) its middle, 'places', 'item': the label of what stands under its middle}.
+    ground: the height of flat ground round the set (None: no ground, start from `starts` only)."""
+    cos = math.cos(math.radians(navgen.SLOPE_MAX))
+    field = navgen.Field(VOXEL, cos)
+    seen = navgen.Field(VOXEL, -1.0)
+    cache = {}
+    solid_by = []
+    for n, item in enumerate(items):
+        solid, drawn = _solid_and_drawn(gd, item, cache)
+        r = _ref(item)
+        before = len(field.cols)
+        if solid:
+            navgen._lay_ref(field, r, solid)
+        if drawn:
+            navgen._lay_ref(seen, r, drawn)
+        solid_by.append((n, before))
+    if not field.cols:
+        return {'reached': 0, 'standing': 0, 'unreached': [], 'invisible': [], 'goals': [], 'ok': False, 'empty': True}
+    if ground is not None:
+        x0, y0, x1, y1 = _box(field)
+        x0, y0, x1, y1 = x0 - MARGIN, y0 - MARGIN, x1 + MARGIN, y1 + MARGIN
+        field.add(x0, y0, ground, x1, y0, ground, x1, y1, ground, True)
+        field.add(x0, y0, ground, x1, y1, ground, x0, y1, ground, True)
+    g = navgen.Graph(navgen._places(field, navgen.HEADROOM), VOXEL, navgen.STEP, navgen.HEADROOM)
+    keep = g.erode([True] * len(g.p), navgen.RADIUS)
+    pieces, label = g.pieces(keep)
+    start = set()
+    for k, piece in enumerate(pieces):
+        if any(g.p[i][5] for i in piece):
+            start.add(k)
+    for pos in starts or ():
+        i = g.nearest(pos, navgen.SEED_REACH, keep)
+        if i is not None:
+            start.add(label[i])
+
+    def where(piece):
+        xs = [(g.p[i][1] + 0.5) * VOXEL for i in piece]
+        ys = [(g.p[i][0] + 0.5) * VOXEL for i in piece]
+        zs = [g.p[i][2] for i in piece]
+        mid = (sum(xs) / len(xs), sum(ys) / len(ys), sum(zs) / len(zs))
+        return tuple(round(c) for c in mid)
+
+    def under(at):
+        return _nearest_item(gd, items, at, cache, labels)
+
+    on = [keep[i] and label[i] in start for i in range(len(g.p))]
+    reached = sum(1 for i in range(len(g.p)) if on[i] and not g.p[i][5])
+    standing = sum(1 for i in range(len(keep)) if keep[i] and not g.p[i][5])
+    # the same places not eroded: an area joined to where the walk starts only that way has a way to it narrower than
+    # an actor (a ladder's feet on a deck's last few units, a stair squeezed past a post)
+    _p0, label0 = g.pieces([True] * len(g.p))
+    start0 = {label0[i] for i in range(len(g.p)) if on[i]}
+    short, unreached = [], []
+    for k, piece in enumerate(pieces):
+        if k in start or len(piece) < MIN_AREA:
+            continue
+        at = where(piece)
+        area = {'at': at, 'places': len(piece), 'item': under(at)}
+        (short if any(label0[i] in start0 for i in piece) else unreached).append(area)
+    # invisible: places walked to (not the flat ground) with nothing drawn near
+    bad = [False] * len(g.p)
+    for i, q in enumerate(g.p):
+        if not on[i] or q[5]:
+            continue
+        iy, ix, z = q[0], q[1], q[2]
+        hit = False
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                for s in seen.cols.get((iy + dy, ix + dx), ()):
+                    if s[0] - SEEN <= z <= s[1] + SEEN:
+                        hit = True
+                        break
+                if hit:
+                    break
+            if hit:
+                break
+        bad[i] = not hit
+    groups, _l = g.pieces(bad)
+    invisible = []
+    for piece in groups:
+        if len(piece) >= MIN_INVISIBLE:
+            at = where(piece)
+            invisible.append({'at': at, 'places': len(piece), 'item': under(at)})
+    out_goals = []
+    r = int(GOAL_REACH // VOXEL)
+    for goal in goals or ():
+        lab, at = goal[0], goal[1]
+        cx, cy = math.floor(at[0] / VOXEL), math.floor(at[1] / VOXEL)
+        hit = any(on[i] and abs(g.p[i][2] - at[2]) <= GOAL_UP and math.hypot(dx, dy) * VOXEL <= GOAL_REACH
+                  for dy in range(-r, r + 1) for dx in range(-r, r + 1) for i in g.by.get((cy + dy, cx + dx), ()))
+        out_goals.append({'label': lab, 'at': tuple(round(c) for c in at), 'reached': hit})
+    unreached.sort(key=lambda a: -a['places'])
+    short.sort(key=lambda a: -a['places'])
+    invisible.sort(key=lambda a: -a['places'])
+    return {'reached': reached, 'standing': standing, 'short': short, 'unreached': unreached, 'invisible': invisible,
+            'goals': out_goals, 'ok': bool(start) and (ground is not None or reached > 0) and not short and not invisible and all(x['reached'] for x in out_goals)}
+
+
+def _nearest_item(gd, items, at, cache, labels):
+    """The label of the item whose middle is nearest a point (seen from above)."""
+    best, bd = None, 1e30
+    for n, item in enumerate(items):
+        x, y = item.get('pos', (0, 0, 0))[:2]
+        d = math.hypot(x - at[0], y - at[1])
+        if d < bd:
+            best, bd = n, d
+    if best is None:
         return None
-    u = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / d
-    v = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / d
-    w = 1 - u - v
-    if u < -1e-6 or v < -1e-6 or w < -1e-6:
-        return None
-    return u * a[2] + v * b[2] + w * c[2]
+    if labels:
+        return labels[best]
+    item = items[best]
+    if 'base' in item:
+        try:
+            return gd.edid(gd.from_key(item['base'])) or item['base']
+        except (KeyError, ValueError):
+            return item['base']
+    return item.get('label') or item.get('model') or 'model %d' % best
 
 
-def _hull(pts):
-    pts = sorted(set((round(x, 3), round(y, 3)) for x, y in pts))
-    if len(pts) < 3:
-        return pts
-    cross = lambda o, a, b: (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-    lower, upper = [], []
-    for p in pts:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
-            lower.pop()
-        lower.append(p)
-    for p in reversed(pts):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
-            upper.pop()
-        upper.append(p)
-    return lower[:-1] + upper[:-1]
-
-
-def _inside(hull, x, y):
-    n = len(hull)
-    if n < 3:
-        return False
-    for i in range(n):
-        a, b = hull[i], hull[(i + 1) % n]
-        if (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]) < -1e-6:
-            return False
-    return True
-
-
-def _faces(points):
-    """Triangles of a box's (or any 8-cornered piece's) faces: every three corners that lie on its surface. A piece of
-    modelmake's is small, so all triples on the convex hull are found the plain way."""
-    n = len(points)
+def of_set(lifted, skip=()):
+    """Items from a landmark set as landmarks.lift gives it (its pieces round its own middle, up from the ground)."""
     out = []
-    for i in range(n):
-        for j in range(i + 1, n):
-            for k in range(j + 1, n):
-                a, b, c = points[i], points[j], points[k]
-                nm = _normal(a, b, c)
-                if abs(nm[0]) + abs(nm[1]) + abs(nm[2]) < 0.5:
-                    continue
-                side = [nm[0] * (p[0] - a[0]) + nm[1] * (p[1] - a[1]) + nm[2] * (p[2] - a[2]) for p in points]
-                if min(side) > -0.01 or max(side) < 0.01:           # all the rest on one side: a face
-                    out.append((a, b, c))
+    for key, dx, dy, dz, rx, ry, rz, sc in lifted['pieces']:
+        if key in skip:
+            continue
+        out.append({'base': key, 'pos': (dx, dy, dz), 'rot': (rx, ry, rz), 'scale': sc})
     return out
 
 
-class Walk:
-    """The places to stand on a model's solids, and which of them the ground leads to."""
+def of_piece(piece):
+    """One of FOLab's own pieces (modelsets.PIECES) as an item, made afresh: its model's bytes at the origin."""
+    import modelsets
+    made = modelsets.build(piece)
+    return {'nif': made['nif'], 'pos': (0.0, 0.0, 0.0), 'rot': (0.0, 0.0, 0.0), 'scale': 1.0,
+            'label': modelsets.PIECES[piece]['label']}
 
-    def __init__(self, solids, margin=160.0, ground=0.0):
-        self.solids = [_Solid([tuple(p) for p in s['points']]) for s in solids]
-        self.ground = ground
-        xs = [v for s in self.solids for v in (s.box[0], s.box[2])]
-        ys = [v for s in self.solids for v in (s.box[1], s.box[3])]
-        self.x0, self.y0 = min(xs) - margin, min(ys) - margin
-        self.nx, self.ny = int((max(xs) + margin - self.x0) / STEP) + 1, int((max(ys) + margin - self.y0) / STEP) + 1
-        self._spans = {}
-        self.stand = {}                                         # (i, j) -> [heights one can stand at there]
-        for j in range(self.ny):
-            for i in range(self.nx):
-                x, y = self.x0 + i * STEP, self.y0 + j * STEP
-                spans = self.spans(x, y)
-                tops = [(self.ground, 0.0)] + [(zt, s.steep(x, y)) for (zb, zt), s in spans]
-                ok = []
-                for z, steep in tops:
-                    if steep > SLOPE:
-                        continue
-                    if any(zb < z + HEAD and zt > z + LIP for (zb, zt), _s in spans):      # something in the space a body takes
-                        continue
-                    ok.append(z)
-                if ok:
-                    self.stand[(i, j)] = sorted(set(round(z, 1) for z in ok))
 
-    def spans(self, x, y):
-        key = (round(x, 1), round(y, 1))
-        if key not in self._spans:
-            out = []
-            for s in self.solids:
-                sp = s.span(x, y)
-                if sp:
-                    out.append((sp, s))
-            self._spans[key] = out
-        return self._spans[key]
+# FOLab's own pieces people walk on, and how each is walked: from the ground, or (a ship) from given points; goals it
+# promises. Frames as each piece is made (towerset, historicset, battleship docstrings).
+def walkable():
+    import battleship
+    z = battleship.deck_z
+    gy = battleship.SPOTS['gangway_y']
+    gx = battleship.half_beam(gy) - 40.0
+    qx, qy, qz = battleship.SPOTS['qd']
+    z3 = z(-2150) + 270 + 260 + 250             # (the 03 level's roof, as battleship.missouri works it out)
+    return {
+        'missouri': {'ground': None, 'starts': [(gx, gy, z(gy)), (-gx, gy, z(gy))],
+                     'goals': [('quarterdeck door', (qx, qy + 60.0, qz)), ('the bow', (0.0, -8000.0, z(-8000.0))),
+                               ('the bridge door', (battleship.SPOTS['bridge'][0], battleship.SPOTS['bridge'][1] + 60.0, z3)),
+                               ('port bridge wing', (-560.0, -1700.0, z3)), ('starboard bridge wing', (560.0, -1700.0, z3))]},
+        'natatorium': {}, 'battery_randolph': {},
+    } | {v['open']: {'ground': None, 'starts': [tuple(v['arrive_in'][:3])]} for v in _views().values()}
 
-    def _blocked(self, a, za, b, zb):
-        """Does anything solid stand between two places, from knee to head?"""
-        for t in (0.25, 0.5, 0.75):
-            x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
-            z = za + (zb - za) * t
-            for (lo, hi), _s in self.spans(x, y):
-                if lo < z + HEAD - 10 and hi > z + KNEE:
-                    return True
-        return False
 
-    def reach(self):
-        """Every place got to from the ground at the model's edge: {(i, j, height)}."""
-        start = [(i, j) for (i, j), zs in self.stand.items() if (i in (0, self.nx - 1) or j in (0, self.ny - 1)) and self.ground in zs]
-        seen = {(i, j, self.ground) for i, j in start}
-        todo = list(seen)
-        while todo:
-            i, j, z = todo.pop()
-            a = (self.x0 + i * STEP, self.y0 + j * STEP)
-            for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                n = (i + di, j + dj)
-                for z2 in self.stand.get(n, ()):
-                    if (n[0], n[1], z2) in seen or z2 - z > CLIMB or z - z2 > DROP:
-                        continue
-                    b = (self.x0 + n[0] * STEP, self.y0 + n[1] * STEP)
-                    if self._blocked(a, z, b, z2):
-                        continue
-                    seen.add((n[0], n[1], z2))
-                    todo.append((n[0], n[1], z2))
-        return seen
+def _views():
+    """The open hotels (hotelinside.VIEWS), walked from where the way in puts you: their lobbies are entered by a door."""
+    import hotelinside
+    return hotelinside.VIEWS
 
-    def floors(self, levels, band=12.0):
-        """For each height in `levels`: (places to stand within `band` of it, how many of them were reached)."""
-        got = self.reach()
-        out = []
-        for lv in levels:
-            there = [(i, j, z) for (i, j), zs in self.stand.items() for z in zs if abs(z - lv) <= band]
-            out.append((len(there), sum(1 for p in there if p in got)))
-        return out
+
+def check_piece(gd, piece, how=None):
+    import modelsets
+    if piece not in modelsets.PIECES:
+        import battleship, historicset, towerset  # noqa: F401  (they add their pieces)
+    how = how if how is not None else walkable().get(piece, {})
+    return walk(gd, [of_piece(piece)], ground=how.get('ground', 0.0), starts=how.get('starts'), goals=how.get('goals'))
+
+
+def check_set(gd, name, skip=()):
+    import landmarks
+    lifted = landmarks.lift(gd, name)
+    if lifted is None:
+        return None
+    return walk(gd, of_set(lifted, skip))
+
+
+def say(name, rep):
+    if rep is None:
+        return '%s: not in these game files' % name
+    lines = ['%s: %s  (%d places reached of %d to stand on)' % (name, 'ok' if rep['ok'] else 'PROBLEMS', rep['reached'], rep['standing'])]
+    for a in rep['short']:
+        lines.append('   TOO NARROW TO GET TO: %d places at %s, on %s' % (a['places'], a['at'], a['item']))
+    for a in rep['unreached'][:SAY_OUT]:
+        lines.append('   (out of reach: %d places at %s, on %s)' % (a['places'], a['at'], a['item']))
+    if len(rep['unreached']) > SAY_OUT:
+        lines.append('   (and %d more out of reach: roofs, closed insides)' % (len(rep['unreached']) - SAY_OUT))
+    for a in rep['invisible']:
+        lines.append('   nothing drawn: %d places at %s, on %s' % (a['places'], a['at'], a['item']))
+    for gl in rep['goals']:
+        lines.append('   %s %s at %s' % ('reached' if gl['reached'] else 'NOT REACHED:', gl['label'], gl['at']))
+    return '\n'.join(lines)
+
+
+def main(names):
+    import gamedata
+    import landmarks
+    gd = gamedata.GameData()
+    import battleship, historicset, towerset  # noqa: F401
+    own = list(walkable())
+    sets = [n for n, s in landmarks.SETS.items() if not s.get('own')]
+    for name in names or own + sets:
+        if name in own or name in __import__('modelsets').PIECES:
+            print(say(name, check_piece(gd, name)))
+        else:
+            print(say(name, check_set(gd, name)))
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])

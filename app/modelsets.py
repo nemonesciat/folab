@@ -1232,7 +1232,7 @@ def build(piece):
         made['far'] = modelmake.make(far)
         files[made['mesh'][:-4] + '_lod.nif'] = made['far']['nif']
         made['textures'] = sorted(set(made['textures']) | set(made['far']['textures']))
-    for name in TEXTURES:
+    for name in list(TEXTURES):                 # (drawing one may bring in a set that adds more)
         if tex_path(name) in made['textures']:
             files[tex_path(name)], files[tex_path(name, True)] = texture_files(name)
     missing = [t for t in made['textures'] if t not in files]
