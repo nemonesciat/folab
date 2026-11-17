@@ -608,6 +608,24 @@ def _solid_of(gd, base, cache, report):
     return out
 
 
+def _solid_of_file(gd, path, cache, report):
+    """The same as _solid_of for a model by its path under Data (the mod's own, read through the game's view of files)."""
+    key = ('file', path.lower())
+    if key in cache:
+        return cache[key]
+    out = []
+    try:
+        data = gd.read_file(path)
+        for s in hkshape.collision_shapes(data):
+            if s['layer'] in hkshape.LAYERS_SOLID and s['i']:
+                out.append((s['v'], s['i'], s['soup']))
+        report['collision'] += 1
+    except (FileNotFoundError, OSError, hkshape.Unread, nif.NifError, struct.error, IndexError):
+        report['unread'] += 1
+    cache[key] = out
+    return out
+
+
 def _lay_ref(field, r, solid):
     (r00, r01, r02), (r10, r11, r12), (r20, r21, r22) = _turn(*r['rot'])
     tx, ty, tz = r['pos']
@@ -628,7 +646,7 @@ def _lay_ref(field, r, solid):
 
 def _usable(gd, r):
     """A placed thing that's really there when the game starts."""
-    if r.get('pos') is None or r.get('rot') is None or r.get('base') is None:
+    if r.get('pos') is None or r.get('rot') is None or (r.get('base') is None and not r.get('model')):
         return False
     entry = gd.forms.get(r['ref'])
     return not (entry and entry[1].flags & INITIALLY_DISABLED)
@@ -644,6 +662,12 @@ def _lay_refs(gd, field, refs, cache, report, any_door=False):
                 seeds.append(r['pos'])
             continue
         if r['type'] != 'REFR' or not _usable(gd, r):
+            continue
+        if r['base'] is None and r.get('model'):            # (one of the mod's own models)
+            solid = _solid_of_file(gd, r['model'], cache, report)
+            if solid:
+                _lay_ref(field, r, solid)
+                report['placed'] += 1
             continue
         try:
             btype = gd.forms[r['base']][1].tag
@@ -796,7 +820,66 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
         return None, report
     if water is False:
         water = _water_of(gd, cell) if cell in gd.forms else None
-    return mesh_from(cell, verts, tris, water), report
+    m = mesh_from(cell, verts, tris, water)
+    report['cover'] = mark_cover(m, field, crop)
+    return m, report
+
+
+# --- cover ---
+# Someone who flees or takes cover searches the mesh outward for a triangle marked as cover on the side away from what
+# they hide from, and the search has no other end: on a mesh with no cover anywhere it goes through every triangle joined
+# to where they stand until the pathfinder's memory runs out and the game crashes (a map-made city of 188,000 triangles,
+# the moment its camp was walked into, 15 Nov 2026). Small meshes never show it. So a generated mesh marks cover as the
+# game's do. Measured over the Mojave: 2 triangles in 100 have it; it is on edge 0-1 (bits 0 to 5 of the cover flags) or
+# edge 1-2 (bits 6 to 11), never edge 2-0; 995 in 1,000 of those edges are open ones (nothing across); the low four bits
+# are 4 to 15 (taken here as the wall's height in sixteenths of 256: the game only asks whether it is over 0, a lone 1
+# doesn't count), the two above them (lean out left, right) mostly 0.
+COVER_MIN = 64.0        # a wall this high beyond an open edge is cover
+COVER_OUT = (40.0, 72.0)    # how far beyond the edge the wall is looked for (the mesh stops RADIUS and a place short of it)
+COVER_FOOT = 40.0       # the wall must start no higher than this above the edge (not a balcony overhead)
+COVER_EDGE = 64.0       # an edge shorter than this is the mesh going round a post
+
+
+def mark_cover(m, field, crop=None):
+    """Give a new mesh its cover: each triangle's open edge (0-1 or 1-2) with something solid standing beyond all of it.
+    Returns how many triangles got any."""
+    v = field.v
+    floor = math.floor
+    cols = field.cols
+    verts, tris = m['verts'], m['tris']
+
+    def wall(x, y, z):
+        best = 0.0
+        for s in cols.get((floor(y / v), floor(x / v)), ()):
+            if s[0] <= z + COVER_FOOT and s[1] - z > best:
+                best = s[1] - z
+        return best
+    cover = []
+    for ti, t in enumerate(tris):
+        cf = 0
+        for s in (0, 1):
+            if t[3 + s] != navmesh.NONE or t[6] >> s & 1:
+                continue
+            a, b = verts[t[s]], verts[t[s + 1]]
+            ex, ey = b[0] - a[0], b[1] - a[1]
+            ln = math.hypot(ex, ey)
+            if ln < COVER_EDGE:
+                continue
+            if crop and ((abs(a[0] - crop[0]) < 1 and abs(b[0] - crop[0]) < 1) or (abs(a[0] - crop[2]) < 1 and abs(b[0] - crop[2]) < 1)
+                         or (abs(a[1] - crop[1]) < 1 and abs(b[1] - crop[1]) < 1) or (abs(a[1] - crop[3]) < 1 and abs(b[1] - crop[3]) < 1)):
+                continue                        # (the cell's own edge: the next cell's mesh goes on from it)
+            ox, oy = ey / ln, -ex / ln          # (corners run anticlockwise from above: outside is to the right of the edge)
+            h = 1e30
+            for f in (0.2, 0.5, 0.8):
+                x, y, z = a[0] + ex * f, a[1] + ey * f, a[2] + (b[2] - a[2]) * f
+                h = min(h, max(wall(x + ox * d, y + oy * d, z) for d in COVER_OUT))
+            if h >= COVER_MIN:
+                cf |= min(15, int(h // 16)) << (s * 6)
+        if cf & navmesh.COVER_BITS:
+            tris[ti] = t[:7] + (cf,)
+            cover.append(ti)
+    m['cover'] = cover
+    return len(cover)
 
 
 # --- measuring against the game ---

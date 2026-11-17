@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOLab</title>
+<link href="/web/vendor/fonts.css" rel="stylesheet">
+<link rel="icon" href="/web/vendor/folab-icon.png">
+<style>
+/* Shown instead of FOLab when the game wasn't found (server.NO_GAME): one question, where is New Vegas? */
+:root{--bg:#13110d;--panel:#1b1813;--bg2:#16130f;--line:#342d23;--line2:#463c2e;--text:#e6dcc8;--muted:#9c8f78;--gold:#d2a64a;--bad:#e08a6a}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--text);
+  font:15px/1.5 Inter,"Segoe UI",system-ui,sans-serif;padding:16px}
+main{width:100%;max-width:640px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:26px 28px}
+img{height:54px;display:block;margin-bottom:10px}
+h1{font:600 22px Inter,"Segoe UI",sans-serif;margin:0 0 8px;color:var(--gold)}
+p{margin:0 0 12px}
+.row{display:flex;gap:8px;margin:14px 0 6px}
+input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--line2);border-radius:6px;padding:8px 10px;color:var(--text);font:inherit}
+button{background:#2a241b;border:1px solid var(--line2);border-radius:6px;padding:8px 14px;color:var(--text);font:inherit;cursor:pointer}
+button.primary{background:#5a4420;border-color:#8a6a2c}
+button:disabled{opacity:.5;cursor:default}
+.note{color:var(--muted);font-size:13px}
+#said{min-height:22px;color:var(--bad)}
+ul{margin:4px 0 0;padding-left:20px;word-break:break-all}
+code{background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+</style>
+</head>
+<body>
+<main>
+  <img src="/web/vendor/folab-mark.svg" alt="FOLab">
+  <h1>Where is New Vegas?</h1>
+  <p>FOLab couldn't find Fallout: New Vegas by itself. Show it the folder the game is in: the one with
+     <code>FalloutNV.exe</code>. FOLab remembers it, and only reads from it.</p>
+  <div class="row">
+    <input id="path" placeholder="D:\Games\Fallout New Vegas" spellcheck="false" autofocus>
+    <button id="browse">Browse…</button>
+    <button id="use" class="primary">Use this folder</button>
+  </div>
+  <p id="said"></p>
+  <p class="note">In Steam: right-click the game › Manage › Browse local files shows the folder; copy its address from the top of that window.</p>
+  <div class="note" id="looked"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+async function send(path, body){
+  const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  return d;
+}
+function say(text, good){ $('#said').textContent = text; $('#said').style.color = good ? 'var(--muted)' : 'var(--bad)'; }
+async function use(){
+  const path = $('#path').value.trim();
+  if (!path) return say('Type or paste the folder first, or press Browse.');
+  $('#use').disabled = $('#browse').disabled = true;
+  say('Reading the game\'s files… this takes a few seconds.', true);
+  try { await send('/api/game/folder', {path}); location.reload(); }
+  catch (e){ say(e.message); $('#use').disabled = $('#browse').disabled = false; }
+}
+$('#use').onclick = use;
+$('#path').onkeydown = e => { if (e.key === 'Enter') use(); };
+$('#browse').onclick = async () => {
+  $('#browse').disabled = true;
+  say('A window for choosing the folder has opened (it may be behind this one).', true);
+  try { const d = await send('/api/game/browse'); say(''); if (d.path){ $('#path').value = d.path; $('#browse').disabled = false; return use(); } }
+  catch (e){ say('That window couldn\'t be opened: type or paste the folder.'); }
+  $('#browse').disabled = false;
+};
+fetch('/api/game/missing').then(r => r.json()).then(d => {
+  if (d.found) return location.reload();
+  $('#looked').innerHTML = d.looked.length ? 'Where FOLab looked:<ul>' + d.looked.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul>'
+                                           : 'FOLab found no Steam on this PC and no note of where the game was installed.';
+}).catch(() => {});
+</script>
+</body>
+</html>

@@ -207,6 +207,11 @@ if people:
     check('and their template no longer gives them packages', not ac.num(n, 'ACBS', 'Template flags') & 0x20)
 pts = [c['p'] for c in refs.values()]
 check('nobody stands on anybody', all((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 > 16 for i, a in enumerate(pts) for b in pts[:i]))
+check('people Populate puts in by hand aren\'t generated things', not any(c.get('gen') for k, c in refs.items() if k.startswith('+')))
+pr.undo()
+populate.apply(gd, pr, br, edit, {'cell': ckey, 'rows': json.loads(json.dumps(rows)), 'seed': 3, 'gen': True})
+gen_people = [c for k, c in pr.cells[ckey]['refs'].items() if k.startswith('+')]
+check('a generated place\'s people are its generated things: making it again takes them too (a real run found 30 left floating)', gen_people and all(c.get('gen') for c in gen_people))
 pr.undo()
 # learnt from places named (a generated vault's story), some kinds left out, nobody near the way in
 liked = populate.plan(gd, pr, br, {'cell': ckey, 'like': ['Vault11c'], 'who': 'creatures', 'seed': 2})

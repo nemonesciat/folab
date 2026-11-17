@@ -13,6 +13,7 @@ import gzip
 import io
 import xml.etree.ElementTree as ET
 
+import osmcover
 from elevation import MapFileError
 
 ROAD_CLASS = {'motorway': 'major', 'trunk': 'major', 'primary': 'major', 'secondary': 'major', 'tertiary': 'major',
@@ -28,6 +29,9 @@ class OsmData:
     def __init__(self):
         self.bounds = None             # (min lat, min lon, max lat, max lon)
         self.roads, self.bridges, self.rivers, self.lakes, self.buildings, self.places = [], [], [], [], [], []
+        self.areas = []                # what the map says ground is: {'ring', 'kind'} (osmcover.py paints by them)
+        self.piers = []                # man_made=pier, each as its points (landmarks.py builds a harbour of them)
+        self.coast = []                # each stretch of coastline as its points, the land on its left (coast.py shapes the sea by it)
         self.skipped = {}              # {what: how many} left out on purpose
         self.road_ends = {}            # {node id: how many roads end there}
         self.passing = {}              # {node id: how many roads have it at all}
@@ -38,7 +42,7 @@ class OsmData:
             out['roads'][w['class']] = out['roads'].get(w['class'], 0) + 1
         for w in self.rivers:
             out['rivers'][w['class']] = out['rivers'].get(w['class'], 0) + 1
-        out.update(bridges=len(self.bridges), lakes=len(self.lakes), buildings=len(self.buildings), places=len(self.places), skipped=self.skipped)
+        out.update(bridges=len(self.bridges), lakes=len(self.lakes), buildings=len(self.buildings), places=len(self.places), coast=len(self.coast), areas=len(self.areas), skipped=self.skipped)
         return out
 
 
@@ -154,8 +158,20 @@ def _lake_kind(tags):
 def _way(d, nodes, wid, refs, tags, in_relation):
     closed = len(refs) > 3 and refs[0] == refs[-1]
     if tags.get('natural') == 'coastline':
-        _skip(d, 'coastline (the base level is the sea)')
+        line = _pts(nodes, refs)
+        if len(line) > 1:
+            d.coast.append(line)
         return
+    if tags.get('man_made') == 'pier':
+        line = _pts(nodes, refs)
+        if len(line) > 1:
+            d.piers.append(line)
+    if closed:
+        ground = osmcover.area_kind(tags)
+        if ground:
+            ring = _pts(nodes, refs[:-1])
+            if len(ring) >= 3:
+                d.areas.append({'ring': ring, 'kind': ground})
     if 'highway' in tags:
         h = tags['highway']
         cls = ROAD_CLASS.get(h)
@@ -222,6 +238,14 @@ def _relation(d, nodes, ways, tags, members):
     """A multipolygon's outer rings, the ways joined end to end. Holes are left out."""
     kind = _lake_kind(tags)
     is_building = 'building' in tags and tags['building'] != 'no'
+    ground = None if kind or is_building else osmcover.area_kind(tags)
+    if ground:
+        outer = [list(ways[r][0]) for ty, r, role in members if ty == 'way' and role in ('outer', '') and r in ways and ways[r][0]]
+        for ring in _join(outer):
+            pts = _pts(nodes, ring[:-1])
+            if len(pts) >= 3:
+                d.areas.append({'ring': pts, 'kind': ground})
+        return
     if kind != 'lake' and not is_building:
         if kind == 'river area':
             _skip(d, 'river outlines (the river\'s line is used)')

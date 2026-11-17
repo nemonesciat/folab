@@ -141,6 +141,12 @@ def plugin_names(data_dir):
 
 
 def refuse_writes(what='That'):
+    # (a FOLab started only to look at an experiment, with FOLAB_NO_GAME_WRITES set: it reads the real game's files and
+    # must never put anything in the game or start it. One such was taken for the user's own FOLab, its Put in game and
+    # Play here were used, and an experiment was played as if it were the real build: 15 Nov 2026.)
+    if os.environ.get('FOLAB_NO_GAME_WRITES'):
+        raise ValueError('%s would change the real game, and this FOLab is a scratch copy for looking at experiments: it may not. '
+                         'Use your own FOLab for that.' % what)
     if _current:
         raise ValueError('%s would write to the real game, but you\'re working in the MO2 loadout "%s", which doesn\'t go by those files. '
                          'Put in MO2 adds your mod to this loadout, or you can go back to the plain game on Tools > MO2 loadout.'

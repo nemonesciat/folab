@@ -135,8 +135,11 @@ def main():
     ap.add_argument('--kind')
     ap.add_argument('--write')
     ap.add_argument('--category')
+    ap.add_argument('--plugin', help="a mod's plugin to check instead (loaded over the game's files)")
     a = ap.parse_args()
-    gd = gamedata.GameData()
+    gd = gamedata.GameData(plugins=list(gamedata.OFFICIAL) + [a.plugin]) if a.plugin else gamedata.GameData()
+    if a.plugin:
+        a.only = os.path.basename(a.plugin)
     totals = collections.Counter()
     cats = collections.defaultdict(list)
     for pi, p in enumerate(gd.plugins):

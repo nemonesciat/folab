@@ -496,6 +496,8 @@ function moBuild(){
     const left = [t.nothing_fits && `${t.nothing_fits.toLocaleString()} too small for any of the game's`, t.blocked && `${t.blocked.toLocaleString()} tries in a road's or a building's way`, t.steep && `${t.steep.toLocaleString()} on ground too uneven`, t.had_one && `${t.had_one.toLocaleString()} already built`].filter(Boolean);
     MO.said = `Put up ${n(t.buildings, 'building', 'buildings')} on ${n(t.built, 'plot', 'plots')} (${fam}), with ${n(t.doors, 'door', 'doors')}.${t.landmarks ? ` ${n(t.landmarks, 'is a landmark', 'are landmarks')}, on plots that stand out.` : ''}${t.insides ? ` ${n(t.insides, 'building opens', 'buildings open')} into a place of its own (${t.inside_things.toLocaleString()} things in all, each with its navmesh${t.navmesh_missed ? `, ${t.navmesh_missed} without: make those in the Kit tab` : ''}); the other doors are locked.${t.insides_capped ? ' That\'s as many as FOLab makes in one go: press again for more.' : ''}` : ''}${left.length ? ' Left: ' + left.join('; ') + '.' : ''}${t.cleared ? ` ${n(t.cleared, 'small thing', 'small things')} cleared off the plots.` : ''}${t.roads_seen ? '' : ' No roads laid yet, so fronts face a long side.'}`;
     await outsideResync();
+    // (a navmesh made before is under the new buildings: people would walk through their walls)
+    if (t.cell_xy && t.cell_xy.length) wnOffer(t.cell_xy, `Buildings went up in ${n(t.cell_xy.length, 'cell', 'cells')}. Characters outside walk through them until the navmesh there is made again.`);
   });
 }
 function moPath(g, line, closed){

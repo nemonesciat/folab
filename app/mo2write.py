@@ -281,9 +281,15 @@ class _Virtual:
         if not loadout.under_mo2():
             raise ValueError('FOLab isn\'t inside MO2\'s virtual folder, so nothing was written.')
         target = os.path.join(lo.data_dir, rel)
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        shutil.copyfile(src, target)
         real = os.path.join(lo.instance.overwrite_dir, rel)
+        # (the folder is made in overwrite itself. Made through the virtual folder, a second file for the same new folder
+        # failed: the folder "already exists" there yet doesn't count as one, and makedirs gave up. Waikiki's 499 files, 14 Nov 2026)
+        os.makedirs(os.path.dirname(real), exist_ok=True)
+        try:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+        except FileExistsError:
+            pass
+        shutil.copyfile(src, target)
         if not os.path.isfile(real):        # (it went to the real Data folder: take it straight back out)
             os.remove(target)
             raise ValueError('MO2\'s virtual folder didn\'t take FOLab\'s file, so Play here stopped. Close FOLab, open it on its own and use Play here there.')

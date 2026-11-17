@@ -325,7 +325,8 @@ def _looks(nif, props):
 
 def mesh_from_nif(data, max_verts=200000):
     """Triangles of a model in its own coordinates, with texture names, for the 3D view. The same shape as
-    Morrowind Workshop's: [{'p', 'uv', 'i', 'tex', 'alpha', 'double'}] with positions in game units."""
+    Morrowind Workshop's: [{'p', 'uv', 'i', 'tex', 'alpha', 'double'}] with positions in game units, and 'c' (red,
+    green, blue a corner, 0-1) where the shape has colours at its corners that aren't all white."""
     nif = Nif(data)
     shapes = []
     total = [0]
@@ -361,8 +362,13 @@ def mesh_from_nif(data, max_verts=200000):
         if _det(nR) < 0:
             idx = [x for k in range(0, len(idx) - 2, 3) for x in (idx[k], idx[k + 2], idx[k + 1])]
         tex, blend, test, double = _looks(nif, b['props'])
-        shapes.append({'p': pos, 'uv': [round(u, 4) for u in d['uv']], 'i': idx, 'tex': tex,
-                       'alpha': 'blend' if blend else 'test' if test else '', 'double': double})
+        got = {'p': pos, 'uv': [round(u, 4) for u in d['uv']], 'i': idx, 'tex': tex,
+               'alpha': 'blend' if blend else 'test' if test else '', 'double': double}
+        c = d['colors']
+        if c and len(c) == 4 * (len(v) // 3) and any(x < 0.98 for k, x in enumerate(c) if k % 4 != 3):
+            # (the shade baked into its corners, as the game multiplies the texture by it: red, green, blue a corner)
+            got['c'] = [round(min(1.0, max(0.0, x)), 2) for k, x in enumerate(c) if k % 4 != 3]
+        shapes.append(got)
         total[0] += len(v) // 3
 
     if nif.blocks:

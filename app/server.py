@@ -15,6 +15,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import bsa
 import espwrite
 import gamedata
 import gameini
@@ -36,8 +37,10 @@ import adopt
 import api_scripts
 import api_quests
 import api_characters
+import radio
 import browse
 import library
+import modelsets
 import recordio
 import base64
 import hashlib
@@ -54,6 +57,7 @@ import refinfo
 import scatter
 import loadout
 import mo2write
+import newgame
 import tes4
 from version import VERSION
 
@@ -86,6 +90,43 @@ _actors = {}                            # base key -> parts (actors.py)
 _lock = threading.RLock()
 LOADOUT_NOTE = ''                       # why the setup isn't the one asked for
 GD_LEFT_OUT = []                        # plugins a loadout has on that can't be loaded
+NO_GAME = False                         # the game wasn't found: only the page that asks where it is answers
+
+
+def game_missing():
+    """What the asking page (web/findgame.html) shows: where FOLab looked."""
+    return {'found': not NO_GAME, 'looked': gamedata.looked_in(), 'version': VERSION}
+
+
+def browse_for_game():
+    """Windows' own folder window, for picking the game's folder. '' if it was closed without one."""
+    import subprocess
+    ps = ('Add-Type -AssemblyName System.Windows.Forms; '
+          '$f = New-Object System.Windows.Forms.Form -Property @{TopMost = $true; ShowInTaskbar = $false; Opacity = 0}; '
+          '$f.Show(); $d = New-Object System.Windows.Forms.FolderBrowserDialog; '
+          '$d.Description = "Choose the folder New Vegas is in (the one with FalloutNV.exe)"; $d.ShowNewFolderButton = $false; '
+          'if ($d.ShowDialog($f) -eq "OK") { [Console]::OutputEncoding = [Text.Encoding]::UTF8; Write-Output $d.SelectedPath }; $f.Close()')
+    r = subprocess.run(['powershell', '-NoProfile', '-STA', '-Command', ps], capture_output=True, timeout=600,
+                       creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    return {'path': r.stdout.decode('utf-8', 'replace').strip()}
+
+
+def set_game_folder(body):
+    """The user's answer to where the game is: kept, and the game loaded from it."""
+    global NO_GAME, PR, LOADOUT_NOTE
+    d = gamedata.remember_data_dir(body.get('path') or '')
+    if not d:
+        raise ValueError('New Vegas isn\'t in that folder: FOLab looks for FalloutNV.esm in it, or in its Data folder. '
+                         'Choose the folder that has FalloutNV.exe.')
+    with _lock:
+        try:
+            load_game(PR)
+        except ValueError as e:
+            PR = None
+            load_game(None)
+            LOADOUT_NOTE = str(e)
+        NO_GAME = False
+    return {'ok': True, 'data': d}
 
 
 def load_settings():
@@ -362,6 +403,18 @@ def map_tile(wkey, tx, ty):
             _tiles.clear()
         _tiles[k] = _painter.tile(w, tx, ty, mine, water)
     return _tiles[k]
+
+
+_far_things = {}
+
+
+def far_things(wkey, tx, ty):
+    """What stands far off in a map tile, as the game's far models (lodobj.Far): for the 3D view past its loaded cells."""
+    import lodobj
+    if _far_things.get('gd') is not GD:
+        _far_things.clear()
+        _far_things.update(gd=GD, far=lodobj.Far(GD))
+    return _far_things['far'].tile(PR, GD.from_key(wkey), tx, ty)
 
 
 _far = {}
@@ -938,10 +991,19 @@ def door(rkey):
     return refinfo.door_target(GD, GD.from_key(rkey))
 
 
+def _mods_own(path):
+    """A file the open mod has of its own (its assets folder): it can be written afresh at any time (a piece remade), so
+    neither the browser nor the mesh cache keeps it."""
+    if not GD or not GD.overlay:
+        return False
+    rel = bsa.norm(path)
+    return bool(GD.overlay.path(rel) or GD.overlay.path('meshes\\' + rel))
+
+
 def mesh(path):
     key = path.lower()
     with _lock:
-        if key in _meshes:
+        if key in _meshes and not _mods_own(path):
             return _meshes[key]
     try:
         shapes = nif.mesh_from_nif(GD.read_file(path))
@@ -1041,6 +1103,7 @@ def state():
     s = {'game': GD.data_dir, 'interiors': len(GD.interiors), 'project': PR.state() if PR else None,
          'projects': project.list_projects(), 'kinds': PLACEABLE}
     s['nvse'] = nvse.status(GD.data_dir)
+    s['memory'] = playtest.memory_room(GD.data_dir)
     s['loadout'] = loadout.current().title if loadout.current() else None
     s['from_mo2'] = loadout.started_from_mo2()
     s['launch_via'] = load_settings().get('launch_via', 'nvse')
@@ -1223,7 +1286,7 @@ def new_world(body, shaped=None):
         load_game(PR)
         raise
     d = PR.to_dict()
-    d.update(cells={}, records={}, land={}, water={}, next_id=nid, source=folder + '/' + PR.plugin)
+    d.update(cells={}, records={}, land={}, water={}, next_id=nid, source=folder + '/' + PR.plugin, trim_masters=True)
     with open(PR.path + '.tmp', 'w', encoding='utf-8') as f:
         json.dump(d, f, indent=1)
     os.replace(PR.path + '.tmp', PR.path)
@@ -1536,6 +1599,26 @@ def play(body):
     return out
 
 
+def new_game(body):
+    """The mod's own new game as body says (newgame.py), one Undo step. A spot from the view stands on the floor there."""
+    if body.get('cell') and body.get('p') and body['cell'].startswith('+'):
+        body = dict(body, p=_arrival(body))
+
+    def comp(text, key, extra):
+        sc = api_scripts.scripts()
+        try:
+            c = sc.compile(text, key, 'quest', extra)
+        except api_scripts.scriptc.CompileError as e:
+            raise ValueError("The new game's script didn't compile (line %d: %s). Please report this." % (e.line, e.message))
+        return sc._record_of(c, c.name)
+    try:
+        label, ops, _s = newgame.plan(GD, PR, comp, body)
+    except newgame.Problem as e:
+        raise ValueError(str(e))
+    out = edit(label, ops)
+    return dict(out, newgame=newgame.view(GD, PR))
+
+
 def _write_play_test(body, path):
     """Play here's plugin at path: a marker where the view is, in body's place."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1582,6 +1665,9 @@ def _run_inside(test=None):
     written) if there is one, in MO2's virtual folder for this run only; MO2's lists as they were once the game has started."""
     lo = loadout.current()
     out, files, plugins = {'from_mo2': True, 'autoload': None}, [], []
+    # (a FOLab Test mod left on in the profile by a Play here made with FOLab opened on its own: its script went on
+    # loading the newest save at the menu, so Open in game never showed the menu, 11 Nov 2026)
+    mo2write.clear_test(lo, playtest.TEST_PLUGIN)
     if PR:
         saved = save()
         files += _files_of(saved['path'])
@@ -1737,6 +1823,7 @@ def give(body):
 
 def save():
     path = PR.plugin_path()
+    PR.save(afresh=True)                    # (every part of the mod's file written out anew, not from what was kept)
     n = espwrite.write(GD, PR, path)
     library.publish(PR)
     return {'path': path, 'bytes': n, 'state': state()}
@@ -1764,6 +1851,12 @@ class Handler(BaseHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path)
         q = dict(urllib.parse.parse_qsl(u.query))
         try:
+            if NO_GAME and not u.path.startswith('/web/'):
+                if u.path in ('/', '/index.html'):
+                    return self.file(os.path.join(WEB, 'findgame.html'))
+                if u.path == '/api/game/missing':
+                    return self.send(game_missing())
+                return self.send({'error': 'FOLab hasn\'t found New Vegas yet.'}, code=503)
             if u.path in ('/', '/index.html'):
                 # (the icon's address carries a hash of it: Edge keeps an app window's icon in a cache of its own,
                 # so a changed icon only shows under a new address)
@@ -1785,6 +1878,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(api_quests.get(u.path, q, GD, PR, BR))
             if u.path.startswith('/api/library/'):
                 return self.send(*library.get(u.path[13:], q))
+            if u.path.startswith('/api/radio/'):
+                with _lock:
+                    got = radio.get(u.path, q, GD, PR, BR)
+                if got is None:
+                    return self.send({'error': 'not found'}, code=404)
+                return self.send(*got) if isinstance(got, tuple) else self.send(got)
+            if u.path.startswith('/api/models/'):
+                return self.send(modelsets.get(u.path[12:], q))
             if u.path == '/api/about':
                 return self.send(about())
             if u.path == '/api/report':
@@ -1798,6 +1899,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(state())
             if u.path.startswith('/api/tools/'):
                 return self.send(modtools.get(u.path[11:], q, sys.modules[__name__]))
+            if u.path == '/api/newgame':
+                with _lock:
+                    return self.send(newgame.view(GD, PR) if PR else {'none': True})
             if u.path == '/api/interiors':
                 return self.send(interiors())
             if u.path == '/api/cell':
@@ -1860,6 +1964,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(map_tile(q['world'], int(q['tx']), int(q['ty'])), 'image/png')
             if u.path == '/api/farland':
                 return self.send(far_land(q['world'], int(q['tx']), int(q['ty'])))
+            if u.path == '/api/farthings':
+                with _lock:
+                    return self.send(far_things(q['world'], int(q['tx']), int(q['ty'])))
             if u.path == '/api/heightmap':
                 data = heightmap_export(q)
                 self.send_response(200)
@@ -1890,9 +1997,9 @@ class Handler(BaseHTTPRequestHandler):
                 hits = [m for m in GD.mesh_list() if all(w in m for w in words)]
                 return self.send({'total': len(hits), 'paths': hits[:int(q.get('limit', 300))]})
             if u.path == '/api/mesh':
-                return self.send(mesh(q['path']), cache=True)
+                return self.send(mesh(q['path']), cache=not _mods_own(q['path']))
             if u.path == '/api/file':
-                return self.send(GD.read_file(q['path']), 'application/octet-stream', cache=True)
+                return self.send(GD.read_file(q['path']), 'application/octet-stream', cache=not _mods_own(q['path']))
             self.send(b'not found', 'text/plain', 404)
         except FileNotFoundError:
             self.send(b'not found', 'text/plain', 404)
@@ -1907,6 +2014,12 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/maps/upload':
                 return self.send(api_maps.upload(self.rfile, n, urllib.parse.parse_qs(u.query).get('name', [''])[0]))
             body = json.loads(self.rfile.read(n) or b'{}')
+            if NO_GAME and u.path != '/api/quit':
+                if u.path == '/api/game/folder':
+                    return self.send(set_game_folder(body))
+                if u.path == '/api/game/browse':
+                    return self.send(browse_for_game())
+                return self.send({'error': 'FOLab hasn\'t found New Vegas yet.'}, code=503)
             if u.path.startswith('/api/maps/'):
                 return self.send(api_maps.post(u.path, body, sys.modules[__name__]))
             if u.path == '/api/quit':
@@ -1959,10 +2072,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(api_quests.post(u.path, body, GD, PR, BR, edit))
                 if u.path.startswith('/api/char/'):
                     return self.send(api_characters.post(u.path, body, GD, PR, BR, edit))
+                if u.path.startswith('/api/radio/'):
+                    return self.send(radio.post(u.path, body, GD, PR, BR, edit))
                 if u.path.startswith('/api/w/'):
                     return self.send(worldapi.post(u.path, body, GD, PR, WORLD_CTX))
+                if u.path.startswith('/api/models/'):
+                    return self.send(modelsets.post(u.path[12:], body, sys.modules[__name__]))
                 if u.path == '/api/world/new':
                     return self.send(new_world(body))
+                if u.path == '/api/newgame':
+                    return self.send(new_game(body))
                 if u.path == '/api/shape/cells':
                     return self.send(shape_cells(body))
                 if u.path == '/api/shape/preview':
@@ -2087,14 +2206,19 @@ def main():
             PR = None
     restore_loadout()
     _clean_inside('starting')           # (a run from inside MO2 that FOLab didn't see the end of)
-    try:
-        load_game(PR)
-    except ValueError as e:         # (the last mod needs what this setup hasn't got: start without it)
-        PR = None
-        load_game(None)
-        LOADOUT_NOTE = str(e)
-    print('%s: %d interiors, %d placeable objects (%.1fs)' % (GD.data_dir, len(GD.interiors), len(CATALOGUE),
-                                                               time.time() - t), flush=True)
+    global NO_GAME
+    if not loadout.current() and not gamedata.find_data_dir():
+        NO_GAME = True              # (the page asks where it is: `set_game_folder` loads it then)
+        print('New Vegas not found: asking where it is. Looked in: %s' % '; '.join(gamedata.looked_in()), flush=True)
+    else:
+        try:
+            load_game(PR)
+        except ValueError as e:         # (the last mod needs what this setup hasn't got: start without it)
+            PR = None
+            load_game(None)
+            LOADOUT_NOTE = str(e)
+        print('%s: %d interiors, %d placeable objects (%.1fs)' % (GD.data_dir, len(GD.interiors), len(CATALOGUE),
+                                                                   time.time() - t), flush=True)
     # (on Windows, address reuse lets a second FOLab bind the same port, and the browser then talks to whichever
     # answers, an old one included: refuse to start twice instead)
     ThreadingHTTPServer.allow_reuse_address = False

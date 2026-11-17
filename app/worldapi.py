@@ -73,7 +73,7 @@ def lod_job(gd, pr, world):
 
     def work():
         try:
-            LOD_JOB.update(result=lodgen.generate(gd, pr, world, lodgen.out_folder(pr), progress=progress), ok=True)
+            LOD_JOB.update(result=lodgen.generate(gd, pr, world, lodgen.out_folder(pr), progress=progress, beyond=True), ok=True)
         except Exception as e:  # (whatever goes wrong, the page has to hear about it)
             LOD_JOB.update(error=str(e), ok=False)
         LOD_JOB['running'] = False

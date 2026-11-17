@@ -5,6 +5,12 @@ import struct
 import tes4
 
 
+def pack(data):
+    """A compressed record's bytes: how long its contents are, then the contents through zlib."""
+    import zlib
+    return struct.pack('<I', len(data)) + zlib.compress(data, 6)
+
+
 class Rec:
     __slots__ = ('tag', 'flags', 'formid', 'head', 'raw')
 
@@ -15,6 +21,16 @@ class Rec:
     def new(cls, tag, flags, formid, data, version=15):
         head = struct.pack('<4sIIIIHH', tag.encode(), len(data), flags, formid, 0, version, 0)
         return cls(tag, flags, formid, head, data)
+
+    @classmethod
+    def packed(cls, tag, flags, formid, data, version=15):
+        """A new record stored compressed (its size, then zlib), as the game's files keep all their land."""
+        return cls.new(tag, flags | tes4.COMPRESSED, formid, pack(data), version)
+
+    def set_packed(self, data, flags=None):
+        """New contents, stored compressed."""
+        self.flags = (self.flags if flags is None else flags) | tes4.COMPRESSED
+        self.raw = pack(data)
 
     def data(self):
         """The subrecord bytes, inflated when stored compressed."""

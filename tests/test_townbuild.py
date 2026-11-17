@@ -100,6 +100,9 @@ small = (3000, Y0 - 700, 3200, Y0 - 500)
 wid += 1
 plot(wid, 4000, Y0 - 2300, 6000, Y0 - 500, {'building': 'church', 'name': 'St Mary'})        # stands out: a landmark may go here
 church = (4000, Y0 - 2300, 6000, Y0 - 500)
+wid += 1
+plot(wid, 7500, Y0 + 500, 7820, Y0 + 1750, {'building': 'static_caravan'})                 # a trailer lot: 320 on the street, 1,250 deep
+trailer = (7500, Y0 + 500, 7820, Y0 + 1750)
 data = fx.osm(NODES, WAYS, bounds=(36.0, -115.0, 36.2, -114.8))
 api_maps.upload(io.BytesIO(data), len(data), 'town.osm')
 api_maps.post('/api/maps/osm/lay', {'file': 'town.osm', 'world': world_key, 'want': {'roads': ['major'], 'buildings': True}}, server)
@@ -123,7 +126,7 @@ undo_before = len(pr.undo_stack)
 
 # ---------- buildings ----------
 t0 = time.time()
-api_maps.post('/api/maps/buildings', {'world': world_key}, server)
+api_maps.post('/api/maps/buildings', {'world': world_key, 'stretch': 1}, server)     # (the plots here are drawn at the game's size: nothing to outgrow)
 j = wait()
 check('buildings go up as a job', j.get('ok') is True)
 if not j.get('ok'):
@@ -131,13 +134,30 @@ if not j.get('ok'):
 rep = j['result']['report']
 print('   %.0f s: %s' % (time.time() - t0, json.dumps(rep)))
 check('one Undo', len(pr.undo_stack) == undo_before + 1 and pr.undo_stack[-1][0] == 'Buildings on the plots')
+grid_of = {gd.key(c): xy for xy, c in gd.grid(w).items()}
+stood = {tuple(grid_of[ck]) for ck, c in pr.cells.items() if ck in grid_of for r in c['refs'].values() if r.get('base') in {b['key'] for b in townbuild.load(gd, server.kits_folder())}}
+check('the cells buildings went up in are listed, for a fresh navmesh (%d)' % len(rep['cell_xy']), stood and stood <= {tuple(c) for c in rep['cell_xy']})
 check('the catalogue is measured and kept', rep['catalogue'] >= 40 and os.path.isfile(os.path.join(server.kits_folder(), 'buildings.json')))
 cat = {b['key']: b for b in townbuild.load(gd, server.kits_folder())}
 check('the street\'s road pieces were seen', rep['roads_seen'] > 5)
 refs = [(ck, k, r) for ck, c in pr.cells.items() for k, r in c['refs'].items() if not r.get('removed')]
 blds = [(ck, k, r) for ck, k, r in refs if r.get('base') in cat]
-check('every house plot, the works and the church got buildings (%d plots built, %d buildings)' % (rep['built'], len(blds)), rep['built'] == 14 and len(blds) >= 15)
+# doorways nobody goes through: the game shuts them with a static door or boards, and so does a building stood here
+shut = {b['edid']: b['shut'] for b in cat.values() if b.get('shut')}
+check('the catalogue knows what the game shuts doorways with (%d buildings)' % len(shut), len(shut) >= 20 and any(not b['doors'] and b.get('shut') for b in cat.values()))
+check('each is at the building, not next door', all(b['box'][0] - 41 <= d['x'] <= b['box'][3] + 41 and b['box'][1] - 41 <= d['y'] <= b['box'][4] + 41
+                                                      for b in cat.values() for d in b.get('shut', ())))
+check('and none where a door that leads somewhere already is', all(((d['x'] - e['x']) ** 2 + (d['y'] - e['y']) ** 2) ** 0.5 >= 80 or abs(d['z'] - e['z']) >= 120
+                                                                    for b in cat.values() for d in b.get('shut', ()) for e in b['doors']))
+shut_keys = {d['base'] for b in cat.values() for d in b.get('shut', ())}
+placed_shut = [r for _c, _k, r in refs if r.get('base') in shut_keys and r.get('base') not in cat]
+want_shut = sum(len(cat[r['base']].get('shut', ())) for _c, _k, r in blds)
+check('the buildings stood got theirs (%d of %d, %d placed)' % (rep['shut'], want_shut, len(placed_shut)), rep['shut'] + rep.get('opened', 0) + rep.get('rooms', 0) + rep.get('unboarded', 0) + rep.get('twins', 0) == want_shut and len(placed_shut) >= rep['shut'] > 0)      # (one made a way in is no longer shut)
+check('every house plot, the works, the church and the trailer lot got buildings (%d plots built, %d buildings)' % (rep['built'], len(blds)), rep['built'] == 15 and len(blds) >= 16)
 in_box = lambda r, b: b[0] - 200 <= r['p'][0] <= b[2] + 200 and b[1] - 200 <= r['p'][1] <= b[3] + 200
+on_lot = [cat[r['base']]['edid'] for _c, _k, r in blds if in_box(r, trailer)]
+check('the narrow lot got narrow homes, side-on to the street (%s, %d side-on)' % (on_lot, rep['side_on']),
+      on_lot and all('mobilehome' in e.lower() or 'shack' in e.lower() for e in on_lot) and rep['side_on'] >= 1)
 marks = [r for _c, _k, r in blds if townbuild.landmark(cat[r['base']])]
 check('plots that stand out: the named works and church (%d)' % rep['poi'], rep['poi'] == 2)
 check('the church got the game\'s church, a landmark (%s)' % [cat[r['base']]['edid'] for _c, _k, r in blds if in_box(r, church)],
@@ -178,13 +198,15 @@ for _c, _k, r in blds:
         continue
     f = townbuild.Fit(b)
     mx, my = mid(foot(r))
-    if not (-7200 <= mx <= 2500):
+    if not (-7200 <= mx <= 2500) or in_box(r, trailer):     # (side-on, a door is to the side)
         continue
     with_doors += 1
     dx, dy = townbuild.turn(f.front[0], f.front[1], r['p'][5])
     if dy * (Y0 - my) > 0 and abs(dy) > 0.99:
         fronts += 1
-check('every house with a door faces the street (%d of %d)' % (fronts, with_doors), with_doors >= 3 and fronts == with_doors)
+    elif abs(dy) > 0.99 and any(abs(mid(g)[0] - mx) < 700 and abs(mid(g)[1] - Y0) < abs(my - Y0) - 200 for g in fps):
+        fronts += 1                         # (the back row of a deep plot faces the other way, by design)
+check('every house with a door faces the street, or away from it behind another (%d of %d)' % (fronts, with_doors), with_doors >= 3 and fronts == with_doors)
 ground = roadgen.Ground(gd, pr, w)
 off = max(abs((ground.at(r['p'][0], r['p'][1]) - r['p'][2]) - cat[r['base']]['mid']) for _c, _k, r in blds if -7200 <= mid(foot(r))[0] <= 2500)
 check('set into the pad as deep as the game sets them (%.1f off at most)' % off, off < 24)
@@ -222,7 +244,7 @@ for pk in places:
     if ok_:
         ock, orr = ref_at[xr['tel']['door']]
         ok_ = orr.get('tel', {}).get('door') == xk and not orr.get('props', {}).get('lock')
-        near_out += math.hypot(xr['tel']['p'][0] - orr['p'][0], xr['tel']['p'][1] - orr['p'][1]) < 300
+        near_out += math.hypot(xr['tel']['p'][0] - orr['p'][0], xr['tel']['p'][1] - orr['p'][1]) < 460      # (a borrowed place: a step outside the wall the door is set back in)
         near_in += math.hypot(orr['tel']['p'][0] - xr['p'][0], orr['tel']['p'][1] - xr['p'][1]) < 300
     bad_link += not ok_
     for k, r in inner.items():
@@ -233,9 +255,53 @@ for pk in places:
 check('every place\'s way out leads to its building\'s door and back, that door unlocked', bad_link == 0)
 check('you arrive outside by the building\'s door (%d of %d) and inside by the way out (%d)' % (near_out, len(places), near_in), near_out == near_in == len(places))
 check('nothing of the game\'s story is copied in: no people, keys, notes, terminals or scripted things', bad_thing == 0)
+# ---------- a hotel is a hotel inside ----------
+check('a plot is a hotel by its kind or by its name', townbuild.grand_kind({'kind': 'hotel'}) == 'hotel' and townbuild.grand_kind({'kind': 'yes', 'name': 'Hyatt Inn'}) == 'hotel'
+      and townbuild.grand_kind({'kind': 'yes', 'name': 'Winning Ways'}) is None and townbuild.grand_kind({'kind': 'retail', 'name': ''}) is None)
+big = [townbuild.grand_inside(gd, e) for e in townbuild.GRAND['hotel']]
+check('the big hotel floors of the game are found, each with its way out to the street', all(big) and all(gd.ref_cell[gd.from_key(g['exit'])] == gd.from_key(g['cell']) for g in big))
+ins = townbuild.Insides(gd, 'FOLabT', share=0.0, most=5, seed=1)
+small = next(b for b in cat.values() if b['doors'] and b['family'] == 'shop')
+g = ins.pick(small, False, {'kind': 'yes', 'name': 'Hyatt Inn'})
+check('a hotel gets one whatever stands for it, though no ordinary building gets a place', bool(g) and bool(g.get('grand')) and ins.pick(small, False, {'kind': 'yes', 'name': 'Corner Shop'}) is None)
+out = townbuild._arrive_out(g, 1000.0, 2000.0, 50.0, 0.0, small)
+d0, bx = small['doors'][0], small['box']
+lx, ly = out[0] - 1000.0, out[1] - 2000.0
+check('one comes out a step clear of the wall its door is in', not (bx[0] <= lx <= bx[3] and bx[1] <= ly <= bx[4]) and math.hypot(lx - d0['x'], ly - d0['y']) < 500
+      and abs(out[2] - (50.0 + small['mid'] + 8)) < 0.01)
+ops_, kept_, _doors = townbuild.inside_ops(gd, g, 'hh', 'FOLabHotel', 'Hyatt Inn')
+check('copied behind the door it is a big place, named as the map names it', kept_ > 300 and any(o.get('op') == 'record_new' or o.get('name') == 'hh' for o in ops_))
+# ---------- many more ways in ----------
+check('a market, a school, a bank and a police station are told by kind or by name', townbuild.grand_kind({'kind': 'school'}) == 'school'
+      and townbuild.grand_kind({'kind': 'yes', 'name': 'Foodland Market'}) == 'market' and townbuild.grand_kind({'kind': 'yes', 'name': 'First Hawaiian Bank'}) == 'office'
+      and townbuild.grand_kind({'kind': 'yes', 'name': 'Waikiki Police Substation'}) == 'police' and townbuild.grand_kind({'kind': 'house', 'name': ''}) is None)
+check('every big place named is in the game', all(townbuild.grand_inside(gd, e) for eds in townbuild.GRAND.values() for e in eds))
+pools = townbuild.pools_of(list(cat.values()))
+check('each family has a pool of places to lend, none too big, none tied to one building', len(pools.get('house', ())) >= 20 and len(pools.get('shop', ())) >= 3
+      and all(i['things'] <= townbuild.POOL_THINGS and 'arrive_out' not in i and i['door'] == 0 for v in pools.values() for i in v))
+ins2 = townbuild.Insides(gd, 'FOLabP', share=1.0, most=50, seed=2)
+ins2.pools = pools
+bare = next((b for b in cat.values() if b['doors'] and not b.get('insides') and pools.get(b['family'])), None)
+check('a building with a door but no place of its own borrows one from its family', bare is None or bool(ins2.pick(bare, False, {'kind': 'yes', 'name': ''})))
+ent = [(b, townbuild.entry_of(gd, b)) for b in cat.values() if not b['doors']]
+twins = [(b, e) for b, e in ent if e]
+check('a door static is swapped for the real door it copies, to be a way in', len(twins) >= 3 and all(gd.forms[gd.from_key(e[1])][1].tag == 'DOOR' for _b, e in twins))
+b3, e3 = twins[0]
+g3 = ins2.pick(b3, False, {'kind': 'yes', 'name': ''}, True)
+check('and such a building then gets a place too', bool(g3))
+check('but a building with nothing to make a door of gets none', all(ins2.pick(b, True, {'kind': 'hotel'}, False) is None for b, e in ent if not e))
+for _n in range(60):
+    ins2.pick(small, False, {'kind': 'school'})
+check('no more than its share of the places made are of one big kind', ins2.kinds['school'] == townbuild.GRAND_MOST)
+import navgen
+for u in ((1.0, 0.0), (0.0, -1.0), (0.6, 0.8)):
+    Rb = navgen._turn(*townbuild._facing(*u))
+    check('a black sheet stands upright facing out of the doorway %s' % (u,), abs(Rb[0][2] - u[0]) < 0.02 and abs(Rb[1][2] - u[1]) < 0.02 and abs(Rb[2][2]) < 0.02 and abs(Rb[2][0]) < 0.02)
+boarded = [b for b in cat.values() if townbuild.boarded_ways(gd, b)]
+check('doorways with only boards over them are known, for the sheet to go behind', len(boarded) >= 3)
 two_way = next(((b, i) for b in cat.values() for i in b['insides'] if sum(1 for r in gd.refs(gd.from_key(i['cell'])) if r['leads']) > 1), None)
 if two_way:
-    ops_, _n = townbuild.inside_ops(gd, two_way[1], 'tt', 'FOLabCheck', 'Check')
+    ops_, _n, _doors = townbuild.inside_ops(gd, two_way[1], 'tt', 'FOLabCheck', 'Check')
     src_doors = {(round(r['pos'][0]), round(r['pos'][1])): r for r in gd.refs(gd.from_key(two_way[1]['cell'])) if r['leads']}
     adds = [o for o in ops_ if o['op'] == 'add' and (round(o['p'][0]), round(o['p'][1])) in src_doors]
     check('inside %s: its way out is free, its doors to anywhere else locked, other doors left to open'
@@ -246,11 +312,15 @@ check('the places are named for what they are', all(recordio.field(pr.records[k]
       and any(recordio.field(pr.records[k], 'FULL') == 'St Mary' for k in places))
 check('no owner on a copied place', not any(s['tag'] == 'XOWN' for k in places for s in pr.records[k]['subs']))
 check('each place has its navmesh (%d missed)' % rep['navmesh_missed'], all(k in pr.navmesh for k in places) and rep['navmesh_missed'] == 0)
+game_meshes = [k for k in places if pr.navmesh[k].get('sig') is not None and len(pr.navmesh[k]['tris']) > 0 and all(d[0] in pr.cells[k]['refs'] for d in pr.navmesh[k]['doors'])]
+check('places take the game\'s own navmesh where it can be taken as it is (%d of %d), its doors linked to the place\'s own'
+      % (rep['navmesh_game'], len(places)), rep['navmesh_game'] >= len(places) // 2 and len(game_meshes) == len(places)
+      and all(pr.navmesh[k]['doors'] for k in places))
 check('still one Undo for all of it', pr.undo_stack[-1][0] == 'Buildings on the plots' and len(pr.undo_stack) == undo_before + 1)
 
 # ---------- again, undo, saved ----------
 n0 = sum(len(c['refs']) for c in pr.cells.values())
-api_maps.post('/api/maps/buildings', {'world': world_key}, server)
+api_maps.post('/api/maps/buildings', {'world': world_key, 'stretch': 1}, server)     # (the plots here are drawn at the game's size: nothing to outgrow)
 j = wait()
 check('a second time adds nothing, and says why: %s' % j.get('error'), not j.get('ok') and 'already' in (j.get('error') or '')
       and sum(len(c['refs']) for c in pr.cells.values()) == n0)
@@ -262,6 +332,19 @@ for g_ in report['groups']:
         for r_ in g_['rows'][:6]:
             print('     %s' % json.dumps(r_, default=str)[:220])
 check('the saved plugin reads back with no problems', report['summary']['error'] == 0 and report['summary']['warn'] == 0)
+import masterlist, plugintree
+saved = plugintree.Plugin.read(pr.plugin_path())
+made_with = masterlist.masters_of(plugintree.Plugin.read(pr.source_path()))
+check('a world FOLab made keeps only the masters it uses (%d of the %d it was made with: %s)' % (len(masterlist.masters_of(saved)), len(made_with), masterlist.masters_of(saved)),
+      pr.trim_masters and len(made_with) == 10 and all(masterlist.used_masters(saved)) and len(masterlist.masters_of(saved)) < 10
+      and not any(g_['kind'] == 'unused_master' for g_ in report['groups']))
+fn = masterlist.mapper(['FalloutNV.esm', 'DeadMoney.esm', 'HonestHearts.esm'], 'Mine.esp', ['FalloutNV.esm', 'HonestHearts.esm'], dropped=True)
+try:
+    fn(0x01000ABC)
+    stopped = False
+except ValueError:
+    stopped = True
+check('a master left out is re-pointed round, and one still used stops the save', fn(0x02000ABC) == 0x01000ABC and fn(0x03000ABC) == 0x02000ABC and stopped)
 gd2 = gamedata.GameData(plugins=list(gamedata.OFFICIAL) + [pr.plugin_path()])
 w2 = next(x for x in gd2.worlds() if gd2.edid(x) == 'FOLabTownTest')
 names = {gd2.edid(r['base']) for c in gd2.grid(w2).values() for r in gd2.refs(c) if r['base'] in gd2.forms}

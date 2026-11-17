@@ -14,7 +14,8 @@ const HELP_DOCS = [['getting-started', 'Getting started'],
                    ['real-maps', 'Land from real maps: height files, OpenStreetMap'],
                    ['playing-and-your-mod', 'Playing, and your mod'],
                    ['tools', 'Tools: health check, load order, sharing'],
-                   ['game-test', 'Test in game: letting the game walk a place']];
+                   ['game-test', 'Test in game: letting the game walk a place'],
+                   ['geck', 'FOLab and the GECK: using both, and what to watch for']];
 
 $('#b-help').onclick = e => {
   e.stopPropagation();

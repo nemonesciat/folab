@@ -12,6 +12,7 @@ a fake game. docs/game-test-first-run.md says what real runs have shown and what
 
 Engine apart from game: everything about how the original game is run is in launch_real, game_settings and
 gametestcheck; a source port would change those three and keep the plan and the report."""
+import heapq
 import json
 import math
 import os
@@ -39,6 +40,9 @@ MAX_POINTS, MAX_DOORS, MAX_THINGS, MAX_ACTORS, MAX_WALKS = 240, 40, 150, 40, 3
 REST_TYPES = {'MISC', 'WEAP', 'ARMO', 'AMMO', 'ALCH', 'BOOK', 'NOTE', 'KEYM', 'CONT', 'FURN', 'IMOD', 'CHIP', 'CMNY', 'CCRD', 'TERM'}
 WALKER = ('1ERefugeeAAM', 'DefaultFollowPlayerFar')
 WALK_TICKS = 300
+WALK_MOST = 2400.0                      # (along the mesh: as far as a follower gets in WALK_TICKS. Real run, 8 Nov 2026: 3,200 in a vault)
+FOLLOW_KEEPS = 512.0                    # (how near DefaultFollowPlayerFar comes: its PTDT distance; read again by _follow_keeps. A follower
+                                        # that ends within it has arrived: real run, 8 Nov 2026, all three walks ended 328-361 away)
 
 # seconds each step takes, to cap a run by its size (ticks are every 2 frames: about 30 a second at 60 frames)
 SECONDS = {'go': 25, 'point': 2.5, 'thing': 1, 'actor': 2, 'door': 30, 'walk': 15}
@@ -94,6 +98,42 @@ def floor_points(meshes, square=SQUARE, level=LEVEL):
             if k not in best or d < best[k][0]:
                 best[k] = (d, x, y, z)
     return [[round(p[1], 1), round(p[2], 1), round(p[3], 1)] for _k, p in sorted(best.items())]
+
+
+def walk_lengths(meshes, points):
+    """For each point, how far along the mesh (triangle middle to middle, by shared edges) to every other point: [[length or
+    None]]. A walk across a twisty place is much longer than the straight line, and a follower has only so long."""
+    cent, nb, base = [], [], 0
+    for m in meshes:
+        V, T = m['verts'], m['tris']
+        edges = {}
+        for n, t in enumerate(T):
+            cent.append([sum(V[t[k]][j] for k in range(3)) / 3 for j in range(3)])
+            nb.append([])
+            for a, b in ((t[0], t[1]), (t[1], t[2]), (t[2], t[0])):
+                edges.setdefault((min(a, b), max(a, b)), []).append(base + n)
+        for ts in edges.values():
+            for a in ts:
+                nb[a] += [b for b in ts if b != a]
+        base += len(T)
+    if not cent:
+        return [[None] * len(points) for _ in points]
+    at = [min(range(len(cent)), key=lambda i: (cent[i][0] - p[0]) ** 2 + (cent[i][1] - p[1]) ** 2 + ((cent[i][2] - p[2]) * 4) ** 2) for p in points]
+    out = []
+    for s in at:
+        dist = {s: 0.0}
+        q = [(0.0, s)]
+        while q:
+            d, u = heapq.heappop(q)
+            if d > dist[u]:
+                continue
+            for v in nb[u]:
+                nd = d + math.dist(cent[u], cent[v])
+                if nd < dist.get(v, 1e18):
+                    dist[v] = nd
+                    heapq.heappush(q, (nd, v))
+        out.append([dist.get(g) for g in at])
+    return out
 
 
 def islands(meshes):
@@ -193,6 +233,13 @@ def _walker(gd):
     return out
 
 
+def _follow_keeps(gd):
+    """How near the walk test's follow package comes to the player, from its target data (PTDT's distance); FOLLOW_KEEPS if unread."""
+    f = next((f for f, (_i, r) in gd.forms.items() if r.tag == 'PACK' and f >> 24 == 0 and gd.edid(f) == WALKER[1]), None)
+    d = gd.fields(f).get('PTDT') if f is not None else None
+    return float(struct.unpack_from('<i', d, 8)[0]) if d and len(d) >= 12 and struct.unpack_from('<i', d, 8)[0] > 0 else FOLLOW_KEEPS
+
+
 def _thin(items, most):
     if len(items) <= most:
         return items
@@ -268,7 +315,8 @@ def make_plan(gd, pr, ckey, walks=True, run=''):
             plan[name_] = _thin(plan[name_], most)
     who = _walker(gd) if walks else None
     if who and len(pts) >= 2 and not plan['outside']:
-        pairs = _far_pairs(pts)[:MAX_WALKS]
+        plan['keeps'] = _follow_keeps(gd)
+        pairs = _far_pairs(pts, plan['keeps'] + SQUARE, walk_lengths(meshes, pts))[:MAX_WALKS]
         plan['walks'] = [{'id': new_id(), 'a': a, 'b': b, 'ticks': WALK_TICKS} for a, b in pairs]
     plan['walker'] = who
     plan['go'] = list(go) if go else None
@@ -277,8 +325,11 @@ def make_plan(gd, pr, ckey, walks=True, run=''):
     return plan
 
 
-def _far_pairs(points):
-    """Pairs of points to walk between, far apart and on the same floor: first the longest such, then the next from what's left."""
+def _far_pairs(points, least=SQUARE * 2, along=None):
+    """Pairs of points to walk between, at least 'least' apart (further than a follower stops short, or arriving proves nothing) and on
+    the same floor: first the longest such, then the next from what's left. along: walk_lengths for the same points; a pair the mesh
+    doesn't join, or joins only by a way longer than WALK_MOST, isn't one (it couldn't be walked in the time: a real vault's were 7,000+)."""
+    index = {id(p): n for n, p in enumerate(points)}
     rows = sorted(points, key=lambda p: (p[2], p[0], p[1]))
     out, used = [], set()
     for _ in range(MAX_WALKS):
@@ -289,7 +340,11 @@ def _far_pairs(points):
             for j, b in enumerate(rows):
                 if j > i and j not in used and abs(a[2] - b[2]) < LEVEL:
                     d = (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
-                    if d > (SQUARE * 2) ** 2 and (best is None or d > best[0]):
+                    if along is not None:
+                        way = along[index[id(a)]][index[id(b)]]
+                        if way is None or way > WALK_MOST:
+                            continue
+                    if d > least ** 2 and (best is None or d > best[0]):
                         best = (d, i, j)
         if not best:
             break
@@ -493,7 +548,9 @@ def _judge_door(plan, d, r, land, add):
     if r['locked']:
         return add('door_locked', 'info', 'A door to %s is locked: it wasn\'t gone through.' % where, at, d['p'])
     low = r['form'].strip().upper()[-6:]
-    if low.strip('0') == '':
+    if low.strip('0') == '' and (to.get('interior') or land is None):
+        # (a door out to a world names no cell: its far side stands in the world's persistent cell, which GetTeleportCell
+        # doesn't give (real run, 8 Nov 2026). Going through and landing at the arrival is the proof there.)
         return add('door_leads_nowhere', 'error', 'A door to %s leads nowhere in the game.' % where, at, d['p'])
     if to.get('interior') and to.get('cell') and low != _low(to['cell']):
         add('door_wrong_place', 'error', 'A door should lead to %s; the game says %s (%s).' % (where, r['name'] or '?', r['form']), at, d['p'])
@@ -560,8 +617,9 @@ def make_report(plan, text, ending=None, differences=(), problems=(), seconds=No
         r = by_id('npc', w['id'])
         if r:
             done['walks'] += 1
-            if r['dist'] >= 300:
-                add('no_path', 'error', 'Told to follow across the place, someone was still %.0f away after the time allowed: the navmesh doesn\'t bring them.' % r['dist'], _go(plan, w['b']), w['a'])
+            if r['dist'] > plan.get('keeps', FOLLOW_KEEPS):
+                add('no_path', 'error', 'Told to follow across the place, someone was still %.0f away after the time allowed (a follower comes within %.0f): '
+                    'the navmesh doesn\'t bring them.' % (r['dist'], plan.get('keeps', FOLLOW_KEEPS)), _go(plan, w['b']), w['a'])
     for r in rows:
         if r['kind'] == 'died':
             add('player_died', 'error', 'The player died at step %.0f, god mode or no.' % r['id'])
@@ -617,12 +675,13 @@ def _last(rows):
 
 def game_settings():
     """What the INIs say for a run: saves apart, no autosaves, windowed, runs in the background, doesn't hold the mouse
-    or keyboard, quiet, straight to the main menu."""
+    or keyboard, leaves the controller alone (no rumble: the user's rule, 8 Nov 2026), quiet, straight to the main menu."""
     return {('General', 'sLocalSavePath'): G.TEST_SAVES + '\\', ('General', 'bAlwaysActive'): 1,
             ('General', 'SIntroSequence'): '', ('General', 'sMainMenuMovieIntro'): '',
             ('GamePlay', 'bSaveOnTravel'): 0, ('GamePlay', 'bSaveOnWait'): 0, ('GamePlay', 'bSaveOnRest'): 0, ('GamePlay', 'bSaveOnInteriorExteriorSwitch'): 0,
             ('Display', 'bFull Screen'): 0, ('Display', 'iSize W'): 1024, ('Display', 'iSize H'): 768,
             ('Controls', 'bBackground Mouse'): 1, ('Controls', 'bBackground Keyboard'): 1, ('Controls', 'bUse Joystick'): 0,
+            ('Controls', 'bGamePadRumble'): 0, ('Interface', 'bDisable360Controller'): 1,
             ('Audio', 'fDefaultMasterVolume'): 0}
 
 

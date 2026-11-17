@@ -40,6 +40,43 @@ for wn in ('FreesideNorthWorld', 'NVDLC01VillaDean'):
         same += lodgen.terrain_nif(path.split(BS)[4], L, x, y, v, u, t, c) == d
     check('%s: all %d terrain chunks rebuilt byte for byte' % (wn, len(names)), same == len(names) and names, '%d of %d' % (same, len(names)))
 
+# the far water: the Mojave's chunks over Lake Mead and the river hold it as a second shape (no properties, at the water's
+# height, a skirt); every one with just that second shape rebuilt byte for byte with terrain_nif(water=...)
+import nif  # noqa: E402
+WATERY = ['BSMultiBoundNode', 'NiTriShape', 'BSShaderPPLightingProperty', 'BSShaderTextureSet', 'NiTriShapeData',
+          'NiAdditionalGeometryData', 'NiTriShape', 'NiTriShapeData', 'BSMultiBound', 'BSMultiBoundAABB']
+tried = same = 0
+for n in chunks('WastelandNV'):
+    d = G.read_file(n)
+    m = nif.Nif(d)
+    if m.types != WATERY:
+        continue
+    tried += 1
+    parts = n.rsplit(BS, 1)[-1].split('.')
+    L, x, y = int(parts[1][5:]), int(parts[2][1:]), int(parts[3][1:])
+    v, u, t, c = lodgen.read_terrain_nif(d)
+    b = d[m.offsets[7]:m.offsets[7] + m.sizes[7]]
+    nv = struct.unpack_from('<H', b, 4)[0]
+    wv = list(struct.iter_unpack('<3f', b[9:9 + 12 * nv]))
+    q = 9 + 12 * nv + 26
+    nt = struct.unpack_from('<H', b, q)[0]
+    wt = list(struct.iter_unpack('<3H', b[q + 7:q + 7 + 6 * nt]))
+    o = lodgen.terrain_nif('WastelandNV', L, x, y, v, u, t, c, water=(wv, wt))
+    r = m.offsets[7] + 9 + 12 * nv + 3 + 12         # (the water's bounding radius: the game sums in single precision, a
+    if o != d and len(o) == len(d) and o[:r] + o[r + 4:] == d[:r] + d[r + 4:]:       # last digit can differ)
+        o = d if abs(struct.unpack_from('<f', o, r)[0] - struct.unpack_from('<f', d, r)[0]) < 0.05 else o
+    same += o == d
+check('the Mojave\'s %d chunks with far water rebuilt byte for byte, water and all' % tried, tried >= 30 and same == tried, '%d of %d' % (same, tried))
+
+
+class _Flat:
+    def height(self, x, y):
+        return -50.0 if x < 4096 else 20.0          # (the first column of cells is sea)
+wm = lodgen.water_mesh(_Flat(), 4, 0, 0, 0.0)
+check('water over a chunk: a square at the sea\'s height over each wet cell (4 here), a skirt on its edges, none over land',
+      wm and sum(1 for p in wm[0] if p[2] == 0.0) == 10 and all(p[0] <= 4096 for p in wm[0])
+      and any(p[2] == lodgen.SKIRT_Z for p in wm[0]) and lodgen.water_mesh(type('L', (), {'height': lambda s, x, y: 5.0})(), 4, 0, 0, 0.0) is None)
+
 # settings: the same sums as the game's
 for wn in ('WastelandNV', 'WastelandNVmini', 'GamorrahWorld', 'FreesideNorthWorld', 'NVDLC02ZionCanyon'):
     have = G.read_file(BS.join(['lodsettings', wn.lower() + '.dlodsettings']))

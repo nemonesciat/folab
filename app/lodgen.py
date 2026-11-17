@@ -25,6 +25,7 @@ import project
 import roadgen
 
 SKIRT_Z = -14098.0      # how far down the game's chunks hang their edges, so no gap shows between levels
+FAR_WATER_BELOW = 16.0  # the far sea this far under the world's water level (see generate)
 TEXTURE = 256
 HEADER_LINE = b'Gamebryo File Format, Version 20.2.0.7\n'
 NIF_TYPES = ['BSMultiBoundNode', 'NiTriShape', 'BSShaderPPLightingProperty', 'BSShaderTextureSet', 'NiTriShapeData',
@@ -42,9 +43,63 @@ class LodError(ValueError):
 
 # --- the chunk's mesh ---
 
-def terrain_nif(world_name, level, x, y, verts, uvs, tris, centre=None):
+def _water_blocks(level, x, y, water):
+    """The far water's two blocks, as the game's own chunks over Lake Mead have them: a shape with no properties (the
+    game paints it with the world's far water), placed at the chunk's corner itself, and its data: points and triangles
+    only. water: (verts from the chunk's corner, tris)."""
+    verts, tris = water
+    px, py = x * 4096.0, y * 4096.0
+    shape = bytes.fromhex('ffffffff00000000ffffffff0e000800') + struct.pack('<3f', px, py, 0.0) + _SHAPE[28:28 + 40] + \
+        struct.pack('<I', 0) + b'\xff\xff\xff\xff' + struct.pack('<I', 7) + _SHAPE[-13:]
+    # (its bounding sphere: the middle of its own box, as the game's)
+    xs, ys, zs = [v[0] for v in verts], [v[1] for v in verts], [v[2] for v in verts]
+    cx, cy, cz = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, (min(zs) + max(zs)) / 2
+    rad = max(math.sqrt((v[0] - cx) ** 2 + (v[1] - cy) ** 2 + (v[2] - cz) ** 2) for v in verts)
+    data = struct.pack('<iHBBB', 0, len(verts), 0, 0, 1) + b''.join(struct.pack('<3f', *v) for v in verts) + \
+        struct.pack('<HB', 0, 0) + struct.pack('<4f', cx, cy, cz, rad) + b'\0' + struct.pack('<Hi', 0, -1) + \
+        struct.pack('<HIB', len(tris), 3 * len(tris), 1) + b''.join(struct.pack('<3H', *t) for t in tris) + struct.pack('<H', 0)
+    return shape, data
+
+
+def water_mesh(S, level, cx, cy, height=0.0):
+    """The far sea over a chunk, or None: a square at the water's height over every cell whose ground goes under it
+    anywhere (sampled every 512), and a skirt down from it along the chunk's edges, as the game's have."""
+    px, py = cx * 4096.0, cy * 4096.0
+    wet = set()
+    for j in range(level):
+        for i in range(level):
+            x0, y0 = px + i * 4096.0, py + j * 4096.0
+            if any(S.height(x0 + a * 512.0, y0 + b * 512.0) < height for a in range(9) for b in range(9)):
+                wet.add((i, j))
+    if not wet:
+        return None
+    verts, at, tris = [], {}, []
+
+    def pt(i, j, z=height):
+        k = (i, j, z)
+        if k not in at:
+            at[k] = len(verts)
+            verts.append((i * 4096.0, j * 4096.0, float(z)))
+        return at[k]
+    for i, j in sorted(wet):
+        a, b, c, d = pt(i, j), pt(i + 1, j), pt(i + 1, j + 1), pt(i, j + 1)
+        tris += [(a, b, c), (a, c, d)]
+    # (the skirt: where a wet cell meets the chunk's edge, a wall down from it, so no gap shows between levels)
+    for i, j in sorted(wet):
+        for (i0, j0), (i1, j1), out in (((i, j), (i + 1, j), j == 0), ((i + 1, j), (i + 1, j + 1), i == level - 1),
+                                        ((i + 1, j + 1), (i, j + 1), j == level - 1), ((i, j + 1), (i, j), i == 0)):
+            if out:
+                a, b = pt(i0, j0), pt(i1, j1)
+                c, d = pt(i1, j1, SKIRT_Z), pt(i0, j0, SKIRT_Z)
+                tris += [(a, d, c), (a, c, b)]
+    return verts, tris
+
+
+def terrain_nif(world_name, level, x, y, verts, uvs, tris, centre=None, water=None):
     """A terrain chunk's NIF. world_name as the texture paths spell it; verts [(x, y, z)] from the chunk's corner; uvs [(u, v)];
-    tris [(a, b, c)]. Its texture paths, placing and bounds follow from the rest."""
+    tris [(a, b, c)]. Its texture paths, placing and bounds follow from the rest. water: (verts, tris) of the far sea over
+    it (water_mesh), a second shape as the game's chunks over water have; None for none (the chunk byte for byte as
+    before)."""
     size = level * 4096.0
     nv = len(verts)
     lox, hix = min(v[0] for v in verts), max(v[0] for v in verts)
@@ -59,6 +114,9 @@ def terrain_nif(world_name, level, x, y, verts, uvs, tris, centre=None):
         cx, cy, cz, rad = centre
     px, py = x * 4096.0, y * 4096.0
     node = _NODE_HEAD + struct.pack('<3f', px, py, 0.0) + _NODE_TAIL
+    if water:
+        # (two children, the land's shape and the water's, and the bounds two blocks further on)
+        node = node[:-16] + struct.pack('<III', 2, 1, 6) + struct.pack('<I', 0) + struct.pack('<I', 8)
     paths = ['Data\\Textures\\Landscape\\LOD\\%s\\%s\\%s.n.Level%d.X%d.Y%d.dds' % (world_name, k, world_name, level, x, y) for k in ('Diffuse', 'Normals')] + [''] * 4
     texset = struct.pack('<I', 6) + b''.join(struct.pack('<I', len(p)) + p.encode('cp1252') for p in paths)
     data = [struct.pack('<iHBBB', 0, nv, 0, 0, 1), b''.join(struct.pack('<3f', *v) for v in verts),
@@ -73,10 +131,15 @@ def terrain_nif(world_name, level, x, y, verts, uvs, tris, centre=None):
     mid, half = (min(real) + max(real)) / 2, (max(real) - min(real)) / 2
     aabb = struct.pack('<6f', px + size / 2, py + size / 2, mid, size / 2, size / 2, half)
     blocks = [node, _SHAPE, _LIGHTING, texset, b''.join(data), extra, struct.pack('<I', 7), aabb]
+    kinds = list(range(len(blocks)))
+    if water:
+        ws, wd = _water_blocks(level, x, y, water)
+        blocks = blocks[:6] + [ws, wd, struct.pack('<I', 9), aabb]
+        kinds = [0, 1, 2, 3, 4, 5, 1, 4, 6, 7]
     head = [HEADER_LINE, struct.pack('<IBI', 0x14020007, 1, 11), struct.pack('<I', len(blocks)), struct.pack('<I', 34), bytes((1, 0)) * 3,
             struct.pack('<H', len(NIF_TYPES))]
     head += [struct.pack('<I', len(t)) + t.encode() for t in NIF_TYPES]
-    head.append(struct.pack('<%dH' % len(blocks), *range(len(blocks))))
+    head.append(struct.pack('<%dH' % len(blocks), *kinds))
     head.append(struct.pack('<%dI' % len(blocks), *[len(b) for b in blocks]))
     head.append(struct.pack('<III', 0, 0, 0))
     return b''.join(head) + b''.join(blocks) + struct.pack('<II', 1, 0)
@@ -236,8 +299,9 @@ def chunks_for(box, top, only=None):
 class Sampler:
     """The land of a world as the mod has it, by point, with its colours."""
 
-    def __init__(self, gd, pr, world, painter):
+    def __init__(self, gd, pr, world, painter, beyond=None):
         self.gd, self.pr, self.world, self.p = gd, pr, world, painter
+        self.beyond = beyond                    # (lodbeyond.Beyond: the land and sea past the world's own edge)
         self.g = roadgen.Ground(gd, pr, world)
         d = gd.fields(world).get('DNAM')
         self.default = struct.unpack_from('<f', d)[0] if d and len(d) >= 4 else 0.0
@@ -245,6 +309,8 @@ class Sampler:
 
     def height(self, x, y):
         z = self.g.at(x, y)
+        if z is None and self.beyond is not None:
+            return self.beyond.height(x, y)
         return self.default if z is None else z
 
     def colour_cell(self, k):
@@ -278,7 +344,7 @@ class Sampler:
         k = (int(x // 4096), int(y // 4096))
         rows = self.colour_cell(k)
         if not rows:
-            return (128, 116, 96)
+            return self.beyond.colour(x, y) if self.beyond is not None else (128, 116, 96)
         c, r = min(15, int((x - k[0] * 4096) / 256)), min(15, int((y - k[1] * 4096) / 256))
         return rows[r * 16 + c]
 
@@ -356,12 +422,25 @@ def report_for(gd, pr, world):
             'folder': out_folder(pr) if pr else ''}
 
 
-def generate(gd, pr, world, out, only_changed=None, progress=None):
+def generate(gd, pr, world, out, only_changed=None, progress=None, beyond=False, like=None):
     """Write a world's terrain into a folder laid out as Data is. only_changed: chunks only over the cells the mod's land changes
-    (for a game world with its own files), the default when the world has files of the game's already. Returns a report."""
+    (for a game world with its own files), the default when the world has files of the game's already. Returns a report.
+    like: another world whose land this one's far view shows (a small world set under a city, as the Lucky 38's top
+    floors are under the Mojave: a few cells of its own, the whole city in the distance), named for this one."""
     edid = gd.edid(world)
     low = edid.lower()
+    if like is not None:
+        world, only_changed = like, False
     box = world_box(gd, world)
+    past = None
+    if beyond:
+        # (a world made from a map: the land and sea round it as distant land, a margin of cells all round)
+        import lodbeyond
+        past = lodbeyond.beyond(gd, pr, world, coast_file=beyond if isinstance(beyond, str) else None)
+        if past is not None:
+            m = past.margin
+            box = (box[0] - m, box[1] - m, box[2] + m, box[3] + m)
+            only_changed = False
     settings = settings_bytes(box)
     top = struct.unpack_from('<I', settings, 4)[0]
     exists = bool(gd.find_file('lodsettings\\' + low + '.dlodsettings'))
@@ -379,7 +458,7 @@ def generate(gd, pr, world, out, only_changed=None, progress=None):
         if not only:
             return {'chunks': 0, 'files': 0, 'note': 'Your mod hasn\'t changed the land in this world.'}
     painter = maptiles.Painter(gd)
-    S = Sampler(gd, pr, world, painter)
+    S = Sampler(gd, pr, world, painter, past)
     work = chunks_for(box, top, only)
     files = []
 
@@ -389,19 +468,31 @@ def generate(gd, pr, world, out, only_changed=None, progress=None):
         with open(path, 'wb') as f:
             f.write(data)
         files.append(rel)
-    if not exists:
+    if not exists or past is not None:
+        # (a world of the mod's own with its surroundings: its settings must reach as far as the chunks do, or the game
+        # draws none past the old edge)
         put(os.path.join('lodsettings', edid + '.dlodsettings'), settings)
     base = os.path.join('meshes', 'landscape', 'lod', edid)
     tex = os.path.join('textures', 'landscape', 'lod', edid)
+    # (the far sea is part of each chunk, a second shape where there's water, at the world's water level: without it the
+    # game drew no water past the loaded cells, only the sea bed)
+    dn = gd.fields(world).get('DNAM') or b''
+    # (FAR_WATER_BELOW under the sea itself: at the very same height the near sea and the far one fought where they
+    # overlapped, and flickered round a ship in the bay; a little lower, the near one always wins)
+    sea = (struct.unpack_from('<f', dn, 4)[0] if len(dn) >= 8 else 0.0) - FAR_WATER_BELOW
+    wet = 0
     for n, (L, x, y) in enumerate(work):
         if progress:
             progress(n, len(work))
         v, u, t = chunk_mesh(S, L, x, y)
-        put(os.path.join(base, '%s.level%d.x%d.y%d.nif' % (edid, L, x, y)), terrain_nif(edid, L, x, y, v, u, t))
+        w = water_mesh(S, L, x, y, sea)
+        wet += bool(w)
+        put(os.path.join(base, '%s.level%d.x%d.y%d.nif' % (edid, L, x, y)), terrain_nif(edid, L, x, y, v, u, t, water=w))
         d, m = chunk_textures(S, L, x, y)
         put(os.path.join(tex, 'diffuse', '%s.n.level%d.x%d.y%d.dds' % (edid, L, x, y)), d)
         put(os.path.join(tex, 'normals', '%s.n.level%d.x%d.y%d.dds' % (edid, L, x, y)), m)
-    return {'chunks': len(work), 'files': len(files), 'levels': levels_of(top), 'folder': out, 'settings_written': not exists, 'partial': bool(only)}
+    return {'chunks': len(work), 'files': len(files), 'levels': levels_of(top), 'folder': out, 'settings_written': not exists or past is not None, 'partial': bool(only),
+            'beyond': past.margin if past is not None else 0, 'box': list(box), 'with_water': wet}
 
 
 # --- into the game and out, at the person's choice ---

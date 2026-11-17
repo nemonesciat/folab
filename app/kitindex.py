@@ -384,7 +384,9 @@ def _load_shape(game, model, cache):
                 ys = [v[1] for t in tris for v in t]
                 zs = [v[2] for t in tris for v in t]
                 out = (tris, (min(xs), min(ys), min(zs), max(xs), max(ys), max(zs)))
-    except (ValueError, IndexError, struct.error, KeyError):
+    except Exception:
+        # (a model that isn't there or won't read is left out of the kits, never the end of them: a mod's records naming a
+        # mesh it doesn't ship stopped a tester's Kit tab at the first, 16 Nov 2026)
         out = None
     cache[model] = out
     return out
@@ -744,7 +746,11 @@ def _foot_walls(game, model, height, cache):
     k = (model, height)
     if k not in cache:
         segs = []
-        for tri in triangles(nif.mesh_from_nif(game.read_file('meshes\\' + model.lstrip('\\')))):
+        try:
+            tris = triangles(nif.mesh_from_nif(game.read_file('meshes\\' + model.lstrip('\\'))))
+        except Exception:
+            tris = []                               # (a model that won't read has no walls to walk against)
+        for tri in tris:
             pts = []
             for i in range(3):
                 a, b = tri[i], tri[(i + 1) % 3]

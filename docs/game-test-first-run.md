@@ -29,6 +29,7 @@ From **Start the game** on **Tools > Test in game**, in this order:
    | `bFull Screen`, `iSize W`, `iSize H` | 0, 1024, 768 | A small window |
    | `bAlwaysActive` | 1 | It keeps running behind other windows |
    | `bBackground Mouse`, `bBackground Keyboard` | 1 | It doesn't hold your mouse or keyboard |
+   | `bUse Joystick`, `bGamePadRumble`, `bDisable360Controller` | 0, 0, 1 | The controller is left alone: no input, no rumble |
    | `SIntroSequence`, `sMainMenuMovieIntro` | empty | Straight to the main menu |
    | `fDefaultMasterVolume` | 0 | Silent |
 
@@ -141,7 +142,7 @@ Each entry says what's assumed and what you'd see if it's wrong. "Lines" means t
 
 - **Falls:** `SetPosEx` puts the player's feet at the point, and collision and gravity act within the 12 ticks allowed. If points read as falling though the floor is fine, the wait is too short; see `SETTLE`. The limits are constants at the top of `gametest.py`, chosen from Morrowind experience and untested on this game.
 - **Doors:** `GetFormFromMod "FOLabGT Mine.esp" "000801"` finds a ref by its 6-digit number. `Activate player 1` takes the player through a load door from a script without opening a menu. 40 ticks in-game is long enough to land. A door to outside lands in a cell whose number isn't compared (only its position is).
-- **NPCs:** `PlaceAtMe` with a form from `GetFormFromMod`, `AddScriptPackage DefaultFollowPlayerFar`, and a plain refugee NPC (`1ERefugeeAAM`). If nobody moves in places that are clearly fine, suspect the package before the navmesh.
+- **NPCs:** `PlaceAtMe` with a form from `GetFormFromMod`, `AddScriptPackage DefaultFollowPlayerFar`, and a plain refugee NPC (`1ERefugeeAAM`). The package keeps within 512 of the player, so a walker ending nearer than that has arrived (`FOLLOW_KEEPS`, read from the package's PTDT).
 - **Message boxes:** a mod's script that pops up a box leaves the game in a menu forever. That ends as *went silent*.
 
 <a id="partway"></a>
@@ -170,6 +171,12 @@ The first real runs were on 7 November 2026, on FOLab Check House (6 floor point
 | 4 | **Ran to the end in 129 seconds and quit by itself**, with the user clicking OK on a message box and the game in front. | Message boxes close by themselves (`CloseActiveMenu`), `bUse Joystick` off for the run, and a report where nearly every thing reads as buried says so once. |
 | 5 | The popups closed by themselves. Through the door, someone in Prospector Saloon spoke first, and the dialogue menu waited for an answer until the watch closed the game. | The dialogue menu is closed the same way. |
 | 6 | **Ran to the end and quit by itself, with no help from the user**, the game in front and the controller left alone. Every check was reached and every file came back. | Nothing. Its only error is the true `no_path` above. |
+| 7 | 8 Nov: a church behind a building of Goodsprings at 1 : 1 (Real map: a copy of the game's church, FOLab's own navmesh). Ran to the end. The door out landed exactly on its arrival point in the world, yet read as *leads nowhere*; all three walkers stopped 360-830 short. | A door out to a world is judged by where you land: `GetTeleportCell` gives nothing for it (its far side is in the world's persistent cell). |
+| 8 | The same church with the game's own navmesh copied in (Real map now does this). Ran to the end; the walkers ended 328-361 from the player. | `DefaultFollowPlayerFar` comes within 512 (its PTDT), so that is arriving: walks are judged against the package's own distance and planned only between points further apart than that. Judged again, run 8 *works*; run 7's mesh still fails one walk (830 away). |
+| 9 | A test-9 vault (POI Test, from 7 Nov). 25 of 40 characters fell and 10 were dead; walkers never moved. | Half its 60 characters belonged to an earlier vault made in the same place: making a vault again took the old pieces but left its people (Populate's now marked `gen`, so they go too). A fresh vault has every person on its navmesh. |
+| 10 | A fresh vault in a place copied from `Vault11`, which is the outdoor cell at the vault's door, not an interior: the game sent the player to "Holding pen for freeform encounters" and everything fell. | A slip in making the test place, not FOLab's (its New place offers only interiors). |
+| 11 | The fresh vault in a copy of `Vault34a`. All 240 floor points stood, 29 of 30 characters where they were put (3 found dead). Walks failed: 7,100-8,500 along the mesh, one walker got 3,200 before the time ran out. | Walks are planned only where the way along the mesh is at most `WALK_MOST` (2,400). |
+| 12 | The same vault, the controller left alone (`bGamePadRumble` 0, `bDisable360Controller` 1: the user's controller had rumbled). Went silent after 131 of 423 checks, on an ordinary floor point; everything put back. | Unexplained; the game falling behind another window is the likeliest. Walks within `WALK_MOST` are still unproven. |
 
 **Now known from a real run:**
 
@@ -177,6 +184,8 @@ The first real runs were on 7 November 2026, on FOLab Check House (6 floor point
 - `CenterOnCell` from the main menu starts the game in the place with no save, and the tick carries on after the move (`gn` fires).
 - Reading the plan, `sv_Split`, `ToNumber`, `SetPosEx`, `BuildRef`, `%i` and `%n` all work as written, and so does `Activate` through a load door, which landed in the right cell.
 - The calibration passed, and on the stands the rays read sensibly.
+- A door from a place of the mod's own out to a world of the mod's own takes you to the arrival point FOLab set (runs 7 and 8).
+- `PlaceAtMe` with `AddScriptPackage DefaultFollowPlayerFar` works: the walker follows, and stops within the package's 512.
 
 **Not settled:**
 

@@ -13,6 +13,7 @@ Undo keeps whole copies of the changes: small for now, and impossible to get sub
 import copy
 import json
 import os
+import pickle
 import re
 import time
 
@@ -56,6 +57,8 @@ class Project:
         self.cellinfo = d.get('cellinfo', {})   # CELL key -> what the mod sets on it (worldrec.py): {tag: key}, XCLR a list
         self.source = d.get('source')           # an opened plugin: its copy, under projects/ (adopt.py); None for a new mod
         self.esm = d.get('esm', False)          # saved as a master (.esm)
+        self.trim_masters = d.get('trim_masters', False)   # an opened plugin FOLab made (a new world): masters nothing uses are left out
+        self.newgame = d.get('newgame')         # the mod's own new game (newgame.py): its settings and what FOLab made for it
         self.next_id = d.get('next_id', FIRST_ID)
         self.undo_stack, self.redo_stack = [], []
 
@@ -77,12 +80,31 @@ class Project:
     def to_dict(self):
         return {'name': self.name, 'plugin': self.plugin, 'author': self.author, 'description': self.description,
                 'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'navmesh': self.navmesh, 'drop': self.drop, 'cellinfo': self.cellinfo, 'next_id': self.next_id,
-                'source': self.source, 'esm': self.esm}
+                'source': self.source, 'esm': self.esm, 'trim_masters': self.trim_masters, 'newgame': self.newgame}
 
-    def save(self):
+    def save(self, afresh=False):
+        """Write the mod's file. Every edit does this, so it has to be quick however big the mod is: a world made from a map
+        holds millions of numbers of ground, and writing them all out again took seconds an edit (placing a thing lagged, and
+        clicks piled up behind it). The ground and the navmeshes are kept as the text last written for each cell and written
+        again only when that cell's entry is another one: a change there always puts a whole new entry in (nothing edits
+        one in place). afresh: don't trust that, and write everything out anew (Save does, to be sure)."""
+        d = self.to_dict()
+        kept = {} if afresh else getattr(self, '_written', {})
+        now = {}
+        parts = []
+        for part in ('land', 'navmesh'):
+            rows = []
+            for k, v in d.pop(part).items():
+                had = kept.get((part, k))
+                text = had[1] if had is not None and had[0] is v else json.dumps(v, separators=(',', ':'))
+                now[(part, k)] = (v, text)           # (the entry itself is held, so no other can turn up at its address)
+                rows.append(json.dumps(k) + ':' + text)
+            parts.append(json.dumps(part) + ':{' + ','.join(rows) + '}')
+        self._written = now
+        head = json.dumps(d, separators=(',', ':'))
         tmp = self.path + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(self.to_dict(), f, indent=1)
+            f.write(head[:-1] + ',' + ','.join(parts) + '}')
         os.replace(tmp, self.path)
 
     def source_path(self):
@@ -97,8 +119,19 @@ class Project:
 
     # --- edits: each one a single undo step ---
 
+    def _snap(self):
+        # (cells and records are plain data: through pickle is the same copy as deepcopy, many times quicker on a big mod)
+        cells, records = pickle.loads(pickle.dumps((self.cells, self.records), pickle.HIGHEST_PROTOCOL))
+        return (cells, records, self.next_id, dict(self.land), dict(self.water), dict(self.navmesh),
+                list(self.drop), dict(self.cellinfo), copy.deepcopy(self.newgame))
+
+    def _put(self, snap):
+        cells, records, nid, land, water, nav, drop, info, newgame = snap
+        self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)   # (an undone ID is never reused)
+        self.land, self.water, self.navmesh, self.drop, self.cellinfo, self.newgame = land, water, nav, drop, info, newgame
+
     def _step(self, label):
-        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), list(self.drop), dict(self.cellinfo)))
+        self.undo_stack.append((label,) + self._snap())
         del self.undo_stack[:-200]
         self.redo_stack.clear()
 
@@ -108,7 +141,8 @@ class Project:
     def apply(self, label, ops, merge=False):
         """Make several changes as one undo step. ops: [{'op': 'add'|'move'|'remove', ...}]. Returns the keys
         given to new refs, in order. merge: part of the last step (navmeshes made for what that step put in).
-        A record_new or add with a 'name' can be named later in the same ops as '$name' (a cell, a ref, a door's link):
+        A record_new or add with a 'name' can be named later in the same ops as '$name' (a cell, a ref, a door's link, what a
+        placed thing is):
         self.names says what each became."""
         if not merge or not self.undo_stack:
             self._step(label)
@@ -120,6 +154,8 @@ class Project:
         for o in ops:
             if names and any(named(o.get(f)) != o.get(f) for f in ('cell', 'ref')):
                 o = dict(o, cell=named(o.get('cell')), ref=named(o.get('ref')))
+            if names and named(o.get('base')) != o.get('base'):
+                o = dict(o, base=named(o['base']))      # (a thing placed of a record made earlier in the same ops)
             if names and o.get('op') == 'tel' and o.get('tel') and named(o['tel'].get('door')) != o['tel'].get('door'):
                 o = dict(o, tel=dict(o['tel'], door=named(o['tel']['door'])))
             if o['op'] == 'record':                  # a record as the mod has it (a game one changed, or its own)
@@ -146,6 +182,9 @@ class Project:
                 continue
             if o['op'] == 'navmesh_revert':
                 self.navmesh.pop(o['cell'], None)
+                continue
+            if o['op'] == 'newgame':                 # the mod's own new game: its settings, whole (newgame.py)
+                self.newgame = o['settings']
                 continue
             if o['op'] == 'cellinfo':                # details on a place (music, region, zone...), the entry whole
                 self.cellinfo[o['cell']] = o['info']
@@ -186,6 +225,8 @@ class Project:
             lock = ((o.get('extra') or {}).get('props') or {}).get('lock') or {}
             if lock.get('key') == '$made':             # (a lock whose key is that record: a generated vault's office)
                 o = dict(o, extra=dict(o['extra'], props=dict(o['extra']['props'], lock=dict(lock, key=new_record))))
+            elif names and lock.get('key') and named(lock['key']) != lock['key']:     # (a key made earlier in these ops, by name)
+                o = dict(o, extra=dict(o['extra'], props=dict(o['extra']['props'], lock=dict(lock, key=named(lock['key'])))))
             refs = self._refs(o['cell'])
             if o['op'] == 'tel':                     # a door's link: where it leads, or (None) nowhere new
                 r = refs.setdefault(o['ref'], {})
@@ -243,20 +284,18 @@ class Project:
     def undo(self):
         if not self.undo_stack:
             return None
-        label, cells, records, nid, land, water, nav, drop, info = self.undo_stack.pop()
-        self.redo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), list(self.drop), dict(self.cellinfo)))
-        self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)   # (an undone ID is never reused)
-        self.land, self.water, self.navmesh, self.drop, self.cellinfo = land, water, nav, drop, info
+        label, *snap = self.undo_stack.pop()
+        self.redo_stack.append((label,) + self._snap())
+        self._put(snap)
         self.save()
         return label
 
     def redo(self):
         if not self.redo_stack:
             return None
-        label, cells, records, nid, land, water, nav, drop, info = self.redo_stack.pop()
-        self.undo_stack.append((label, copy.deepcopy(self.cells), copy.deepcopy(self.records), self.next_id, dict(self.land), dict(self.water), dict(self.navmesh), list(self.drop), dict(self.cellinfo)))
-        self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)
-        self.land, self.water, self.navmesh, self.drop, self.cellinfo = land, water, nav, drop, info
+        label, *snap = self.redo_stack.pop()
+        self.undo_stack.append((label,) + self._snap())
+        self._put(snap)
         self.save()
         return label
 

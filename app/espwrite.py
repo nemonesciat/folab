@@ -144,7 +144,7 @@ class Writer:
                 used.add(gd.land[cell][0])
             for q in L['q']:
                 for k in [q.get('bkey')] + [l.get('key') for l in q['layers']]:
-                    if k:
+                    if k and not k.startswith('+'):         # (a ground texture of the mod's own needs no master)
                         used.add(gd.from_key(k) >> 24)
         for ckey, info in getattr(self.pr, 'cellinfo', {}).items():
             if not ckey.startswith('+'):
@@ -177,6 +177,8 @@ class Writer:
                     used.add(gd.from_key(k) >> 24)
         questrec.plan_masters(gd, self.pr, used)
         for i in list(used):                    # a copied record may name its own file's masters
+            if gd.names[i] == self.own_name:
+                continue                        # (the mod's own plugin, loaded as part of the game: its list is what's being worked out)
             for m in gd.plugins[i].header['masters']:
                 if m.lower() in gd.names:
                     used.add(gd.names.index(m.lower()))
@@ -186,6 +188,13 @@ class Writer:
             # (what it had stays where it was; anything new it now uses goes after, every link re-pointed in build())
             low = {m.lower() for m in kept} | {self.own_name}
             self.source_masters = kept
+            if getattr(self.pr, 'trim_masters', False):
+                # (a plugin FOLab made, a new world saved naming every game file: those nothing in it or in the mod's changes uses go)
+                inside = masterlist.used_by_file(self.source)
+                if inside is not None:
+                    want = {gd.names[i] for i in used}
+                    kept = [m for n, m in enumerate(kept) if n == 0 or inside.get(m.lower()) or m.lower() in want]
+                    self.trimmed = True
             self.masters = kept + [file_name(i) for i in order if gd.names[i] not in low]
             self.mindex = {m.lower(): k for k, m in enumerate(self.masters)}
             return
@@ -205,7 +214,8 @@ class Writer:
         return struct.pack('<I6fI', self.link(t['door']), *[float(v) for v in t['p']], 0)
 
     def new_ref(self, rkey, r):
-        subs = [('NAME', struct.pack('<I', self.link(r['base'])))]
+        subs = [('EDID', r['edid'].encode('cp1252', 'replace') + b'\0')] if r.get('edid') else []   # (a name scripts use: the new game's start)
+        subs.append(('NAME', struct.pack('<I', self.link(r['base']))))
         first, last = worldrec.ref_extra_subs(r, self.link)
         subs += first
         if r.get('xlcm') is not None:                   # (a levelled actor's difficulty: after NAME and XEZN, as the game has it)
@@ -213,6 +223,9 @@ class Writer:
         if r.get('tel'):
             subs.append(('XTEL', self.tel(r)))
         subs += last
+        if r.get('radio'):                              # (where a radio station is heard: radio.py)
+            import radio
+            subs.append(('XRDO', radio.xrdo(r['radio'], self.link)))
         if r.get('s', 1.0) != 1.0:
             subs.append(('XSCL', struct.pack('<f', r['s'])))
         subs.append(('DATA', struct.pack('<6f', *r['p'])))
@@ -262,9 +275,10 @@ class Writer:
         gd = self.gd
         tree = plugintree.Plugin.read(self.source) if self.source else plugintree.Plugin.empty(b'')
         if self.source and self.masters != self.source_masters:
-            masterlist.grow(tree, self.pr.plugin, self.masters)
+            masterlist.grow(tree, self.pr.plugin, self.masters, dropped=getattr(self, 'trimmed', False))
         order = gd.plugins[0].top_groups()
         found = {r.formid: (r, parent) for r, parent, _path in tree.records()}
+        had = set(found)                    # (what the opened plugin held before this save)
 
         # records the mod changes or adds (a place's record goes with the place, below)
         for key, rec in sorted(self.pr.records.items()):
@@ -381,11 +395,11 @@ class Writer:
             subs = landmod.encode(L, original, self.link, self._beyond(cell))
             have = found.get(llid)
             if have:
-                have[0].set_data(join(subs), rec.flags & ~tes4.COMPRESSED)
+                have[0].set_packed(join(subs), rec.flags)
                 continue
             kids = cell_kids(cell)
             group = self._ref_group(kids, self.local(cell), False)
-            node = plugintree.Rec.new('LAND', rec.flags & ~tes4.COMPRESSED, llid, join(subs), FORM_VERSION)
+            node = plugintree.Rec.packed('LAND', rec.flags, llid, join(subs), FORM_VERSION)     # (compressed, as all the game's land is)
             group.kids.insert(0, node)                      # (the land first, as the game's cells have it)
             found[llid] = (node, group)
 
@@ -412,6 +426,8 @@ class Writer:
             node.set_data(join(subs), node.flags & ~tes4.COMPRESSED)
 
         self._drop(tree, found)
+        self._empty_deleted(tree, found)
+        as_the_game_files(tree, len(self.masters) if self.source and getattr(self.pr, 'trim_masters', False) else None)
 
         # the header: an opened plugin's own, with its count and next ID brought up to date
         own_ids = [r.formid & 0xFFFFFF for r, _p, _path in tree.records() if r.formid >> 24 == len(self.masters)]
@@ -433,6 +449,8 @@ class Writer:
             for m in self.masters:
                 subs += [('MAST', m.encode('cp1252') + b'\0'), ('DATA', b'\0' * 8)]
         flags = (tree.header.flags & ~ESM) | (ESM if self.pr.esm else 0)
+        if self.pr.esm:
+            subs = with_overrides(subs, tree, len(self.masters), had if self.source else None)
         new_head = join(subs)
         if new_head != tree.header.raw or flags != tree.header.flags:
             tree.header.set_data(new_head, flags)
@@ -448,6 +466,31 @@ class Writer:
             if rec.formid == (own << 24) | low:
                 return self.remap_fields(i, rec.tag, list(tes4.iter_subrecords(p.data(rec))))
         return None
+
+    def _empty_deleted(self, tree, found):
+        """Placed things of an opened plugin's own held as nothing but a deleted mark (another tool's doing: FOLab never
+        marks one) are left out. The GECK takes them for bad forms it can't remove, and crashed loading the cells they're
+        in (a tester's San Francisco, 16 Nov 2026); the game's own files never hold one. A master's thing deleted that way
+        is left as it is: Dead Money deletes 51 of FalloutNV.esm's so, and the GECK loads it."""
+        gone = False
+        for r, parent, _path in list(tree.records()):
+            if r.tag not in REF_KINDS or not r.flags & tes4.DELETED or r.raw or parent is None:
+                continue
+            if r.formid >> 24 >= len(self.masters):
+                parent.kids.remove(r)
+                found.pop(r.formid, None)
+                gone = True
+        if gone:
+            def prune(kids):
+                keep = []
+                for k in kids:
+                    if isinstance(k, plugintree.Group):
+                        k.kids = prune(k.kids)
+                        if not k.kids and k.gtype != tes4.G_CELL_PERSISTENT:
+                            continue
+                    keep.append(k)
+                return keep
+            tree.tops = prune(tree.tops)
 
     def _drop(self, tree, found):
         """Records the mod has cleaned out of an opened plugin, and any groups that leaves empty."""
@@ -474,6 +517,15 @@ class Writer:
         """A place's NAVM, first in its temporary group as the game has it, and its doors told which triangle they stand by
         (a mesh only copied to change its links keeps its triangles, so its doors are right as they are)."""
         fid = self.link(nav['form'])
+        # (a door of the mod's own taken out since the mesh was made, e.g. cleared for a landmark, is left off it:
+        # nothing is written for it to point at)
+        def taken_out(d):                           # (the mod's own door, new or in the opened plugin, no longer written)
+            rid = self.link(d)
+            return rid not in found and (d.startswith('+') or rid >> 24 == len(self.masters))
+        gone = {d for d, _t in nav['doors'] if taken_out(d)} | {d for d in nav.get('no_door', []) if taken_out(d)}
+        if gone:
+            nav = dict(nav, doors=[dt for dt in nav['doors'] if dt[0] not in gone],
+                       no_door=[d for d in nav.get('no_door', []) if d not in gone])
         m = navbuild.to_record(nav, lid, self.link)
         data = navmesh.write_navm(m)
         have = found.get(fid)
@@ -675,6 +727,89 @@ def set_water(subs, h):
         at = max([n + 1 for n, (t, _d) in enumerate(out) if t in WATER_AFTER] or [len(out)])
         out.insert(at, ('XCLW', v))
     return out
+
+
+REF_KINDS = ('REFR', 'ACHR', 'ACRE', 'PGRE', 'PMIS', 'PBEA', 'PFLA', 'PCBE')
+OVERRIDES_LISTED = ('REFR', 'ACHR', 'ACRE', 'PGRE', 'PMIS', 'PBEA', 'PFLA', 'PCBE', 'NAVM', 'LAND')
+
+
+def with_overrides(subs, tree, own, had=None):
+    """A master file's header with its ONAM: the placed things, navmeshes and land of other files that this one
+    changes, as each of the game's DLC masters lists its own. The game takes a master's changes to another file's
+    placed things only when they're listed here; a plugin (.esp) needs no list. had: the form IDs an opened plugin
+    already held: its own list is kept as it stands (the game's leave a few out), less what's gone, plus what's new."""
+    ids = [r.formid for r, _p, _path in tree.records() if r.tag in OVERRIDES_LISTED and r.formid >> 24 < own]
+    old = next((d for t, d in subs if t == 'ONAM'), None)
+    if had is not None and old is not None:
+        mine = list(struct.unpack('<%dI' % (len(old) // 4), old))
+        now = set(ids)
+        ids = [f for f in mine if f in now] + [f for f in ids if f not in had]
+    subs = [(t, d) for t, d in subs if t != 'ONAM']
+    if not ids:
+        return subs
+    at = max([n + 1 for n, (t, _d) in enumerate(subs) if t in ('HEDR', 'OFST', 'DELE', 'CNAM', 'SNAM', 'MAST', 'DATA')] or [len(subs)])
+    return subs[:at] + [('ONAM', struct.pack('<%dI' % len(ids), *ids))] + subs[at:]
+
+
+DRY_BELOW = 4096.0     # (a cell with no water to see: its water this far under the world's lowest land)
+
+
+def dry(subs, lowest):
+    """A CELL's subrecords with no water to see: the has-water flag on and a level of its own far under the ground.
+    Every outside cell of the game has the flag and a level; none is without."""
+    return set_water(subs, float(lowest) - DRY_BELOW)
+
+
+def as_the_game_files(tree, own=None):
+    """Outside cells laid out the way every one of the game's is (measured over all its worlds; the GECK is less
+    forgiving than the game about what it never made itself):
+      - a world's persistent cell has a children group with a persistent group in it, even an empty one;
+      - a grid cell with nothing in it has no children group at all, and never an empty temporary group's parent alone;
+      - every LAND stored compressed, in any plugin saved (an opened plugin's too: contents untouched).
+    own (the plugin's own load-order byte, for a plugin FOLab made a world in) also brings what earlier FOLabs wrote
+    into line: its own cells without water given a level far under the ground."""
+    wtop = next((g for g in tree.tops if g.gtype == tes4.G_TOP and g.label == plugintree.type_label('WRLD')), None)
+    if not wtop:
+        return
+    is_group = lambda k, t: isinstance(k, plugintree.Group) and k.gtype == t
+
+    def cells(kids, lowest, grid):
+        n = 0
+        while n < len(kids):
+            k = kids[n]
+            if isinstance(k, plugintree.Group) and k.gtype in (tes4.G_EXT_BLOCK, tes4.G_EXT_SUBBLOCK):
+                cells(k.kids, lowest, True)
+            elif isinstance(k, plugintree.Rec) and k.tag == 'CELL':
+                nxt = kids[n + 1] if n + 1 < len(kids) else None
+                has = is_group(nxt, tes4.G_CELL_CHILDREN)
+                if grid and has and not nxt.kids:
+                    del kids[n + 1]
+                elif not grid and not (has and any(is_group(g, tes4.G_CELL_PERSISTENT) for g in nxt.kids)):
+                    if not has:
+                        nxt = plugintree.Group(k.formid, tes4.G_CELL_CHILDREN)
+                        kids.insert(n + 1, nxt)
+                    nxt.kids.insert(0, plugintree.Group(k.formid, tes4.G_CELL_PERSISTENT))
+                if has:
+                    # (every LAND stored compressed, whoever's it is: the game's and the GECK's files never hold one
+                    # uncompressed, and a world with all its land uncompressed loaded in FOLab and crashed the GECK as its
+                    # cells loaded (a tester's San Francisco, 16 Nov 2026). Only the storage changes, never the contents.)
+                    for g in nxt.kids:
+                        for r in (g.kids if isinstance(g, plugintree.Group) else []):
+                            if isinstance(r, plugintree.Rec) and r.tag == 'LAND' and not r.flags & tes4.COMPRESSED:
+                                r.set_packed(r.raw)
+                if own is not None and k.formid >> 24 == own:
+                    if grid and lowest is not None:
+                        subs = list(tes4.iter_subrecords(k.data()))
+                        flags = next((d for t, d in subs if t == 'DATA'), b'')
+                        if flags and not flags[0] & 2:
+                            k.set_data(join(dry(subs, lowest)), k.flags)
+            n += 1
+
+    for n, k in enumerate(wtop.kids):
+        nxt = wtop.kids[n + 1] if n + 1 < len(wtop.kids) else None
+        if isinstance(k, plugintree.Rec) and is_group(nxt, tes4.G_WORLD_CHILDREN):
+            dnam = dict(tes4.iter_subrecords(k.data())).get('DNAM')
+            cells(nxt.kids, struct.unpack_from('<f', dnam)[0] if dnam and len(dnam) >= 4 else None, False)
 
 
 def _set_text(subs, tag, text):

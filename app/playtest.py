@@ -46,6 +46,27 @@ def game_exe(data_dir):
     return os.path.join(os.path.dirname(os.path.normpath(data_dir)), 'FalloutNV.exe')
 
 
+PATCH_PAGE = 'https://www.nexusmods.com/newvegas/mods/62552'       # (the FNV 4GB Patcher's page: FOLab only links to it)
+LARGE_ADDRESS_AWARE = 0x20
+
+
+def memory_room(data_dir):
+    """How much memory the game's exe may use: {'big': True (4 GB) | False (2 GB) | None (couldn't tell), 'page'}.
+    As it ships, FalloutNV.exe stops at 2 GB and crashes when a busy outdoor place needs more (a tester's own PC sat at
+    1.67 GB in one small room; a map-made city took it over, 15 Nov 2026). The 4GB patch sets one flag in the exe's
+    header, which is all this reads; the game's files are never changed from here."""
+    big = None
+    try:
+        with open(game_exe(data_dir), 'rb') as f:
+            head = f.read(4096)
+        pe = struct.unpack_from('<I', head, 0x3C)[0]
+        if head[:2] == b'MZ' and head[pe:pe + 4] == b'PE\0\0':
+            big = bool(struct.unpack_from('<H', head, pe + 22)[0] & LARGE_ADDRESS_AWARE)
+    except (OSError, struct.error):
+        pass
+    return {'big': big, 'page': PATCH_PAGE}
+
+
 def game_running():
     """Is New Vegas running? (it holds its plugins open, and a save while it runs could leave it half-written)"""
     try:

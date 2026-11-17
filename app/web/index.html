@@ -311,7 +311,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
     <div id="tools">
       <div class="tgrp" data-grp="view" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="seg"><button class="btn" id="t-map" title="The place from above (M)">🗺 Map</button><button class="btn on" id="t-3d" title="The 3D view (M)">3D</button></span><button class="btn ico" id="t-help" title="The 3D view's controls">?</button></div>
       <div class="tgrp" data-grp="handles" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn on" id="t-move" title="Move (1)">✥ Move</button><button class="btn" id="t-turn" title="Turn (2)">⟳ Turn</button><button class="btn" id="t-scale" title="Size (3): drag any handle, it grows or shrinks evenly">⤢ Scale</button><button class="btn" id="t-space" title="The handles point the world's directions (click: the thing's own)">✛ World axes</button></div>
-      <div class="tgrp" data-grp="snap" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="grp">Grid <select id="t-grid"><option value="0">off</option><option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option><option>256</option></select></span><span class="grp">Angle <select id="t-angle"><option value="0">off</option><option>5</option><option selected>15</option><option>45</option><option>90</option></select></span><span class="grp"><label title="While moving, pieces slide into place against the pieces round them: edge to edge, sides level, standing on top"><input type="checkbox" id="t-snap" checked> Snap pieces</label></span></div>
+      <div class="tgrp" data-grp="snap" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="grp">Grid <select id="t-grid"><option value="0">off</option><option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option><option>256</option></select></span><span class="grp">Angle <select id="t-angle"><option value="0">off</option><option>5</option><option selected>15</option><option>45</option><option>90</option></select></span><span class="grp"><label title="While moving, pieces slide into place against the pieces round them: edge to edge, sides level, standing on top"><input type="checkbox" id="t-snap" checked> Snap pieces</label></span><span class="grp"><label title="After you move something with the arrows, it comes to rest on the ground or whatever is under it. Several keep their places to each other. Dragging the up arrow leaves it where you put it"><input type="checkbox" id="t-land"> Land on what's below</label></span></div>
       <div class="tgrp" data-grp="edit" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn" id="t-drop" title="Set the selected thing down on what's below it (End)">⤓ Drop down</button><button class="btn" id="t-dup" title="Duplicate (Ctrl+D)">⧉ Duplicate</button><button class="btn" id="t-del" title="Remove (Delete)">✕ Remove</button></div>
       <div class="tgrp" data-grp="show" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="grp"><label><input type="checkbox" id="t-markers"> Markers</label></span><span class="grp"><label><input type="checkbox" id="t-removed"> Removed</label></span><span class="grp"><label title="Light each place with its own lights, as in game"><input type="checkbox" id="t-light" checked> Game light</label></span></div>
       <div class="tgrp" data-grp="outside" title="" id="tg-outside" style="display:none"><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn" id="t-ground" title="Shape, paint and tint the ground outside">⛰ Ground</button><button class="btn" id="ls-btn" title="Shape many cells at once: ridges, valleys, plateaus, hills… drawn on the flat map">🗺⛰ Shape land</button></div>
@@ -319,13 +319,13 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
       <div id="hint"></div>
       <div id="help3d"><div class="h3-top"><b>Controls in the 3D view</b><button class="owx" id="help3d-x" title="Close (Esc)">✕</button></div>
         <div class="h3-body"><section><h4>Moving about</h4><dl><dt><kbd>Right-drag</kbd></dt><dd>look around</dd><dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>fly the way you look</dd><dt><kbd>Q</kbd> <kbd>E</kbd></dt><dd>down, up</dd><dt><kbd>Shift</kbd></dt><dd>faster; tap a move key twice and hold to sprint</dd><dt><kbd>Wheel</kbd></dt><dd>forward and back</dd><dt><kbd>Middle-drag</kbd></dt><dd>slide</dd><dt><kbd>Alt+drag</kbd></dt><dd>circle round the selection</dd><dt><kbd>F</kbd></dt><dd>look at what's selected</dd><dt><kbd>M</kbd></dt><dd>the flat map, and back</dd><dt><kbd>Ctrl+K</kbd></dt><dd>go to a place</dd><dt><kbd>Alt+←</kbd></dt><dd>back to where you were</dd></dl></section>
-        <section><h4>Selecting</h4><dl><dt><kbd>Click</kbd></dt><dd>select</dd><dt><kbd>Shift+click</kbd></dt><dd>add or take away</dd><dt>Drag on empty space</dt><dd>select with a box</dd><dt><kbd>Ctrl+A</kbd></dt><dd>everything you can see</dd><dt><kbd>Ctrl+click</kbd></dt><dd>one thing out of a group</dd><dt><kbd>Esc</kbd></dt><dd>deselect, or stop what you're doing</dd><dt><kbd>H</kbd> <kbd>Shift+H</kbd></dt><dd>hide it, show everything again</dd><dt><kbd>Right-click</kbd></dt><dd>a menu, here and on the lists</dd><dt>Double-click</dt><dd>its window</dd></dl></section>
-        <section><h4>Changing what's selected</h4><dl><dt><kbd>G</kbd> or <kbd>1</kbd></dt><dd>move: drag the arrows</dd><dt><kbd>R</kbd> or <kbd>2</kbd></dt><dd>turn: drag the rings</dd><dt><kbd>3</kbd></dt><dd>scale</dd><dt><kbd>End</kbd></dt><dd>drop it onto what's below</dd><dt><kbd>Shift+End</kbd></dt><dd>settle it, leaning as it lands</dd><dt><kbd>Del</kbd></dt><dd>remove</dd><dt><kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd></dt><dd>copy, paste where the mouse is</dd><dt><kbd>Ctrl+D</kbd></dt><dd>duplicate</dd><dt><kbd>Ctrl+G</kbd> <kbd>Ctrl+Shift+G</kbd></dt><dd>group, ungroup</dd></dl></section>
+        <section><h4>Selecting</h4><dl><dt><kbd>Click</kbd></dt><dd>select</dd><dt>Drag a box, from anywhere</dt><dd>select everything whose middle is in it</dd><dt><kbd>Ctrl+click</kbd> <kbd>Shift+click</kbd></dt><dd>add one more, or take it out (Ctrl: just that one of a group)</dd><dt><kbd>Shift</kbd>+drag a box</dt><dd>add what's in it</dd><dt><kbd>Ctrl</kbd>+drag a box</dt><dd>take what's in it out</dd><dt><kbd>Ctrl+A</kbd></dt><dd>everything you can see</dd><dt>🔒 in the View tab</dt><dd>kinds a click or a box leaves alone (roads, buildings…)</dd><dt><kbd>Esc</kbd></dt><dd>deselect, or stop what you're doing</dd><dt><kbd>H</kbd> <kbd>Shift+H</kbd></dt><dd>hide it, show everything again</dd><dt><kbd>Right-click</kbd></dt><dd>a menu, here and on the lists</dd><dt>Double-click</dt><dd>its window</dd></dl></section>
+        <section><h4>Changing what's selected</h4><dl><dt><kbd>G</kbd> or <kbd>1</kbd></dt><dd>move: drag the arrows</dd><dt><kbd>R</kbd> or <kbd>2</kbd></dt><dd>turn: drag the rings</dd><dt><kbd>3</kbd></dt><dd>scale</dd><dt><kbd>End</kbd></dt><dd>drop it onto what's below</dd><dt><kbd>Shift+End</kbd></dt><dd>settle it, leaning as it lands</dd><dt><kbd>Del</kbd></dt><dd>remove</dd><dt><kbd>Esc</kbd> mid-drag</dt><dd>put it back (or right-click)</dd><dt>Land on what's below</dt><dd>ticked: a move ends resting on the ground</dd><dt><kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd></dt><dd>copy; the copies follow the mouse, click to put them down</dd><dt><kbd>Ctrl+D</kbd></dt><dd>duplicate, beside it</dd><dt><kbd>Ctrl+G</kbd> <kbd>Ctrl+Shift+G</kbd></dt><dd>group, ungroup</dd></dl></section>
         <section><h4>While placing</h4><dl><dt>Click a thing in Place</dt><dd>it comes to the mouse; or drag it into the view</dd><dt><kbd>Click</kbd></dt><dd>put it down; it stays on the mouse for another</dd><dt><kbd>Wheel</kbd> <kbd>Shift+wheel</kbd></dt><dd>turn by the Angle setting, by 1°</dd><dt><kbd>R</kbd> <kbd>Shift+R</kbd></dt><dd>a quarter turn, each way</dd><dt><kbd>Ctrl+wheel</kbd> or <kbd>[</kbd> <kbd>]</kbd></dt><dd>size</dd><dt><kbd>Alt+wheel</kbd> or <kbd>PgUp</kbd> <kbd>PgDn</kbd></dt><dd>height (Shift: 1 unit)</dd><dt><kbd>0</kbd></dt><dd>put turn, size and height back</dd><dt><kbd>Esc</kbd> or <kbd>Right-click</kbd></dt><dd>stop placing</dd></dl></section>
         <section><h4>Your mod</h4><dl><dt><kbd>Ctrl+Z</kbd> <kbd>Ctrl+Y</kbd></dt><dd>undo, redo</dd><dt><kbd>Ctrl+S</kbd></dt><dd>save</dd></dl></section>
         <section><h4>The ground brush, outside</h4><dl><dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>brush size</dd></dl></section></div></div></div>
     <div id="status"><span id="s-place">No place open</span><span id="s-load"></span>
-      <span class="r">Right-drag look · WASD fly · ? all controls</span></div>
+      <span id="s-sel"></span><span class="r">Drag a box: select several · Right-drag look · WASD fly · ? all controls</span></div>
     <div id="welcome"><div class="card">
       <h3>Start a mod</h3>
       <p>Your changes are kept as a mod of their own. The game's files are never touched until you choose <b>Put in game</b>.</p>
@@ -349,7 +349,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
     </div>
     <div class="pane" id="tab-view"></div>
     <div class="pane" id="tab-kit"></div>
-    <div class="pane" id="tab-selected"><div id="selected"><div class="note">Click a thing in the view or in Objects.</div></div><div id="kit-joins"></div></div>
+    <div class="pane" id="tab-selected"><div id="selected"><div class="note">Click a thing in the view or in Objects. Drag a box in the view to select several.</div></div><div id="kit-joins"></div></div>
   </div>
 </main>
 <main id="page-browse" style="display:none">
@@ -378,11 +378,16 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/ground.js"></script>
 <script src="/web/map2d.js"></script>
 <script src="/web/farland.js"></script>
+<script src="/web/farthings.js"></script>
 <script src="/web/viewtools.js"></script>
+<script src="/web/sky.js"></script>
 <script src="/web/landshape.js"></script>
 <script src="/web/help.js"></script>
 <script src="/web/toolbar.js"></script>
 <script src="/web/ctxmenu.js"></script>
+<script src="/web/gridview.js"></script>
+<script src="/web/pivot.js"></script>
+<script src="/web/grab.js"></script>
 <script src="/web/listmenu.js"></script>
 <script src="/web/objwin.js"></script>
 <script src="/web/browse.js"></script>
@@ -408,12 +413,15 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/dialogue.js"></script>
 <script src="/web/questboard.js"></script>
 <script src="/web/library.js"></script>
+<script src="/web/radio.js"></script>
 <script src="/web/stylepal.js"></script>
+<script src="/web/placefold.js"></script>
 <script src="/web/comforts.js"></script>
 <script src="/web/worldtools.js"></script>
 <script src="/web/worldtabs.js"></script>
 <script src="/web/navtool.js"></script>
 <script src="/web/mapland.js"></script>
+<script src="/web/newgame.js"></script>
 <script src="/web/home.js"></script>
 </body>
 </html>

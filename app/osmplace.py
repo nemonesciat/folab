@@ -3,12 +3,15 @@ No towns or buildings are put up. All of it comes back as ops, so it's one Undo.
 
 The file's lat/lon goes through the height file's place on Earth to game units (the sidecar api_maps.py keeps). Lines are cut at the world's edge and thinned (a land point is 128 units: finer than that
 is noise here). Water goes first, then pads, then roads, each on what the one before left. Every height stays on a whole 8-unit step, worked out by spot, so cells still meet."""
+import collections
+import struct
 import math
 import random
 
 import elevation
 import land
 import landshape
+import navgen
 import roadgen
 
 CELL = 4096
@@ -161,6 +164,57 @@ def layout(data, side):
         x, y = geo.xy(w['pt'])
         if box[0] <= x <= box[2] and box[1] <= y <= box[3]:
             out['places'].append({'p': [x, y], 'name': w['name'], 'kind': w['kind']})
+    gap = float(side.get('road_gap') or 0)
+    if gap > 0:
+        before = len(out['roads'])
+        out['roads'] = sparse(out['roads'], gap)
+        out['roads_thinned'] = before - len(out['roads'])
+    return out
+
+
+SPARSE_SHARE = 0.6          # (a street goes when this much of it runs closer than the gap to streets already kept)
+SPARSE_STEP = 400.0
+
+
+def sparse(roads, gap):
+    """A street grid thinned for a world squeezed smaller than life, where roads keep their width and the blocks between
+    them don't: main roads all stay; of the rest, whole streets (the pieces of one name together) are taken longest first,
+    and one is kept only if most of it runs at least `gap` from every road kept before it. So the through streets stay and
+    every other side street goes, as the game's own towns have a few streets where the real one has many."""
+    cell = max(gap, 1.0)
+    kept_pts = collections.defaultdict(list)
+
+    def samples(line):
+        out = []
+        for (ax, ay), (bx, by) in zip(line, line[1:]):
+            L = math.hypot(bx - ax, by - ay)
+            n = max(1, int(L / SPARSE_STEP))
+            out += [(ax + (bx - ax) * (k + 0.5) / n, ay + (by - ay) * (k + 0.5) / n) for k in range(n)]
+        return out
+
+    def keep(road):
+        for x, y in samples(road['line']):
+            kept_pts[(int(x // cell), int(y // cell))].append((x, y))
+
+    def crowded(x, y):
+        cx, cy = int(x // cell), int(y // cell)
+        return any(math.hypot(px - x, py - y) < gap for dx in (-1, 0, 1) for dy in (-1, 0, 1) for px, py in kept_pts.get((cx + dx, cy + dy), ()))
+
+    out = []
+    streets = collections.defaultdict(list)
+    for n, r in enumerate(roads):
+        if r['class'] == 'major':
+            keep(r)
+            out.append(r)
+        else:
+            streets[r.get('name') or ('', n)].append(r)
+    for _name, parts in sorted(streets.items(), key=lambda kv: -sum(length(p['line']) for p in kv[1])):
+        pts = [p for part in parts for p in samples(part['line'])]
+        if pts and sum(1 for x, y in pts if crowded(x, y)) > SPARSE_SHARE * len(pts):
+            continue
+        for part in parts:
+            keep(part)
+            out.append(part)
     return out
 
 
@@ -248,6 +302,50 @@ class Work:
 
 def _step(v):
     return round(v / 8.0) * 8.0
+
+
+LIFT = 2.5              # (game units between two road pieces that lie over each other)
+
+
+def apart(gd, ops):
+    """Road pieces that lie over one another at the same height (where streets cross, and one piece's end over the next
+    on a bend) show both surfaces at once, flickering as you move. Each is lifted a hair clear of the ones under it that
+    it overlaps: a lip nobody sees or trips on. Changes the add ops in place; returns how many were lifted."""
+    import townbuild
+    boxes, done, by, lifted = {}, [], {}, 0
+    for o in ops:
+        if o.get('op') != 'add' or not o.get('p'):
+            continue
+        key = o['base']
+        if key not in boxes:
+            boxes[key] = townbuild.obnd(gd, key)
+        b = boxes[key]
+        if not b or b[5] - b[2] > 80 or max(b[3] - b[0], b[4] - b[1]) < 400:
+            continue                            # (only the flat pieces a road is made of)
+        p = o['p']
+        fp = townbuild._foot(b, p[5], p)
+        near = set()
+        for x, y in fp + [(p[0], p[1])]:
+            near.update(by.get((int(x // 1024), int(y // 1024)), ()))
+        taken = []
+        for n in near:
+            q, qfp = done[n]
+            if townbuild.overlap(fp, qfp):
+                inter = townbuild._clip(fp, qfp)
+                if inter and townbuild._area(inter) > 4000:
+                    taken.append(q[2])
+        z, moved = p[2], False
+        while any(abs(z - t) < LIFT - 0.01 for t in taken):
+            z += LIFT
+            moved = True
+        if moved:
+            p[2] = round(z, 2)
+            lifted += 1
+        n = len(done)
+        done.append((p, fp))
+        for x, y in fp + [(p[0], p[1])]:
+            by.setdefault((int(x // 1024), int(y // 1024)), set()).add(n)
+    return lifted
 
 
 def lay_water(w, lay, want, compress, progress):
@@ -400,6 +498,7 @@ def ops_for(gd, pr, world, lay, want, compress, seed=1, progress=None):
     else:
         rows = [{'ring': _round(b['ring']), 'name': b['name'], 'kind': b['kind'], 'pad': False} for b in lay['buildings']]
     ops, total, skipped = lay_roads(gd, w, lay, want, seed, progress) if want.get('roads') else ([], 0.0, 0)
+    lifted = apart(gd, ops)
     for ck in sorted(w.changed):
         ops.append({'op': 'land', 'cell': ck, 'land': w.over.land[ck]})
     levels = 0
@@ -407,9 +506,22 @@ def ops_for(gd, pr, world, lay, want, compress, seed=1, progress=None):
         if v > 0 and k in w.grid:
             ops.append({'op': 'water', 'cell': gd.key(w.grid[k]), 'h': round(v, 1)})
             levels += 1
+    # a square dug under the world's own water level (a canal to the sea, a harbour basin) takes that water: a world made
+    # from a map files its dry squares with a level far underground (espwrite.dry), and digging doesn't change that
+    d = gd.fields(world).get('DNAM')
+    sea = struct.unpack_from('<f', d, 4)[0] if d and len(d) >= 8 else 0.0
+    own = {gd.key(c): k for k, c in w.grid.items()}
+    for ck in sorted(w.changed):
+        k = own.get(ck)
+        if k is None or (k in water and water[k] > 0) or min(w.over.land[ck]['h']) >= sea:
+            continue
+        have = navgen._water_of(gd, w.grid[k])
+        if have is None or have < sea - 1.0:
+            ops.append({'op': 'water', 'cell': ck, 'h': None})
+            levels += 1
     layer = {'buildings': rows, 'places': [{'p': _round([p['p']])[0], 'name': p['name'], 'kind': p['kind']} for p in lay['places']],
              'bridges': [{'line': _round(b['line']), 'name': b['name'], 'kind': b['kind']} for b in lay['bridges']]}
-    report = {'pieces': sum(1 for o in ops if o['op'] == 'add'), 'road_units': round(total), 'roads_skipped': skipped, 'rivers': n_r, 'lakes': n_l, 'water_cells': levels, 'pads': pads,
+    report = {'pieces': sum(1 for o in ops if o['op'] == 'add'), 'road_units': round(total), 'roads_skipped': skipped, 'rivers': n_r, 'lakes': n_l, 'water_cells': levels, 'pads': pads, 'lifted': lifted,
               'buildings': len(rows), 'pads_too_small': sum(1 for r in rows if not r['pad']) if want.get('buildings') else 0, 'bridges': len(layer['bridges']), 'places': len(layer['places']),
               'land_cells': len(w.changed), 'cell_xy': [list(gd.cell_grid(gd.from_key(ck))) for ck in sorted(w.changed)]}
     return ops, report, layer

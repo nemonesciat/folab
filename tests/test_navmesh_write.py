@@ -122,6 +122,20 @@ check('loaded with the game, the place has that navmesh', len(found) == 1 and N.
 refs = {r.tag for r in [e[1] for e in G2.cell_refs[c2].values()]}
 check('… among what the place holds', 'NAVM' in refs and 'REFR' in refs)
 
+# the door taken out after the mesh was made (a landmark clears what stood in its way): the save leaves it off the mesh
+pr.apply('Clear', [{'op': 'remove', 'cell': cell, 'ref': door}])
+try:
+    out5 = os.path.join(project.HOME, 'nav test cleared.esp')
+    espwrite.write(G, pr, out5)
+    p5, recs5 = records_of(out5)
+    m5 = N.read_navm(p5.data(recs5['NAVM'][0][0]))
+    check('a door taken out after the mesh was made: saved, the mesh sound with no door', not m5['doors'] and not N.validate(m5)
+          and not any(r.formid == fid(door) for r, _g, _ in recs5.get('REFR', [])))
+    p5.close()
+except Exception as e:
+    check('a door taken out after the mesh was made: saved', False, repr(e))
+pr.undo()
+
 # out of date, undo
 pr.apply('Move', [{'op': 'move', 'cell': cell, 'ref': door, 'p': [at[0] + 64] + at[1:]}])
 check('moving something makes it out of date', not navbuild.status(G, pr, cell)['current'])

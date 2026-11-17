@@ -115,14 +115,20 @@ check('every edge between cells matches, read back', bad == 0)
 check('every height on a whole step', all(v % 8 == 0 for k in list(grid)[::7] for v in land_of(*k)['h']))
 # water
 wet = dry = 0
+world_low = min(min(land_of(*k)['h']) for k in grid)
 for k, c in grid.items():
     low = min(land_of(*k)['h'])
-    has = gd.fields(c)['DATA'][0] & 2 and 'XCLW' in gd.fields(c)
-    wet += bool(has)
+    f = gd.fields(c)
+    level = struct.unpack('<f', f['XCLW'])[0] if 'XCLW' in f else None
+    if not f['DATA'][0] & 2 or level is None:
+        check('cell %s has the has-water flag and a level, as every outside cell of the game does' % (k,), False)
+        continue
+    has = level > 1e30          # (the world's own level; a cell with none to see has its own, far under the ground)
+    wet += has
     dry += not has
-    if bool(has) != (low < 0):
-        check('cell %s\'s water agrees with its ground' % (k,), False)
-check('cells under the base level have water, the others none (%d wet, %d dry)' % (wet, dry), wet > 0 and dry > 0)
+    if has != (low < 0) or (not has and level > world_low - 1000):
+        check("cell %s's water agrees with its ground" % (k,), False)
+check("cells under the base level have the world's water, the others theirs far under the ground (%d wet, %d dry)" % (wet, dry), wet > 0 and dry > 0)
 some_wet = next(c for k, c in grid.items() if 'XCLW' in gd.fields(c))
 check('at the world\'s level', struct.unpack('<f', gd.fields(some_wet)['XCLW'])[0] > 1e38)
 # paint

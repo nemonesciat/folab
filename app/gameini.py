@@ -59,6 +59,10 @@ def write(changes, files=FILES):
     the last of them (FalloutPrefs.ini by default), in its section. Returns the backup folder."""
     stamp = time.strftime('%Y-%m-%d %H%M%S')
     bk = os.path.join(project.HOME, 'backups', 'game settings ' + stamp)
+    n = 1
+    while os.path.exists(bk):           # (two writes in one second, to two folders, each keep their own copies)
+        n += 1
+        bk = os.path.join(project.HOME, 'backups', 'game settings %s (%d)' % (stamp, n))
     have = {}
     for fn in files:
         p = os.path.join(folder(), fn)

@@ -668,6 +668,8 @@ def apply(gd, pr, br, edit, body):
             op = {'op': 'add', 'cell': ckey, 'base': r['base'], 'p': [x, y, z, 0.0, 0.0, turn]}
             if r.get('levelled') and r.get('xlcm') is not None:
                 op['xlcm'] = int(r['xlcm'])
+            if body.get('gen'):
+                op['gen'] = True             # (a generated place's people: making it again takes them with it)
             ops.append(op)
     out = edit('Populate ' + place, ops)
     out.pop('things', None)

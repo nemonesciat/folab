@@ -30,7 +30,7 @@ In **Outside**, press **＋ New worldspace…**, then **🗺 From a real map…*
 2. **Set the scale** (below).
 3. **Choose the part you want.** Drag on the map for a rectangle; drag inside it to move it. It snaps to whole cells. Right-drag pans, the wheel zooms.
 4. **Read the numbers.** Before anything is made you see the cells, the plugin's size, how long it'll take, and how high the heights run.
-5. **Make it.** Your mod is saved and reopened with the new world in it. The map shows it, and every tool outside works on it as on any other land.
+5. **Make it.** Your mod is saved and reopened with the new world in it. The map shows it, and every tool outside works on it as on any other land. While you work, every DLC's things are yours to use; when you save, the plugin names only the game files it actually uses, so players need only those (Goodsprings with its buildings needs Honest Hearts and Old World Blues, nothing else).
 
 **Undo** takes the whole world away again, back to your mod as it was, as long as you haven't changed anything in it since. Once you have, **World tools > Real map > Go back to before this world** still can, but what you've done since goes with it. (Only the latest world can be taken back like this.)
 
@@ -40,7 +40,7 @@ A cell is 4,096 units, about **58 m**, so **1 km is about 17 cells**. The Mojave
 
 - **Size** is how much real ground goes in the same space. At **1 : 10**, 10 m of the real place become 1 m in the game: a cell holds 585 m, and 1 km is 1.7 cells. The whole file comes out about 48 cells across unless you change it.
 - **Height ×**: at 1, slopes are as steep as the real ones, whatever the size. So land compressed 1 : 30 with height × 1 is a true model, but its hills have shrunk by 30 too, and it feels flat. Fallout's own land is much steeper than the places it stands for. The default goes up with compression: 1.5 at 1 : 3 to 1 : 5, 2 up to 1 : 20, 3 past that.
-- **Base level** is the real height that comes out at z 0. The world's water stands there, so for a place on the coast it's sea level (0), and FOLab picks that if the file reaches the sea; inland, it picks just under the lowest ground, so there's no sea. Set it higher to flood the valleys.
+- **Base level** is the real height that comes out at z 0. The world's water stands there, so for a place on the coast it's sea level (0), and FOLab picks that if the file reaches the sea; inland, it picks just under the lowest ground of the part you've chosen, so there's no sea. (A town cut from a big tile stands on its own ground, not the tile's lowest corner.) Set it higher to flood the valleys.
 
 Rule of thumb: a town is 1 : 1 to 1 : 3; a valley 1 : 5 to 1 : 15; a whole SRTM square (100 km) 1 : 30 to 1 : 60.
 
@@ -66,12 +66,13 @@ With the new world open, press **🧭 World tools > Real map**, pick the `.osm` 
 
 Once the pads are laid, **World tools > Real map > 🏚 Put up buildings** stands the game's own buildings on them. It's one Undo, and pressing it again only fills plots that have nothing yet.
 
-- **Which buildings:** every building the game stands on its own outdoors: Novac's and Goodsprings' houses, shacks, ranch houses, corner stores, gas stations, offices and apartment blocks, barracks, transmission buildings, the police station and the like. City-block kit pieces, walls, signs and rubble aren't used. FOLab measures them the first time (about a minute) and keeps what it found.
+- **Which buildings:** every building the game stands on its own outdoors: Novac's and Goodsprings' houses, shacks, ranch houses, corner stores, gas stations, offices and apartment blocks, barracks, transmission buildings, the police station and the like, and the mobile homes the game sets upright (closed up, no way in). City-block kit pieces, walls, signs and rubble aren't used. FOLab measures them the first time (about a minute) and keeps what it found.
 - **Which one where:** each plot gets the nearest fit for its size and its kind. OpenStreetMap's `building=house` gets a house, `retail` a shop, `industrial` works, `church` or `school` a hall. Plain `building=yes` goes by size. A wide plot takes a row of buildings and a deep one a second row facing the back. A town doesn't get one house over and over: a building gets less likely each time it's used.
 - **Generic and landmarks:** most of a town is the game's generic buildings: the ones it uses three times or more, ruined and ordinary as the Mojave's are. Its one-offs (the Prospector Saloon, Nipton's town hall, the Goodsprings schoolhouse, the church) are landmarks. They only go on plots that stand out: a building named in the file, a church, school, police station or other public building, or a very big plot. Each landmark appears once in a world and keeps its plot to itself. Where the game has a building of that very kind, it's chosen: a church gets the church.
-- **Facing:** fronts face the nearest road you've laid, where the game had the doors. Lay the roads first: with none, a long side faces out.
+- **Facing:** fronts face the nearest road you've laid, where the game had the doors. Lay the roads first: with none, a long side faces out. A plot too narrow on its street side for anything (a trailer lot) is tried side-on, the way a mobile home stands on a real one.
 - **On the ground:** each sits on its pad as deep as the game sets it. Nothing goes on a road piece or on another building, and the small things you'd scattered on a plot (plants, rocks) are taken off.
 - **Doors** go where the game had them on that building.
+- **Navmesh:** characters outside would walk through the new buildings, so FOLab offers to make the navmesh again in the cells they went up in. Say yes, or do it later from World tools.
 
 ### Ways in
 
@@ -80,12 +81,12 @@ Once the pads are laid, **World tools > Real map > 🏚 Put up buildings** stand
 - **Furnished as the game has it:** walls, furniture, clutter, lights and containers to search, with nothing owned and nothing locked.
 - **Without the game's story:** its people and creatures, keys, notes, terminals, talking radios, anything switched on by a quest, and anything with a script of its own stay out. A door inside that led somewhere else in the game is locked.
 - **Linked both ways:** you arrive just inside the way out, and back outside in front of the building's door.
-- **Walkable:** each gets its navmesh, made in the same Undo.
+- **Walkable:** each takes the game's own navmesh for that place, made by hand and fitting the furniture exactly (FOLab makes one where the game's can't be taken as it is), in the same Undo. A Goodsprings church walked this way in the real game.
 - **Named for what it is:** your world's editor ID with House, Shop, Offices, Works or Hall and a number, shown as the plot's name if the map has one (a church called St Mary is "St Mary"), otherwise as House, Shop and so on. Rename them in Places like any place of your own.
 
-The game has a place behind about 50 of the 86 buildings FOLab uses. The rest stay locked. FOLab makes at most 40 places in one go; press again for more. A plot that already has its building isn't opened later: Undo and put the buildings up again to change how many open.
+The game has a place behind about 50 of the 86 buildings FOLab uses. The rest stay locked. FOLab makes at most 40 places in one go. A plot that already has its building isn't opened later: Undo and put the buildings up again to change how many open.
 
-Real buildings are often smaller than the game's once the map is compressed. A plot too small for any of the game's buildings is left empty, and the message says how many. At 1 : 1 to 1 : 3 most houses get one. Past about 1 : 5, only the big plots do.
+Real buildings are often smaller than the game's once the map is compressed. A plot too small for any of the game's buildings is left empty, and the message says how many. At 1 : 1 to 1 : 3 most houses get one. Past about 1 : 5, only the big plots do. Even at 1 : 1, sheds and garages (OpenStreetMap maps them too) are smaller than anything the game has: Goodsprings at real size fills 139 of its 222 outlines.
 
 FOLab needs to know where the height file is on Earth to line this up. SRTM names and most GeoTIFFs say so; GeoTIFFs in degrees, UTM (WGS84, NAD83, ETRS89) or web mercator work. A plain PNG doesn't, so the OSM file's own bounds are taken as the whole picture.
 
@@ -101,6 +102,23 @@ Before you make the world, the panel's **Ground types** section takes a land-cov
 FOLab recognises these two by their numbers; any other file just shows its numbers, for you to say what each gets. Each class has a row: a **ground texture** from the game's (blank leaves it to the slope), a **set of things** to scatter (plants, rocks, trees or junk: what the game itself placed in the world you take after), and how many a cell. The defaults are guesses, so look through them. FOLab remembers your choices for that kind of file on this computer.
 
 Steep ground stays as the slope says, so grass doesn't climb cliffs. Textures go into the world as it's made; scatter comes straight after as its own Undo, at most 30,000 things (thinned evenly if it would be more). Nothing stands in water.
+
+## A whole town: Goodsprings, step by step
+
+This is how the real Goodsprings, Nevada was made into a playable town, a church in it walked through in the game. Any small town goes the same way.
+
+1. **The two files.**
+   - Heights: the SRTM tile that holds the town. Goodsprings is at 35.83° N, 115.43° W, so it's `N35W116.hgt` (or `.hgt.gz`), which covers 35-36° N, 116-115° W. Free from NASA Earthdata, the USGS, or the public terrain tiles on Amazon (`elevation-tiles-prod/skadi/N35/N35W116.hgt.gz`).
+   - Streets and buildings: on openstreetmap.org, find the town, press **Export**, **Manually select a different area**, draw a box just round it, and **Export**. Goodsprings' box (115.45° to 115.42° W, 35.822° to 35.845° N) came to 1 MB. Keep it under about 5 MB; for more, use Overpass (see above).
+2. **Start a mod**, then in **Outside** press **＋ New worldspace…** and **🗺 From a real map…**. Pick the height file.
+3. **The area and scale.** Set the scale to **1 : 1** with **height × 1**: a town is small, and at real size its houses get real-sized plots. Drag a rectangle round the town on the shaded map, the same box as your export. Goodsprings came to 46 × 43 cells (2.7 × 2.5 km). Leave the base level as FOLab picks it: just under the area's lowest ground.
+4. **Make it.** About a minute.
+5. **Lay OpenStreetMap.** **World tools > Real map**, pick the `.osm` file, **Read it**. Goodsprings has 19 main roads, 69 side streets, 46 dirt tracks and 222 buildings. Tick the main roads, side streets and Buildings (tracks are optional), then **Lay it**.
+6. **Put up buildings.** Leave **Ways in** at about a third and press it. Goodsprings got 155 buildings on 139 plots, 4 landmarks (its named church among them) and 40 places to go in. The other plots are sheds and garages, smaller than anything the game has. Say yes when FOLab offers to make the navmesh outside.
+7. **Have a look and save.** The map and the 3D view show the street; Places lists the insides, named from the map where it has a name. Save, and **Tools > Health check** should find nothing wrong.
+8. **Go there.** Put it in the game and use the console: `cow GoodspringsWorld 0 0` (your world's editor ID). Or try one place first with **Tools > Test in game**.
+
+What it needs: the plugin names only the game files it uses (Goodsprings: the base game, Honest Hearts and Old World Blues). What it doesn't have yet: people, distant land (**World tools > Far land**), and the road onto it from the Mojave.
 
 ## What's left to you
 

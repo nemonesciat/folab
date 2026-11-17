@@ -33,7 +33,7 @@ check('rivers and streams, width in metres', c['rivers'] == {'river': 1, 'stream
 check('lakes: a closed way and a multipolygon joined up, not a river\'s outline', c['lakes'] == 2 and {'Split Lake', ''} == {l['name'] for l in d.lakes} and all(len(l['ring']) == 3 for l in d.lakes))
 check('a river\'s outline is skipped and counted', d.skipped['river outlines (the river\'s line is used)'] == 2)
 check('a closed building, not an open one; an unclosed multipolygon is no ring', c['buildings'] == 1 and d.buildings[0]['name'] == 'Hall')
-check('coastline left out, said so', 'coastline (the base level is the sea)' in d.skipped)
+check('the coastline is kept, for the sea to be shaped by', len(d.coast) == 1 and c['coast'] == 1 and len(d.coast[0]) >= 2)
 check('places', d.places == [{'pt': (36.05, -114.95), 'name': 'Testville', 'kind': 'town'}])
 check('a road says which of its nodes join others', d.road_ends[3] == 2 and d.road_ends[1] == 1)
 check('.bz2 and .gz', osm.read(bz2.compress(xml)).counts() == c and osm.read(gzip.compress(xml)).counts() == c)

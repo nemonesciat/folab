@@ -185,7 +185,7 @@ async function kitPeople(who){
   const said = s => { KIT.said = (KIT.said || '') + ' ' + s; const el = $('#kit-said'); if (el) el.innerHTML = KIT.said; };
   const plan = await post('/api/char/populate/plan', {cell, like: who.like, who: who.who, busy: who.busy, skip: who.skip, seed}).catch(() => null);
   if (!plan || !plan.rows || !plan.rows.length || cell !== A.cellId) return said(`Nobody was put in: ${(plan && plan.notes && plan.notes[0]) || 'Populate found no one.'}`);
-  const r = await post('/api/char/populate/apply', {cell, rows: plan.rows, live: !!who.live, levelled: false, seed, away: who.away}).catch(() => null);
+  const r = await post('/api/char/populate/apply', {cell, rows: plan.rows, live: !!who.live, levelled: false, seed, away: who.away, gen: true}).catch(() => null);
   if (!r || !r.placed) return said(`Nobody was put in: ${(r && r.note) || 'no room.'}`);
   setState(r.state);
   await resync();
