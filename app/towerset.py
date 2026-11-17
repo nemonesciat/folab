@@ -231,6 +231,7 @@ def _looks():
 # ---------- the tower ----------
 
 PLINTH, DRUM, FRIEZE = 140, 900, 260
+LIFT_AT, LIFT_K = 436, 1 / 0.8         # (the lifts on the core, -y, as hotelinside.KIL_DOORS; the frames fit the door at the Kilauea's 0.8)
 SHAFT_R, SHAFT_H = 1100, 4900
 FIN_STEPS, FIN_STEP = 8, 600
 CROWN = SHAFT_H
@@ -257,9 +258,14 @@ def _glass_wall(parts, r, h, z, n=24):
                       'faces': {f: None for f in ('front', 'back', 'left', 'right', 'top', 'bottom')}})
 
 
+def _round(r, deg):
+    return math.cos(math.radians(deg)) * r, math.sin(math.radians(deg)) * r
+
+
 def kilauea(open_=False):
     """The Kilauea: see the module's docstring. open_: for its own small world (viewworld.py), the casino and the
     observation deck inside: their glass seen through from both sides, a lift core in the middle of each."""
+    import hotelinside
     parts = []
     # the plinth and its lava-rock planters
     _ring(parts, 3500, PLINTH, 0, 'lava', cap='terrazzo', solid=True, far=True)
@@ -274,8 +280,24 @@ def kilauea(open_=False):
         _glass_wall(parts, 2900, DRUM, PLINTH)
         _ring(parts, 2890, 4, PLINTH + DRUM - 46, 'kil_ceiling', cap='kil_ceiling')
         _ring(parts, 420, DRUM, PLINTH, 'gold', sides=12, solid=True)            # (the lift core)
+        hotelinside.lift_frame(parts, 0, -LIFT_AT, PLINTH, 180, 'gold', LIFT_K, back=60)
     else:
-        _ring(parts, 2900, DRUM, PLINTH, 'glass', cap='terrazzo', solid=True, far=True)
+        # (the casino as the town sees it, hotelinside: what stops you as it always was, drawn by nothing but its floor
+        # and roof; the open piece's glass, ceiling and lift core in front of it, lit, and its slot machines lit)
+        import hotelinside as hi
+        _ring(parts, 2900, DRUM, PLINTH, 'kil_hide', cap='terrazzo', solid=True, far=True)
+
+        def room(P):
+            _ring(P, 2900, DRUM, PLINTH, 'kil_clear', caps=False)
+            P[-1]['under'] = True
+            _ring(P, 2890, 4, PLINTH + DRUM - 46, 'kil_ceiling', cap='kil_ceiling')
+            _ring(P, 420, DRUM, PLINTH, 'gold', sides=12)
+            hi.lift_frame(P, 0, -LIFT_AT, PLINTH, 180, 'gold', LIFT_K, back=60)
+            for r in (2200, 1500):
+                _ring(P, r, 190, PLINTH, 'kil_slots', sides=48, caps=False)
+                P[-1]['under'] = True
+        hi.shown(parts, room)
+        hi.lamps(parts, [_round(1100, d) for d in (90, 210, 330)] + [(0, -1200), (0, 1200)], PLINTH + DRUM - 46)
     _ring(parts, 2960, FRIEZE, PLINTH + DRUM - 40, 'mosaic', cap='terrazzo', far=True)
     _ring(parts, 3080, 36, PLINTH + DRUM + FRIEZE - 60, 'gold', cap='gold')
     deck = PLINTH + DRUM + FRIEZE - 40
@@ -325,6 +347,7 @@ def kilauea(open_=False):
         _ring(parts, 1950, 24, z - 12, 'gold', cap='terrazzo', solid=True)         # (its floor)
         _ring(parts, 1945, 4, z + 470, 'kil_ceiling', cap='kil_ceiling')
         _ring(parts, 420, 480, z, 'gold', sides=12, solid=True)
+        hotelinside.lift_frame(parts, 0, -LIFT_AT, z + 12, 180, 'gold', LIFT_K, back=60)     # (on the deck's floor)
     else:
         _ring(parts, 1950, 480, z, 'deck_glass', cap='terrazzo', solid=True, far=True)
     for k in range(24):
@@ -348,11 +371,13 @@ def kilauea(open_=False):
                       'look': 'flame', 'solid': False, 'far': True})
     parts.append({'shape': 'cylinder', 'r': 46, 'r2': 8, 'h': 1000, 'sides': 6, 'at': [0, 0, z + 900], 'look': 'gold', 'solid': False, 'far': True})
     lk = _looks()
+    lk['kil_clear'] = dict(look('hist/rhl_glass', tile=400), alpha=True)
+    lk['kil_ceiling'] = look('hist/rhl_ceiling', tile=512)
+    lk['lobby_lamp'] = hotelinside._lamp_look()       # (over the lifts)
     if open_:
-        import hotelinside
-        lk['kil_clear'] = dict(look('hist/rhl_glass', tile=400), alpha=True)
-        lk['kil_ceiling'] = look('hist/rhl_ceiling', tile=512)
         hotelinside.looks()                 # (its pictures registered)
+    else:
+        lk.update({k: v for k, v in hotelinside.shown_looks().items() if k not in lk})
     return {'name': 'FOLabLandmarkKilauea' + ('Open' if open_ else ''), 'looks': lk, 'parts': parts, 'flame': flame, 'deck': deck}
 
 

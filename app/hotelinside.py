@@ -164,7 +164,170 @@ def looks():
         'rhl_arch_town': dict(look('hist/rhl_arch_town'), alpha=True),
         'rhl_arch_end': dict(look('hist/rhl_arch_end'), alpha=True),
         'rhl_rail': dict(look('hist/rhl_rail', tile=96), alpha=True),
+        'lobby_lamp': _lamp_look(),
     }
+
+
+def _lamp_look():
+    import waikikiset as wk
+    return wk.lit('waikiki/lamp_glass', LIT_LAMP)
+
+
+# ---------- the lobby as the town sees it (the closed pieces Waikiki stands) ----------
+# The engine draws nothing of an interior from outside, so the closed hotel shows its lobby as a stage set: the open
+# piece's own windows, glass and room (marble, beams, desk, columns) built in front of what stops you, nothing of it
+# solid, its walls, ceiling and lamps glowing (a glow map, as the game's lamps: lit by day and by night). What stops you
+# is the closed piece's own collision, unchanged: its boxes keep their size and place, their sides drawn by nothing
+# (`HIDE`), so no navmesh round them changes. From afar the ground floor is a lit band (`far_front`), drawn on a skin
+# that only the far model shows (alpha cuts it all away near; the far model keeps its far picture, `far_keep`).
+
+LIT_WALLS, LIT_FLOOR, LIT_LAMP = 0.75, 0.45, 3.0        # (how bright what glows is: the room, its floor, its lamps)
+LAMP_R = 34
+
+
+def clear(size=8):
+    """A picture of nothing: every pixel cut away."""
+    return Picture(size, size, clear=(0, 0, 0))
+
+
+def far_front(wall, inside=(250, 196, 120), bays=9, arched=True, w=256, h=64, seed=1380):
+    """A lobby's ground floor from across the bay: bays of warm light between piers of the hotel's wall, brighter up
+    under the lamps, arched heads or square."""
+    pic = Picture(w, h, gloss=16)
+    f = Field(w, h, seed, cells=3, octaves=3)
+    bw = w / float(bays)
+    for y in range(h):
+        v = y / float(h)
+        for x in range(w):
+            p = y * w + x
+            u = (x % bw) / bw
+            open_ = 0.16 < u < 0.84 and v > 0.12
+            if open_ and arched and v < 0.42:            # (the arch's head: a half circle over the opening)
+                du, dv = (u - 0.5) / 0.34, (0.42 - v) / 0.3
+                open_ = du * du + dv * dv < 1.0
+            if open_:
+                col = mul(inside, (1.05 - 0.45 * v) * (0.9 + 0.2 * f.v[p]))
+            else:
+                col = mul(wall, 0.82 + 0.25 * f.v[p])
+            pic.rgb[p] = grade(col)
+    return pic
+
+
+def slot_row(size=256, seed=1390):
+    """A slot machine seen across the casino (one to a picture, the ring repeats it): its cabinet, a lit screen and
+    reels, the coin tray; see-through round it."""
+    pic = Picture(size, size, clear=(40, 30, 24), gloss=60)
+    f = Field(size, size, seed, cells=4, octaves=3)
+    for y in range(size):
+        v = y / float(size)
+        for x in range(size):
+            u = x / float(size)
+            p = y * size + x
+            if not (0.22 < u < 0.78 and 0.06 < v):
+                continue
+            col, a = mul((150, 34, 30), 0.8 + 0.3 * f.v[p]), 1.0          # (red lacquer, worn)
+            if 0.3 < u < 0.7 and 0.1 < v < 0.34:
+                col = (250, 214, 120)                                      # (the lit top glass)
+            elif 0.3 < u < 0.7 and 0.4 < v < 0.58:
+                k = int((u - 0.3) / 0.4 * 3)
+                col = (238, 232, 210) if (u - 0.3) / 0.4 * 3 - k > 0.08 else (40, 30, 24)      # (three reels)
+            elif 0.66 < v < 0.7 or (0.26 < u < 0.74 and 0.84 < v < 0.9):
+                col = (196, 160, 82)                                       # (gold trim, the tray)
+            pic.rgb[p], pic.a[p] = grade(col, sat=0.85), a
+    return pic
+
+
+modelsets.TEXTURES.update({
+    'hist/clear': clear,
+    'hist/rhl_far_front': lambda: far_front(hs.PINK, bays=9, arched=True, seed=1380),
+    'hist/rhl_far_end': lambda: far_front(hs.PINK, bays=2, arched=True, w=64, seed=1381),
+    'hist/mol_far_front': lambda: far_front(hs.MOANA_WHITE, bays=7, arched=False, seed=1382),
+    'hist/mol_far_end': lambda: far_front(hs.MOANA_WHITE, bays=2, arched=False, w=64, seed=1383),
+    'resort/kil_far_casino': lambda: far_front((176, 140, 72), inside=(250, 186, 104), bays=24, arched=False, w=256, h=32, seed=1384),
+    'resort/kil_slots': slot_row,
+})
+
+
+def hide(far):
+    """A look nothing near draws (all cut away) whose far model shows `far`."""
+    return dict(look('hist/clear'), alpha=True, far=far, far_keep=True)
+
+
+def shown_looks():
+    """The closed pieces' looks for their lobby: the open piece's, the room's own lit, and the skins."""
+    import waikikiset as wk
+    out = looks()
+    out.update({
+        'rhl_inside_lit': dict(out['rhl_inside'], glow=wk.GLOW, glow_mult=LIT_WALLS),
+        'rhl_ceiling_lit': dict(out['rhl_ceiling'], glow=wk.GLOW, glow_mult=LIT_WALLS),
+        'rhl_marble_lit': dict(out['rhl_marble'], glow=wk.GLOW, glow_mult=LIT_FLOOR),
+        'rhl_koa_lit': dict(out['rhl_koa'], glow=wk.GLOW, glow_mult=LIT_FLOOR),
+        'rh_hide_front': hide('hist/rhl_far_front'), 'rh_hide_end': hide('hist/rhl_far_end'),
+        'mo_hide_front': hide('hist/mol_far_front'), 'mo_hide_end': hide('hist/mol_far_end'),
+        'kil_hide': hide('resort/kil_far_casino'),
+        'kil_slots': dict(look('resort/kil_slots', tile=190), alpha=True, glow=wk.GLOW, glow_mult=LIT_FLOOR),
+    })
+    return out
+
+
+LIT = {'rhl_inside': 'rhl_inside_lit', 'rhl_ceiling': 'rhl_ceiling_lit', 'rhl_marble': 'rhl_marble_lit', 'rhl_koa': 'rhl_koa_lit',
+       'kil_ceiling': 'rhl_ceiling_lit'}
+NO_FACES = {f: None for f in ('front', 'back', 'left', 'right', 'bottom')}
+
+
+def shown(P, build, *args):
+    """What build(parts, *args) makes, only to be seen: nothing of it solid, the room's own looks lit."""
+    sub = []
+    build(sub, *args)
+    for q in sub:
+        q['solid'] = False
+        q['far'] = False
+        for k in ('look', 'cap_look', 'under_look'):
+            if q.get(k) in LIT:
+                q[k] = LIT[q[k]]
+        if q.get('faces'):
+            q['faces'] = {f: LIT.get(v, v) for f, v in q['faces'].items()}
+    P += sub
+    return sub
+
+
+def lamps(P, spots, z):
+    """Lamps hung under the ceiling at z: a glowing globe on a rod."""
+    for x, y in spots:
+        P.append({'shape': 'ball', 'r': LAMP_R, 'sides': 10, 'rings': 6, 'at': [x, y, z - 2 * LAMP_R - 40], 'look': 'lobby_lamp', 'solid': False})
+        P.append({'shape': 'cylinder', 'r': 3, 'h': 40, 'sides': 4, 'at': [x, y, z - 40], 'look': 'grey', 'solid': False})
+
+
+def skin(P, size, at, front, end):
+    """The far model's ground floor: a box only the far model draws (its sides `front` along x, `end` along y)."""
+    P.append({'shape': 'box', 'size': list(size), 'at': list(at), 'look': front, 'material': 'stone', 'solid': False, 'far': True,
+              'faces': {'front': front, 'back': front, 'left': end, 'right': end, 'top': None, 'bottom': None}})
+
+
+LIFT_W, LIFT_H = 216.0, 174.0          # (HotelElevatorDoor01 stood on the floor: door_rise)
+BANK = 110                              # (how far the Royal Hawaiian's lift bank stands out of its east end wall)
+
+
+def lift_frame(P, x, y, z, face, frame='rhl_koa', k=1.0, back=0.0):
+    """A lift's surround in a lobby's own model, round where its door stands (x, y on the wall's face, z the floor; face
+    as the doors', 0 +y): jambs and a head standing out of the wall, a lamp over it saying here is the way up. The
+    game's lift door is two thin leaves and needs a wall and a frame round it; k: the frame in a piece stood smaller
+    (the Kilauea at 0.8) still fits the door, which isn't."""
+    f = math.radians(face)
+    ux, uy, nx, ny = math.cos(f), -math.sin(f), math.sin(f), math.cos(f)
+    turn = -face
+
+    def put(a, b, size, zz, look_name, shape='box'):
+        P.append({'shape': 'box', 'size': [size[0], size[1], size[2]], 'at': [x + ux * a + nx * b, y + uy * a + ny * b, zz],
+                  'turn': [0, 0, turn], 'look': look_name, 'material': 'wood', 'solid': False})
+    w, h = LIFT_W * k / 2.0, LIFT_H * k
+    for side in (-1, 1):
+        put(side * (w + 18 * k), 10 * k, (36 * k, 20 * k, h + 16 * k), z, frame)
+    put(0, 10 * k, (2 * w + 72 * k, 20 * k, 46 * k), z + h + 16 * k, frame)
+    if back:                                # (a wall behind it where what it stands on isn't flat: the Kilauea's round core)
+        put(0, -back / 2.0, (2 * w + 72 * k, back, h + 62 * k), z, frame)
+    P.append({'shape': 'ball', 'r': 12 * k, 'sides': 8, 'rings': 5, 'at': [x + nx * 16 * k, y + ny * 16 * k, z + h + 30 * k],
+              'look': 'lobby_lamp', 'solid': False})
 
 
 def _wall(P, x0, x1, y, z0=0.0, z1=LH, along='x', out='rh_plain'):
@@ -249,6 +412,10 @@ def rh_lobby(P):
     hs._box(P, [560, 14, 190], [desk_x, D2 - WALL - 7, 130], 'rhl_koa', solid=False, front='rhl_keys', back=None)
     hs._box(P, [1500, 520, 2], [400, -20, 8], 'rhl_rug', solid=False, bottom=None)
     hs._box(P, [900, 360, 2], [-900, -60, 8], 'rhl_rug', solid=False, bottom=None)
+    # the lift bank against the east end (it stands in front of the end's two windows: the lifts had stood in them)
+    hs._box(P, [BANK, 660, LH], [W2 - WALL - BANK / 2.0, 0, 0], 'rhl_inside', top=None, bottom=None)
+    for ly in (150, -150):
+        lift_frame(P, W2 - WALL - BANK, ly, FLOOR_TOP, 270)
 
 
 def rh_belvedere(P, T, ty, tz, H):
@@ -284,8 +451,8 @@ RH_THINGS = [
     ('HotelChair01F', 300, 40, 8, 0), ('HotelChair01F', 600, 40, 8, 0), ('HotelChair01L', 1000, -120, 8, 270),
     ('HotelChair01F', -350, -250, 8, 180), ('HotelChair01R', -600, -100, 8, 90),
     # planters and palms along the walls
-    ('NVTOPSRecPlanter03', -1850, -250, 8, 0), ('NVTOPSRecPlanter03', 1850, -250, 8, 0), ('NVTOPSRecPlanter03', -1850, 250, 8, 0),
-    ('NVGoldfingerBanana', -1850, -250, 40, 0), ('NVGoldfingerBanana', 1850, -250, 40, 70), ('NVFalseSpireaPlant', -1850, 250, 40, 0),
+    ('NVTOPSRecPlanter03', -1850, -250, 8, 0), ('NVTOPSRecPlanter03', 1600, -280, 8, 0), ('NVTOPSRecPlanter03', -1850, 250, 8, 0),
+    ('NVGoldfingerBanana', -1850, -250, 40, 0), ('NVGoldfingerBanana', 1600, -280, 40, 70), ('NVFalseSpireaPlant', -1850, 250, 40, 0),
     ('CementPlanterRd01', -300, 280, 8, 0), ('CementPlanterRd01', 300, 280, 8, 0), ('NVFalseSpireaPlant', -300, 280, 40, 0), ('NVFalseSpireaPlant', 300, 280, 40, 0),
     # luggage left where the guests left it
     ('SuitCase01Empty', -1300, 200, 8, 30), ('SuitCase02', -1340, 150, 8, 75), ('SuitCase01Empty', 1100, 250, 8, 300),
@@ -297,8 +464,8 @@ RH_THINGS = [
 # (doors: name, edid, x, y, z, face; 'in' the way in from the town, 'lift' to the guest floors, 'lookout' up the tower)
 RH_DOORS = [
     ('in', 'DoorStorefrontDbl01', 0, D2 - WALL / 2.0, 0, 180),
-    ('lift', 'HotelElevatorDoor01', hs.RH_W / 2.0 - WALL - 10, 150, 0, 270),
-    ('lift2', 'HotelElevatorDoor01', hs.RH_W / 2.0 - WALL - 10, -150, 0, 270),
+    ('lift', 'HotelElevatorDoor01', hs.RH_W / 2.0 - WALL - BANK, 150, 0, 270),      # (on the lift bank's face, in their frames)
+    ('lift2', 'HotelElevatorDoor01', hs.RH_W / 2.0 - WALL - BANK, -150, 0, 270),
 ]
 BELVEDERE_Z = 8 * FLOOR + 10 - 8.0        # (the lookout's floor over the lobby's: z of things and doors is over the lobby floor)
 RH_LOOKOUT = ('lookout', 'OffDoorHotelSmL01', 0, -(D2 - 200) + 20 - 86, BELVEDERE_Z, 180)
@@ -361,6 +528,7 @@ def mo_lobby(P):
     hs._box(P, [560, 120, 8], [-520, desk_y, 112], 'rhl_koa', material='wood')
     hs._box(P, [420, 14, 190], [-520, D2_ - WALL - 7, 130], 'rhl_koa', solid=False, front='rhl_keys', back=None)
     hs._box(P, [900, 380, 2], [250, -30, 8], 'rhl_rug', solid=False, bottom=None)
+    lift_frame(P, W2 - WALL, MO_LIFT_Y, FLOOR_TOP, 270)
 
 
 def mo_pavilion(P, z):
@@ -380,6 +548,7 @@ def mo_pavilion(P, z):
 
 
 MD2 = hs.MO_D / 2.0
+MO_LIFT_Y = 120
 MO_DESK_Y = MD2 - WALL - 160
 MO_TOP = hs.MO_FLOORS * FLOOR + 30 - FLOOR_TOP      # (the pavilion's floor over the lobby's)
 MO_THINGS = [
@@ -398,7 +567,7 @@ MO_THINGS = [
 ]
 MO_DOORS = [
     ('in', 'DoorStorefrontDbl01', 0, MD2 - WALL / 2.0, 0, 180),
-    ('lift', 'HotelElevatorDoor01', hs.MO_W / 2.0 - WALL - 10, 120, 0, 270),
+    ('lift', 'HotelElevatorDoor01', hs.MO_W / 2.0 - WALL, MO_LIFT_Y, 0, 270),      # (on the east wall's face, in its frame)
     ('wing', 'OffDoorHotelSmL01', -(hs.MO_W / 2.0 - WALL - 10), 0, 0, 90),
     ('lookout', 'OffDoorHotelSmL01', 0, 60 - 86, MO_TOP, 180),
 ]
@@ -474,6 +643,15 @@ VIEWS = {
 }
 
 
+def door_rise(gd, key):
+    """How far a door must stand over the floor so its leaf stands on it: some of the game's doors are made round their
+    middle (HotelElevatorDoor01 from 80 under its origin to 94 over: the game stands it 80 up in its kit's frame).
+    Stood on its origin, half of it was under the lobby's floor and what showed was a stub the height of a child."""
+    import library
+    b = library.bounds_of(gd.read_file('meshes' + chr(92) + gd.describe(gd.from_key(key))[3]))
+    return max(0.0, -b[2])
+
+
 def leaf_turn(gd, key):
     """Degrees to add to a door's face (0 its front to +y) so its leaf lies along the wall: some of the game's doors are
     made with their leaf across y and their face to x (DoorStorefrontDbl01, OffDoorHotelSmL01: their meshes are thin in
@@ -483,14 +661,11 @@ def leaf_turn(gd, key):
     return -90.0 if (b[3] - b[0]) < (b[4] - b[1]) else 0.0
 
 
-def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
-    """Everything that goes into a hotel's small world (already added, viewworld.add_world), as ops for one Undo: the
-    open hotel where the city stands the closed one, the city round it (viewworld.stage_ops), its things and lights, its
-    doors (named '<hotel>_<door>'; the way in linked both ways with a door of the same on the outside; the others locked
-    until something is behind them, save those named in `linked`). Returns (ops, report); the report's 'doors' {name:
-    {'cell', 'arrive'}}: each door's cell and the spot just in front of it, for linking."""
+def _frame(gd, pr, hotel, parent):
+    """Where the hotel stands in the city (its closed piece, once): (its cell, its ref, at), at(lx, ly, lz, face, rise=0)
+    the world's [x y z rx ry rz] of a spot in the building's frame (z over its ground floor's top; rise unscaled, a door's
+    own: door_rise)."""
     import landmarks
-    import viewworld
     v = VIEWS[hotel]
     modelsets._all_sets()
     closed = modelsets.record_of(pr, v['closed'])
@@ -501,6 +676,55 @@ def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
     wck, _wrk, wr = spot[0]
     x, y, z, _rx, _ry, rz = wr['p']
     sz = float(wr.get('s') or 1.0)            # (the Kilauea stands at 0.8: its rooms and where things go shrink with it, the things don't)
+    fz = z + v.get('floor_top', FLOOR_TOP) * sz
+
+    def at(lx, ly, lz, face, rise=0.0):
+        wx, wy = landmarks._turn(lx * sz, ly * sz, rz)
+        return [round(x + wx, 1), round(y + wy, 1), round(fz + lz * sz + rise, 1), 0.0, 0.0, round((rz + math.radians(face)) % math.tau, 4)]
+    return wck, wr, at
+
+
+def relay_ops(gd, pr, hotel, parent, child, reach=400.0):
+    """Ops moving a hotel's things and doors already in its small world to where view_ops puts them now (a lobby laid
+    out again: the lifts raised and framed, 17 Nov 2026). Each is found as the nearest ref of the same base in the small
+    world within `reach`; one already where it should be is left. Returns (ops, [what moved])."""
+    v = VIEWS[hotel]
+    _wck, _wr, at = _frame(gd, pr, hotel, parent)
+    cells = {gd.key(c) for c in gd.grid(child).values()}
+    refs = [(ck, rk, r) for ck, c in pr.cells.items() if ck in cells for rk, r in c['refs'].items()
+            if r.get('base') and r.get('p') and not r.get('removed')]
+    want = {t[0] for t in v['things']} | {d[1] for d in v['doors']}
+    keys = {gd.edid(f): gd.key(f) for f, (_i, r) in gd.forms.items() if gd.edid(f) in want}
+    items = [(e, at(lx, ly, lz, face)) for e, lx, ly, lz, face in v['things'] if e in keys]
+    items += [(e, at(lx, ly, lz, face + leaf_turn(gd, keys[e]), door_rise(gd, keys[e]))) for _n, e, lx, ly, lz, face in v['doors'] if e in keys]
+    ops, moved, used = [], [], set()
+    for e, p in items:
+        near = [(math.hypot(r['p'][0] - p[0], r['p'][1] - p[1]) + abs(r['p'][2] - p[2]) * 0.01, ck, rk, r) for ck, rk, r in refs
+                if r['base'] == keys[e] and rk not in used]
+        near = [n for n in near if n[0] < reach]
+        if not near:
+            continue
+        d, ck, rk, r = min(near)
+        used.add(rk)
+        if max(abs(a - b) for a, b in zip(r['p'][:3], p[:3])) < 0.5 and abs(r['p'][5] - p[5]) < 1e-3:
+            continue
+        ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': p})
+        moved.append((e, rk, [round(v_) for v_ in r['p'][:3]], [round(v_) for v_ in p[:3]]))
+    return ops, moved
+
+
+def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
+    """Everything that goes into a hotel's small world (already added, viewworld.add_world), as ops for one Undo: the
+    open hotel where the city stands the closed one, the city round it (viewworld.stage_ops), its things and lights, its
+    doors (named '<hotel>_<door>'; the way in linked both ways with a door of the same on the outside; the others locked
+    until something is behind them, save those named in `linked`). Returns (ops, report); the report's 'doors' {name:
+    {'cell', 'arrive'}}: each door's cell and the spot just in front of it, for linking."""
+    import viewworld
+    v = VIEWS[hotel]
+    wck, wr, at = _frame(gd, pr, hotel, parent)
+    x, y, z, _rx, _ry, rz = wr['p']
+    sz = float(wr.get('s') or 1.0)
+    closed = modelsets.record_of(pr, v['closed'])
     cx, cy = int(x // 4096), int(y // 4096)
     stage = viewworld.stage_ops(gd, pr, parent, child, cx, cy, skip=lambda base, p: base == closed)
     progress('%s: %d of the city\'s things round it' % (v['name'], len(stage)))
@@ -513,11 +737,6 @@ def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
     want = {t[0] for t in v['things']} | {d[1] for d in v['doors']} | {v['door_out']}
     keys = {gd.edid(f): gd.key(f) for f, (_i, r) in gd.forms.items() if gd.edid(f) in want}
     missing = sorted(want - set(keys))
-    fz = z + v.get('floor_top', FLOOR_TOP) * sz
-
-    def at(lx, ly, lz, face, base=fz):
-        wx, wy = landmarks._turn(lx * sz, ly * sz, rz)
-        return [round(x + wx, 1), round(y + wy, 1), round(base + lz * sz, 1), 0.0, 0.0, round((rz + math.radians(face)) % math.tau, 4)]
     n = 0
     for edid, lx, ly, lz, face in v['things']:
         if edid in keys:
@@ -526,7 +745,7 @@ def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
             n += 1
     names = {}
     for name, edid, lx, ly, lz, face in v['doors']:
-        p = at(lx, ly, lz, face + leaf_turn(gd, keys[edid]))
+        p = at(lx, ly, lz, face + leaf_turn(gd, keys[edid]), door_rise(gd, keys[edid]))
         o = {'op': 'add', 'cell': cell_of(p[0], p[1]), 'base': keys[edid], 'p': p, 's': 1, 'name': hotel + '_' + name}
         if name != 'in' and name not in linked:
             o['extra'] = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}
@@ -540,7 +759,7 @@ def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
     pgrid = gd.grid(parent)
     ock = gd.key(pgrid.get((int(po[0] // 4096), int(po[1] // 4096)), gd.from_key(wck)))     # (the door's own cell: a big hotel spans several)
     ops.append({'op': 'add', 'cell': ock, 'base': keys[v['door_out']], 'p': po, 's': 1, 'name': hotel + '_out'})
-    ai, ao = at(*v['arrive_in']), at(*v['arrive_out'], base=z)
+    ai, ao = at(*v['arrive_in']), at(*v['arrive_out'], rise=-v.get('floor_top', FLOOR_TOP) * sz)     # (outside: over the piece's foot)
     ops.append({'op': 'tel', 'cell': ock, 'ref': '$%s_out' % hotel, 'tel': {'door': '$%s_in' % hotel, 'p': ai}})
     ops.append({'op': 'tel', 'cell': names[hotel + '_in']['cell'], 'ref': '$%s_in' % hotel, 'tel': {'door': '$%s_out' % hotel, 'p': ao}})
     return ops, {'hotel': hotel, 'at': [round(x), round(y), round(z)], 'turn': rz, 'city': len(stage), 'things': n, 'doors': names,

@@ -415,9 +415,8 @@ def royal_hawaiian(open_=False):
     """The Royal Hawaiian: see the module's docstring. Sea side (the lawn, the wings, the loggia) to -y. open_: its lobby
     and the lookout in its tower inside (hotelinside.py), for the hotel's own small world."""
     P = []
-    if open_:
-        import hotelinside as hi
-        LH = hi.LH
+    import hotelinside as hi
+    LH = hi.LH
     H6, H5 = RH_FLOORS * FLOOR, RH_WING * FLOOR
     # the lawn between the wings, and the main block
     _box(P, [RH_W + 200, 1500, 8], [0, -1150, 0], 'lawn', material='dirt', top='lawn', front='lawn', back=None, left='lawn', right='lawn', bottom=None)
@@ -425,7 +424,12 @@ def royal_hawaiian(open_=False):
         _box(P, [RH_W, RH_D, H6 - LH], [0, 0, LH], 'rh_wall', far=True, top='tar', bottom='rhl_ceiling')
         hi.rh_lobby(P)
     else:
-        _box(P, [RH_W, RH_D, H6], [0, 0, 0], 'rh_wall', far=True, top='tar')
+        # (the lobby as the town sees it, hotelinside: what stops you as it always was, drawn by nothing)
+        _box(P, [RH_W, RH_D, H6], [0, 0, 0], 'tar', far=True, top='tar', **hi.NO_FACES)
+        _box(P, [RH_W, RH_D, H6 - LH], [0, 0, LH], 'rh_wall', far=True, solid=False, top=None, bottom='rhl_ceiling_lit')
+        hi.skin(P, [RH_W, RH_D, LH], [0, 0, 0], 'rh_hide_front', 'rh_hide_end')
+        hi.shown(P, hi.rh_lobby)
+        hi.lamps(P, [(x, 0) for x in (-1500, -900, -300, 300, 900, 1500)], LH - 30)
     _box(P, [RH_W + 40, RH_D + 40, 36], [0, 0, H6], 'rh_plain', far=True, top='rh_tiles')       # the coping
     # its two ends rise a floor under hip roofs of tile
     for sx in (-1, 1):
@@ -444,7 +448,10 @@ def royal_hawaiian(open_=False):
     if open_:
         _box(P, [T, T, tz - LH], [0, ty, LH], 'rh_wall', far=True, top='tar', bottom='rhl_ceiling')
     else:
-        _box(P, [T, T, tz], [0, ty, 0], 'rh_wall', far=True, top='tar')
+        _box(P, [T, T, tz], [0, ty, 0], 'tar', far=True, top='tar', **hi.NO_FACES)
+        _box(P, [T, T, tz - LH], [0, ty, LH], 'rh_wall', far=True, solid=False, top=None, bottom='rhl_ceiling_lit')
+        hi.skin(P, [T, hi.TOWER_BAY, LH], [0, -(RH_D / 2 + hi.TOWER_BAY / 2.0), 0], 'rh_hide_end', 'rh_hide_end')
+        hi.lamps(P, [(0, -(RH_D / 2 + 20))], LH - 30)
     n, W, H, pier = RH_BELVEDERE
     spring = tz + 260
     if open_:
@@ -485,8 +492,7 @@ def royal_hawaiian(open_=False):
     trees = [('palm_tall', x, y, t, s) for x, y, t, s in
              ((-900, -1250, 20, 1.15), (-300, -1700, 140, 1.0), (500, -1350, 260, 1.2), (900, 1250, 170, 1.1))]
     lk = _looks()
-    if open_:
-        lk.update(hi.looks())
+    lk.update(hi.looks() if open_ else hi.shown_looks())
     return _with_trees({'name': 'FOLabLandmarkRoyalHawaiian' + ('Open' if open_ else ''), 'looks': lk, 'parts': P}, trees)
 
 
@@ -500,12 +506,17 @@ def moana(open_=False):
     pavilion on its roof inside (hotelinside.py), for the hotel's own small world."""
     P = []
     H5, H4 = MO_FLOORS * FLOOR, 4 * FLOOR
+    import hotelinside as hi
     if open_:
-        import hotelinside as hi
         _box(P, [MO_W, MO_D, H5 - hi.LH], [0, 0, hi.LH], 'mo_wall', far=True, top='tar', bottom='rhl_ceiling')
         hi.mo_lobby(P)
     else:
-        _box(P, [MO_W, MO_D, H5], [0, 0, 0], 'mo_wall', far=True, top='tar')
+        # (the lobby as the town sees it, hotelinside: what stops you as it always was, drawn by nothing)
+        _box(P, [MO_W, MO_D, H5], [0, 0, 0], 'tar', far=True, top='tar', **hi.NO_FACES)
+        _box(P, [MO_W, MO_D, H5 - hi.LH], [0, 0, hi.LH], 'mo_wall', far=True, solid=False, top=None, bottom='rhl_ceiling_lit')
+        hi.skin(P, [MO_W, MO_D, hi.LH], [0, 0, 0], 'mo_hide_front', 'mo_hide_end')
+        hi.shown(P, hi.mo_lobby)
+        hi.lamps(P, [(x, 0) for x in (-400, 0, 400)], hi.LH)
     _box(P, [MO_W + 40, MO_D + 40, 30], [0, 0, H5], 'mo_plain', far=True)
     for sy in (-1, 1):                                                          # balustrades round its roof
         _box(P, [MO_W, 12, 90], [0, sy * (MO_D / 2 + 6), H5 + 30], 'mo_rail', solid=False, top='mo_plain', bottom=None, left=None, right=None)
@@ -550,8 +561,7 @@ def moana(open_=False):
     _box(P, [MO_W, 1300, 8], [0, -(MO_D / 2 + 220 + 650), 0], 'lawn', material='dirt', bottom=None)
     trees = [('jungle_banyan', 0, -(MO_D / 2 + 900), 30, 1.6), ('palm_tall', 650, -(MO_D / 2 + 1450), 230, 1.1), ('palm_young', -800, MO_D / 2 + 700, 50, 1.0)]
     lk = _looks()
-    if open_:
-        lk.update(hi.looks())
+    lk.update(hi.looks() if open_ else hi.shown_looks())
     return _with_trees({'name': 'FOLabLandmarkMoana' + ('Open' if open_ else ''), 'looks': lk, 'parts': P}, trees)
 
 
