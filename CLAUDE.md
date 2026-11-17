@@ -7,8 +7,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
 
 - **Game files are read-only.** Nothing ever writes into the game's `Data` folder; plugins we make are written
   elsewhere and copied in by the user's choice.
-- **fnv_decomp is reference only.** `C:\Users\AMD RYZEN\Documents\GitHub\fnv_decomp` (no licence granted). Read it to
-  learn how the game works; never copy its code, comments or names into this project. Write our own from understanding.
+- **fnv_decomp: names and layouts, never code.** `C:\Users\AMD RYZEN\Documents\GitHub\fnv_decomp` (no licence in its
+  repository; its authors told nv-rs anyone may use it, see nv-rs ADR-0009). Read it to learn how the game works; its
+  names, types and record/structure layouts may be used (not its placeholder names made from addresses). Never copy its
+  code or comments: write our own from understanding. Settle doubts in the game's own files or exe.
 - **Engine apart from game.** Keep anything that depends on how the game is run (original game vs a possible OpenMW
   or source-port New Vegas: launching, config, scripts, navmesh) behind one small interface.
 - Morrowind Workshop stays untouched; copy ideas or code from it, never edit it from here.
