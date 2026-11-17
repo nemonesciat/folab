@@ -11,8 +11,10 @@ and pier that bring you aboard.
                       deck to Turret Two.
     the engine room   two turbine casings and the reduction gears aft of them, the gauge boards by the door, pumps.
     Turret Two        three guns' breeches, their barrels out through the forward bulkhead, the turret officer's booth.
-    the pilot house   the helm (FOLab's own: the wheel, the brass telegraphs and the binnacle: the game has none), the
-                      captain's chair, the chart table, the consoles along the forward bulkhead.
+    the pilot house   three squares across, two deep; the ports along the forward bulkhead (FOLab's own: sea and sky
+                      painted behind the glass, since the game draws nothing outside a place), the helm behind them
+                      (FOLab's own: the wheel, the brass telegraphs and the binnacle: the game has none), consoles on the
+                      side bulkheads, the captain's chair, the chart table.
 
 Each place is a `Layout`: rooms and corridors on the kit's 256-unit squares, which squares have doorways between them,
 the doorways out (`exit`: which place and door each leads to), the things in it (by editor ID, against a wall or where
@@ -163,12 +165,19 @@ def helm():
     _box(parts, [150, 70, 110], [0, 0, 0], 'machine', material='metal')
     _box(parts, [130, 4, 60], [0, -36, 70], 'gauges', solid=False)
     _cyl(parts, 8, 30, [0, 35, 80], 'black', sides=8, turn=[90, 0, 0], solid=False)
-    _cyl(parts, 46, 6, [0, 66, 80], 'veneer', sides=16, turn=[90, 0, 0], solid=False, caps=False)      # the wheel's rim
+    # the wheel, facing aft: its rim of 16 segments (a part turned about y points its own z along (sin, 0, cos)), spokes from
+    # the hub to the rim, a handle out past the rim on each. (The rim was a bare tube 6 deep, seen edge on from the helmsman's
+    # place: there was none to see. A spoke stood off the hub, the lowest 40 under the deck: the helm stood 40 in the air)
+    for k in range(16):
+        a = 22.5 * k
+        r = math.radians(a)
+        _box(parts, [19, 7, 7], [math.sin(r) * 41, 66, 80 + math.cos(r) * 41], 'veneer', turn=[0, a, 0], solid=False)
     _cyl(parts, 10, 10, [0, 66, 80], 'brass', sides=10, turn=[90, 0, 0], solid=False)                  # its hub
     for k in range(8):
-        a = math.radians(45 * k)
-        _box(parts, [4, 4, 60], [math.sin(a) * 28, 68, 80 - 2 + math.cos(a) * 28 - 30], 'veneer', turn=[0, 45 * k, 0], solid=False)
-        _cyl(parts, 3, 16, [math.sin(a) * 52, 64, 80 + math.cos(a) * 52], 'veneer', sides=6, turn=[0, 0, 0], solid=False)
+        a = 45 * k
+        r = math.radians(a)
+        _box(parts, [4, 4, 42], [0, 66, 80], 'veneer', turn=[0, a, 0], solid=False)
+        _cyl(parts, 3, 16, [math.sin(r) * 47, 66, 80 + math.cos(r) * 47], 'veneer', sides=6, turn=[0, a, 0], solid=False)
     for sx in (-1, 1):
         _cyl(parts, 16, 96, [sx * 150, 10, 0], 'brass', sides=10)                                           # telegraphs
         _cyl(parts, 30, 10, [sx * 150, 10, 104], 'gauges', sides=14, turn=[90, 0, 0], solid=False)
@@ -182,6 +191,69 @@ def helm():
 
 
 modelsets.PIECES.setdefault('mo_helm', {'label': 'Helm', 'set': SET, 'file': 'mo_helm', 'describe': helm, 'edid': 'FOLabMissouriHelm'})
+
+
+# (the pilot house's ports: the game draws nothing outside a place, so the sea and sky are painted behind the glass, as the
+# game's own windows are lit panes. PORTS round ports a panel, a panel PORTS_WIDE by PORTS_HIGH, the picture 1024 by 256)
+PORTS, PORTS_WIDE, PORTS_HIGH = 5, 640.0, 128.0
+
+
+def ports(w=1024, h=256, seed=1230):
+    """A strip of the pilot house's forward bulkhead: grey steel, PORTS round ports in brass rims, through each one the sky
+    paling to a hazy horizon and the grey-blue sea below it, the glass salted at its edges."""
+    c = Picture(w, h, gloss=40)
+    wr = Wear(w, h, seed, grime=0.6, rain=0.5, ledges=(0.0,))
+    swell = Field(w, h, seed + 1, cells=64, octaves=3, stretch=(4.0, 0.5))
+    cloud = Field(w, h, seed + 2, cells=4, octaves=4, stretch=(3.0, 1.0))
+    kx, ky = w / PORTS_WIDE, h / PORTS_HIGH           # (pixels a unit: the picture is stretched over the panel)
+    r = PORTS_HIGH * 0.36
+    horizon = 0.56
+    for y in range(h):
+        for x in range(w):
+            p = y * w + x
+            u, v = x / kx, y / ky
+            i = int(u / (PORTS_WIDE / PORTS))
+            cx, cy = (i + 0.5) * PORTS_WIDE / PORTS, PORTS_HIGH * 0.5
+            d = math.hypot(u - cx, v - cy)
+            col, ht, g = mul((106, 112, 110), 0.9 + 0.15 * wr.mid.v[p]), 0.5, 40
+            if d < r:
+                t = (v - (cy - r)) / (2 * r)
+                if t < horizon:
+                    col = mix((150, 176, 196), (212, 216, 210), (t / horizon) ** 1.5)
+                    col = mix(col, (236, 236, 230), 0.35 * max(0.0, cloud.v[p] - 0.55) / 0.45)
+                else:
+                    s = (t - horizon) / (1 - horizon)
+                    col = mul(mix((104, 128, 140), (58, 80, 96), s), 0.9 + 0.2 * swell.v[p])
+                col = mix(col, (190, 186, 172), 0.25 * max(0.0, (d / r) - 0.75) / 0.25)       # (salt on the glass)
+                ht, g = 0.42, 160
+                c.rgb[p], c.ht[p], c.gloss[p] = tuple(int(min(255, max(0, v))) for v in col), ht, g   # (the view is not worn, only the steel round it)
+                continue
+            if d < r * 1.18:
+                col, ht, g = mul((176, 140, 72), 0.85 + 0.3 * wr.fine.v[p]), 0.75, 120
+            c.rgb[p], c.ht[p], c.gloss[p] = grade(wr.on(x, y, col)), ht, g
+    return c
+
+
+modelsets.TEXTURES['ship/in_ports'] = ports
+
+
+def port_panel():
+    """The ports along the forward bulkhead: a steel panel standing out from the wall, the view painted on its face, a
+    sill under it. Its origin is the middle of its foot on the deck; its face is +y (aft, into the room); it stands
+    PORT_SILL up to the ports' foot."""
+    looks = dict(battleship._looks())
+    looks.update({'ports': look('ship/in_ports'), 'machine': look('ship/in_machine', tile=200)})
+    parts = []
+    _box(parts, [PORTS_WIDE + 40, 30, PORT_SILL], [0, 0, 0], 'machine', material='metal')                    # (the bulkhead under the ports, to the sill)
+    _box(parts, [PORTS_WIDE, 4, PORTS_HIGH], [0, 13, PORT_SILL], 'ports', solid=False)                       # (the ports)
+    _box(parts, [PORTS_WIDE + 40, 30, 20], [0, 0, PORT_SILL + PORTS_HIGH], 'machine', solid=False)           # (the steel over them)
+    return {'name': 'FOLabMissouriPorts', 'looks': looks, 'parts': parts}
+
+
+PORT_SILL = 110.0
+modelsets.PIECES.setdefault('mo_ports', {'label': 'Pilot house ports', 'set': SET, 'file': 'mo_ports', 'describe': port_panel,
+                                         'edid': 'FOLabMissouriPorts'})
+OWN = {'helm': 'mo_helm', 'ports': 'mo_ports'}      # (names in a Layout for FOLab's own pieces, not the game's)
 
 
 # ---------- the game's own things in FOLab's cloth ----------
@@ -373,8 +445,7 @@ def _second():
             if x == -330 and y == -1780:
                 continue                                    # (in front of the door from Broadway)
             L.put('NavalTable01', x, y)
-            L.put('NavalBench01TableBothSides', x, y, face=0)
-            L.put('NavalBench01TableBothSides', x, y, face=180)
+            L.put('NavalBench01TableBothSides', x, y, face=0)       # (a bench either side in the one piece: put once)
             L.put('CafeteriaTray01', x, y + 30, 54, floor=False)
             L.put('CoffeeMug01', x + 5, y - 40, 54, floor=False)
     for y in (-1930, -1630):
@@ -459,17 +530,21 @@ def _turret():
 
 
 def _pilot():
+    # (a pilot house is narrow and low with ports all along its front: three squares across, two deep (it was three by
+    # four, a hall); the ports across the forward bulkhead, the helm behind them, consoles on the side bulkheads)
     L = Layout('pilot')
-    p = L.room('pilot house', -1, -2, 3, 4)
-    L.exit('out', (1, 1), 1, ('deck', 'bridge'))
-    L.put('helm', 0, -330, face=0)
-    for a in (120, 200, 530, 610):
-        L.wall('GenericConsolePanel04NoAnim', p, 's', a)
-    L.put('ComputerNavalChair01R', -250, -250, face=180)
-    L.put('NavalTable01', -40, 170, face=90)
-    L.put('Clipboard01', -20, 170, 54, 30, floor=False)
-    L.put('Handradio', -90, 160, 54, floor=False)
-    L.wall('Telephone01', p, 'w', 700, z=120, floor=False)
+    p = L.room('pilot house', -1, -1, 3, 2)
+    L.exit('out', (1, 0), 1, ('deck', 'bridge'))
+    L.wall('ports', p, 's', 365, gap=0)
+    L.put('helm', 0, -150, face=0)
+    for side in ('w', 'e'):
+        for a in (70, 150):
+            L.wall('GenericConsolePanel04NoAnim', p, side, a)
+    L.put('ComputerNavalChair01R', -250, -160, face=180)
+    L.put('NavalTable01', -230, 20, face=90)
+    L.put('Clipboard01', -215, 20, 54, 30, floor=False)
+    L.put('Handradio', -270, 10, 54, floor=False)
+    L.wall('Telephone01', p, 'e', 330, z=120, floor=False)
     return L
 
 
@@ -613,6 +688,7 @@ class Built:
         self.pieces, self.things, self.lights, self.doors, self.exits = [], [], [], [], {}
         self.scales = []            # (beside things: each one's scale)
         self.helm = None
+        self.own = []               # (FOLab's own pieces: [(piece, p)])
 
 
 _built = {}
@@ -634,7 +710,7 @@ def build(gd, key):
     if sv is None:
         raise ValueError('No survey of what the game stands in the Utility kit, so her doors could not be hung.')
     L = layout(key)
-    want = {game_edid(t['edid']) for t in L.things if t['edid'] != 'helm'} | {DOOR_IN}
+    want = {game_edid(t['edid']) for t in L.things if t['edid'] not in OWN} | {DOOR_IN}
     forms = _forms(gd, want)
     lacking = sorted(want - set(forms))
     if lacking:
@@ -642,7 +718,7 @@ def build(gd, key):
     door_key = gd.key(forms[DOOR_IN])
     cache = {}
     why = collections.Counter()
-    helm_box = _helm()['box'] if any(t['edid'] == 'helm' for t in L.things) else None
+    own_box = {n: _own_made(OWN[n])['box'] for n in {t['edid'] for t in L.things} & set(OWN)}
     for seed in range(TRIES):
         plan = plan_of(ts, L)
         made = kitplan.fill(ts, plan, seed)
@@ -689,8 +765,11 @@ def build(gd, key):
         items = lights(gd, ts, sv, L, plan, made, random.Random(seed))
         B.lights = [(it.key, [round(v, 4) for v in it.p]) for it in items]
         for t in L.things:
-            if t['edid'] == 'helm':
-                B.helm = stand(gd, L, t, None, helm_box)
+            if t['edid'] in OWN:
+                p = stand(gd, L, t, None, own_box[t['edid']])
+                B.own.append((OWN[t['edid']], p))
+                if t['edid'] == 'helm':
+                    B.helm = p
                 continue
             f = forms[game_edid(t['edid'])]
             B.things.append((gd.key(f), stand(gd, L, t, f), t['edid']))
@@ -711,13 +790,17 @@ def build(gd, key):
         PLACES[key][1], TRIES, '; '.join('%s (%d)' % w for w in why.most_common())))
 
 
-_helm_made = []
+_own_built = {}
+
+
+def _own_made(piece):
+    if piece not in _own_built:
+        _own_built[piece] = modelsets.build(piece)
+    return _own_built[piece]
 
 
 def _helm():
-    if not _helm_made:
-        _helm_made.append(modelsets.build('mo_helm'))
-    return _helm_made[0]
+    return _own_made('mo_helm')
 
 
 def _under(gd, B, c):
@@ -777,7 +860,10 @@ def lights(gd, ts, sv, L, plan, made, rng):
                 info = sv.info.get(it[0], ('thing',))
                 if info[0] == 'light' or (info[0] == 'stat' and (names[it[0]] == LIGHT_FITTING or names[it[0]].startswith('FXGlow'))):
                     k = key_light if info[0] == 'light' and key_light else it[0]
-                    out.append(kitdress.Item(k, kitdress._world(m, it[1], it[2], it[3], it[4], it[5], it[6]), it[7], info[0], o['n'], m))
+                    w = kitdress._world(m, it[1], it[2], it[3], it[4], it[5], it[6])
+                    if any(o2.key == k and abs(o2.p[0] - w[0]) < 2 and abs(o2.p[1] - w[1]) < 2 and abs(o2.p[2] - w[2]) < 2 for o2 in out):
+                        continue            # (the same light twice on one spot: a set the game stood twice there, or a fitting's own)
+                    out.append(kitdress.Item(k, w, it[7], info[0], o['n'], m))
     return out
 
 
@@ -847,7 +933,7 @@ def board(gd, pr, world, ship, prefix='FOLab', again=False):
         raise ValueError('The game files lack the bulkhead door (%s).' % DOOR)
     like = townbuild.grand_inside(gd, LIKE)
     ops, rep = [], {'places': {}, 'pieces': 0, 'things': 0, 'lights': 0, 'seeds': {}}
-    cells, places, dressed = {}, {}, {}
+    cells, places, dressed, own = {}, {}, {}, {}
     for key, (edid, full, _fn) in PLACES.items():
         rec = recordio.load(gd, gd.from_key(like['cell']))
         rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('XOWN', 'XRNK')]
@@ -869,10 +955,12 @@ def board(gd, pr, world, ship, prefix='FOLab', again=False):
             ops.append({'op': 'add', 'cell': ck, 'base': k, 'p': p, 's': 1})
         for k, p in B.doors:
             ops.append({'op': 'add', 'cell': ck, 'base': k, 'p': p, 's': 1})
-        if B.helm:
-            more, info = modelsets.put(pr, 'mo_helm')
-            ops += more
-            ops.append({'op': 'add', 'cell': ck, 'base': info['key'] or '$model_mo_helm', 'p': B.helm, 's': 1})
+        for piece, p in B.own:
+            if piece not in own:
+                more, info = modelsets.put(pr, piece)
+                ops += more
+                own[piece] = info['key'] or '$model_' + piece
+            ops.append({'op': 'add', 'cell': ck, 'base': own[piece], 'p': p, 's': 1})
         for tag, (k, p, arrive, to) in B.exits.items():
             name = 'mo_%s_%s' % (key, tag)
             ops.append({'op': 'add', 'cell': ck, 'base': k, 'p': p, 's': 1, 'name': name})

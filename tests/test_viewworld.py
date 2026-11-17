@@ -85,3 +85,21 @@ doors = [o for o in stage if gd.forms[gd.from_key(o['base'])][1].tag == 'DOOR']
 check('doors come in locked, leading nowhere', all(o['extra']['props']['lock']['level'] == 255 for o in doors), len(doors))
 pr.apply('view', stage)
 check('the copies are the mod\'s own', all(any(rk.startswith('+') for rk in pr.cells.get(o['cell'], {}).get('refs', {})) for o in stage[:20]))
+
+# the hotels' doors lie along their walls: each door's wide side square to the way it faces, whichever way the game made
+# its mesh (the Royal Hawaiian's way in from the town stood on its edge, square to the wall: its mesh faces x, not y)
+import math  # noqa: E402
+import hotelinside  # noqa: E402
+import library  # noqa: E402
+keys = {gd.edid(f): gd.key(f) for f in gd.forms if gd.edid(f) in {d[1] for v in hotelinside.VIEWS.values() for d in v['doors']} | {v['door_out'] for v in hotelinside.VIEWS.values()}}
+bad = []
+for hotel, v in hotelinside.VIEWS.items():
+    for name, edid, _x, _y, _z, face in v['doors'] + [('out', v['door_out'], 0, 0, 0, v['out'][2])]:
+        b = library.bounds_of(gd.read_file('meshes' + chr(92) + gd.describe(gd.from_key(keys[edid]))[3]))
+        rz = math.radians(face + hotelinside.leaf_turn(gd, keys[edid]))
+        wide = (1.0, 0.0) if b[3] - b[0] > b[4] - b[1] else (0.0, 1.0)            # (its wide side, in its own frame)
+        wx, wy = wide[0] * math.cos(rz) + wide[1] * math.sin(rz), -wide[0] * math.sin(rz) + wide[1] * math.cos(rz)
+        fx, fy = math.sin(math.radians(face)), math.cos(math.radians(face))       # (the way it faces)
+        if abs(wx * fx + wy * fy) > 0.01:
+            bad.append((hotel, name, edid))
+check('every hotel door lies along its wall, its wide side square to the way it faces', not bad, bad)

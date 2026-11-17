@@ -474,6 +474,15 @@ VIEWS = {
 }
 
 
+def leaf_turn(gd, key):
+    """Degrees to add to a door's face (0 its front to +y) so its leaf lies along the wall: some of the game's doors are
+    made with their leaf across y and their face to x (DoorStorefrontDbl01, OffDoorHotelSmL01: their meshes are thin in
+    x), others across x. Turned by its face alone, a door of the first kind stood on its edge, square to the wall."""
+    import library
+    b = library.bounds_of(gd.read_file('meshes' + chr(92) + gd.describe(gd.from_key(key))[3]))
+    return -90.0 if (b[3] - b[0]) < (b[4] - b[1]) else 0.0
+
+
 def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
     """Everything that goes into a hotel's small world (already added, viewworld.add_world), as ops for one Undo: the
     open hotel where the city stands the closed one, the city round it (viewworld.stage_ops), its things and lights, its
@@ -517,7 +526,7 @@ def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
             n += 1
     names = {}
     for name, edid, lx, ly, lz, face in v['doors']:
-        p = at(lx, ly, lz, face)
+        p = at(lx, ly, lz, face + leaf_turn(gd, keys[edid]))
         o = {'op': 'add', 'cell': cell_of(p[0], p[1]), 'base': keys[edid], 'p': p, 's': 1, 'name': hotel + '_' + name}
         if name != 'in' and name not in linked:
             o['extra'] = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}
@@ -527,7 +536,7 @@ def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
         f = math.radians(face)
         names[hotel + '_' + name] = {'cell': o['cell'], 'arrive': at(lx + 120 * math.sin(f) / sz, ly + 120 * math.cos(f) / sz, lz + 8, face)}
     ox, oy, oface = v['out']
-    po = at(ox, oy, 0.0, oface)
+    po = at(ox, oy, 0.0, oface + leaf_turn(gd, keys[v['door_out']]))
     pgrid = gd.grid(parent)
     ock = gd.key(pgrid.get((int(po[0] // 4096), int(po[1] // 4096)), gd.from_key(wck)))     # (the door's own cell: a big hotel spans several)
     ops.append({'op': 'add', 'cell': ock, 'base': keys[v['door_out']], 'p': po, 's': 1, 'name': hotel + '_out'})

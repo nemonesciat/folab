@@ -631,7 +631,11 @@ def missouri():
         # end is in the level, not a lip in the air at its edge)
         foot = 2990 + (Z1 - deck_z(3000)) * LADDER_RUN
         ladder(parts, sx * 520, foot, deck_z(foot) - 2, 2990, Z1)
-        ladder(parts, sx * (490 + 250 * LADDER_RUN), 2280, Z1, 2280, Z1 + 250, x_top=sx * 490)
+        # (01 up to the after superstructure's roof: along its side, foot on open 01 deck aft, top on a landing that
+        # reaches over the roof's edge. It ran across her before, its foot on the 01 level's last 20 units, and nobody
+        # could get onto it: laddercheck found no deck under its foot)
+        ladder(parts, sx * 562, 2300 + 250 * LADDER_RUN, Z1, 2300, Z1 + 250)
+        _box(parts, [150, 130, 20], [sx * 545, 2245, Z1 + 230], 'deck', solid=True)
     ladder(parts, 0, -770 + (Z3 - Z2) * LADDER_RUN, Z2, -770, Z3, wide=130)     # (its top 10 inside 03, which ends at -760)
     # the forecastle: anchor chains to the windlasses, the breakwater, bitts, the jackstaff
     for sx in (-1, 1):

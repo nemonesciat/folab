@@ -147,11 +147,20 @@ def shore_side(gd, pr, world, x, y, turn, reach=6000.0):
     return min(best, key=best.get)
 
 
-def standing(pr):
-    """Where the Missouri stands in the mod: (cell, ref, place) or None."""
+def world_cells(gd, world):
+    """The keys of a world's grid cells."""
+    return {gd.key(c) for c in gd.grid(world).values()}
+
+
+def standing(pr, gd=None, world=None):
+    """Where the Missouri stands in the mod: (cell, ref, place) or None. With gd and world: in that world only (a hotel's
+    small world holds a copy of the city round it, her among it: the first copy found was taken for her, 17 Nov 2026)."""
     import modelsets
     key = modelsets.record_of(pr, PIECE)
+    only = world_cells(gd, world) if world is not None else None
     for ck, c in pr.cells.items():
+        if only is not None and ck not in only:
+            continue
         for rk, r in c['refs'].items():
             if key and r.get('base') == key and not r.get('removed'):
                 return ck, rk, r['p']
@@ -164,10 +173,11 @@ def unboard_ops(gd, pr, world, prefix='FOLab'):
     and board use them again)."""
     import modelsets
     import shipinside
-    got = standing(pr)
+    got = standing(pr, gd, world)
     if not got:
         return []
     ck0, rk0, p = got
+    city = world_cells(gd, world)          # (only her world: the copies of what is round her in the hotels' small worlds stay)
     places = {k for k, r in pr.records.items() if k.startswith('+') and r.get('type') == 'CELL'
               and recordio.field(r, 'EDID') in {prefix + e for e, _f, _fn in shipinside.PLACES.values()}}
     gang = modelsets.record_of(pr, 'mo_gangway')
@@ -175,10 +185,10 @@ def unboard_ops(gd, pr, world, prefix='FOLab'):
     dockish = {gd.key(f) for f in found.values() if f is not None}
     lights = {gd.key(f) for f, (_i, r) in gd.forms.items() if r.tag == 'LIGH'}
     spots = [to_world(p[0], p[1], p[5], lx, ly) for _e, lx, ly, _lz in waikikiset.LIGHTS.get(PIECE, ())]
-    gangways = [r['p'] for c in pr.cells.values() for r in c['refs'].values() if gang and r.get('base') == gang and not r.get('removed')]
+    gangways = [r['p'] for ck, c in pr.cells.items() if ck in city for r in c['refs'].values() if gang and r.get('base') == gang and not r.get('removed')]
     ops = [{'op': 'remove', 'cell': ck0, 'ref': rk0}]
     for ck, c in pr.cells.items():
-        if ck.startswith('+'):
+        if ck.startswith('+') or ck not in city:
             continue
         for rk, r in c['refs'].items():
             if not rk.startswith('+') or rk == rk0 or r.get('removed') or not r.get('p'):
@@ -205,9 +215,9 @@ def restand(gd, pr, world, prefix='FOLab'):
     """(ops, report): her taken out with all round her and stood again where she was, along the same line, with this
     FOLab's model, insides and way aboard."""
     import shipinside
-    got = standing(pr)
+    got = standing(pr, gd, world)
     if not got:
-        raise ValueError("The Missouri isn't in this mod.")
+        raise ValueError("The Missouri isn't in this world of the mod.")
     _ck, _rk, p = got
     ops = unboard_ops(gd, pr, world, prefix)
     more, info = stand(gd, pr, world, p[0], p[1], p[5])
