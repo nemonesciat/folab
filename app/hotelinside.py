@@ -684,19 +684,31 @@ def _frame(gd, pr, hotel, parent):
     return wck, wr, at
 
 
+def arrive_at(at, lx, ly, lz, face, sz):
+    """Where you arrive by a door: a step in front of it, on the floor it stands on."""
+    f = math.radians(face)
+    return at(lx + 120 * math.sin(f) / sz, ly + 120 * math.cos(f) / sz, lz + 8, face)
+
+
 def relay_ops(gd, pr, hotel, parent, child, reach=400.0):
     """Ops moving a hotel's things and doors already in its small world to where view_ops puts them now (a lobby laid
     out again: the lifts raised and framed, 17 Nov 2026). Each is found as the nearest ref of the same base in the small
     world within `reach`; one already where it should be is left. Returns (ops, [what moved])."""
     v = VIEWS[hotel]
-    _wck, _wr, at = _frame(gd, pr, hotel, parent)
+    _wck, wr, at = _frame(gd, pr, hotel, parent)
+    sz = float(wr.get('s') or 1.0)
     cells = {gd.key(c) for c in gd.grid(child).values()}
     refs = [(ck, rk, r) for ck, c in pr.cells.items() if ck in cells for rk, r in c['refs'].items()
             if r.get('base') and r.get('p') and not r.get('removed')]
     want = {t[0] for t in v['things']} | {d[1] for d in v['doors']}
     keys = {gd.edid(f): gd.key(f) for f, (_i, r) in gd.forms.items() if gd.edid(f) in want}
     items = [(e, at(lx, ly, lz, face)) for e, lx, ly, lz, face in v['things'] if e in keys]
-    items += [(e, at(lx, ly, lz, face + leaf_turn(gd, keys[e]), door_rise(gd, keys[e]))) for _n, e, lx, ly, lz, face in v['doors'] if e in keys]
+    arrive = {}
+    for _n, e, lx, ly, lz, face in v['doors']:
+        if e in keys:
+            p = at(lx, ly, lz, face + leaf_turn(gd, keys[e]), door_rise(gd, keys[e]))
+            items.append((e, p))
+            arrive[id(p)] = at(*v['arrive_in']) if _n == 'in' else arrive_at(at, lx, ly, lz, face, sz)     # (the way in: where VIEWS says)
     ops, moved, used = [], [], set()
     for e, p in items:
         near = [(math.hypot(r['p'][0] - p[0], r['p'][1] - p[1]) + abs(r['p'][2] - p[2]) * 0.01, ck, rk, r) for ck, rk, r in refs
@@ -706,6 +718,14 @@ def relay_ops(gd, pr, hotel, parent, child, reach=400.0):
             continue
         d, ck, rk, r = min(near)
         used.add(rk)
+        if id(p) in arrive:                 # (and whatever leads to the door brings you a step in front of it, where it is now)
+            ar = arrive[id(p)]
+            for ock, c in pr.cells.items():
+                for ork, orr in c['refs'].items():
+                    t = orr.get('tel')
+                    if t and t.get('door') == rk and max(abs(a - b) for a, b in zip(t.get('p') or [0] * 6, ar)) > 0.5:
+                        ops.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': dict(t, p=ar)})
+                        moved.append(('arrival by ' + e, ork, [round(v_) for v_ in (t.get('p') or [])[:3]], [round(v_) for v_ in ar[:3]]))
         if max(abs(a - b) for a, b in zip(r['p'][:3], p[:3])) < 0.5 and abs(r['p'][5] - p[5]) < 1e-3:
             continue
         ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': p})
@@ -752,8 +772,7 @@ def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
         else:
             o['extra'] = {'persistent': True}
         ops.append(o)
-        f = math.radians(face)
-        names[hotel + '_' + name] = {'cell': o['cell'], 'arrive': at(lx + 120 * math.sin(f) / sz, ly + 120 * math.cos(f) / sz, lz + 8, face)}
+        names[hotel + '_' + name] = {'cell': o['cell'], 'arrive': arrive_at(at, lx, ly, lz, face, sz)}
     ox, oy, oface = v['out']
     po = at(ox, oy, 0.0, oface + leaf_turn(gd, keys[v['door_out']]))
     pgrid = gd.grid(parent)
