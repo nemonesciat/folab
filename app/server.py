@@ -27,6 +27,7 @@ import navbuild
 import worldapi
 import api_maps
 import nif
+import nvrs
 import nvse
 import playtest
 import project
@@ -1043,6 +1044,8 @@ def state():
     s['loadout'] = loadout.current().title if loadout.current() else None
     s['from_mo2'] = loadout.started_from_mo2()
     s['launch_via'] = load_settings().get('launch_via', 'nvse')
+    s['engine'] = _engine()
+    s['nvrs'] = nvrs.status(load_settings().get('nvrs_dir'), GD.data_dir)
     if PR:
         s['installed'] = mo2write.status(loadout.current(), os.path.join(project.BUILD_DIR, PR.plugin), PR.name) if loadout.current() else install.status(GD.data_dir, PR.plugin)
         built = os.path.join(project.BUILD_DIR, PR.plugin)
@@ -1456,9 +1459,58 @@ def not_while_playing():
         raise ValueError('New Vegas is running: close it first (it holds its plugins open while it runs).')
 
 
+def _engine():
+    """What plays the game: 'original' (FalloutNV.exe, through xNVSE, Steam or MO2) or 'nv-rs' (nvrs.py)."""
+    return 'nv-rs' if load_settings().get('engine') == 'nv-rs' else 'original'
+
+
+def _nvrs_folder():
+    folder = nvrs.find(load_settings().get('nvrs_dir'))
+    if not folder:
+        raise ValueError('nv-rs isn\'t found: unpack it (in C:\\Games\\nv-rs, say), or choose its folder on the Mod page.')
+    return folder
+
+
+def choose_engine(body):
+    """body: {engine: 'original' | 'nv-rs', folder: nv-rs's folder (optional)}"""
+    folder = (body.get('folder') or '').strip().strip('"')
+    if folder:
+        if not nvrs.is_nvrs(folder):
+            raise ValueError('That folder has no Play.exe and app\\FalloutNV.exe: it isn\'t nv-rs.')
+        save_settings(nvrs_dir=os.path.normpath(folder))
+    if body.get('engine') == 'nv-rs':
+        _nvrs_folder()
+    if body.get('engine') in ('original', 'nv-rs'):
+        save_settings(engine=body['engine'])
+    return state()
+
+
+def _play_nvrs(plugins):
+    """These saved plugins in nv-rs's mods folder (anything FOLab put there before and not now taken out), and nv-rs
+    started with them. There's no xNVSE there to load a save at the menu: you load one."""
+    folder = _nvrs_folder()
+    for p in plugins:
+        if os.path.basename(p) == playtest.TEST_PLUGIN:
+            playtest.test_assets(p)         # (no JIP there for the script that loads a save: cleared out)
+    out = {'install': nvrs.put_in(folder, plugins), 'autoload': None}
+    out['via'] = nvrs.launch(folder)
+    return out
+
+
 def play(body):
     """Save, put the mod in the game, and start it; with a place and a spot, Play here."""
     not_while_playing()
+    if _engine() == 'nv-rs':
+        saved = save()
+        plugins = [saved['path']]
+        out = {}
+        if body.get('cell'):
+            path = os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN)
+            out['test'] = _write_play_test(body, path)
+            plugins.append(path)
+        out.update(_play_nvrs(plugins))
+        out['state'] = state()
+        return out
     if loadout.started_from_mo2():
         test = None
         if body.get('cell'):
@@ -1637,6 +1689,22 @@ def give(body):
     not_while_playing()
     key, count = body['key'], max(1, min(int(body.get('count', 1)), 100000))
     out = {}
+    if _engine() == 'nv-rs':
+        if not PR and key.startswith('+'):
+            raise ValueError('Open the mod this item is in first.')
+        plugins = [save()['path']] if PR else []
+        rec = BR.record(key)['record']
+        edid = recordio.field(rec, 'EDID') or key
+        path = os.path.join(project.BUILD_DIR, playtest.TEST_PLUGIN)
+        os.makedirs(project.BUILD_DIR, exist_ok=True)
+        out['test'] = playtest.write_test_plugin(GD, None, None, path, give=[(key, count, edid)],
+                                                 mod=PR.plugin if PR else None)
+        out.update(_play_nvrs(plugins + [path]))
+        name = recordio.field(rec, 'FULL') or edid
+        out['message'] = 'Starting nv-rs: %s%s will be in your inventory once you load a save.' % (
+            '%d × ' % count if count > 1 else '', name)
+        out['state'] = state()
+        return out
     inside = loadout.started_from_mo2()
     if inside:
         if not PR and key.startswith('+'):
@@ -1867,6 +1935,15 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path == '/api/launch_via':
                     save_settings(launch_via='nvse' if body.get('via') == 'nvse' else 'steam')
                     return self.send(state())
+                if u.path == '/api/engine':
+                    return self.send(choose_engine(body))
+                if u.path == '/api/nvrs/import_saves':
+                    not_while_playing()
+                    nvrs.import_saves(_nvrs_folder())
+                    return self.send(state())
+                if u.path == '/api/nvrs/take_out':
+                    not_while_playing()
+                    return self.send({'removed': nvrs.take_out(_nvrs_folder()), 'state': state()})
                 if u.path == '/api/give':
                     return self.send(give(body))
                 if u.path == '/api/project/new':

@@ -35,6 +35,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   beside FalloutNV.exe (its config in Data\NVSE), records what it put in for Take out. The game starts through
   nvse_loader.exe when present (setting `launch_via`), else steam://rungameid/22380; never FalloutNV.exe directly
   (Steam's load error 5:0000065434).
+- nv-rs (`nvrs.py`, setting `engine`: 'original' | 'nv-rs', `nvrs_dir`): the Rust port of the game, a folder of its
+  own (C:\Games\nv-rs). With it chosen, Play / Play here / Give put the built plugins and their assets in its `mods`
+  folder (listed in mods\folab.json, only those taken out again) and start `Play.exe --mods`; no xNVSE or JIP there
+  (no save loaded at the menu). Its game is app\FalloutNV.exe, so `game_running()` sees it too.
 - Create page (`web/create.js`): items in plain fields over the same records Browse edits; "Give it to me in game"
   (`/api/give`) reuses FOLab Test.esp: its quest runs player.AddItem once (bytes as the game's Hull20GaAddScript).
 - Outside: `gamedata.py` indexes exterior cells (`ext_cells`, `grid(world)`), LAND (`land`, `land_at`, parent

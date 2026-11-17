@@ -511,6 +511,8 @@ async function play(at){
     const d = await post('/api/play', at || {});
     setState(d.state);
     if (d.via === 'by hand') return toast('Your mod and Play here are in MO2, but FOLab couldn\'t find how to start it: open MO2 and press Run.' + (at ? ' Load a save and you\'ll arrive here.' : ''), true);
+    if (d.via === 'nv-rs') return toast(at ? 'nv-rs is starting with your mod. Load a save (one made in nv-rs with mods): you\'ll arrive here a moment after it loads.'
+                                           : 'nv-rs is starting with your mod: load a save or start a new game.');
     const how = d.via === 'mo2' ? 'MO2 is starting New Vegas' : d.via === 'nvse' ? 'New Vegas is starting (with xNVSE)' : 'Steam is starting New Vegas: press Play in its launcher';
     toast(at ? (d.autoload ? how + `: it loads your newest save (${d.autoload}) and you'll arrive here.`
                            : how + '. Continue or load a save: you\'ll arrive here a moment after it loads.')
@@ -592,6 +594,22 @@ function nvseCard(s){
        <label><input type="radio" name="via" value="steam" ${via !== 'nvse' || !n.loader ? 'checked' : ''}> Start it through Steam (the game's launcher opens: Play)</label></p></div>`;
 }
 
+function engineCard(s){
+  const r = s.nvrs || {}, rs = s.engine === 'nv-rs';
+  return `<div class="card"><h3>What plays the game</h3>
+    <p><label><input type="radio" name="engine" value="original" ${rs ? '' : 'checked'}> The original game (FalloutNV.exe)</label><br>
+       <label><input type="radio" name="engine" value="nv-rs" ${rs ? 'checked' : ''} ${r.found ? '' : 'disabled'}> nv-rs, the game's code translated to Rust${r.version ? ' (' + esc(r.version) + ')' : ''}</label></p>
+    ${r.found ? `<p>nv-rs is in <code>${esc(r.folder)}</code>. With it chosen, <b>Play here</b>, <b>Open in game</b> and <b>Give it to me</b>
+         put your mod in its <code>mods</code> folder and start its Play with mods. Your game folder isn't touched.</p>
+       <p>nv-rs can't run xNVSE or JIP yet, so mods that need them won't work there, and you load a save yourself.
+         Saves with mods are kept apart in nv-rs: ${r.saves ? `it has ${r.saves}.` : 'it has none yet.'}
+         <button class="btn" id="m-nvrs-saves">Copy my saves in</button>
+         ${(r.mine || []).length ? `<button class="btn" id="m-nvrs-out">Take FOLab's files out of nv-rs</button>` : ''}</p>
+       ${r.same_drive ? '' : '<p class="note">nv-rs needs to be on the same drive as the game to play mods.</p>'}`
+     : `<p>nv-rs isn't found (looked in ${(r.places || []).map(p => `<code>${esc(p)}</code>`).join(', ')}).</p>`}
+    <p><input id="m-nvrs-dir" placeholder="nv-rs's folder" style="width:280px" value="${esc(r.folder || '')}"> <button class="btn" id="m-nvrs-set">Use this folder</button></p></div>`;
+}
+
 function drawModPage(){
   const s = A.state, p = s.project, i = s.installed || {};
   const others = (s.projects || []).filter(x => !p || x.name !== p.name);
@@ -612,6 +630,7 @@ function drawModPage(){
       <p>${p.opened ? 'Opened from an existing plugin: saving keeps everything in it and lays your changes over it.' : 'A new mod of your own.'}</p>
       <p>Masters: ${(p.masters || []).map(m => `<code>${esc(m)}</code>`).join(' ') || 'none yet'}</p>
       <p><label><input type="checkbox" id="m-esm" ${p.esm ? 'checked' : ''}> Save as a master (other mods can build on it; the game loads it before plugins)</label></p></div>` : ''}
+    ${engineCard(s)}
     ${nvseCard(s)}
     <div class="card"><h3>Open a plugin as your mod</h3>
       <p>${s.loadout ? 'The plugins in this loadout. FOLab works on a copy and won\'t put it back over another mod\'s plugin: to change a mod and leave it as it is, start a patch.' : 'Mods in the game\'s Data folder. FOLab works on a copy; <b>Put in game</b> writes it back over the original (the old one goes to backups first).'}</p>
@@ -640,6 +659,15 @@ function drawModPage(){
   on2('#m-nvse-out', async () => {
     if (!confirm('Take xNVSE out of the game folder? (A copy goes to backups.)')) return;
     try { const d = await post('/api/nvse/uninstall'); setState(d.state); toast('xNVSE taken out.'); } catch (e){ fail(e); }
+  });
+  $('#page-mod').querySelectorAll('input[name="engine"]').forEach(r => r.onchange = async () => {
+    try { setState(await post('/api/engine', {engine: r.value})); toast(r.value === 'nv-rs' ? 'nv-rs will play the game.' : 'The original game will play.'); } catch (e){ fail(e); drawModPage(); }
+  });
+  on2('#m-nvrs-set', async () => { try { setState(await post('/api/engine', {folder: $('#m-nvrs-dir').value})); toast('nv-rs found.'); } catch (e){ fail(e); } });
+  on2('#m-nvrs-saves', async () => { try { setState(await post('/api/nvrs/import_saves')); toast('nv-rs asks before it copies your saves (your own stay as they are).'); } catch (e){ fail(e); } });
+  on2('#m-nvrs-out', async () => {
+    if (!confirm('Take the files FOLab put in nv-rs\'s mods folder out again?')) return;
+    try { const d = await post('/api/nvrs/take_out'); setState(d.state); toast('Taken out of nv-rs.'); } catch (e){ fail(e); }
   });
   $('#page-mod').querySelectorAll('input[name="via"]').forEach(r => r.onchange = async () => { try { setState(await post('/api/launch_via', {via: r.value})); } catch (e){ fail(e); } });
   const esm = $('#m-esm');
