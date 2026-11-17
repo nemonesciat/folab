@@ -248,6 +248,23 @@ def generate(gd, project, ckey):
                   'stubs': len(old_meshes) - 1 if len(old_meshes) > 1 else 0}
 
 
+def _drop_unused_ext(m):
+    """Outside links no triangle uses any more taken out of the list, the rest renumbered."""
+    used = sorted({t[3 + i] for t in m['tris'] for i in range(3) if t[6] >> i & 1 and t[3 + i] < len(m['ext'])})
+    if len(used) == len(m['ext']):
+        return
+    new = {old: n for n, old in enumerate(used)}
+    m['ext'] = [m['ext'][k] for k in used]
+    for ti, t in enumerate(m['tris']):
+        if t[6] & (N.F_EDGE0 | N.F_EDGE1 | N.F_EDGE2):
+            edges = list(t[3:6])
+            for i in range(3):
+                if t[6] >> i & 1:
+                    edges[i] = new[edges[i]]
+            m['tris'][ti] = tuple(t[:3]) + tuple(edges) + tuple(t[6:])
+    N._touch(m)
+
+
 # --- outside: a set of cells, joined to each other and to what's round them ---
 
 class Area:
@@ -316,6 +333,45 @@ class Area:
             for b in self.meshes(gd.key(home)):
                 for f in forms:
                     N._forget_links(b['m'], f)
+
+    def mend(self):
+        """Links between the meshes here that don't point back, or name no outside link at all, taken off (the edge is left
+        unlinked: nobody crosses there, as at any edge the join found no partner for). Big batches of Waikiki's cells came
+        out with a few, 3 batches of 35, never the same batch twice from the same start, and a whole batch was lost each time.
+        The game's own links between its own meshes are left alone (not all of them are mutual). Returns how many went."""
+        rows = [e for row in self.cells.values() for e in row]
+        by = {e['form']: e for e in rows}
+        gone = 0
+        for e in rows:
+            m = e['m']
+            ext = m['ext']
+            for ti, t in enumerate(m['tris']):
+                drop = []
+                for i in range(3):
+                    if not t[6] >> i & 1:
+                        continue
+                    if t[3 + i] >= len(ext):
+                        drop.append(i)
+                        continue
+                    _k, target, tri = ext[t[3 + i]]
+                    o = by.get(target)
+                    if o is None or (e['copy'] and o['copy']):
+                        continue
+                    ot = o['m']['tris'][tri] if tri < len(o['m']['tris']) else None
+                    if ot is None or not any(ot[6] >> j & 1 and ot[3 + j] < len(o['m']['ext'])
+                                             and tuple(o['m']['ext'][ot[3 + j]][1:]) == (e['form'], ti) for j in range(3)):
+                        drop.append(i)
+                if drop:
+                    edges, fl = list(t[3:6]), t[6]
+                    for i in drop:
+                        edges[i] = N.NONE
+                        fl &= ~(1 << i)
+                    m['tris'][ti] = tuple(t[:3]) + tuple(edges) + (fl, t[7])
+                    gone += len(drop)
+            _drop_unused_ext(m)
+        if gone:
+            gone += self.mend()         # (a link taken off one side leaves the other side's pointing nowhere)
+        return gone
 
     def check(self):
         """Every mesh here against each other: what's wrong, as words."""
@@ -401,6 +457,7 @@ def generate_area(gd, project, ckeys, progress=None):
         A.forget_far(ck, far.get(ck, ()))
     report['joined'] = A.join(targets)
     report['triangles'] = sum(len(A.cells[ck][0]['m']['tris']) for ck in targets)
+    report['mended'] = A.mend()
     bad = A.check()
     if bad:
         raise NavError('The mesh came out unsound (%s): this is a bug in FOLab, please report it.' % bad[0])
@@ -438,6 +495,7 @@ def remove_area(gd, project, ckeys):
             for f in gone_forms:
                 N._forget_links(e['m'], f)
     A.join(sorted(made))
+    A.mend()
     bad = A.check()
     if bad:
         raise NavError('The meshes came out unsound (%s): this is a bug in FOLab, please report it.' % bad[0])
