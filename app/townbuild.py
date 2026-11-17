@@ -379,6 +379,7 @@ def survey(gd, progress=None):
 
 SHUT_REACH = 40.0       # (how far outside a building's box something in its doorway may be)
 SHUT_SAME = 80.0        # (two things this near are in the same doorway)
+TWIN = 4.0              # (the same thing this near another of itself is one thing stood twice)
 SHUT_MOST = 48          # (a motel has a door to every room, on two floors)
 _SHUT_WORD = re.compile(r'door|woodplanksgroup')       # (boards nailed over a doorway are the game's WoodPlanksGroup)
 _SHUT_NOT = re.compile(r'doorframe|doorway|indoor|outdoor|doorbell|doormat')
@@ -966,7 +967,7 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE, 
             rep['nothing_fits'] += 1
         else:
             rep['built'] += 1
-    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'opened': rep.get('opened', 0), 'rooms': rep.get('rooms', 0), 'unboarded': rep.get('unboarded', 0), 'backed': rep.get('backed', 0), 'too_small': rep['too_small'],
+    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'opened': rep.get('opened', 0), 'rooms': rep.get('rooms', 0), 'unboarded': rep.get('unboarded', 0), 'twins': rep.get('twins', 0), 'backed': rep.get('backed', 0), 'too_small': rep['too_small'],
               'nothing_fits': rep['nothing_fits'], 'blocked': rep['blocked'], 'steep': rep['steep'], 'had_one': rep['had_one'],
               'cleared': len(gone), 'families': dict(fams), 'catalogue': len(cat), 'roads_seen': len(roads), 'poi': rep['poi'], 'landmarks': rep['landmarks'],
               'insides': len(w.ins.tags) if w.ins else 0, 'inside_things': w.ins.things if w.ins else 0, 'made': list(w.ins.tags) if w.ins else [],
@@ -1160,6 +1161,9 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
     shut = b.get('shut', ())
     doorlike = [(d['x'], d['y'], d['z']) for d in b['doors']] + [(d['x'], d['y'], d['z']) for d in shut if not d.get('board')]
     for k, d in enumerate(b['doors']):
+        if any(e['base'] == d['base'] and math.hypot(d['x'] - e['x'], d['y'] - e['y']) < TWIN and abs(d['z'] - e['z']) < TWIN
+               for e in b['doors'][:k]) and not (inside and k == inside['door']):
+            continue                            # (the game has this door twice in one doorway: NoVacHouse01)
         dx, dy = turn(d['x'], d['y'], rz)
         dck = w.cell_at(ox + dx, oy + dy) or ck
         o = {'op': 'add', 'cell': dck, 'base': d['base'], 'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)], 's': 1}
@@ -1169,7 +1173,14 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
         else:
             o['extra'] = DOOR_LOCK
             ops.append(o)
+    stood = [(e['base'], e['x'], e['y'], e['z']) for e in b['doors']]
     for n, d in enumerate(shut):
+        # (the same door the catalogue has as a way in, or twice as shut: once is enough; 28 buildings of Waikiki had
+        # two locked office doors in one doorway)
+        if any(base == d['base'] and math.hypot(d['x'] - x, d['y'] - y) < TWIN and abs(d['z'] - z_) < TWIN for base, x, y, z_ in stood):
+            rep['twins'] = rep.get('twins', 0) + 1
+            continue
+        stood.append((d['base'], d['x'], d['y'], d['z']))
         if d.get('board') and any(math.hypot(d['x'] - x, d['y'] - y) < SHUT_SAME and abs(d['z'] - z_) < SHUT_SAME * 2 for x, y, z_ in doorlike):
             rep['unboarded'] = rep.get('unboarded', 0) + 1
             continue                            # (boards nailed across a door stood through it: a door is enough)

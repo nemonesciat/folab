@@ -56,6 +56,15 @@ for hotel, H in HF.HOTELS.items():
     check('%s: nothing with a script of its own place\'s' % hotel, not scripted, scripted.most_common(5))
     tels = [o for o in m['ops'] if o['op'] == 'tel']
     check('%s: the floors are joined both ways' % hotel, len(tels) == 2 * (n - 1), len(tels))
+    # (nothing stood twice: the same base within a couple of units of itself, a light lit twice in the Moana's once)
+    twice = []
+    per = collections.defaultdict(list)
+    for o in m['ops']:
+        if o['op'] == 'add' and o.get('p'):
+            per[(o['cell'], o['base'])].append(o['p'][:3])
+    for (cell, base), ps in per.items():
+        twice += [(cell, base) for i, a in enumerate(ps) for b in ps[i + 1:] if math.dist(a, b) < HF.TWIN]
+    check('%s: no place has the same thing twice in one spot' % hotel, not twice, twice[:5])
     layouts[hotel] = [r['seed'] for r in rows]
     pr.apply('floors ' + hotel, m['ops'])
     names = dict(pr.names)
@@ -95,3 +104,9 @@ for hotel, H in HF.HOTELS.items():
         check('the Royal Hawaiian: nobody stands near a door you arrive by', near == 0, near)
         pr.apply('people', ppl, merge=True)
 check('each hotel\'s floors are its own, not another\'s', len({tuple(v) for v in layouts.values()}) == len(layouts), layouts)
+# (no_twins itself: a light stood twice keeps one; the lift is never the one dropped; a second one a step away stays)
+a = kitdress.Item('FalloutNV.esm:0695BF', [1230.0, -2224.0, 138.0, 0, 0, 0], 1.0, 'light', 0, None)
+b = kitdress.Item('FalloutNV.esm:0695BF', [1230.5, -2224.0, 138.0, 0, 0, 0], 1.0, 'light', 0, None)
+c = kitdress.Item('FalloutNV.esm:0695BF', [1330.0, -2224.0, 138.0, 0, 0, 0], 1.0, 'light', 0, None)
+got = HF.no_twins([a, b, c], keep=b)
+check('a thing stood twice is stood once, the one to keep kept', got == [b, c], got)

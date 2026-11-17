@@ -832,6 +832,12 @@ def buildings_job(body, srv):
             if nav_ops:
                 srv.PR.apply('Buildings on the plots', nav_ops, merge=True)
                 state = srv.state()
+            if made:
+                # (the game has too few places of some kinds to lend: each copy after the first gets things and a light of its own)
+                _said('Making repeated places their own')
+                import roomvary
+                report['varied'] = roomvary.vary(srv.GD, srv.PR, merge=True, label='Buildings on the plots')
+                state = srv.state()
             report['places'] = [names[m[0]] for m in made if m[0] in names]
         return {'state': state, 'report': report}
     return _start(work, kind='buildings')

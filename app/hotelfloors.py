@@ -242,6 +242,20 @@ def _put_lift(game, ts, plan, made, items, rng, lift_key, avoid, kind='guest'):
 
 
 _tris = {}
+TWIN = 2.0              # (the same thing this near another of itself is one thing stood twice: a light lit twice)
+
+
+def no_twins(items, keep=None, near=TWIN):
+    """Items with none standing twice: the same base within `near` units of another of itself is left out (the first kept,
+    and `keep` whatever else; the game's own rooms have none)."""
+    out, by = [], collections.defaultdict(list)
+    for it in sorted(items, key=lambda it: it is not keep):
+        if any(math.dist(it.p[:3], o.p[:3]) < near for o in by[it.key]):
+            continue
+        by[it.key].append(it)
+        out.append(it)
+    order = {id(it): n for n, it in enumerate(items)}
+    return sorted(out, key=lambda it: order[id(it)])
 
 
 def _mesh_tris(game, key):
@@ -457,6 +471,7 @@ def build_floor(gd, hotel, kind, n, seed, last=False):
             why['things in the way'] += 1
             continue
         _secure(gd, ts, plan, items, rng, kind, '$hf_%s_key' % hotel if last else None, lift)
+        items[:] = no_twins(items, keep=lift)
         names = NAMES[kind]
         rooms = collections.Counter(names.get(o.get('dress') or o['purpose'], o.get('dress') or o['purpose']) for o in plan.rooms())
         kinds = collections.Counter(it.what for it in items)

@@ -131,6 +131,13 @@ the model for style, UI and approach. Python, standard library first, code in `a
   `W.grabbing` keeps world.js's own Esc and right-button cancel off it. `web/placefold.js`: Place panel's Prefabs,
   Recently used and Suggested fold away (remembered), Suggested and Recently used by themselves while a search is typed.
   FOLab.exe waits as long as the server runs (it gave up after 180 s: through MO2 a big load order took longer).
+- Rooms not the same twice (`roomvary.py`, `tests/test_roomvary.py`): the game lends only 116 places to a city's buildings
+  (5 shops), so one place stood behind up to nine doors of Waikiki. `twins` finds copies of one place by what they're built
+  of; every copy after the first gets things swapped like for like (`Swaps`: same nouns, bounds within `FIT`, same game file,
+  no script, not a quest's/vault's/faction's, `NOT_IN`), loose things thinned, and a light of its own (`MOODS`, LNAM's colour
+  bits cleared); doors and anything named, locked or linked kept; navmeshes stay current. Runs at the end of
+  `/api/maps/buildings`; a copy no longer like the first is left alone. townbuild stands a door the catalogue has twice
+  in one doorway once (`TWIN`: Waikiki had 80 doubled: office doors, shop-front door statics, planks).
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
