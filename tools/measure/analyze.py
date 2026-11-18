@@ -80,7 +80,10 @@ def first_pass(path):
     game = set()
     presents = collections.defaultdict(list)
     names = {}
+    first_pass.first_sample = None
     for ev in etlread.events(path):
+        if ev.kind == 'k' and ev.group == PERF and ev.type == 46 and first_pass.first_sample is None:
+            first_pass.first_sample = ev.time
         if ev.kind == 'k':
             if ev.group == HEADER and ev.type == 0 and freq is None and len(ev.payload) >= 264:
                 freq, = struct.unpack_from('<q', ev.payload, 256)
@@ -110,6 +113,8 @@ def second_pass(path, game, threads, window=None):
     run = collections.Counter()        # tid -> ticks on a core (from switches)
     last = {}                          # cpu -> (time, tid)
     span = [None, None]
+    wakes = collections.defaultdict(list)   # tid -> times it was switched onto a core
+    second_pass.wakes = wakes
     game_tids = {t for t, (p, _s) in threads.items() if p in game}
     for ev in etlread.events(path, want=lambda k, g, t: k == 'k' and g in (PERF, STACK, THREAD)):
         if ev.group == PERF and ev.type == 46:
@@ -127,6 +132,8 @@ def second_pass(path, game, threads, window=None):
                 stacks[(tid, ts)] = struct.unpack_from('<%dQ' % n, ev.payload, 16)
         elif ev.group == THREAD and ev.type == 36:
             new, old = struct.unpack_from('<II', ev.payload, 0)
+            if new in game_tids:
+                wakes[new].append(ev.time)
             prev = last.get(ev.cpu)
             if prev and prev[1] in game_tids and (window is None or window[0] <= prev[0] <= window[1]):
                 run[prev[1]] += ev.time - prev[0]
@@ -148,12 +155,17 @@ def main(path, out=None):
     freq = freq or 10_000_000
     shown = sorted(t for p in game for t in presents.get(p, []))
     window = (shown[0], shown[-1]) if len(shown) > 2 else None
+    if window is None and first_pass.first_sample:
+        # no Direct3D 9 frames (DXVK draws through Vulkan): the recorder's 60 s from its first sample
+        window = (first_pass.first_sample, first_pass.first_sample + 60 * (freq or 10_000_000))
     samples, per_thread, all_samples, stacks, run, span = second_pass(path, game, threads, window)
     secs = (span[1] - span[0]) / freq
     cpus = len(all_samples)
     gp = sorted(presents.get(max(game), []))
     if len(game) == 1 and len(gp) > 2:
         secs = (gp[-1] - gp[0]) / freq    # the time the game was showing frames (the rest is the recorder stopping)
+    elif window:
+        secs = (window[1] - window[0]) / freq
     gn = gamenames.GameNames()
     pid = max(game, key=lambda p: sum(per_thread[t] for t, (pp, _s) in threads.items() if pp == p))
     m = mods[pid]
@@ -204,6 +216,14 @@ def main(path, out=None):
             continue
         say('  %6d  %5.1f%%  %5.1f%%  starts in %s' % (t, 100.0 * s / per_ms / 1000 / secs, 100 * r, where(threads[t][1])))
     say('  the game kept %.2f cores busy on average (of %d)' % (busy_total, cpus))
+    wakes = second_pass.wakes
+    lo, hi = window if window else (span[0], span[1])
+    for t in tids:
+        if where(threads[t][1]) in ('d3d9.dll',) and len(wakes[t]) > 200:
+            w = [x for x in wakes[t] if lo <= x <= hi]
+            per_s = collections.Counter(int((x - lo) / freq) for x in w)
+            say('  DXVK thread %d woke %.1f times a second (by second: %s)' % (
+                t, len(w) / secs, [per_s[s] for s in range(int(secs))]))
 
     # main thread
     main_tid = tids[0]
