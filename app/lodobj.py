@@ -318,7 +318,9 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None):
     sheet = Sheet(gd)
     blocks = {}
     shown = skipped = 0
-    sw_x, sw_y = lodgen.world_box(gd, world)[:2]         # (blocks are counted from the world's south-west cell, as its settings file says)
+    # (blocks are counted from the corner the world's settings file gives: the one lodgen just wrote beside them, else the
+    # one the game reads. Counted from the world's own corner they missed the settings on 18 Nov 2026 and none were drawn.)
+    sw_x, sw_y = lodgen.corner(gd, edid, out, world)
     kinds = {}
     for base, x, y, z, rz, s in things_of(gd, pr, world):
         shapes = stand.of(base)

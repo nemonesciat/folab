@@ -68,6 +68,22 @@ def stale(*a, **k):
     return [c for c in others(*a, **k) if not c['same']]
 
 
+def far_view(roots):
+    """Far views under these folders (laid out as Data) that the game would draw none of (lodgen.check_folder), as stale
+    entries: not a copy to move, but the mod isn't ready while one is there."""
+    import lodgen
+    out, seen = [], set()
+    for root in roots:
+        if not root or not os.path.isdir(root):
+            continue
+        for w, why in lodgen.check_folder(root):
+            if w.lower() in seen:
+                continue
+            seen.add(w.lower())
+            out.append({'where': 'the far view of %s: %s' % (w, why), 'path': root, 'same': False, 'movable': False, 'far': True})
+    return out
+
+
 def loose_left(built, data_dir):
     """The files an older Put in game left loose in data_dir (install.py's list beside the build): far views, models,
     textures. In a loadout the game draws them beside the mod's own, and far-view blocks named otherwise all at once:

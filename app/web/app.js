@@ -35,7 +35,7 @@ function setState(s){
   else {
     g.style.display = '';
     const where = s.loadout ? 'MO2' : 'game';
-    if (i.installed && (i.stale || []).length){ g.className = 'pill warn'; g.textContent = '● In ' + where + ', but an old copy is there too'; g.title = i.stale.map(c => c.where).join('\n'); }
+    if (i.installed && (i.stale || []).length){ g.className = 'pill warn'; g.textContent = '● In ' + where + ', but not ready'; g.title = i.stale.map(c => c.where).join('\n'); }
     else if (i.installed && i.active && i.current && p.built){ g.className = 'pill ok'; g.textContent = '● In ' + where; g.title = ''; }
     else if (i.installed){ g.className = 'pill warn'; g.textContent = '● In ' + where + ', out of date'; }
     else { g.className = 'pill'; g.textContent = 'Not in ' + where; }
@@ -65,7 +65,7 @@ async function install(){
   try {
     const d = await post('/api/install'); setState(d.state);
     const old = (d.state.installed || {}).stale || [];
-    if (old.length) return toast(`Not ready yet: an older ${d.state.project.plugin} is also in ${old.map(c => c.where).join(', and in ')}. The game may load that one instead. My mod shows what to do.`, true);
+    if (old.length) return toast(`Not ready yet: ${old.map(c => c.far ? c.where : 'an older copy is in ' + c.where).join('; ')}. My mod shows what to do.`, true);
     if (d.install.switch_on) return toast(`Saved into MO2 as "${d.install.mod}". Close FOLab, then in MO2 press Refresh and tick it in both panes.`);
     if (d.state.loadout) return toast(`It's in MO2 as "${d.install.mod}": on in ${d.install.profile}, and loading last.`);
     toast('In the game: start or load a save, open the console (~) and type  coc ' + (A.cellEdid || 'TheCellName'));
@@ -675,8 +675,7 @@ function staleCopies(i, p){
   const old = i.stale || [];
   if (!old.length) return '';
   const movable = old.filter(c => c.movable);
-  return `<div class="note" style="color:var(--amber);font-size:13px"><b>Not ready: an older copy of ${esc(p.plugin)} is somewhere else the game can load it from.</b>
-    The game may load that one, and you'd see old changes.<ul>${old.map(c => `<li>In ${esc(c.where)}${c.loose ? '' : `: <code>${esc(c.path)}</code>`}${c.movable ? '' : ' (switch that mod off in MO2, or take the file out of it)'}</li>`).join('')}</ul>
+  return `<div class="note" style="color:var(--amber);font-size:13px"><b>Not ready.</b> ${old.some(c => !c.far) ? `An older copy of ${esc(p.plugin)} is somewhere else the game can load it from, and you'd see old changes. ` : ''}${old.some(c => c.far) ? 'Part of the far view would not be drawn. ' : ''}<ul>${old.map(c => `<li>${c.far ? esc(c.where[0].toUpperCase() + c.where.slice(1)) + '. Making the far view again (World tools) puts it right.' : `In ${esc(c.where)}${c.loose ? '' : `: <code>${esc(c.path)}</code>`}${c.movable ? '' : ' (switch that mod off in MO2, or take the file out of it)'}`}</li>`).join('')}</ul>
     ${movable.length ? `<button class="btn primary" id="m-stale-out">Move ${movable.length === 1 ? 'it' : 'them'} to FOLab's backups</button>` : ''}</div>`;
 }
 

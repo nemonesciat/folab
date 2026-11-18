@@ -1218,7 +1218,10 @@ def stale_copies():
     if _engine() == 'nv-rs':
         f = _nvrs_folder()
         nv = nvrs.mods_dir(f) if f else None
-    return copies.stale(built, lo, mine, nv)
+    out = copies.stale(built, lo, mine, nv)
+    # far views the game would draw nothing of (copies.far_view: settings and files counted from different corners)
+    out += copies.far_view([install._assets_folder(built)] + ([mine] if mine else []))
+    return out
 
 
 def take_out_of_mo2():

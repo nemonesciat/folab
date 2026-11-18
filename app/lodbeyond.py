@@ -148,21 +148,29 @@ class FromGrid(Beyond):
         return min(32000.0, max(self.floor, z))
 
 
+WHY = ''                    # (why the last beyond() gave None: the far view's report says it, never silently)
+
+
 def beyond(gd, pr, world, margin=MARGIN, coast_file=None):
     """A Beyond for this world, or None if it wasn't made from a height file (or the file is gone)."""
     import api_maps
     import elevation
     import mapscale
+    global WHY
     side = (api_maps.read_sidecar(pr) or {}).get(gd.edid(world))
     if not side or not side.get('file') or not side.get('opts'):
+        WHY = 'the world was not made from a height file'
         return None
     try:
         raster = elevation.read_file(api_maps.file_path(side['file']))
-    except (OSError, ValueError):
+    except (OSError, ValueError) as e:
+        WHY = 'its height file %s could not be read: %s' % (side['file'], e)
         return None
     plan = mapscale.Plan(raster, side['opts'])
     if (plan.W, plan.H, plan.x0, plan.y0) != (side.get('W'), side.get('H'), side.get('x0'), side.get('y0')):
-        return None                         # (the file or the scale isn't the one the world was made from)
+        WHY = ('its height file or scale is no longer the one the world was made from (now %s, made %s)'
+               % ((plan.W, plan.H, plan.x0, plan.y0), (side.get('W'), side.get('H'), side.get('x0'), side.get('y0'))))
+        return None
     # the world's rectangle grown by the margin, centred the same, so its cells fall where the world's do
     pcx, pcy = mapscale.CELL / plan.upx, mapscale.CELL / plan.upy
     c0, r0, c1, r1 = side['opts']['rect']
