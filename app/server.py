@@ -20,6 +20,7 @@ import espwrite
 import gamedata
 import gameini
 import install
+import copies
 import kitindex
 import modtools
 import kitdress
@@ -1111,6 +1112,7 @@ def state():
     s['nvrs'] = nvrs.status(load_settings().get('nvrs_dir'), GD.data_dir)
     if PR:
         s['installed'] = mo2write.status(loadout.current(), os.path.join(project.BUILD_DIR, PR.plugin), PR.name) if loadout.current() else install.status(GD.data_dir, PR.plugin)
+        s['installed']['stale'] = stale_copies()
         built = os.path.join(project.BUILD_DIR, PR.plugin)
         s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= os.path.getmtime(PR.path)
         s['project']['masters'] = masters()
@@ -1198,6 +1200,25 @@ def put_in_mo2(saved):
     _read_loadout_again(loadout.current())
     out['state'] = state()
     return out
+
+
+def stale_copies():
+    """Other copies of the mod's plugin the game could load instead of the one put in (copies.py)."""
+    if not PR:
+        return []
+    built = os.path.join(project.BUILD_DIR, PR.plugin)
+    if not os.path.isfile(built):
+        return []
+    lo = loadout.current()
+    try:
+        mine = mo2write.mod_folder(lo, PR.name) if lo else None
+    except ValueError:
+        mine = None
+    nv = None
+    if _engine() == 'nv-rs':
+        f = _nvrs_folder()
+        nv = nvrs.mods_dir(f) if f else None
+    return copies.stale(built, lo, mine, nv)
 
 
 def take_out_of_mo2():
@@ -2158,6 +2179,12 @@ class Handler(BaseHTTPRequestHandler):
                     if loadout.current():
                         return self.send(put_in_mo2(saved))
                     return self.send({'install': install.install(GD.data_dir, saved['path']), 'state': state()})
+                if u.path == '/api/install/stale_out':
+                    not_while_playing()
+                    moved = copies.move_out([c['path'] for c in stale_copies() if c['movable']], PR.plugin)
+                    if loadout.current():
+                        _read_loadout_again(loadout.current())
+                    return self.send({'moved': moved, 'state': state()})
                 if u.path == '/api/uninstall':
                     not_while_playing()
                     if loadout.current():
