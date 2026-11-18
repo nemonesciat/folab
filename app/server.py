@@ -1555,8 +1555,59 @@ def _play_nvrs(plugins):
     for p in plugins:
         if os.path.basename(p) == playtest.TEST_PLUGIN:
             playtest.test_assets(p)         # (no JIP there for the script that loads a save: cleared out)
-    out = {'install': nvrs.put_in(folder, plugins), 'autoload': None}
+    out = {'install': nvrs.put_in(folder, plugins, _nvrs_setup()), 'autoload': None}
     out['via'] = nvrs.launch(folder)
+    return out
+
+
+def _nvrs_setup():
+    return nvrs.clean_setup(load_settings().get('nvrs_setup'))
+
+
+def nvrs_setup(body=None):
+    """nv-rs's folders of mods (OpenMW's launcher's list): GET what they are, POST {folders, plugins} to change them,
+    {mo2: {folder, profile}} to fill them from an MO2 profile. Its plugins are read afresh each time."""
+    note = None
+    if body is not None:
+        if body.get('mo2'):
+            lo = loadout.Loadout(loadout.Instance(body['mo2']['folder']), body['mo2']['profile'])
+            setup, data_only = nvrs.from_mo2(lo)
+            if data_only:
+                note = ("%s %s only in the game's Data folder, so nv-rs won't load %s: put %s in a folder of "
+                        'its own and add that.' % (', '.join(data_only), 'is' if len(data_only) == 1 else 'are',
+                                                  'it' if len(data_only) == 1 else 'them', 'it' if len(data_only) == 1 else 'them'))
+        else:
+            setup = nvrs.clean_setup({'folders': body.get('folders'), 'plugins': body.get('plugins'),
+                                      'from': _nvrs_setup().get('from') if body.get('keep_from') else None})
+        save_settings(nvrs_setup=setup)
+    setup = _nvrs_setup()
+    folder = nvrs.find(load_settings().get('nvrs_dir'))
+    here = os.path.splitdrive(os.path.abspath(folder))[0].lower() if folder else None
+    folders = [dict(f, found=os.path.isdir(f['path']),
+                    far=bool(here) and os.path.splitdrive(os.path.abspath(f['path']))[0].lower() != here)
+               for f in setup['folders']]
+    return {'folders': folders, 'plugins': nvrs.plugin_rows(setup), 'from': setup.get('from'), 'note': note}
+
+
+def nvrs_profiles():
+    """The MO2 profiles there are, for nv-rs's folders: [{title, folder, profile}]."""
+    out = []
+    for inst in loadout.find_instances()[0]:
+        if inst.is_nv:
+            out += [{'title': '%s: %s' % (inst.name, p), 'folder': inst.folder, 'profile': p} for p in inst.profiles()]
+    return out
+
+
+def play_nvrs_setup():
+    """nv-rs started with its folders of mods alone (no FOLab mod)."""
+    not_while_playing()
+    setup = _nvrs_setup()
+    if not any(f['on'] for f in setup['folders']):
+        raise ValueError("No folder is on in nv-rs's list yet.")
+    folder = _nvrs_folder()
+    out = {'install': nvrs.put_in(folder, [], setup)}
+    out['via'] = nvrs.launch(folder)
+    out['state'] = state()
     return out
 
 
@@ -1934,6 +1985,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(game_settings())
             if u.path == '/api/nvse/archives':
                 return self.send(nvse.find_xnvse())
+            if u.path == '/api/nvrs/setup':
+                return self.send(nvrs_setup())
+            if u.path == '/api/nvrs/profiles':
+                return self.send(nvrs_profiles())
             if u.path == '/api/plugins':
                 return self.send(adopt.candidates(GD.data_dir))
             if u.path == '/api/prefabs':
@@ -2054,6 +2109,10 @@ class Handler(BaseHTTPRequestHandler):
                     not_while_playing()
                     nvrs.import_saves(_nvrs_folder())
                     return self.send(state())
+                if u.path == '/api/nvrs/setup':
+                    return self.send(nvrs_setup(body))
+                if u.path == '/api/nvrs/play':
+                    return self.send(play_nvrs_setup())
                 if u.path == '/api/nvrs/take_out':
                     not_while_playing()
                     return self.send({'removed': nvrs.take_out(_nvrs_folder()), 'state': state()})

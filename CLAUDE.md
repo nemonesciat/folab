@@ -42,6 +42,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   own (C:\Games\nv-rs). With it chosen, Play / Play here / Give put the built plugins and their assets in its `mods`
   folder (listed in mods\folab.json, only those taken out again) and start `Play.exe --mods`; no xNVSE or JIP there
   (no save loaded at the menu). Its game is app\FalloutNV.exe, so `game_running()` sees it too.
+  Folders of mods (`nvrs_setup`, `web/nvrsfolders.js`, `/api/nvrs/setup`, `/profiles`, `/play`), as OpenMW's launcher's data
+  folders: each holds what goes in Data, lowest first (a later one's file wins), plugins ticked and ordered; `put_in` links the
+  folders' files into mods (copies only off nv-rs's drive), FOLab's mod on top, and writes mods\plugins.txt (the DLC they need,
+  then them); `from_mo2` fills it from a profile (`Loadout.layers`, overwrite last). Not yet tried in nv-rs itself.
 - Own new game (`newgame.py`, `web/newgame.js`, `/api/newgame`; settings in `project.newgame`, op `newgame`, in Undo): a
   persistent named XMarkerHeading (a mod ref's `edid` is written as its EDID), a start game enabled quest and its script
   compiled by scriptc (MoveTo, hour, the screens as VCG04ActivatorScript opens them), VCG01's start flag cleared in an
