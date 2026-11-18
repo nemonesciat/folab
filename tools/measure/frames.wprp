@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FOLab's game measurement: each frame the game shows (Direct3D 9's own events), beside Windows' CPU profile. -->
+<WindowsPerformanceRecorder Version="1.0" Author="FOLab">
+  <Profiles>
+    <EventCollector Id="EC_Frames" Name="FOLab frames">
+      <BufferSize Value="1024"/>
+      <Buffers Value="64"/>
+    </EventCollector>
+    <EventProvider Id="EP_D3D9" Name="783ACA0A-790E-4D7F-8451-AA850511C6B9" Level="5"/>
+    <EventProvider Id="EP_DXGI" Name="CA11C036-0102-4A2D-A6AD-F03CFED5D3C9" Level="5"/>
+    <Profile Id="Frames.Verbose.File" Name="Frames" Description="Each frame the game shows" LoggingMode="File" DetailLevel="Verbose">
+      <Collectors>
+        <EventCollectorId Value="EC_Frames">
+          <EventProviders>
+            <EventProviderId Value="EP_D3D9"/>
+            <EventProviderId Value="EP_DXGI"/>
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+    <Profile Id="Frames.Verbose.Memory" Name="Frames" Description="Each frame the game shows" LoggingMode="Memory" DetailLevel="Verbose" Base="Frames.Verbose.File"/>
+  </Profiles>
+</WindowsPerformanceRecorder>
