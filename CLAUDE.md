@@ -22,7 +22,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
   the changes over a `plugintree.py` tree: empty for a new mod, the plugin itself for an opened one, so untouched
   records keep their exact bytes), `adopt.py` (open a plugin as your mod: a copy in `projects/<name> source/`,
   loaded on top of the game, any mods it needs under it; it gains masters when edits need them: `masterlist.py` re-points every link), `install.py` (copies into
-  Data + plugins.txt, backups in `backups/`).
+  Data + plugins.txt, backups in `backups/`); `copies.py` lists every other copy of the plugin the game could load
+  instead (real Data, overwrite, other switched-on MO2 mods, nv-rs's mods): never report a mod as in while one differs
+  (18 Nov 2026: yesterday's Waikiki.esp in Data played instead of MO2's).
 - Editor: `server.py` (port 8771) + `web/index.html`, `web/app.js` (panels, edits), `web/world.js` (3D view).
 - Building: places of the mod's own are '+ID' keys in both `records` (their CELL) and `cells`; door links are a
   ref change `tel` (XTEL, made persistent; arrival points picked in world.js `arrivalFor`). Snap pieces: kit
