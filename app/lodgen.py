@@ -265,6 +265,77 @@ def world_box(gd, world):
     return min(xs), min(ys), max(xs), max(ys)
 
 
+def corner(gd, edid, out=None, world=None):
+    """The south-west cell a world's far-view files are counted from: the settings file being written beside them (out),
+    else the one the game will read (the mod's files over the game's), else the world's own corner."""
+    low = edid.lower() + '.dlodsettings'
+    d = os.path.join(out, 'lodsettings') if out else None
+    data = None
+    if d and os.path.isdir(d):
+        for n in os.listdir(d):
+            if n.lower() == low:
+                with open(os.path.join(d, n), 'rb') as f:
+                    data = f.read()
+    if data is None and gd is not None and gd.find_file('lodsettings\\' + low):
+        data = gd.read_file('lodsettings\\' + low)
+    if data and len(data) >= 24:
+        return struct.unpack_from('<2h', data, 12)
+    return world_box(gd, world)[:2]
+
+
+def check_folder(root):
+    """Far views laid out as Data is under root, checked as the game reads them: every world with far-view files has a
+    settings file, and its chunks and blocks are counted from that file's corner (level 4 on a 4-cell grid from it, and
+    chunks at that corner itself). [(world, problem)]; empty when the game will draw them all."""
+    import re
+    out = []
+    lod = os.path.join(root, 'meshes', 'landscape', 'lod')
+    if not os.path.isdir(lod):
+        return out
+    sets = {}
+    sd = os.path.join(root, 'lodsettings')
+    for n in (os.listdir(sd) if os.path.isdir(sd) else []):
+        if n.lower().endswith('.dlodsettings'):
+            sets[n[:-len('.dlodsettings')].lower()] = os.path.join(sd, n)
+    for w in sorted(os.listdir(lod)):
+        names = []
+        for sub in ('', 'blocks'):
+            d = os.path.join(lod, w, sub)
+            if os.path.isdir(d):
+                names += [(sub, n) for n in os.listdir(d)]
+        cells = []
+        for sub, n in names:
+            m = re.match(r'.*\.level(\d+)\.x(-?\d+)\.y(-?\d+)\.nif$', n, re.I)
+            if m:
+                cells.append((sub, int(m.group(1)), int(m.group(2)), int(m.group(3))))
+        if not cells:
+            continue
+        if w.lower() not in sets:
+            out.append((w, 'far-view files but no lodsettings\\%s.dlodsettings: the game draws none of them' % w))
+            continue
+        with open(sets[w.lower()], 'rb') as f:
+            have = f.read()
+        if len(have) < 24:
+            out.append((w, 'its settings file is cut short'))
+            continue
+        top, sx, sy = struct.unpack_from('<I', have, 4)[0], *struct.unpack_from('<2h', have, 12)
+        off = [c for c in cells if (c[2] - sx) % 4 or (c[3] - sy) % 4]
+        if off:
+            s, L, x, y = off[0]
+            out.append((w, '%d far-view files are counted from another corner than its settings (%d, %d), e.g. %s level %d x %d y %d: '
+                            'the game draws none of them' % (len(off), sx, sy, s or 'ground', L, x, y)))
+            continue
+        ground = [c for c in cells if not c[0]]
+        if ground and not any(c[1] == 4 and c[2] == sx and c[3] == sy for c in ground) and not any(c[2] < sx or c[3] < sy for c in ground):
+            lowx, lowy = min(c[2] for c in ground), min(c[3] for c in ground)
+            if (lowx - sx) >= 4 * 4 and (lowy - sy) >= 4 * 4:
+                out.append((w, 'its far ground starts at (%d, %d), well inside the corner its settings give (%d, %d): '
+                                'likely counted from elsewhere' % (lowx, lowy, sx, sy)))
+        if any(c[1] > top for c in ground):
+            out.append((w, 'far ground at levels above the settings\' top level %d: those aren\'t drawn' % top))
+    return out
+
+
 def settings_bytes(box):
     """A world's .dlodsettings for a box of cells, as the game's are sized: the top level a quarter of the world's width, rounded
     up to a power of two, four at the least."""
@@ -433,10 +504,13 @@ def generate(gd, pr, world, out, only_changed=None, progress=None, beyond=False,
         world, only_changed = like, False
     box = world_box(gd, world)
     past = None
+    beyond_left_out = ''
     if beyond:
         # (a world made from a map: the land and sea round it as distant land, a margin of cells all round)
         import lodbeyond
+        lodbeyond.WHY = ''
         past = lodbeyond.beyond(gd, pr, world, coast_file=beyond if isinstance(beyond, str) else None)
+        beyond_left_out = lodbeyond.WHY if past is None else ''
         if past is not None:
             m = past.margin
             box = (box[0] - m, box[1] - m, box[2] + m, box[3] + m)
@@ -468,9 +542,12 @@ def generate(gd, pr, world, out, only_changed=None, progress=None, beyond=False,
         with open(path, 'wb') as f:
             f.write(data)
         files.append(rel)
-    if not exists or past is not None:
-        # (a world of the mod's own with its surroundings: its settings must reach as far as the chunks do, or the game
-        # draws none past the old edge)
+    written = not only
+    if written:
+        # A whole set is counted from this box's corner, so its settings go with it, always. (Written only for a new
+        # world or one with land past its edge, a rebuild of Waikiki on 18 Nov 2026 counted its chunks from the world's
+        # corner (-37, -20) while the settings kept saying (-62, -50): the game found none and drew no far view at all,
+        # and an old loose set in Data that did match drew the old one.)
         put(os.path.join('lodsettings', edid + '.dlodsettings'), settings)
     base = os.path.join('meshes', 'landscape', 'lod', edid)
     tex = os.path.join('textures', 'landscape', 'lod', edid)
@@ -491,8 +568,8 @@ def generate(gd, pr, world, out, only_changed=None, progress=None, beyond=False,
         d, m = chunk_textures(S, L, x, y)
         put(os.path.join(tex, 'diffuse', '%s.n.level%d.x%d.y%d.dds' % (edid, L, x, y)), d)
         put(os.path.join(tex, 'normals', '%s.n.level%d.x%d.y%d.dds' % (edid, L, x, y)), m)
-    return {'chunks': len(work), 'files': len(files), 'levels': levels_of(top), 'folder': out, 'settings_written': not exists or past is not None, 'partial': bool(only),
-            'beyond': past.margin if past is not None else 0, 'box': list(box), 'with_water': wet}
+    return {'chunks': len(work), 'files': len(files), 'levels': levels_of(top), 'folder': out, 'settings_written': written, 'partial': bool(only),
+            'beyond': past.margin if past is not None else 0, 'beyond_left_out': beyond_left_out, 'box': list(box), 'with_water': wet}
 
 
 # --- into the game and out, at the person's choice ---

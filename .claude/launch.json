@@ -31,6 +31,15 @@
       "port": 8773
     },
     {
+      "name": "folab-real-look",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=C:\\Users\\AMD RYZEN\\Claude Code Projects\\FOLab\\packaging\\out\\FOLab&& set FOLAB_NV_INI=%TEMP%\\claude\\e42e1d88a102c550\\56e2c523-5085-43f3-9365-2d80f6743fb3\\scratchpad\\waikiki\\ini&& py -3 app/server.py 8785 --no-browser"
+      ],
+      "port": 8785
+    },
+    {
       "name": "folab-models",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [

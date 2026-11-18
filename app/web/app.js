@@ -35,7 +35,8 @@ function setState(s){
   else {
     g.style.display = '';
     const where = s.loadout ? 'MO2' : 'game';
-    if (i.installed && i.active && i.current && p.built){ g.className = 'pill ok'; g.textContent = '● In ' + where; }
+    if (i.installed && (i.stale || []).length){ g.className = 'pill warn'; g.textContent = '● In ' + where + ', but not ready'; g.title = i.stale.map(c => c.where).join('\n'); }
+    else if (i.installed && i.active && i.current && p.built){ g.className = 'pill ok'; g.textContent = '● In ' + where; g.title = ''; }
     else if (i.installed){ g.className = 'pill warn'; g.textContent = '● In ' + where + ', out of date'; }
     else { g.className = 'pill'; g.textContent = 'Not in ' + where; }
     $('#b-install').textContent = 'Put in ' + where;
@@ -63,6 +64,8 @@ async function save(){
 async function install(){
   try {
     const d = await post('/api/install'); setState(d.state);
+    const old = (d.state.installed || {}).stale || [];
+    if (old.length) return toast(`Not ready yet: ${old.map(c => c.far ? c.where : 'an older copy is in ' + c.where).join('; ')}. My mod shows what to do.`, true);
     if (d.install.switch_on) return toast(`Saved into MO2 as "${d.install.mod}". Close FOLab, then in MO2 press Refresh and tick it in both panes.`);
     if (d.state.loadout) return toast(`It's in MO2 as "${d.install.mod}": on in ${d.install.profile}, and loading last.`);
     toast('In the game: start or load a save, open the console (~) and type  coc ' + (A.cellEdid || 'TheCellName'));
@@ -668,6 +671,14 @@ function engineCard(s){
     <p><input id="m-nvrs-dir" placeholder="nv-rs's folder" style="width:280px" value="${esc(r.folder || '')}"> <button class="btn" id="m-nvrs-set">Use this folder</button></p></div>`;
 }
 
+function staleCopies(i, p){
+  const old = i.stale || [];
+  if (!old.length) return '';
+  const movable = old.filter(c => c.movable);
+  return `<div class="note" style="color:var(--amber);font-size:13px"><b>Not ready.</b> ${old.some(c => !c.far) ? `An older copy of ${esc(p.plugin)} is somewhere else the game can load it from, and you'd see old changes. ` : ''}${old.some(c => c.far) ? 'Part of the far view would not be drawn. ' : ''}<ul>${old.map(c => `<li>${c.far ? esc(c.where[0].toUpperCase() + c.where.slice(1)) + '. Making the far view again (World tools) puts it right.' : `In ${esc(c.where)}${c.loose ? '' : `: <code>${esc(c.path)}</code>`}${c.movable ? '' : ' (switch that mod off in MO2, or take the file out of it)'}`}</li>`).join('')}</ul>
+    ${movable.length ? `<button class="btn primary" id="m-stale-out">Move ${movable.length === 1 ? 'it' : 'them'} to FOLab's backups</button>` : ''}</div>`;
+}
+
 function drawModPage(){
   const s = A.state, p = s.project, i = s.installed || {};
   const others = (s.projects || []).filter(x => !p || x.name !== p.name);
@@ -678,6 +689,7 @@ function drawModPage(){
       <p>${p.changes} change${p.changes === 1 ? '' : 's'} in ${mine.length} place${mine.length === 1 ? '' : 's'}${mine.length ? ': ' + mine.map(c => esc(c.name || c.edid)).join(', ') : ''}.</p>
       <p>${p.built ? 'The saved plugin is up to date.' : 'Changes since the last save: <b>Save</b> writes the plugin.'}
          ${i.installed ? (i.current && p.built ? ` It is in ${s.loadout ? 'MO2' : 'the game'} and switched on.` : ` ${s.loadout ? 'MO2' : 'The game'} has an older copy: <b>Put in ${s.loadout ? 'MO2' : 'game'}</b> updates it.`) : ` It is not in ${s.loadout ? 'MO2' : 'the game'} yet.`}</p>
+      ${staleCopies(i, p)}
       <p><button class="btn primary" id="m-save">Save</button> <button class="btn" id="m-install">Put in ${s.loadout ? 'MO2' : 'game'}</button>
          ${i.installed ? `<button class="btn" id="m-uninstall">Take out of ${s.loadout ? 'MO2' : 'game'}</button>` : ''}</p></div>
     <div class="card"><h3>Trying it in the game</h3>
@@ -703,6 +715,7 @@ function drawModPage(){
       <p>FOLab keeps a copy of anything it replaces in its <code>backups</code> folder.</p></div>`;
   const on = (id, f) => { const el = $(id); if (el) el.onclick = f; };
   on('#m-save', save); on('#m-install', install); on('#m-new', () => newMod($('#m-name').value));
+  on('#m-stale-out', async () => { try { const d = await post('/api/install/stale_out'); setState(d.state); toast(`Moved ${d.moved.length} old cop${d.moved.length === 1 ? 'y' : 'ies'} to FOLab's backups.`); } catch (e){ fail(e); } });
   on('#m-uninstall', async () => { try { const d = await post('/api/uninstall'); setState(d.state); toast(d.state.loadout ? 'Taken out of MO2.' : 'Taken out of the game.'); } catch (e){ fail(e); } });
   $('#page-mod').querySelectorAll('[data-open]').forEach(r => r.onclick = () => { openMod(r.dataset.open); page('world'); });
   const on2 = (id, f) => { const el = $(id); if (el) el.onclick = f; };

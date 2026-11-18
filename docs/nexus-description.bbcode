@@ -1,0 +1,115 @@
+[center][size=6][b]FOLab[/b][/size]
+[size=4]An editor for Fallout: New Vegas[/size]
+
+[i]Change the game's places, land, items and people in 3D and on a map, try it in the game with one click, and save it as a plugin (.esp) the game loads like any other mod.[/i][/center]
+
+[size=4][b]This is a test version[/b][/size]
+Thank you for trying it. Please tell me what goes wrong: [b]Help → Report a problem[/b] copies everything I need. Paste it with a few words on what you did, and a screenshot if you can.
+
+[size=5][b]What it does[/b][/size]
+
+[size=4][b]Places[/b][/size]
+[list]
+[*]Every interior and every worldspace outside, in 3D (fly with WASD) or on a flat map (M).
+[*]Move, turn, size, add, remove and swap things. Link doors, save prefabs, and snap building pieces together.
+[*]A grid you can tilt to match a slope, a pivot point to turn several things about, and Blender's mouse and G / R keys if you're used to them.
+[*]Right-click menus by what you clicked, an object window for each thing, and copy and paste.
+[/list]
+
+[size=4][b]The land[/b][/size]
+[list]
+[*]Raise, lower, smooth, flatten, paint and tint the ground, and set water.
+[*]Scatter plants, rocks and trees the way the game does round there.
+[*]Shape many cells at once from ridges, valleys, plateaus, lakes and rivers drawn on the map, painted by slope.
+[*]Height maps out to PNG and back, and worldspaces of your own.
+[/list]
+
+[size=4][b]Worlds from real maps[/b][/size]
+[list]
+[*]Make a whole world from real height data and OpenStreetMap: coast, roads, painted ground, buildings that open into rooms, landmarks, piers, plants, street life, far views and a Pip-Boy map.
+[*]FOLab fetches none of these files: you download them yourself and hand them to it.
+[/list]
+
+[size=4][b]Items, characters and quests[/b][/size]
+[list]
+[*]Weapons, apparel, aid, ammo and more in plain fields, with inventories, levelled lists and a 3D preview of each model.
+[*]Every record of the game in Browse.
+[*]People, creatures, AI packages and factions in plain fields, and Populate to fill a place.
+[*]Quests and conversations, with a board showing how a quest moves on.
+[*]Your own new game: choose where the player starts and what they carry, and skip Doc Mitchell's house.
+[/list]
+
+[size=4][b]Building[/b][/size]
+[list]
+[*]Generate a vault or another interior from the game's own kit pieces: planned rooms, corridors, stairs, doors, lights and furnishing.
+[*]Grow a place from any wall.
+[*]Navmeshes inside and out, made for you or edited by hand.
+[/list]
+
+[size=4][b]Scripts[/b][/size]
+[list]
+[*]Read, write and compile the game's script language, with errors shown at their line and starters to build on.
+[*]xNVSE's and JIP LN's commands compile too, xNVSE's own expressions included.
+[/list]
+
+[size=4][b]Library and tools[/b][/size]
+[list]
+[*]Every mesh, texture and sound, with thumbnails, your own files and retexturing.
+[*]A health check that finds broken models and links and fixes them with one click.
+[*]Mod conflicts against your load order, the load order itself, and a list of your changes.
+[*]Merging plugins, and a zip ready to share.
+[/list]
+
+[size=4][b]Play[/b][/size]
+[list]
+[*][b]Open in game[/b] starts the game with your mod.
+[*][b]Play here[/b] puts you in the game where the view looks.
+[*][b]Give it to me in game[/b] puts an item you made in your inventory.
+[*]The game's own settings: resolution, borderless, field of view and more.
+[*][b]New:[/b] choose the original game or [url=https://github.com/slaterain/nv-rs]nv-rs[/url], the Rust port of New Vegas, to play in.
+[/list]
+
+[size=5][b]Mod Organizer 2[/b][/size]
+FOLab can work inside an MO2 profile, so your own mods are what you edit against. [b]Tools → MO2 loadout[/b] finds your New Vegas instances and shows each profile's mods and plugins.
+[list]
+[*][b]Work in this loadout:[/b] FOLab uses that profile's plugins in its order, and each mod's files. MO2's files aren't changed.
+[*][b]New patch:[/b] a mod of your own that loads last, built on whichever mod wins for each thing you edit.
+[*][b]Put in MO2:[/b] adds your mod to the profile as a mod folder of its own, switched on (MO2 must be closed; a copy of its lists is kept).
+[*][b]Start FOLab from MO2:[/b] add FOLab to MO2's Run list, and Play here and Open in game start the game with your mods.
+[/list]
+
+[size=5][b]What you need[/b][/size]
+[list]
+[*][b]Fallout: New Vegas[/b] from Steam. FOLab finds it in your Steam libraries on any drive, and asks for the game's folder if it can't. A GOG copy is found too, but starting the game from FOLab has only been tried with Steam's.
+[*]Nothing else to install: Python comes inside the download.
+[*]For Play here and Give it to me in game: [b]xNVSE[/b] and [b]JIP LN NVSE[/b]. Download xNVSE from its own page and FOLab installs it from your Downloads folder.
+[*]Strongly recommended for big worlds: the [b]4GB patch[/b]. FOLab's My mod page links to it and warns you before starting a game that can only use 2 GB.
+[/list]
+
+[size=5][b]Installing[/b][/size]
+Unzip it somewhere you can save files, such as Documents or the desktop (not Program Files), and double-click [b]FOLab.exe[/b]. FOLab reads the game, which takes about ten seconds, and opens in its own window. Your mods and settings are kept in that folder.
+The first time, a Getting started guide opens. Help (top right) has the rest.
+
+[size=5][b]Your game is safe[/b][/size]
+[list]
+[*]FOLab never changes the game's own files. Your mod lives in FOLab's own folder.
+[*]Only [b]Put in game[/b] (or Play) copies the plugin into Data and switches it on, keeping copies of anything it replaces. [b]Take it out of the game[/b] removes it again.
+[*]The game's settings files are only changed when you press Save, and a copy is kept first.
+[*]FOLab downloads nothing from the internet.
+[/list]
+
+[size=5][b]Known limits[/b][/size]
+[list]
+[*]Much of it is new and only tested on a few setups, so expect rough edges, and keep a backup of anything you care about.
+[*]People only walk where there are navmeshes, and big map-made worlds take a while to navmesh.
+[*]Big map-made worlds are heavy: without the 4GB patch a large city can run the game out of memory.
+[*]Anything borrowed from Fallout 3 (if you own it) is for your own play only, not for a mod you share.
+[*]Windows only for now.
+[/list]
+
+[size=5][b]Thanks[/b][/size]
+[list]
+[*][b]Morrowind Workshop[/b], whose look and approach FOLab follows.
+[*]The [b]fnv_decomp[/b] project, for what it shows of how the game works inside.
+[*]The [b]xNVSE[/b] and [b]JIP LN NVSE[/b] teams, and every tester who sent a report.
+[/list]

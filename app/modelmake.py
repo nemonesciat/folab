@@ -602,6 +602,8 @@ def _step(desc, bevel):
 def _parts(desc, step, bevel):
     mesh = _Mesh(desc['looks'], step, bevel)
     for part in desc['parts']:
+        if part.get('far_only'):                # (in the far model alone: modelsets.far_of)
+            continue
         fn = _SHAPES.get(part.get('shape'))
         if not fn:
             raise nifmake.MakeError('no part called %r: there are %s' % (part.get('shape'), ', '.join(sorted(_SHAPES))))

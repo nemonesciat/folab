@@ -26,8 +26,9 @@ m_desc = battleship.missouri()
 wrong = nifmake.check(m['nif'], m['shapes'], m['solids'])
 check('she builds, mesh and collision checked', not wrong, wrong[:3])
 b = m['box']
-check('270 m long, 33 m in the beam (70 units a metre)', 18800 < b[4] - b[1] < 19000 and 2300 < b[3] - b[0] < 2400, b)
-check('her mast near 70 m over the water, her keel under it', 4500 < b[5] < 5500 and b[2] < -500, b)
+# (her hull: 270 m by 33 m; her fallen mainmast hangs out past her starboard side, so the box is wider that way)
+check('270 m long, 33 m in the beam (70 units a metre)', 18800 < b[4] - b[1] < 19000 and 1160 < b[3] < 1200 and -2300 < b[0] < -1160, b)
+check('her bent foremast still near 57 m over the water, her keel under it', 3700 < b[5] < 4300 and b[2] < -500, b)
 check('she has a far model', bool(m.get('far')) and m['far']['triangles'] < m['triangles'])
 hull = [s for s in m['solids'] if len(s['points']) == 8]
 check('her deck is solid underfoot: a piece of hull for each section', len(hull) >= 28, len(hull))

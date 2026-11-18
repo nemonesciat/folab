@@ -356,3 +356,63 @@ def gaps(gd, pr, world):
             if v:
                 out.append((max(v), min(v)))
     return out
+
+
+SUNK_MOST = 64.0        # a thing's origin this far under a road's top at its spot was stood on the land under the road
+ONTO_SKIP = 2.0
+INTO_ROAD = 8.0         # a thing may stand this far into a road's top (a rubble pile's foot); deeper, it goes up
+
+
+def onto_roads(gd, pr, world, cells=None):
+    """(ops, report): things of the mod's own standing in a road piece's footprint, under its top, lifted onto it.
+
+    Street things (wrecks, rubble, barrels, poles) were stood on the land, and the road pieces laid after them stand 14
+    to 25 over it (as the game's own do): a car was in the slab, and the road looked propped up on junk (3,639 of
+    Waikiki's 7,208 pieces, 18 Nov 2026). Each such thing goes up by the road's top at its spot less the land there, so it
+    stands on the road as deep as it stood in the land. Road pieces, pavement slabs and buildings are left. cells: only
+    things in these cell keys."""
+    import townbuild
+    flat = _flat_bases(gd)
+    skip = set(flat) | set(_slab_bases(gd))
+    import server
+    skip |= {b['key'] for b in townbuild.load(gd, server.kits_folder())}
+    g = roadgen.Ground(gd, pr, world)
+    inside = {gd.key(c) for c in gd.grid(world).values()}
+    roads = {}
+    for ck, c in pr.cells.items():
+        if ck not in inside:
+            continue
+        for rk, r in c['refs'].items():
+            p = r.get('p')
+            if p and not r.get('removed') and r.get('base') in flat:
+                roads.setdefault((int(p[0] // 1024), int(p[1] // 1024)), []).append((p, flat[r['base']], navgen._turn(p[3], p[4], p[5])))
+    ops, kinds, most = [], {}, 0.0
+    for ck, c in pr.cells.items():
+        if ck not in inside or (cells is not None and ck not in cells):
+            continue
+        for rk, r in c['refs'].items():
+            p, b = r.get('p'), r.get('base')
+            if not p or not b or r.get('removed') or b in skip or not rk.startswith('+'):
+                continue
+            top = None
+            sx, sy = int(p[0] // 1024), int(p[1] // 1024)
+            for i in (-1, 0, 1):
+                for j in (-1, 0, 1):
+                    for rp, box, R in roads.get((sx + i, sy + j), ()):
+                        dx, dy = p[0] - rp[0], p[1] - rp[1]
+                        lx, ly = R[0][0] * dx + R[1][0] * dy, R[0][1] * dx + R[1][1] * dy
+                        if box[0] <= lx <= box[3] and box[1] <= ly <= box[4]:
+                            z = rp[2] + R[2][0] * lx + R[2][1] * ly
+                            top = z if top is None else max(top, z)
+            if top is None or p[2] >= top - INTO_ROAD - 0.5 or p[2] < top - SUNK_MOST:
+                continue                        # (on the road already, as deep as it may be in it: so a second run does nothing)
+            land = g.at(p[0], p[1])
+            if land is None:
+                continue
+            new = top - max(0.0, min(INTO_ROAD, land - p[2]))     # (as deep in the road as it was in the land, INTO_ROAD at most)
+            if new - p[2] < ONTO_SKIP:
+                continue
+            ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [p[0], p[1], round(new, 1)] + list(p[3:])})
+            kinds[b] = kinds.get(b, 0) + 1
+            most = max(most, new - p[2])
+    return ops, {'lifted': len(ops), 'kinds': len(kinds), 'most': round(most)}

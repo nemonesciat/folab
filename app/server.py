@@ -20,6 +20,7 @@ import espwrite
 import gamedata
 import gameini
 import install
+import copies
 import kitindex
 import modtools
 import kitdress
@@ -1111,6 +1112,7 @@ def state():
     s['nvrs'] = nvrs.status(load_settings().get('nvrs_dir'), GD.data_dir)
     if PR:
         s['installed'] = mo2write.status(loadout.current(), os.path.join(project.BUILD_DIR, PR.plugin), PR.name) if loadout.current() else install.status(GD.data_dir, PR.plugin)
+        s['installed']['stale'] = stale_copies()
         built = os.path.join(project.BUILD_DIR, PR.plugin)
         s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= os.path.getmtime(PR.path)
         s['project']['masters'] = masters()
@@ -1197,6 +1199,28 @@ def put_in_mo2(saved):
     out = {'install': mo2write.install_mod(loadout.current(), saved['path'], PR.name)}
     _read_loadout_again(loadout.current())
     out['state'] = state()
+    return out
+
+
+def stale_copies():
+    """Other copies of the mod's plugin the game could load instead of the one put in (copies.py)."""
+    if not PR:
+        return []
+    built = os.path.join(project.BUILD_DIR, PR.plugin)
+    if not os.path.isfile(built):
+        return []
+    lo = loadout.current()
+    try:
+        mine = mo2write.mod_folder(lo, PR.name) if lo else None
+    except ValueError:
+        mine = None
+    nv = None
+    if _engine() == 'nv-rs':
+        f = _nvrs_folder()
+        nv = nvrs.mods_dir(f) if f else None
+    out = copies.stale(built, lo, mine, nv)
+    # far views the game would draw nothing of (copies.far_view: settings and files counted from different corners)
+    out += copies.far_view([install._assets_folder(built)] + ([mine] if mine else []))
     return out
 
 
@@ -2217,6 +2241,16 @@ class Handler(BaseHTTPRequestHandler):
                     if loadout.current():
                         return self.send(put_in_mo2(saved))
                     return self.send({'install': install.install(GD.data_dir, saved['path']), 'state': state()})
+                if u.path == '/api/install/stale_out':
+                    not_while_playing()
+                    old = [c for c in stale_copies() if c['movable']]
+                    moved = copies.move_out([c['path'] for c in old if not c.get('loose')], PR.plugin)
+                    if any(c.get('loose') for c in old):
+                        n = copies.move_loose(os.path.join(project.BUILD_DIR, PR.plugin), loadout.current().data_dir)
+                        moved.append({'from': '%d loose files in the game\'s Data' % n, 'to': 'backups'})
+                    if loadout.current():
+                        _read_loadout_again(loadout.current())
+                    return self.send({'moved': moved, 'state': state()})
                 if u.path == '/api/uninstall':
                     not_while_playing()
                     if loadout.current():

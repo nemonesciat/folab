@@ -154,8 +154,29 @@ check('a new world: one chunk, three files and its settings', rep['chunks'] == 1
 stem = BS.join(['meshes', 'landscape', 'lod', 'FreesideNorthWorld', 'FreesideNorthWorld.level4.x0.y0.nif']).replace(BS, os.sep)
 check('… laid out as Data is', os.path.isfile(os.path.join(out, stem)) and os.path.isfile(os.path.join(out, 'lodsettings', 'FreesideNorthWorld.dlodsettings')))
 
+# a whole set made again where a settings file of another corner exists (Waikiki, 18 Nov 2026: chunks from the world's
+# corner, settings left at the old one, so the game drew no far view at all)
+out3 = os.path.join(project.HOME, 'lod3')
+lodgen.world_box = lambda gd, world: (0, 0, 3, 3)
+had = struct.unpack_from('<2h', G.read_file('lodsettings\\freesidenorthworld.dlodsettings'), 12)
+rep3 = lodgen.generate(G, pr, W, out3, only_changed=False)
+lodgen.world_box = orig
+written = os.path.join(out3, 'lodsettings', 'FreesideNorthWorld.dlodsettings')
+check('a whole set over an older settings file writes its own settings', rep3['settings_written'] and os.path.isfile(written), str(rep3))
+check('… counted from the corner its chunks are', struct.unpack_from('<2h', open(written, 'rb').read(), 12) == (0, 0) and had != (0, 0), str(had))
+check('… and the check finds nothing wrong', lodgen.check_folder(out3) == [], str(lodgen.check_folder(out3)))
+check('the corner far buildings take is that settings file\'s', tuple(lodgen.corner(G, 'FreesideNorthWorld', out3, W)) == (0, 0))
+check('… with none beside them, the one the game reads', tuple(lodgen.corner(G, 'FreesideNorthWorld', None, W)) == had)
+with open(written, 'wb') as f:
+    f.write(G.read_file('lodsettings\\freesidenorthworld.dlodsettings'))
+bad = lodgen.check_folder(out3)
+check('settings of another corner than the files: the check says the game draws none', bad and 'draws none' in bad[0][1], str(bad))
+os.remove(written)
+bad = lodgen.check_folder(out3)
+check('far-view files with no settings at all: said too', bad and 'no lodsettings' in bad[0][1], str(bad))
+
 # only what changed, on a world of the game's
-rep2 = lodgen.generate(G, pr, W, os.path.join(project.HOME, 'lod2'))
+rep2 =lodgen.generate(G, pr, W, os.path.join(project.HOME, 'lod2'))
 check('a game world with no land changed: nothing to make', rep2['chunks'] == 0 and rep2.get('note'))
 c0 = G.grid(W)[(-1, 1)]
 pr.land[G.key(c0)] = {'h': [1000.0] * 1089, 'c': None, 'q': lodgen.land.decode(G, G.land[c0], {})['q']}

@@ -22,7 +22,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
   the changes over a `plugintree.py` tree: empty for a new mod, the plugin itself for an opened one, so untouched
   records keep their exact bytes), `adopt.py` (open a plugin as your mod: a copy in `projects/<name> source/`,
   loaded on top of the game, any mods it needs under it; it gains masters when edits need them: `masterlist.py` re-points every link), `install.py` (copies into
-  Data + plugins.txt, backups in `backups/`).
+  Data + plugins.txt, backups in `backups/`); `copies.py` lists every other copy of the plugin the game could load
+  instead (real Data, overwrite, other switched-on MO2 mods, nv-rs's mods): never report a mod as in while one differs
+  (18 Nov 2026: yesterday's Waikiki.esp in Data played instead of MO2's).
 - Editor: `server.py` (port 8771) + `web/index.html`, `web/app.js` (panels, edits), `web/world.js` (3D view).
 - Building: places of the mod's own are '+ID' keys in both `records` (their CELL) and `cells`; door links are a
   ref change `tel` (XTEL, made persistent; arrival points picked in world.js `arrivalFor`). Snap pieces: kit
@@ -127,6 +129,17 @@ the model for style, UI and approach. Python, standard library first, code in `a
   lockers go to the port berthing (empty). `shipplace.swap` takes out the carrier, its way aboard and its hangar base, stands her
   where it lay (port side to shore). navmeshes: `navbuild.place_refs` now gives a mod's own STAT its `model` and navgen reads its
   collision from the mod's files (`_solid_of_file`); before, the mod's own models were nothing to a navmesh. Not tried in the game.
+- The Missouri aground (`shipway.py`, `natcompound.py`; the lore in `docs/waikiki-lore-additions.md`, she keeps her name): she lies
+  off the Natatorium along the shore, bow to its -x (north on Waikiki), starboard to the shore, on the bottom at the height that
+  puts her deck `RISE` over the sea wall's top; the floor under her just under her hull, round her up to `REEF` over her keel.
+  `beach` moves everything on her (in every world holding a copy: a mod's own thing stays in the cell it was added to, so each is
+  removed and added again, doors re-linked both ways). The way aboard: steps up through the arch and the walk over the bleachers
+  (`historicset.NAT_*`), the pool's side wall, the sea wall, a dock-plank pier `PIER_LONG`, the scaffold stair tower (`tower`, a
+  modelsets piece) to her rails' gap; the bathhouse is a copy of PrimmSheriffStation (placeholder). Her damage is in
+  `battleship.missouri` and `damage` (blast from ahead and to port, her sea side): see-through sheets laid on her (`_side_decal`:
+  a turn about y of +lean leans a port sheet out with her flare; -lean, as the hull number first had it, hid its top half in
+  her). `natcompound` is the wall (junk walls, sandbags, rubble; gaps where roads cross), the park cleared but for `KEEP` trees,
+  a screen of trees toward the city. Not tried in the game.
 - Pip-Boy world map (`worldmap.py`, `tests/test_worldmap.py`; no button yet, `pipmap.py` in the scratch folder runs it): a world FOLab made had no ICON (worldgen drops the template's), so the Pip-Boy map was blank and nothing could be fast travelled to. `picture` draws a 1024 square in the game's manner (grey: shaded heights, dark sea with a pale shore, roads, pavement and buildings from what the mod placed, a cell grid, the frame's ticks and corner brackets); `ops` writes it under `textures\interface\worldmap\` in the mod's own files and a `record` op on the WRLD sets ICON, MNAM (size, size, then north-west and south-east cells of the square) and clears DATA's no-fast-travel flag. Markers are left as they are (flags 2: they show once found). Run it after anything that moves ground or stands things.
 - Roads in the ground (`roadbed.py`, last in `/api/maps/dress`, after `landsoft`): the game's road piece is a slab, top at its origin, sides 25 under; the Mojave stands its origin about 14 over the land (5 in 100 with a point more than 32 over). `bed` lays every piece again on the ground as it is (slope along, a lean only where the ground leans), brings the land to the pieces' planes (the mean where pieces share ground, `ROUNDS` times so they agree), re-seats what stands there; `gaps` measures. Without it 37 in 100 showed their sides on Waikiki, with it 3. `roadgen.UNDER` is 12 for the same reason. Pavement (`osmdress.footings`' slabs) is bedded there too, harder: a slab's mesh is a bare sheet 16 over its origin with no sides (the game hides the edge with kerb pieces), so the sheet goes `SLAB_OVER` above land made flat and level under it (held ground by a building's wall too), and a slab whose ground still isn't flat within `SLAB_ROUGH`, or is in the sea, is taken out; `slab_gaps` measures. `footings` cuts each wall's strip into slab-size squares (scaled to the wall's length, `SLAB_FIT`), drops squares off dry open ground or lying in a slab already down (`laid`: two sheets at one height flicker). Doorways: `townbuild`'s catalogue keeps `shut` beside `doors` (what the game closes a doorway with when nobody goes through: a `...DoorStatic`, `DoorBarricade`, a door that leads nowhere), stood with the building; a building with neither (mobile homes, wrecks) has its door in its own mesh or none. Boards over doorways (`WoodPlanksGroup*`) count as `shut` too. A landmark set with a catalogue building among its `extra` pieces stands it with its doors and `shut` once `landmarks.know(cat)` was called (the landmarks route does): the grand hotel's wings were see-through at the door without. To look at a scratch home in the editor: launch config `folab-look` (port 8773).
 - A big mod's edits: `Project.save` writes land and navmesh entries from the text kept for each (an entry is only ever replaced whole, never edited in place: keep it so), everything else afresh; `save(afresh=True)` (Save) trusts nothing kept. `_snap` copies cells and records through pickle. An edit on Waikiki (39 MB) went from 4.6 s to 0.2 s.
@@ -155,6 +168,14 @@ the model for style, UI and approach. Python, standard library first, code in `a
   Other areas out of reach (roofs, closed insides, the guard tower's top deck, which the game's own navmeshes don't
   reach either) are listed only. Run it on anything people walk on before a navmesh run: a remake of Waikiki's took
   2.5 hours. Found 17 Nov 2026: the Missouri's bridge wings join the 03 level only through a gap ~32 wide.
+- Ground upwards (`groundfit.py`, `roadbed.onto_roads`, `tests/test_groundfit.py`; after the user's look, 18 Nov 2026: buildings on
+  grass plinths, cars in road slabs, tents off hills): the order is land, then roads bedded flush (`roadbed.bed`, buildings
+  holding only their footprint), then buildings set to the street those roads make (`groundfit.fit`: `L` read past the walls,
+  the building `SINK` under it, its yard cut or filled and eased back over `EASE`, never touching a road's ground within
+  `ROAD_REACH`; close neighbours share a level, `TERRACE_MOST` the most one is lifted for it), then lying things seated
+  (`osmdress.seat_lying`), then things in road pieces lifted onto them (`onto_roads`, `INTO_ROAD`), then standing junk let
+  down off slopes (`settle_pieces`). Each step run twice changes nothing. padfill's banks are what this replaces. Not done:
+  the hotel view worlds' copies of the city keep the old heights.
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
