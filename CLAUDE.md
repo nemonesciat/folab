@@ -180,6 +180,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   between the dressing's clumps): by the texture the game draws on top at each land point (`CLASSES`: none on pavement, asphalt,
   gravel, water; rock and sand thinner, `REACH_OF`), a clump (`MIXES`) wherever no plant stands within `reach` and the ground isn't
   steeper than `STEEP`, off roads, buildings and landmarks; each clump counts at once. Waikiki took it at reach 256 (79,104 plants).
+  By hand: the Ground panel's Fill bare brush (`web/ground.js` `fillCommit`, How close = reach) posts a stroke's circles to
+  `/api/ground/fill` (`server.ground_fill`: `fill(area=...)`, only the cells round it, ops back, nothing changed), then sends them
+  to `/api/edit` labelled `understory.BRUSH_LABEL`; the game's plants and the landmarks are read once and kept (`_GAME`, `_MARKS`).
+  A stroke is 0.3 s; the edit after it is Waikiki's 4.7 s save (194 MB of JSON), as for any edit there.
   A grown world's `api_maps.map_cover` plans on the grown box (it covered only the first one: the new land's plants were dropped).
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;

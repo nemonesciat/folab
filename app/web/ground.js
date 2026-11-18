@@ -8,7 +8,11 @@ const GB = {on: false, tool: 'raise', size: 768, strength: 4, follow: true, tex:
             ring: null, stroke: null, texes: null};
 try { Object.assign(GB, JSON.parse(localStorage.getItem('folab-ground') || '{}'), {on: false, stroke: null, ring: null, texes: null}); } catch (e) {}
 const GB_TOOLS = [['raise', '▲ Raise'], ['lower', '▼ Lower'], ['smooth', '≈ Smooth'], ['flatten', '▬ Flatten'],
-                  ['paint', '🖌 Paint'], ['tint', '🎨 Tint'], ['scatter', '🌿 Scatter']];
+                  ['paint', '🖌 Paint'], ['tint', '🎨 Tint'], ['scatter', '🌿 Scatter'], ['fill', '🌱 Fill bare']];
+// the Fill bare brush (understory.py): plants wherever the ground under the stroke could grow something and nothing
+// grows; how close they come is FILL.reach (game units: no point of plantable ground farther than that from a plant)
+const FILL = {reach: 256, busy: false};
+const FILL_REACH = [[192, 'Thick'], [256, 'Close'], [384, 'Loose'], [576, 'Sparse']];
 // the Scatter brush: what the game itself put round here (scatter.py), the set being scattered, what's left out
 const SC = {found: null, sets: [], at: null, set: 'plants', off: new Set(), density: 5, remove: false, temp: 0};
 function gbSave(){ try { localStorage.setItem('folab-ground', JSON.stringify({tool: GB.tool, size: GB.size, strength: GB.strength, follow: GB.follow, tex: GB.tex, color: GB.color})); } catch (e) {} }
@@ -46,9 +50,11 @@ function gbDraw(){
       <div class="list gb-list">${(GB.texes || []).filter(t => !GB.q || (t.edid + ' ' + t.tex).toLowerCase().includes(GB.q)).slice(0, 200).map(t =>
         `<div class="row${t.key === GB.tex ? ' on' : ''}" data-tex="${esc(t.key)}"><div>${esc(t.edid)}<small>${esc(t.tex.split('\\').pop())}</small></div></div>`).join('') || '<div class="note">Loading…</div>'}</div>` : ''}
     ${GB.tool === 'scatter' ? scHtml() : ''}
+    ${GB.tool === 'fill' ? `<label class="gb-row">How close <select data-gb="fillreach">${FILL_REACH.map(([v, l]) => `<option value="${v}" ${v === FILL.reach ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <div class="note" style="padding:2px 0">Plants by the ground under the stroke: grass, ferns, undergrowth and taro on dirt and scrub, ferns and slope cover on rock, grass and hibiscus on lawns, a little dune grass on sand. Nothing on roads, pavement, cliffs or in buildings, and nothing more where it's green already.</div>` : ''}
     ${GB.tool === 'tint' ? `<label class="gb-row">Colour <input type="color" value="${GB.color}" data-gb="color"> <span class="note" style="padding:0">Ctrl: back to plain · Shift+click: take the ground's</span></label>` : ''}
     ${GB.tool === 'raise' || GB.tool === 'lower' ? '<div class="note" style="padding:2px 0">Ctrl: the other way</div>' : ''}
-    <label class="gb-row"><input type="checkbox" data-gb="follow" ${GB.follow ? 'checked' : ''}> Things on the ground move with it</label>
+    ${GB.tool === 'fill' || GB.tool === 'scatter' ? '' : `<label class="gb-row"><input type="checkbox" data-gb="follow" ${GB.follow ? 'checked' : ''}> Things on the ground move with it</label>`}
     <div class="note" style="padding:2px 0">[ and ] size · each stroke is one Undo</div>
     ${hmHtml()}
     ${wtHtml()}`;
@@ -79,6 +85,7 @@ document.addEventListener('input', e => {
   if (k === 'density'){ SC.density = +e.target.value; e.target.nextElementSibling.textContent = SC.density; }
   if (k === 'remove'){ SC.remove = e.target.checked; }
   if (k === 'hmsize'){ HM.size = +e.target.value; gbDraw(); }
+  if (k === 'fillreach'){ FILL.reach = +e.target.value; }
   if (k === 'find'){ GB.q = e.target.value.toLowerCase(); const pos = e.target.selectionStart; gbDraw(); const f = $('[data-gb="find"]'); f.focus(); f.setSelectionRange(pos, pos); }
 });
 addEventListener('keydown', e => {
@@ -136,6 +143,11 @@ const GROUND_TOOL = {
       scApply(h.point);
       return true;
     }
+    if (GB.tool === 'fill'){
+      if (FILL.busy){ toast('Still planting the last stroke…'); return true; }
+      GB.stroke = {fill: true, points: [[h.point.x, h.point.y]], last: 0};
+      return true;
+    }
     if (GB.tool === 'paint' && !GB.tex){ toast('Pick a texture first (or Shift+click the ground to take its).', true); return true; }
     GB.stroke = {cells: new Map(), level: gbHeight(h.point.x, h.point.y), ctrl: e.ctrlKey, last: 0, before: new Map()};
     gbApply(h.point);
@@ -162,6 +174,11 @@ function gbApply(at){
   const R = GB.size, s = GB.stroke, k = GB.strength / 10;
   const touched = new Set();
   if (s.scatter) return scApply(at);
+  if (s.fill){
+    const [lx, ly] = s.points[s.points.length - 1];
+    if (Math.hypot(at.x - lx, at.y - ly) > R / 2) s.points.push([at.x, at.y]);
+    return;
+  }
   if (['raise', 'lower', 'smooth', 'flatten'].includes(GB.tool)){
     const pts = gbPoints(at.x, at.y, R, 33, 128);
     const sign = (GB.tool === 'raise') !== s.ctrl ? 1 : -1;
@@ -254,6 +271,7 @@ function gbPick(at){
 async function gbCommit(){
   const s = GB.stroke; GB.stroke = null;
   if (s.scatter) return scCommit(s);
+  if (s.fill) return fillCommit(s);
   const cells = [...s.cells.keys()];
   if (!cells.length) return;
   const ops = cells.map(c => ({op: 'land', cell: c.data.cell, land: c.data.land}));
@@ -378,6 +396,21 @@ async function scCommit(s){
   if (!d){ for (const [k] of s.removed){ const g = W.byKey.get(k); if (g) g.visible = true; } return; }
   // (a stroke across more cells than the answer covers: every cell on show again)
   if (s.placed.length && !(d.things || []).some(t => t.key.startsWith('+'))) outsideResync();
+}
+
+
+// ---------- Fill bare: the stroke's circles to the server, which says what grows there; sent back as one edit ----------
+async function fillCommit(s){
+  FILL.busy = true;
+  toast('Looking at the ground under the stroke…');
+  try {
+    const d = await post('/api/ground/fill', {world: OUT.world, points: s.points, size: GB.size, reach: FILL.reach});
+    const n = (d.report || {}).plants || 0;
+    if (!n){ toast('Nothing to plant here: it is green already, or nothing grows on this ground.'); return; }
+    const done = await edit(`Fill bare ground: ${n} plants`, d.ops);
+    if (done){ toast(`Planted ${n}.`); if (!(done.things || []).some(t => t.key.startsWith('+'))) outsideResync(); }
+  } catch (e) { toast('Fill bare: ' + e.message, true); }
+  finally { FILL.busy = false; }
 }
 
 

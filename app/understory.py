@@ -64,6 +64,27 @@ PLANTY = re.compile(r'(?i)tree|bush|plant|fern|grass|palm|shrub|banana|jungle|ta
                     r'hibiscus|ivy|vine|weed|reed|cactus|agave|yucca|flower|sage|brush|joshua|cholla|stump|slope|leaves')
 
 
+_GAME = {}
+_MARKS = {}
+BRUSH_LABEL = 'Fill bare ground'      # (the Ground panel's stroke: web/ground.js labels its edit so)
+
+
+def _game_bases(gd):
+    """{editor ID lowered: key} for the dressing's things and every plant MIXES names, read once a GameData (looking them up
+    across every record of the game took most of a brush stroke's time)."""
+    got = _GAME.get(id(gd))
+    if got is None:
+        got = dict(osmdress._bases(gd))
+        want = {p.lower() for rows in MIXES.values() for p, *_r in rows if p not in modelsets.PIECES} - set(got)
+        if want:
+            for f, (_i, r) in gd.forms.items():
+                if r.tag in ('STAT', 'TREE', 'FLOR') and gd.edid(f).lower() in want:
+                    got[gd.edid(f).lower()] = gd.key(f)
+        _GAME.clear()
+        _GAME[id(gd)] = got
+    return got
+
+
 def class_of(edid):
     e = (edid or '').lower()
     for pat, cls in CLASSES:
@@ -151,17 +172,29 @@ def _in_boxes(boxes):
     return hit
 
 
-def fill(gd, pr, world, cells=None, seed=1, progress=None, reach=REACH, limit=LIMIT, cat=None):
-    """(ops, report): see the module's docstring. cells: the (x, y) cells to fill (all the world's by default)."""
+def fill(gd, pr, world, cells=None, seed=1, progress=None, reach=REACH, limit=LIMIT, cat=None, area=None):
+    """(ops, report): see the module's docstring. cells: the (x, y) cells to fill (all the world's by default). area:
+    [(x, y, radius)], a brush's stroke: only spots inside one of its circles, and only the cells round it looked at."""
+    if area:
+        import mapgrow
+        circles = [(float(x), float(y), float(r)) for x, y, r in area]
+        under = {(cx, cy) for x, y, r in circles for cx in range(int((x - r) // 4096), int((x + r) // 4096) + 1)
+                 for cy in range(int((y - r) // 4096), int((y + r) // 4096) + 1)}
+        with mapgrow.only(gd, world, mapgrow.ring(under, 1)):
+            return _fill(gd, pr, world, sorted(under), seed, progress, reach, limit, cat, circles)
+    return _fill(gd, pr, world, cells, seed, progress, reach, limit, cat, None)
+
+
+def _fill(gd, pr, world, cells, seed, progress, reach, limit, cat, circles):
     import landmarks
-    import townbuild
-    import server
     rng = random.Random(seed * 104729 + 7)
     grid = gd.grid(world)
-    todo = sorted(xy for xy in grid if cells is None or tuple(xy) in {tuple(c) for c in cells})
+    want = None if cells is None else {tuple(c) for c in cells}
+    todo = sorted(xy for xy in grid if want is None or tuple(xy) in want)
     keys = {gd.key(c) for c in grid.values()}
     # what grows already: the mod's plants and the game's, by name or by being one of the dressing's or FOLab's sets
-    known = set(osmdress._bases(gd).values())
+    game = _game_bases(gd)
+    known = set(game.values())
     for which in modelsets.EXTRA:
         for _d, rows in modelsets.EXTRA[which].values():
             for piece, *_r in rows:
@@ -197,28 +230,37 @@ def fill(gd, pr, world, cells=None, seed=1, progress=None, reach=REACH, limit=LI
             if r.get('base') and r.get('pos') and gd.key(r['ref']) not in removed and is_plant(gd.key(r['base'])):
                 green.add(r['pos'][0], r['pos'][1])
     on_road = _roads(gd, pr, world, keys)
-    cat = cat if cat is not None else townbuild.load(gd, server.kits_folder())
+    if cat is None:
+        import townbuild
+        import server                   # (from a script; FOLab's own server hands its catalogue in)
+        cat = townbuild.load(gd, server.kits_folder())
     built = osmdress._Stands(osmdress.standing(gd, pr, world, cat), margin=NEAR_BUILT)
-    in_mark = _in_boxes(list(landmarks.standing(gd, pr, world)) + list(modelsets.footprints(pr, gd, world)))
+    # (where the landmarks stand reads every editor ID of the game: a brush asks it once until the mod next changes)
+    # (a stroke of this brush moves no landmark: the mod's last change being one keeps what was read)
+    last = pr.undo_stack[-1] if pr.undo_stack else None
+    stamp = (id(gd), id(pr), world, len(pr.undo_stack), id(last))
+    ours = last is not None and str(last[0]).startswith(BRUSH_LABEL) and _MARKS.get('stamp', (0,))[:3] == stamp[:3]
+    if ours:
+        _MARKS['stamp'] = stamp
+    if _MARKS.get('stamp') != stamp:
+        _MARKS.clear()
+        _MARKS.update(stamp=stamp, boxes=list(landmarks.standing(gd, pr, world)) + list(modelsets.footprints(pr, gd, world)))
+    in_mark = _in_boxes(_MARKS['boxes'])
     ground = roadgen.Ground(gd, pr, world)
     # the pieces, FOLab's own made (or found) first
+    # (a piece the mod has already is used as it is: making its files again took a stroke 25 s)
     first, base_of = [], {}
-    game = osmdress._bases(gd)
     wanted = {p for rows in MIXES.values() for p, *_r in rows}
     for piece in sorted(wanted):
         if piece in modelsets.PIECES:
-            ops, info = modelsets.put(pr, piece)
-            first += ops
-            base_of[piece] = info['key'] or '$model_' + piece
-        else:
-            k = game.get(piece.lower())
-            if k is None:
-                for f, (_i, r) in gd.forms.items():
-                    if r.tag in ('STAT', 'TREE', 'FLOR') and gd.edid(f).lower() == piece.lower():
-                        k = gd.key(f)
-                        break
-            if k:
-                base_of[piece] = k
+            k = modelsets.record_of(pr, piece)
+            if not k:
+                ops, info = modelsets.put(pr, piece)
+                first += ops
+                k = info['key'] or '$model_' + piece
+            base_of[piece] = k
+        elif game.get(piece.lower()):
+            base_of[piece] = game[piece.lower()]
     mixes = {c: [row for row in rows if row[0] in base_of] for c, rows in MIXES.items()}
     tex_class, cache = {}, {}
     spots = []
@@ -257,7 +299,10 @@ def fill(gd, pr, world, cells=None, seed=1, progress=None, reach=REACH, limit=LI
                     if max(dzx, dzy) > STEEP:
                         continue
                     jx, jy = rng.uniform(-STEP / 2, STEP / 2), rng.uniform(-STEP / 2, STEP / 2)
-                    spots.append((xy[0] * 4096 + gi * 128 + jx, xy[1] * 4096 + gj * 128 + jy, cls))
+                    sx, sy = xy[0] * 4096 + gi * 128 + jx, xy[1] * 4096 + gj * 128 + jy
+                    if circles and not any((sx - x) ** 2 + (sy - y) ** 2 <= r * r for x, y, r in circles):
+                        continue
+                    spots.append((sx, sy, cls))
     rng.shuffle(spots)
     in_todo = set(todo)
     out, by, looked, why = [], {}, 0, {'green already': 0, 'road': 0, 'built': 0}

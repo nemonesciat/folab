@@ -1354,6 +1354,22 @@ def _world_apply(pr, label, ops):
 WORLD_CTX = {'lock': _lock, 'apply': _world_apply, 'not_playing': lambda: not_while_playing()}
 
 
+def ground_fill(body):
+    """The Ground panel's Fill bare brush: what understory.fill would plant inside a stroke's circles (body: world,
+    points [[x, y]], size the brush's radius, reach), as ops for the page to send to /api/edit (one Undo, and the view
+    sees the plants as any edit's). Nothing is changed here."""
+    import understory
+    w = GD.from_key(body['world'])
+    r = float(body.get('size') or 768)
+    area = [(p[0], p[1], r) for p in body.get('points') or []][:400]
+    if not area:
+        return {'ops': [], 'report': {'plants': 0}}
+    import townbuild
+    ops, rep = understory.fill(GD, PR, w, area=area, reach=float(body.get('reach') or understory.REACH),
+                               seed=int(body.get('seed') or 1) + len(PR.undo_stack), cat=townbuild.load(GD, kits_folder()))
+    return {'ops': ops, 'report': {k: v for k, v in rep.items() if k in ('plants', 'by', 'passed', 'spots')}}
+
+
 def edit(label, ops):
     if not PR:
         raise ValueError('no mod open')
@@ -2175,6 +2191,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(heightmap_import(body))
                 if u.path == '/api/edit':
                     return self.send(edit(body.get('label', 'Edit'), body['ops']))
+                if u.path == '/api/ground/fill':
+                    return self.send(ground_fill(body))
                 if u.path == '/api/undo' and not PR.undo_stack and api_maps.undo_label(PR):
                     return self.send(api_maps.undo_world(sys.modules[__name__]))
                 if u.path in ('/api/undo', '/api/redo'):
