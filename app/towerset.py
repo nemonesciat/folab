@@ -285,7 +285,12 @@ def kilauea(open_=False):
         # (the casino as the town sees it, hotelinside: what stops you as it always was, drawn by nothing but its floor
         # and roof; the open piece's glass, ceiling and lift core in front of it, lit, and its slot machines lit)
         import hotelinside as hi
-        _ring(parts, 2900, DRUM, PLINTH, 'kil_hide', cap='terrazzo', solid=True, far=True)
+        # (its far picture in the far model only: in the model itself it lay on the glass and flickered, 17 Nov 2026;
+        # what stops you is the glass's own walls, nothing to see, and its roof a slab a hair wider than the glass)
+        _ring(parts, 2900, DRUM, PLINTH, 'kil_hide', cap='terrazzo')
+        parts[-1].update(far_only=True)
+        _glass_wall(parts, 2900, DRUM, PLINTH)
+        _ring(parts, 2906, 16, PLINTH + DRUM - 16, 'terrazzo', cap='terrazzo', solid=True)      # (thinner doesn't close as a solid)
 
         def room(P):
             _ring(P, 2900, DRUM, PLINTH, 'kil_clear', caps=False)

@@ -634,7 +634,7 @@ def blue_lagoon():
 def far_of(desc):
     """A piece's far model: only its masses, each look as its far picture laid once over a face, nothing solid. None
     for a piece with nothing marked 'far'."""
-    parts = [dict(p, solid=False) for p in desc['parts'] if p.get('far')]
+    parts = [dict(p, solid=False, far_only=False) for p in desc['parts'] if p.get('far') or p.get('far_only')]
     if not parts:
         return None
     # each look's own picture, repeated as on the model itself but never more than FAR_REPEAT times across a face (the

@@ -140,11 +140,14 @@ def boot(size=512, seed=920):
 
 
 def antifoul(size=512, seed=930):
-    """The bottom's red anti-fouling, faded to brick, under weed and barnacles."""
+    """The bottom's red anti-fouling, faded to brick, under weed, a crust of barnacles and the reef's coral growing on
+    her where she sits (two centuries aground)."""
     c = Picture(size, size, gloss=8)
     wr = Wear(size, size, seed, grime=0.5, rain=0.0)
     weed = Field(size, size, seed + 10, cells=5, octaves=5)
-    barn = Cells(size, size, seed + 11, n=40)
+    barn = Cells(size, size, seed + 11, n=140)
+    coral = Field(size, size, seed + 12, cells=4, octaves=5)
+    knob = Cells(size, size, seed + 13, n=400)
     for y in range(size):
         for x in range(size):
             p = y * size + x
@@ -152,8 +155,12 @@ def antifoul(size=512, seed=930):
             col, h = mul((120, 52, 42), 0.8 + 0.3 * f), 0.5
             if weed.v[p] > 0.5:
                 col = mix(col, (52, 70, 44), smooth(0.5, 0.75, weed.v[p]) * 0.8)
-            if barn.d1[p] < 0.2 and barn.id[p] % 2 == 0:
+            if barn.d1[p] < 0.2 and barn.id[p] % 3 != 0:
                 col, h = mul((176, 168, 150), 0.7 + 0.3 * (0.2 - barn.d1[p]) / 0.2), 0.7 - barn.d1[p]
+            if coral.v[p] > 0.6:                        # coral: pale, knobbly, here and there a pink or ochre head
+                k = knob.d1[p]
+                tone = ((196, 186, 168), (190, 140, 140), (176, 150, 96))[knob.id[p] % 3]
+                col, h = mul(tone, 0.6 + 0.5 * max(0.0, 0.3 - k) / 0.3), 0.5 + max(0.0, 0.3 - k)
             c.rgb[p], c.ht[p] = grade(wr.on(x, y, col)), h
     return c
 
@@ -222,14 +229,17 @@ def armour(size=512, seed=960, colour=HAZE, panels=2):
     return c
 
 
-def bridge_windows(size=512, seed=970, across=4):
+def bridge_windows(size=512, seed=970, across=4, blown=False):
     """The pilot house's windows, two rows to the picture: dark glass in heavy frames, a few panes cracked or gone,
-    the grey round them run with rust from the frames' corners."""
+    the grey round them run with rust from the frames' corners. blown: every pane gone or a few shards, soot over the
+    frames (the blast came in through them)."""
     c = Picture(size, size, gloss=30)
     rnd = random.Random(seed)
     cw = size / float(across)
     rows = ((0.08, 0.36), (0.58, 0.86))
-    state = [[rnd.choice(('dark', 'dark', 'dark', 'sky', 'cracked', 'gone')) for _ in range(across)] for _ in rows]
+    kinds = ('gone', 'gone', 'gone', 'cracked') if blown else ('dark', 'dark', 'dark', 'sky', 'cracked', 'gone')
+    state = [[rnd.choice(kinds) for _ in range(across)] for _ in rows]
+    soot = Field(size, size, seed + 20, cells=4, octaves=4)
     irons = [(int(i * cw + cw * 0.12), int(r[1] * size)) for r in rows for i in range(across)]
     wr = Wear(size, size, seed, grime=0.8, rain=1.0, ledges=[r[1] for r in rows], irons=irons)
     for y in range(size):
@@ -254,6 +264,8 @@ def bridge_windows(size=512, seed=970, across=4):
                             col, h, g = mul((14, 14, 14), 0.8 + 0.4 * f), 0.1, 0
                         elif st == 'cracked' and abs(math.sin(math.atan2(gv - 0.4, gu - 0.6) * 3 + i)) < 0.05:
                             col = mix(col, (200, 204, 200), 0.6)
+            if blown and soot.v[p] > 0.4:
+                col = mix(col, SOOT, 0.75 * smooth(0.4, 0.65, soot.v[p]))
             c.rgb[p], c.ht[p], c.gloss[p] = grade(wr.on(x, y, col, depth), **COOL), h, g
     return c
 
@@ -292,6 +304,135 @@ def plaque(w=256, h=128, seed=990):
     for p in range(w * h):
         c.rgb[p] = grade(c.rgb[p], sat=0.8)
     return c
+
+
+# ---------- what the bomb did (see-through pictures laid over her own: modelmake looks with alpha) ----------
+
+SOOT = (34, 30, 27)
+UNBURNT = (150, 154, 156)           # (her paint where something stood between it and the flash: paler than the rest)
+
+
+def scorch(w=512, h=512, seed=1300, shadows=None, person=False):
+    """Paint burnt by the flash: soot in drifts, blistered paint bubbled and split, bare steel rusting where it flaked;
+    ragged at its edges (see-through there). shadows: flash shadows on it, pale where something stood in the way:
+    'rails' (stanchions and two lifelines across its lower part), 'barrel' (a long gun's shadow, slanting), with person
+    one human shape among them."""
+    c = Picture(w, h, clear=SOOT, gloss=6)
+    edge = Field(w, h, seed, cells=4, octaves=5, fall=0.6)
+    blis = Cells(w, h, seed + 1, n=160)
+    flake = Field(w, h, seed + 2, cells=10, octaves=4)
+    fine = Field(w, h, seed + 3, cells=32, octaves=2)
+    rnd = random.Random(seed)
+    pale = set()
+    if shadows:
+        for kind in shadows:
+            if kind == 'rails':
+                for k in range(int(w / 70)):
+                    x0 = int(30 + k * 70 + rnd.uniform(-6, 6))
+                    for y in range(int(h * 0.45), h):
+                        for x in range(x0, x0 + 7):
+                            pale.add(y * w + x)
+                for yy in (0.55, 0.75):
+                    y0 = int(h * yy)
+                    for y in range(y0, y0 + 5):
+                        for x in range(w):
+                            pale.add(y * w + x)
+            elif kind == 'barrel':
+                for t in range(0, int(w * 0.9)):
+                    cx, cy = int(w * 0.05) + t, int(h * 0.3 + t * 0.12)
+                    r = 14 - t * 6.0 / w
+                    for y in range(int(cy - r), int(cy + r)):
+                        if 0 <= y < h and 0 <= cx < w:
+                            pale.add(y * w + cx)
+        if person:
+            px, py, s = w * 0.62, h * 0.2, h * 0.009         # (a man walking, 1.8 m on a picture of a few metres)
+            for p in range(w * h):
+                x, y = (p % w - px) / s, (p // w - py) / s
+                head = (x - 0) ** 2 + (y - 6) ** 2 < 9
+                body = -3.5 < x < 3.5 and 9 < y < 36
+                legs = (abs(x + 1.8 - (y - 36) * 0.18) < 1.6 or abs(x - 1.8 + (y - 36) * 0.22) < 1.6) and 36 <= y < 62
+                arm = abs(x - 4.5 - (y - 12) * 0.25) < 1.3 and 12 < y < 32
+                if head or body or legs or arm:
+                    pale.add(p)
+    for p in range(w * h):
+        x, y = p % w, p // w
+        a = smooth(0.24, 0.42, edge.v[p])                 # (ragged: the burn's edge eats in from nothing)
+        if a <= 0.0:
+            continue
+        col, ht = mul(SOOT, 0.8 + 0.5 * fine.v[p]), 0.5
+        if blis.d1[p] < 0.12:                             # a blister, light on its top, a dark split in it
+            col, ht = mul((96, 84, 70), 0.7 + 0.4 * (0.12 - blis.d1[p]) / 0.12), 0.5 + (0.12 - blis.d1[p]) * 3
+            if blis.d1[p] < 0.03:
+                col, ht = (18, 16, 14), 0.3
+        if flake.v[p] > 0.7:
+            col, ht = mix(col, tw.RUST, smooth(0.7, 0.85, flake.v[p])), 0.42
+        if p in pale:
+            col, ht, a = mul(UNBURNT, 0.9 + 0.15 * fine.v[p]), 0.52, 1.0
+        c.rgb[p], c.ht[p], c.a[p] = grade(col, **COOL), ht, 1.0 if a > 0.5 else 0.0
+    return c
+
+
+def burnt_teak(w=512, h=512, seed=1320):
+    """Her planking where it burned: charred black and split along the grain, in patches; elsewhere see-through."""
+    c = Picture(w, h, clear=(20, 18, 16), gloss=4)
+    edge = Field(w, h, seed, cells=3, octaves=5, fall=0.6)
+    grain = Field(w, h, seed + 1, cells=2, octaves=4, stretch=(0.25, 6.0))
+    for p in range(w * h):
+        x = p % w
+        if edge.v[p] < 0.45:
+            continue
+        g = grain.v[p]
+        col = mul((26, 22, 18), 0.7 + 0.6 * g)
+        if x % 11 < 1 or abs(math.sin(g * 40)) < 0.05:
+            col = (8, 8, 8)
+        if edge.v[p] < 0.5:
+            col = mix(col, (96, 80, 60), 0.6)              # (scorched brown at the edge)
+        c.rgb[p], c.ht[p], c.a[p] = col, 0.4 + 0.2 * g, 1.0
+    return c
+
+
+def holed(w=512, h=512, seed=1340):
+    """A hole torn in her plating: black inside, the steel round it bent inwards and rusted; see-through outside."""
+    c = Picture(w, h, clear=(10, 10, 10), gloss=4)
+    rim = Field(w, h, seed, cells=6, octaves=4)
+    for p in range(w * h):
+        x, y = (p % w) / float(w) - 0.5, (p // w) / float(h) - 0.55
+        r = math.hypot(x * 1.3, y) + 0.12 * (rim.v[p] - 0.5)
+        if r < 0.24:
+            c.rgb[p], c.ht[p], c.a[p] = (6, 6, 6), 0.0, 1.0
+        elif r < 0.36:
+            t = (r - 0.24) / 0.12
+            c.rgb[p], c.ht[p], c.a[p] = mix(tw.RUST_DARK, tw.RUST, t), 0.2 + 0.5 * t, 1.0
+    return c
+
+
+def droppings(w=256, h=256, seed=1360):
+    """Two centuries of seabirds: white streaks run down from a ledge, thick at the top; see-through between."""
+    c = Picture(w, h, clear=(220, 218, 206), gloss=10)
+    rnd = random.Random(seed)
+    for _ in range(26):
+        x0, ln, wd = rnd.uniform(0, w), rnd.uniform(0.2, 0.9) * h, rnd.uniform(2, 7)
+        for y in range(int(ln)):
+            ww = wd * (1 - y / ln) + 1
+            for x in range(int(x0 - ww), int(x0 + ww)):
+                if 0 <= x < w:
+                    p = y * w + x
+                    c.rgb[p], c.ht[p], c.a[p] = mul((222, 220, 208), 0.85 + 0.15 * rnd.random()), 0.6, 1.0
+    for x in range(w):
+        for y in range(int(6 + 4 * math.sin(x * 0.2))):
+            c.rgb[y * w + x], c.a[y * w + x] = (226, 224, 212), 1.0
+    return c
+
+
+modelsets.TEXTURES.update({
+    'ship/scorch': lambda: scorch(seed=1300),
+    'ship/scorch_rails': lambda: scorch(seed=1301, shadows=('rails',)),
+    'ship/scorch_person': lambda: scorch(seed=1302, shadows=('rails', 'barrel'), person=True),
+    'ship/burnt_teak': burnt_teak,
+    'ship/holed': holed,
+    'ship/droppings': droppings,
+    'ship/windows_blown': lambda: bridge_windows(seed=971, blown=True),
+})
 
 
 modelsets.TEXTURES.update({
@@ -336,6 +477,13 @@ def _looks():
         'windows': look('ship/windows', tile=480, far='ship/far_dark'),
         'number': dict(look('ship/number'), alpha=True),
         'plaque': look('ship/plaque'),
+        'windows_blown': look('ship/windows_blown', tile=480, far='ship/far_dark'),
+        'scorch': dict(look('ship/scorch'), alpha=True),
+        'scorch_rails': dict(look('ship/scorch_rails'), alpha=True),
+        'scorch_person': dict(look('ship/scorch_person'), alpha=True),
+        'burnt_teak': dict(look('ship/burnt_teak'), alpha=True),
+        'holed': dict(look('ship/holed'), alpha=True),
+        'droppings': dict(look('ship/droppings'), alpha=True),
     }
 
 
@@ -455,35 +603,60 @@ def _round_house(parts, y0, y1, wide, z0, high, look_='super', top='deck', far=T
     return p
 
 
-def turret(parts, y, z0, aft=False, elev=5.0):
-    """A 16-inch turret on its barbette: the gun house, its rangefinder's hoods, three guns and their canvas."""
+def _trained(parts, first, y, deg):
+    """The parts from index `first` on turned by deg about the upright through (0, y): a turret trained round."""
+    a = math.radians(deg)
+    c, s = math.cos(a), math.sin(a)
+    for p in parts[first:]:
+        x0, y0, z0 = p['at']
+        dy = y0 - y
+        p['at'] = [round(x0 * c - dy * s, 1), round(y + x0 * s + dy * c, 1), z0]
+        t = list(p.get('turn') or [0, 0, 0])
+        p['turn'] = [t[0], t[1], t[2] + deg]
+
+
+def turret(parts, y, z0, aft=False, elev=5.0, train=0.0, droop=None):
+    """A 16-inch turret on its barbette: the gun house, its rangefinder's hoods, three guns and their canvas. train:
+    the house turned that many degrees (towards port when positive); droop: the gun (0, 1, 2 from starboard) whose
+    barrel hangs down."""
     d = 1 if aft else -1
     _cyl(parts, 540, z0 - deck_z(y) + 20, [0, y, deck_z(y) - 20], 'armour', sides=20, solid=True, far=True)
+    first = len(parts)
     _box(parts, [880, 900, 260], [0, y + d * 80, z0], 'armour', faces={'top': 'deck'}, far=True)
     _box(parts, [800, 220, 230], [0, y - d * 470, z0], 'armour', turn=[-d * 22, 0, 0], faces={'top': 'armour'}, far=True)
     _cyl(parts, 440, 252, [0, y + d * 520, z0], 'armour', sides=16, scale=[1.0, 0.55, 1.0], solid=True, far=True, cap='deck')
     for sx in (-1, 1):
         _box(parts, [90, 240, 70], [sx * 400, y + d * 380, z0 + 260], 'armour', solid=False)
-    for gx in (-220, 0, 220):
+    for k, gx in enumerate((-220, 0, 220)):
+        el = -6.0 if k == droop else elev
         base = [gx, y - d * 520, z0 + 130]
-        _cyl(parts, 86, 130, base, 'canvas', sides=12, turn=[90 - elev, 0, 180 if aft else 0])
-        _cyl(parts, 58, GUN_LONG, base, 'gun', r2=33, sides=12, turn=[90 - elev, 0, 180 if aft else 0], far=True)
-        reach = GUN_LONG * math.sin(math.radians(90 - elev))
-        _cyl(parts, 40, 70, [gx, y - d * (520 + reach - 50), z0 + 130 + GUN_LONG * math.cos(math.radians(90 - elev)) - 3], 'gun', sides=12, turn=[90 - elev, 0, 180 if aft else 0])
+        _cyl(parts, 86, 130, base, 'canvas', sides=12, turn=[90 - el, 0, 180 if aft else 0])
+        _cyl(parts, 58, GUN_LONG, base, 'gun', r2=33, sides=12, turn=[90 - el, 0, 180 if aft else 0], far=True)
+        reach = GUN_LONG * math.sin(math.radians(90 - el))
+        _cyl(parts, 40, 70, [gx, y - d * (520 + reach - 50), z0 + 130 + GUN_LONG * math.cos(math.radians(90 - el)) - 3], 'gun', sides=12, turn=[90 - el, 0, 180 if aft else 0])
+    if train:
+        _trained(parts, first, y, train)
 
 
-def twin_five(parts, x, y, z, face):
-    """A twin 5-inch/38 mount: its rounded house and two barrels; face: the way the guns point (degrees, 0 = forward)."""
-    _box(parts, [300, 340, 160], [x, y, z], 'armour', turn=[0, 0, face], faces={'top': 'deck'})
+def twin_five(parts, x, y, z, face, askew=None):
+    """A twin 5-inch/38 mount: its rounded house and two barrels; face: the way the guns point (degrees, 0 = forward).
+    askew (roll, pitch): knocked off its roller path by the blast, the house leaning, one barrel bent down."""
+    tilt = askew or (0.0, 0.0)
+    _box(parts, [300, 340, 160], [x, y, z - (10 if askew else 0)], 'armour', turn=[tilt[1], tilt[0], face], faces={'top': 'deck'})
     a = math.radians(face)
-    for gx in (-70, 70):
+    for k, gx in enumerate((-70, 70)):
         ox, oy = gx * math.cos(a), gx * math.sin(a)
         fx, fy = -math.sin(a) * -170, math.cos(a) * -170
-        _cyl(parts, 13, 420, [x + ox + fx, y + oy + fy, z + 90], 'gun', sides=8, turn=[85, 0, face])
+        down = (k == 1 and askew) and 18 or 0
+        _cyl(parts, 13, 420, [x + ox + fx, y + oy + fy, z + 90], 'gun', sides=8, turn=[85 + down + tilt[1], tilt[0], face])
 
 
-def ciws(parts, x, y, z):
-    """A Phalanx: its pedestal, the white dome, the gun under it."""
+def ciws(parts, x, y, z, wrecked=False):
+    """A Phalanx: its pedestal, the white dome, the gun under it. wrecked: the dome and gun gone, the mount burnt."""
+    if wrecked:
+        _cyl(parts, 70, 90, [x, y, z], 'soot', sides=10, solid=True)
+        _cyl(parts, 40, 50, [x, y, z + 90], 'soot', sides=8, turn=[12, 8, 0])
+        return
     _cyl(parts, 70, 90, [x, y, z], 'deck', sides=10, solid=True)
     _cyl(parts, 64, 90, [x, y, z + 90], 'white', sides=12)
     _box(parts, [16, 16, 16], [x, y, z + 180], 'white', solid=False)
@@ -557,8 +730,8 @@ def missouri():
     Z7 = Z6 + 250
     Z8 = Z7 + 250
     # turrets One and Two forward, Three aft
-    turret(parts, -3970, deck_z(-3970) + 90)
-    turret(parts, -2760, deck_z(-2760) + 330)
+    turret(parts, -3970, deck_z(-3970) + 90, droop=1)                 # (One: her middle gun hangs, its elevating gear gone)
+    turret(parts, -2760, deck_z(-2760) + 330, train=90.0)             # (Two: trained hard to port, towards the flash)
     turret(parts, 4540, deck_z(4540) + 90, aft=True)
     # the superstructure in levels
     base = deck_z(3000) - 40
@@ -566,7 +739,7 @@ def missouri():
     _round_house(parts, -2100, 1900, 1150, Z1, Z2 - Z1, sides=10)                          # 02
     _round_house(parts, -2050, -760, 880, Z2, Z3 - Z2)                                    # 03 (its after end clear of 03 aft: a ladder between)
     _cyl(parts, 330, Z4 - Z2 + 20, [0, -1780, Z2 - 10], 'armour', sides=16, scale=[1.25, 1.0, 1.0], solid=True, far=True, cap='deck')   # conning tower
-    _round_house(parts, -2100, -1100, 820, Z3, Z4 - Z3, look_='windows', sides=12)        # 04: the pilot house, round-fronted, windows all round
+    _round_house(parts, -2100, -1100, 820, Z3, Z4 - Z3, look_='windows_blown', sides=12)  # 04: the pilot house, its windows blown in
     _box(parts, [1700, 260, 22], [0, -1700, Z3 - 18], 'deck', faces={'top': 'teak'})        # bridge wings (4 over 03's roof: walked onto, no step)
     for sx in (-1, 1):
         _box(parts, [8, 260, 70], [sx * 850, -1700, Z3 + 4], 'white', solid=True)
@@ -585,17 +758,13 @@ def missouri():
     _box(parts, [440, 460, 210], [0, -1460, Z8], 'armour', faces={'top': 'deck'}, far=True)     # the main battery director
     _box(parts, [1000, 90, 90], [0, -1440, Z8 + 110], 'dark', solid=False, far=True)
     _box(parts, [320, 30, 160], [0, -1400, Z8 + 210], 'dark', solid=False)
-    # the foremast: a tripod, its yards, its radars
-    _cyl(parts, 34, 1700, [0, -1200, Z8], 'dark', sides=8, far=True)
+    # the foremast: its tripod bent back by the blast, the pole leaning far aft over the funnel, its yards and radars gone
+    _cyl(parts, 34, 420, [0, -1200, Z8], 'dark', sides=8, far=True)
+    _cyl(parts, 34, 1250, [0, -1200, Z8 + 410], 'rust', sides=8, turn=[-38, 0, 0], far=True)
     for sx in (-1, 1):
-        _cyl(parts, 22, 1500, [sx * 260, -1200, Z6], 'dark', sides=6, turn=[0, sx * -9, 0])
-    for z, w in ((Z8 + 850, 1100), (Z8 + 1300, 700)):
-        _box(parts, [w, 24, 24], [0, -1200, z], 'dark', solid=False)
-    # (radars hung on the mast's forward side, touching it: the first stood 50 off it, in the air)
-    _box(parts, [600, 70, 250], [0, -1200 - 34 - 33, Z8 + 950], 'dark', solid=False, far=True)       # the air search radar
-    _box(parts, [80, 40, 30], [0, -1200 - 20, Z8 + 1060], 'dark', solid=False)                       # its bracket
-    _box(parts, [240, 40, 90], [0, -1200 - 34 - 18, Z8 + 1400], 'dark', solid=False)
-    _cyl(parts, 10, 800, [0, -1200, Z8 + 1700], 'dark', r2=4, sides=5)
+        _cyl(parts, 22, 700, [sx * 260, -1200, Z6], 'dark', sides=6, turn=[-8, sx * -9, 0])
+        _cyl(parts, 22, 520, [sx * 150, -1200 + 700 * math.sin(math.radians(8)), Z6 + 690], 'rust', sides=6, turn=[-55, sx * -20, 0])
+    _box(parts, [600, 24, 24], [0, -1200 + 780 * math.sin(math.radians(38)) + 30, Z8 + 410 + 780 * math.cos(math.radians(38))], 'rust', turn=[0, 14, 0], solid=False)
     _round_house(parts, -410, 1700, 760, Z2, Z3 - Z2)                                      # 03 aft, round the funnels (the 02 level's end clear aft of it)
     # the first funnel, the mainmast, the second funnel
     _cyl(parts, 340, 1150, [0, FUNNEL1, Z3 - 10], 'super', sides=16, scale=[0.78, 1.35, 1.0], far=True, cap='soot', solid=True)
@@ -603,12 +772,12 @@ def missouri():
     for sx in (-1, 1):                                                                   # searchlight platforms on its sides
         _box(parts, [220, 260, 16], [sx * 380, FUNNEL1, Z3 + 600], 'deck', solid=False)
         _cyl(parts, 50, 70, [sx * 400, FUNNEL1, Z3 + 616], 'dark', sides=8)
-    _cyl(parts, 34, 2600, [0, MAINMAST, Z3], 'dark', sides=8, far=True)
+    # the mainmast: snapped off above 03 aft and fallen to starboard, across the roof's edge and out over her side
+    _cyl(parts, 34, 250, [0, MAINMAST, Z3], 'dark', sides=8, far=True)
+    _cyl(parts, 34, 2400, [0, MAINMAST + 20, Z3 + 250], 'rust', sides=8, turn=[0, -121.5, 0], far=True)
     for sx in (-1, 1):
-        _cyl(parts, 22, 1500, [sx * 300, MAINMAST, Z3], 'dark', sides=6, turn=[0, sx * -11, 0])
-    _box(parts, [520, 420, 20], [0, MAINMAST, Z3 + 1350], 'deck', solid=False)
-    _box(parts, [900, 22, 22], [0, MAINMAST, Z3 + 1950], 'dark', solid=False)
-    _box(parts, [440, 50, 180], [0, MAINMAST + 40, Z3 + 1550], 'dark', solid=False, far=True)
+        _cyl(parts, 22, 380, [sx * 300, MAINMAST, Z3], 'dark', sides=6, turn=[0, sx * -11, 0])
+    _box(parts, [520, 420, 20], [-1380, MAINMAST + 60, Z3 - 560], 'rust', turn=[8, -40, 6], solid=False)     # (its platform, hanging off it)
     _cyl(parts, 326, 1000, [0, FUNNEL2, Z3 - 10], 'super', sides=16, scale=[0.78, 1.3, 1.0], far=True, cap='soot', solid=True)
     _cyl(parts, 332, 140, [0, FUNNEL2, Z3 + 860], 'soot', sides=16, scale=[0.78, 1.3, 1.0], caps=False)
     # the after superstructure and director
@@ -618,16 +787,23 @@ def missouri():
     # ten twin 5-inch mounts on the 01 level, five a side
     for k, y in enumerate((-1500, -950, -400, 150, 700)):
         for sx in (-1, 1):
-            twin_five(parts, sx * 740, y, Z1, sx * (-25 if k < 2 else -70 if k < 4 else -110))
+            face = sx * (-25 if k < 2 else -70 if k < 4 else -110)
+            if sx > 0:                                  # (the port mounts, the flash's side: knocked off their roller paths)
+                face += (37, -52, 24, 61, -33)[k]
+            twin_five(parts, sx * 740, y, Z1, face, askew=((7, -4), (-5, 6), (9, 3), (-6, -7), (4, 8))[k] if sx > 0 else None)
     # Tomahawk launchers and Harpoon canisters amidships, four Phalanx (all on what is under them: the after Phalanx
     # stood half off the 02 level's end, over a ladder, and read as a funnel hanging in the air)
     for sx in (-1, 1):
         # (narrow, against the director's sides: 30 from it, they shut the roof's after part off, but for a ledge)
-        _box(parts, [150, 300, 170], [sx * 256, 2620, Z1 + 250], 'dark', faces={'front': 'deck'})
+        # (the Tomahawk boxes crushed down and burnt out; the Harpoon canisters burst, two of each four thrown askew)
+        _box(parts, [150, 300, 80], [sx * 256, 2620, Z1 + 250], 'soot', turn=[sx * 6, 0, sx * 4], faces={'front': 'soot'})
         for k in range(4):
-            _cyl(parts, 32, 520, [sx * (380 + k * 70), 1250, Z2 + 30], 'dark', sides=8, turn=[90, 0, 0], caps=True)
-        ciws(parts, sx * 520, -1050, Z2)
-        ciws(parts, sx * 240, 2150, Z1 + 250)
+            if k == 3 and sx > 0:
+                continue
+            _cyl(parts, 32, 520, [sx * (380 + k * 70), 1250 + (k % 2) * 40, Z2 + 30], 'soot', sides=8,
+                 turn=[90 + (k % 2) * 12, 0, (k % 2) * sx * 18], caps=True)
+        ciws(parts, sx * 520, -1050, Z2, wrecked=True)
+        ciws(parts, sx * 240, 2150, Z1 + 250, wrecked=True)
     # the way up, walked: deck to 01 at its after end; 01 up the after superstructure's side onto its roof (10 under the
     # 02 level, which it meets: step on forward); 02 up to 03 between the two 03 houses; the bridge wings are 03's level.
     # (before, the 01-02 ladder's foot was inside the after superstructure and the 02-03 one's inside 03 aft)
@@ -656,22 +832,23 @@ def missouri():
         xa = half_beam(ya, za)
         lean = math.degrees(math.atan2(half_beam(ya) - half_beam(ya, 60.0), deck_z(ya) - 60.0))
         taper = math.degrees(math.atan2(half_beam(ya + 300, za) - half_beam(ya - 300, za), 600))
-        _box(parts, [40, 120, 200], [sx * (xa + 8), ya, za - 100], 'rust', turn=[0, sx * -lean, sx * -taper], solid=False)
+        _box(parts, [40, 120, 200], [sx * (xa + 8), ya, za - 100], 'rust', turn=[0, sx * lean, sx * -taper], solid=False)
         yn, zn = -7300, deck_z(-7300) - 520
-        xn = half_beam(yn, zn + 210) + 3
-        taper = math.degrees(math.atan2(half_beam(yn + 300, zn + 210) - half_beam(yn - 300, zn + 210), 600))
-        _box(parts, [2, 900, 420], [sx * xn, yn, zn], None, turn=[0, sx * -lean * 0.6, sx * -taper], faces={'right' if sx > 0 else 'left': 'number'}, solid=False, far=True)
+        # (laid on her side as it leans there: at 0.6 of the lean its top half was inside her flare, 18 Nov 2026)
+        _side_decal(parts, yn, zn, zn + 420, 900, 'number', sx, off=6.0)
+        parts[-1]['far'] = True
     _cyl(parts, 8, 650, [0, -9380, deck_z(-9380)], 'dark', sides=5)
     _cyl(parts, 8, 600, [0, 9380, deck_z(9380)], 'dark', sides=5)
-    # the fantail: the crane
-    crane_top = deck_z(8300) + 520
-    _cyl(parts, 70, 520, [0, 8300, deck_z(8300)], 'super', sides=10, solid=True)
-    _box(parts, [150, 150, 90], [0, 8300, crane_top], 'super', solid=False)                      # (its turntable)
-    a, boom = math.radians(40), 1000.0                                                         # (the boom from the turntable, up and aft, short of her stern)
-    _box(parts, [70, boom, 70], [0, 8300 + boom / 2 * math.cos(a), crane_top + 40 + boom / 2 * math.sin(a) - 35], 'super', turn=[40, 0, 0], solid=False)
+    # the fantail: the crane toppled to starboard, its post lying across the deck, the boom along it aft
+    dz = deck_z(8300)
+    _cyl(parts, 70, 90, [0, 8300, dz], 'super', sides=10, solid=True)                          # (the stump of its post)
+    _cyl(parts, 70, 520, [-40, 8300, dz + 70], 'rust', sides=10, turn=[0, -90, 0])              # (the post, lying)
+    _box(parts, [150, 150, 90], [-610, 8310, dz], 'rust', turn=[0, 0, 23], solid=False)          # (its turntable)
+    _box(parts, [70, 800, 70], [-300, 8760, dz + 4], 'rust', turn=[2, 6, -4], solid=False)     # (the boom, along the deck)
     # the surrender plaque, starboard on the 01 level beside turret Two
     _box(parts, [150, 100, 3], [-720, -2000, Z1], 'plaque', solid=False)
     fittings(parts, Z1, Z2, Z3)
+    damage(parts, Z1, Z2, Z3, Z8)
     rails(parts, gaps=(SPOTS['gangway_gap'],))
     _door_frame(parts, SPOTS['qd'][0], SPOTS['qd'][1], SPOTS['qd'][2])
     _door_frame(parts, SPOTS['bridge'][0], SPOTS['bridge'][1], Z3)
@@ -729,6 +906,49 @@ def fittings(parts, Z1, Z2, Z3):
             _box(parts, [12, 10, 70], [sx * 824, y, deck_z(y) + 140], 'dark', solid=False)
     funnel_cap(parts, FUNNEL1, Z3 + 1160, 340, (0.78, 1.35, 1.0), Z3 + 1140)
     funnel_cap(parts, FUNNEL2, Z3 + 1000, 326, (0.78, 1.3, 1.0), Z3 + 990)
+
+
+def _side_decal(parts, y, z0, z1, long, look_, sx=1, off=4.0):
+    """A see-through picture laid on her side at y, from z0 up to z1, `long` along her: a sheet leaning and tapering
+    as her side does there, `off` proud of it (as the hull number is laid)."""
+    zm = (z0 + z1) / 2.0
+    x = half_beam(y, z0) + off                      # (its foot on her side at z0; turned about the foot, its top meets her at z1)
+    lean = math.degrees(math.atan2(half_beam(y, z1) - half_beam(y, z0), z1 - z0))
+    taper = math.degrees(math.atan2(half_beam(y + long / 2, zm) - half_beam(y - long / 2, zm), long))
+    # (a turn about y takes up to +x: so +lean leans a port sheet out with her flare. -lean, as the hull number had it,
+    # leaned its top into her and only its lower half showed)
+    _box(parts, [2, long, z1 - z0], [sx * x, y, z0], None, turn=[0, sx * lean, sx * -taper],
+         faces={'right' if sx > 0 else 'left': look_}, solid=False)
+
+
+def _wall_decal(parts, x, y, z0, z1, long, look_, sx=1):
+    """A see-through picture on an upright wall that faces out to sx at x (the 01 level's sides)."""
+    _box(parts, [2, long, z1 - z0], [x + sx * 3, y, z0], None, faces={'right' if sx > 0 else 'left': look_}, solid=False)
+
+
+def _deck_decal(parts, x, y, wide, long, look_):
+    """A see-through picture lying on the main deck, along its sheer, 4 over it."""
+    pitch = math.degrees(math.atan2(deck_z(y + long / 2) - deck_z(y - long / 2), long))
+    _box(parts, [wide, long, 2], [x, y, deck_z(y) + 3], None, turn=[pitch, 0, 0], faces={'top': look_}, solid=False)
+
+
+def damage(parts, Z1, Z2, Z3, Z8):
+    """What the flash and the blast did, laid over her as pictures: her port side (the bomb's, ahead and to port)
+    scorched from the bow to amidships, worst forward, with flash shadows of the rails on the 01 level's side and one of
+    a man; her forecastle's teak burnt on the port side; a hole torn in her port bow at the waterline; two centuries of
+    seabirds on the director and the tower."""
+    for y, ln in ((-7400, 500), (-6900, 500), (-6400, 500), (-5900, 500), (-5300, 700), (-4600, 700), (-3900, 700),
+                  (-3200, 700), (-2500, 700), (-1800, 700), (-1100, 700), (-400, 700)):
+        top = deck_z(y) - 30 if y > -6600 else deck_z(-7300) - 530     # (under her number at the bow: it stays legible)
+        _side_decal(parts, y, 80.0, top, ln, 'scorch')
+    for y, ln, look_ in ((-1900, 500, 'scorch_rails'), (-1300, 600, 'scorch_person'), (-600, 700, 'scorch_rails'), (100, 600, 'scorch')):
+        _wall_decal(parts, 820.0, y, deck_z(y) + 10, Z1 - 10, ln, look_)
+    for y in (-6600, -5900, -5200):
+        _deck_decal(parts, 0.35 * half_beam(y) + 140, y, 0.5 * half_beam(y), 650, 'burnt_teak')
+    _side_decal(parts, -6900, -250.0, 150.0, 520, 'holed', off=9.0)
+    for sx in (-1, 1):
+        _wall_decal(parts, sx * 220.0, -1460, Z8 + 60, Z8 + 210, 420, 'droppings', sx)
+        _wall_decal(parts, sx * 360.0, -1440, Z8 - 240, Z8 - 20, 520, 'droppings', sx)
 
 
 def _door_frame(parts, x, y, z):

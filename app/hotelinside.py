@@ -299,8 +299,9 @@ def lamps(P, spots, z):
 
 
 def skin(P, size, at, front, end):
-    """The far model's ground floor: a box only the far model draws (its sides `front` along x, `end` along y)."""
-    P.append({'shape': 'box', 'size': list(size), 'at': list(at), 'look': front, 'material': 'stone', 'solid': False, 'far': True,
+    """The far model's ground floor: a box only the far model draws (its sides `front` along x, `end` along y). Never in
+    the model itself: there its faces lay on the lobby's own walls and flickered (17 Nov 2026)."""
+    P.append({'shape': 'box', 'size': list(size), 'at': list(at), 'look': front, 'material': 'stone', 'solid': False, 'far_only': True,
               'faces': {'front': front, 'back': front, 'left': end, 'right': end, 'top': None, 'bottom': None}})
 
 

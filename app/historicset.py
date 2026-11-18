@@ -569,6 +569,10 @@ def moana(open_=False):
 
 NAT_POOL_W, NAT_POOL_D = 3000, 1300
 NAT_DEEP = 420          # (how far its sea walls go down below the shore it stands on)
+NAT_WALK = 266.0        # (the walk over the bleachers' top rows: 6 over the walls' tops, which are walked on too)
+NAT_STEPS, NAT_STEPS_W, NAT_STEPS_FOOT = 14, 400.0, 760.0      # (up through the arch: from the street at y 760 to the walk)
+NAT_SEA = -1560.0       # (the sea wall's middle, front to back; its top 260 over the origin, 200 wide)
+NAT_SIDE = 1600.0       # (the pool's side walls' middles, across)
 
 
 def natatorium():
@@ -604,7 +608,15 @@ def natatorium():
         _box(P, [NAT_POOL_W, 75, 260 - 55 * k + NAT_DEEP], [0, py0 - 37 - 75 * k, -NAT_DEEP], 'nat_stone', far=(k == 0))
     _box(P, [NAT_POOL_W, NAT_POOL_D, 30], [0, py0 - 300 - NAT_POOL_D / 2.0, -40], 'nat_stone', solid=False, top='pool', bottom=None, far=True)
     _box(P, [NAT_POOL_W + 400, 12, 80], [0, py0 - NAT_POOL_D - 306, 260], 'nat_rail', solid=False, top='nat_stone', bottom=None, left=None, right=None)
-    trees = [('palm_tall', -1700, fy + 650, 20, 1.1), ('palm_young', 1750, fy + 700, 150, 1.0)]
+    # the way through (to the battleship: shipway.py): steps up through the arch from the street to a walk along the top
+    # of the bleachers, which meets the tops of the pool's side walls; they lead to the sea wall, where the pier starts
+    run = NAT_STEPS_FOOT - py0
+    for k in range(NAT_STEPS):
+        t0 = k / float(NAT_STEPS)
+        y1 = NAT_STEPS_FOOT - run * t0
+        _box(P, [NAT_STEPS_W, run / NAT_STEPS + 1, NAT_WALK * (k + 1) / NAT_STEPS + 40], [0, y1 - run / NAT_STEPS / 2.0, -40], 'nat_stone', far=False)
+    _box(P, [NAT_POOL_W + 400, py0 + 8, 20], [0, (py0 + 8) / 2.0, NAT_WALK - 20], 'nat_stone', far=True)       # (the walk: over the top rows)
+    trees =[('palm_tall', -1700, fy + 650, 20, 1.1), ('palm_young', 1750, fy + 700, 150, 1.0)]
     return _with_trees({'name': 'FOLabLandmarkNatatorium', 'looks': _looks(), 'parts': P}, trees)
 
 

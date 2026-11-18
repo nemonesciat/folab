@@ -264,6 +264,304 @@ def make_job(body, srv):
     return _start(work, kind='make')
 
 
+# ---------- a world grown ----------
+
+def _grown_before(name):
+    return os.path.join(project.PROJECTS_DIR, name + ' before grow')
+
+
+def grow_preview(body, srv):
+    """What growing a world to a box would add: cells each way and in all, before anything is made."""
+    import mapgrow
+    w, side = _side_of(srv, body['world'])
+    new, added = mapgrow.grown_side(side, [float(v) for v in body['box']])
+    return {'added': dict(zip(('west', 'east', 'north', 'south'), added)), 'cells_now': side['W'] * side['H'],
+            'cells_after': new['W'] * new['H'], 'new_cells': new['W'] * new['H'] - side['W'] * side['H'], 'W': new['W'], 'H': new['H']}
+
+
+def grow_job(body, srv):
+    """A world made from a height file grown to a bigger box of the same file (mapgrow.py): new cells made as the world
+    was (roofs off the flat, the sea from the coastline, ground painted by what the map says, relief), the old ones as
+    they are, the new eased into them. body: world, box [south, west, north, east] in degrees, file (an OpenStreetMap
+    file covering the whole box: it stands in for the world's own from now on), seed. The mod's plugin as it was is
+    kept in projects/<mod> before grow/ (Undo grow puts it back)."""
+    import mapgrow
+    srv.not_while_playing()
+    w, side = _side_of(srv, body['world'])
+    name = body.get('file')
+    if name:
+        file_path(name)
+
+    def work():
+        gd, pr = srv.GD, srv.PR
+        edid = gd.edid(w)
+        new, added = mapgrow.grown_side(side, [float(v) for v in body['box']])
+        if not any(added):
+            raise ValueError('The box asked for is no bigger than the world, or reaches past the height file: nothing to add.')
+        _said('Reading the height file')
+        r = raster_of(side['file'])
+        plan = mapgrow.plan_of(r, new)
+        side_new = dict(new)
+        for k in ('bumps', 'coast', 'paint'):
+            if side.get(k) and name:
+                side_new[k] = name
+        state = {}
+
+        def shape(grid):
+            if side_new.get('bumps'):
+                _said('Taking roofs off the flat ground')
+                _roofs_off(grid, side_new)
+            if side_new.get('coast'):
+                _said('Shaping the sea')
+                data = _osm_data(side_new['coast'])
+                geo = osmplace.Georef(side_new, data)
+                sea = coast.shape_sea(grid, [[geo.xy(p) for p in line] for line in data.coast], plan.floor)
+                if sea and not sea.get('leak'):
+                    MS.limit_slopes(grid.pts, grid.across, grid.down)
+                state['sea'] = sea
+            if side_new.get('paint'):
+                data = _osm_data(side_new['paint'])
+                geo = osmplace.Georef(side_new, data)
+                state['painted'] = osmcover.MapCover(grid, data, geo.xy, osmcover.default_textures(gd), _said, laid=osmplace.layout(data, side_new)['roads'])
+            if side_new.get('relief'):
+                _said('Giving the ground some shape')
+                coast.roughen(grid, float(side_new['relief']), int(body.get('seed', 1)), state['painted'].calm if state.get('painted') else None)
+                MS.limit_slopes(grid.pts, grid.across, grid.down)
+        _said('The land as the mod has it now')
+        old = mapgrow.old_heights(gd, pr, w)
+        grid, _fixed, rep = mapgrow.land_grid(plan, old, shape, _said)
+        tpl = gd.from_key(body['template']) if body.get('template') else next(x for x in gd.worlds() if gd.edid(x) == 'WastelandNV')
+        _said('Learning how the game paints its land')
+        shaped = mapworld.options(plan, grid, gd, tpl, None, int(body.get('seed', 1)), None, state.get('painted'))
+        todo = sorted(mapgrow.cells_of(new) - set(gd.grid(w)))
+        with srv._lock:
+            # (the plugin as it was, and what says where it lies, kept to go back to)
+            d = _grown_before(pr.name)
+            shutil.rmtree(d, ignore_errors=True)
+            os.makedirs(d)
+            shutil.copy2(pr.source_path(), os.path.join(d, 'source.esp'))
+            shutil.copy2(_sidecar(pr), os.path.join(d, 'made.json'))
+            with open(os.path.join(d, 'next_id.json'), 'w', encoding='utf-8') as f:
+                json.dump({'next_id': pr.next_id, 'edid': edid}, f)
+            srv.release_source()
+            n = mapgrow.add_cells(gd, pr, w, new, todo, shaped['land_for'], shaped['wet'], lambda a, b: _said('Painting and packing the new land', a, b))
+            srv.load_game(pr)
+            gd = srv.GD
+            w2 = next(x for x in gd.worlds() if gd.edid(x) == edid)
+            more = mapgrow.world_record_ops(gd, pr, w2)
+            if more:
+                srv.PR.apply('Grow the world', more)
+            pr.save()
+            sc = read_sidecar(pr)
+            side_new['added'] = [list(c) for c in todo]
+            side_new['grown_from'] = {k: side[k] for k in ('W', 'H', 'x0', 'y0', 'col0', 'row0')}
+            sc[edid] = side_new
+            write_sidecar(pr, sc)
+        out = dict(rep, cells=n, added=dict(zip(('west', 'east', 'north', 'south'), added)), W=new['W'], H=new['H'])
+        if state.get('sea') is not None:
+            out['sea'] = {k: v for k, v in state['sea'].items() if not isinstance(v, (list, dict))}
+        return {'state': srv.state(), 'report': out}
+    return _start(work, kind='grow')
+
+
+def new_cells_of(srv, world):
+    """The cells the last growing added to a world (keys), and the world's other cells (keys): what later steps keep to."""
+    w, side = _side_of(srv, world)
+    added = {tuple(c) for c in side.get('added') or []}
+    grid = srv.GD.grid(w)
+    return ({srv.GD.key(c) for xy, c in grid.items() if xy in added},
+            {srv.GD.key(c) for xy, c in grid.items() if xy not in added}, added)
+
+
+GROW_STEPS = ('lay', 'buildings', 'dress', 'life', 'seam')       # ('navmesh' too when asked: the long one)
+NAV_BATCH = 40
+
+
+def grow_dress_job(body, srv):
+    """The cells the last growing added made into more of the same world, as it was: the map laid (roads, water, pads),
+    buildings stood on the new plots with their places behind them, things on the ground, the wild and the camps peopled,
+    and the shared edges put back to the old cells' where a step moved them. Each step keeps to the new cells (and works
+    only round them: mapgrow.only), nothing of the old cells changes. One Undo a step. body: world, file (the OpenStreetMap
+    file the world was grown with), want (as osm/lay), steps (GROW_STEPS by default), seed, insides."""
+    import mapgrow
+    srv.not_while_playing()
+    w, side = _side_of(srv, body['world'])
+    name = body['file']
+    file_path(name)
+    steps = body.get('steps') or GROW_STEPS
+
+    def work():
+        gd, pr = srv.GD, srv.PR
+        edid = gd.edid(w)
+        new_keys, old_keys, added = new_cells_of(srv, body['world'])
+        if not added:
+            raise ValueError('This world hasn\'t been grown: nothing new to make.')
+        reach = mapgrow.ring(added, 1)
+        keep = lambda ops: mapgrow.keep_new(gd, ops, old_keys)
+        seed = int(body.get('seed', 1))
+        report = {'cells': len(added)}
+        data = _osm_data(name)
+        lay = mapgrow.lay_within(osmplace.layout(data, side), reach)
+        if 'lay' in steps:
+            want = body.get('want') or {'roads': sorted({r['class'] for r in lay['roads']} - {'track', 'path', 'foot'}), 'buildings': True, 'lakes': True,
+                                        'rivers': True, 'streams': False}
+            with srv._lock, mapgrow.only(gd, w, reach):
+                _said('Laying the map on the new land')
+                ops, rep, layer = osmplace.ops_for(gd, pr, w, lay, want, side['compress'], seed, _said)
+                ops = keep(ops)
+                if ops:
+                    srv.edit('Grown: the map laid', ops)
+                all_layers = read_layers(pr)
+                had = all_layers.get(edid) or {'buildings': [], 'places': [], 'bridges': []}
+                for k in ('buildings', 'places', 'bridges'):
+                    rows = layer.get(k) or []
+                    if k == 'buildings':
+                        rows = [r for r in rows if mapgrow.middle_in(r['ring'], added)]
+                    elif k == 'places':
+                        rows = [r for r in rows if (int(r['p'][0] // 4096), int(r['p'][1] // 4096)) in added]
+                    else:
+                        rows = [r for r in rows if mapgrow.middle_in(r['line'], added)]
+                    had[k] = list(had.get(k) or []) + rows
+                all_layers[edid] = had
+                with open(_layers_path(pr) + '.tmp', 'w', encoding='utf-8') as f:
+                    json.dump(all_layers, f)
+                os.replace(_layers_path(pr) + '.tmp', _layers_path(pr))
+                report['lay'] = {k: v for k, v in rep.items() if k != 'cell_xy'}
+        cat = townbuild.load(gd, srv.kits_folder(), _said)
+        rows = [r for r in (read_layers(pr).get(edid) or {}).get('buildings') or [] if mapgrow.middle_in(r['ring'], added)]
+        if 'buildings' in steps and any(r.get('pad') for r in rows):
+            with srv._lock, mapgrow.only(gd, w, reach):
+                _said('Putting up the buildings')
+                squeeze = float(side.get('compress') or 1.0)
+                ops, rep = townbuild.plan(gd, pr, w, rows, cat, seed, _said, insides=float(body.get('insides', townbuild.INSIDE_SHARE)),
+                                          stretch=min(4.0, squeeze) if squeeze >= 1.5 else 1.0)
+                made = rep.pop('made', [])
+                ops = keep(ops)
+                if ops:
+                    srv.edit('Grown: buildings', ops)
+                    names = dict(pr.names)
+                    nav_ops = []
+                    for k, (tag, _fam, src, doors) in enumerate(made):
+                        _said('Making the places\' navmeshes', k, len(made))
+                        key = names.get(tag)
+                        if not key:
+                            continue
+                        data_ = townbuild.copied_navmesh(gd, pr, src, key, {g: names[n] for g, n in doors.items() if n in names})
+                        if not data_:
+                            try:
+                                data_, _r = navbuild.generate(gd, pr, key)
+                            except navbuild.NavError:
+                                continue
+                        nav_ops.append({'op': 'navmesh', 'cell': key, 'mesh': data_})
+                    if nav_ops:
+                        pr.apply('Grown: buildings', nav_ops, merge=True)
+                    if made:
+                        _said('Making repeated places their own')
+                        import roomvary
+                        rep['varied'] = roomvary.vary(gd, pr, merge=True, label='Grown: buildings')
+                report['buildings'] = {k: v for k, v in rep.items() if not isinstance(v, (list, dict))}
+        if 'dress' in steps:
+            cover, _lay_all = map_cover(srv, body['world'], name, _said)
+            with srv._lock, mapgrow.only(gd, w, reach):
+                _said('Things on the new ground')
+                ops, rep = osmdress.ops(gd, pr, w, cover, lay['roads'], seed, _said)
+                more, rep['footings'] = osmdress.footings(gd, pr, w, cover, cat, seed, _said)
+                ops += more
+                more, rep['life'] = osmdress.life(gd, pr, w, cover, cat, seed, _said)
+                ops += more
+                more, rep['lots'] = osmdress.lots(gd, pr, w, cover, cat, rows, seed, _said)
+                ops += more
+                more, rep['scenes'] = osmdress.scenes(gd, pr, w, cover, lay['roads'], cat, seed, _said)
+                ops += more
+                marks = landmarks.standing(gd, pr, w)
+                ops = landmarks.clear_of(ops, marks)
+                inside = osmdress._Stands(osmdress.standing(gd, pr, w, cat), margin=24.0)
+                ops = keep([o for o in ops if o.get('op') != 'add' or not inside.hit(o['p'][0], o['p'][1])])
+                if ops:
+                    srv.edit('Grown: things on the ground', ops)
+                spots = [s for s in (rep['scenes'].get('spots') or []) if (int(s[0] // 4096), int(s[1] // 4096)) in added]
+                kept = _kept(pr, 'scenes.json')
+                kept[edid] = list(kept.get(edid) or []) + spots
+                _kept(pr, 'scenes.json', kept)
+                standing = osmdress.keep_of(osmdress.standing(gd, pr, w, cat)) + marks
+                soft, rep['ground'] = landsoft.soften(gd, pr, w, standing, [(r['line'], osmdress.EDGE.get(r.get('class'), 300.0) * 0.8) for r in lay['roads']], _said)
+                if keep(soft):
+                    pr.apply('Grown: things on the ground', keep(soft), merge=True)
+                _said('Laying the roads in the ground')
+                bedded, rep['roads'] = roadbed.bed(gd, pr, w, osmdress.keep_of(osmdress.standing(gd, pr, w, cat)) + marks, _said)
+                if keep(bedded):
+                    pr.apply('Grown: things on the ground', keep(bedded), merge=True)
+                more, rep['rough'] = osmdress.rough_roads(gd, pr, w, cover, lay['roads'], cat, seed, _said)
+                more = keep(landmarks.clear_of(more, marks))
+                if more:
+                    pr.apply('Grown: things on the ground', more, merge=True)
+                more, rep['seated'] = osmdress.seat_lying(gd, pr, w, _said)
+                if keep(more):
+                    pr.apply('Grown: things on the ground', keep(more), merge=True)
+                report['dress'] = {k: (v if not isinstance(v, dict) else {a: b for a, b in v.items() if not isinstance(b, (list, dict))})
+                                   for k, v in rep.items() if not isinstance(v, list)}
+        if 'life' in steps:
+            cover, _l = map_cover(srv, body['world'], name, _said)
+            with srv._lock:
+                _said('Who lives on the new land')
+                ops = mapgrow.cellinfo_ops(gd, pr, w, added, (pr.newgame or {}).get('p'))
+                with mapgrow.only(gd, w, added):
+                    start = ((pr.newgame or {}).get('p') or [0.0, 0.0])[:2]
+                    P = osmdress._Putter(gd, pr, w, cover)
+                    L = worldlife.Life(gd, pr, w, start, seed)
+                    inside = osmdress._Stands(osmdress.standing(gd, pr, w, cat), margin=120.0)
+                    marks = landmarks.standing(gd, pr, w)
+                    within = lambda x, y: inside.hit(x, y) or len(landmarks.clear_of([{'op': 'add', 'p': [x, y]}], marks)) == 0
+                    L.blocked = within
+                    spots = [s for s in (_kept(pr, 'scenes.json').get(edid) or []) if (int(s[0] // 4096), int(s[1] // 4096)) in added]
+                    L.people(spots)
+                    L.wildlife(P.kind, lambda x, y: within(x, y) or P.kind(x, y) in ('asphalt', 'seabed', None))
+                    more, rep = L.done()
+                ops += keep(more)
+                if ops:
+                    srv.edit('Grown: life', ops)
+                report['life'] = rep
+        if 'seam' in steps:
+            with srv._lock:
+                ops = mapgrow.seam_ops(gd, pr, w, added)
+                if ops:
+                    srv.edit('Grown: edges joined', ops)
+                report['seam'] = len(ops)
+        if 'navmesh' in steps:
+            # (the new land's cells, a batch at a time, each joined to whatever is round it: the old cells at the edge are
+            # made again as copies with links to the new, nothing else of them changes; about 4.5 s a cell)
+            G = __import__('roadgen').Ground(gd, pr, w)
+            grid = gd.grid(w)
+            todo = sorted(gd.key(grid[xy]) for xy in added if xy in grid and max(G.cell(xy) or [-1]) >= 0)
+            if body.get('nav_limit'):
+                todo = todo[:int(body['nav_limit'])]
+            made = missed = 0
+            first = True
+            for b in range(0, len(todo), NAV_BATCH):
+                part = todo[b:b + NAV_BATCH]
+                _said('Navmeshes for the new land', b, len(todo))
+                with srv._lock:
+                    try:
+                        o, rep = navbuild.generate_area(gd, pr, part)
+                    except navbuild.NavError:
+                        o = []
+                        for k in part:
+                            try:
+                                o1, _r = navbuild.generate_area(gd, pr, [k])
+                                pr.apply('Grown: navmeshes', o1, merge=not first)
+                                first = False
+                                made += 1
+                            except navbuild.NavError:
+                                missed += 1
+                        continue
+                    pr.apply('Grown: navmeshes', o, merge=not first)
+                    first = False
+                    made += rep['cells']
+            report['navmesh'] = {'cells': len(todo), 'made': made, 'missed': missed}
+        return {'state': srv.state(), 'report': report}
+    return _start(work, kind='grow_dress')
+
+
 # ---------- going back to before the world ----------
 
 def _before(name):
@@ -901,6 +1199,12 @@ def post(path, body, srv):
         return {'job': green_job(body, srv)}
     if path == '/api/maps/plants':
         return {'job': plants_job(body, srv)}
+    if path == '/api/maps/grow/preview':
+        return grow_preview(body, srv)
+    if path == '/api/maps/grow':
+        return {'job': grow_job(body, srv)}
+    if path == '/api/maps/grow/dress':
+        return {'job': grow_dress_job(body, srv)}
     if path == '/api/maps/restore':
         with srv._lock:
             if not srv.PR or not os.path.isfile(os.path.join(_before(srv.PR.name), 'project.json')):

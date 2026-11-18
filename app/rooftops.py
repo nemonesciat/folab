@@ -266,9 +266,12 @@ def _camp(gd, b, p, s, roof, side, along, drop, rng, edid_key, kind, road, put, 
     tx, ty = -ny, nx
     if SANDBAG in edid_key:
         bags = 0
+        half, deep = _half_size(gd, edid_key[SANDBAG], s)
         for t in (-0.25, 0.0, 0.25):
             bx, by = ex + tx * ln * t - nx * (90 / s), ey + ty * ln * t - ny * (90 / s)
-            if rf.free(bx, by, 40) and abs(bx - land[0]) + abs(by - land[1]) > 300 / s:
+            # (all along its length, not just its middle: a wall of bags is a car long, and its ends hung off the roof)
+            along_free = all(rf.free(bx + tx * d, by + ty * d, deep) for d in _steps(half))
+            if along_free and abs(bx - land[0]) + abs(by - land[1]) > 300 / s:
                 rf.take(bx, by, 40)
                 wx, wy = world(bx, by)
                 put(edid_key[SANDBAG], wx, wy, z, turn(tx, ty) + math.pi / 2)      # (its length along the edge)
@@ -335,6 +338,107 @@ def _camp(gd, b, p, s, roof, side, along, drop, rng, edid_key, kind, road, put, 
             break
     out['walked'] = int(rf.reach(land, [q for q, _r in placed]))
     return out
+
+
+def _half_size(gd, key, s=1.0):
+    """(half its length, half its depth) of a thing's footprint, in a building's frame scaled s."""
+    o = townbuild.obnd(gd, key) or [-40, -40, 0, 40, 40, 0]
+    a, b = (o[3] - o[0]) / 2.0, (o[4] - o[1]) / 2.0
+    return max(a, b) / s, max(8.0, min(a, b)) / s
+
+
+def _steps(half, step=CELL):
+    n = max(1, int(half // step))
+    return [half * k / n for k in range(-n, n + 1)]
+
+
+def _foot(gd, key, lx, ly, turn_local, s):
+    """Spots under a thing's footprint (its bounds, turned), in the building's frame scaled s."""
+    o = townbuild.obnd(gd, key) or [-20, -20, 0, 20, 20, 0]
+    c, sn = math.cos(turn_local), math.sin(turn_local)
+    out = []
+    for fx in (0.05, 0.5, 0.95):
+        for fy in (0.05, 0.5, 0.95):
+            ax, ay = o[0] + (o[3] - o[0]) * fx, o[1] + (o[4] - o[1]) * fy
+            out.append((lx + (ax * c + ay * sn) / s, ly + (-ax * sn + ay * c) / s))
+    return out
+
+
+TIDY_REACH = 320.0          # how far in a thing hanging off a roof may be moved, in the building's own units
+TIDY_STEP = 16.0
+
+
+def tidy(gd, pr, world, cat, progress=None):
+    """(ops, report): what stands on a roof (its underside at the roof's floor, its middle over it) with any of its
+    footprint off the roof's clear floor (hanging over the edge, or into the parapet) moved in toward the roof's middle
+    until it all stands on floor, or taken out if no spot within TIDY_REACH has room."""
+    grid = gd.grid(world)
+    by_key = {b['key']: b for b in cat}
+    stands, things = [], {}
+    for cell in grid.values():
+        ck = gd.key(cell)
+        c = pr.cells.get(ck)
+        for rk, r in (c['refs'].items() if c else ()):
+            p = r.get('p')
+            if not p or r.get('removed') or not r.get('base'):
+                continue
+            b = by_key.get(r['base'])
+            if b and rk.startswith('+'):
+                roof = roof_of(gd, b['model'], b['box'])
+                if roof:
+                    stands.append((b, p, float(r.get('s') or 1.0), roof))
+            elif rk.startswith('+') and abs(p[3]) < 0.05 and abs(p[4]) < 0.05:
+                things.setdefault((int(p[0] // 2048), int(p[1] // 2048)), []).append((ck, rk, r))
+    ops, report = [], {'roofs': len(stands), 'moved': 0, 'removed': 0, 'fine': 0}
+    for n, (b, p, s, roof) in enumerate(stands):
+        if progress and n % 200 == 0:
+            progress('Tidying the roofs', n, len(stands))
+        rf = roof_floor(gd, b['model'], roof)
+        zf = p[2] + roof['z'] * s
+        rz0 = p[5] if len(p) > 5 else 0.0
+        x0, y0, x1, y1 = roof['rect']
+        mid = ((x0 + x1) / 2, (y0 + y1) / 2)
+        reach = max(abs(v) for v in b['box']) * s + 400
+        for gx in range(int((p[0] - reach) // 2048), int((p[0] + reach) // 2048) + 1):
+            for gy in range(int((p[1] - reach) // 2048), int((p[1] + reach) // 2048) + 1):
+                for ck, rk, r in things.get((gx, gy), ()):
+                    q = r['p']
+                    o = townbuild.obnd(gd, r['base'])
+                    if not o or abs(q[2] + o[2] * float(r.get('s') or 1.0) - zf) > 12:
+                        continue
+                    lx, ly = landmarks._turn(q[0] - p[0], q[1] - p[1], -rz0)
+                    lx, ly = lx / s, ly / s
+                    if not (x0 <= lx <= x1 and y0 <= ly <= y1):
+                        continue
+                    tl = (q[5] if len(q) > 5 else 0.0) - rz0
+
+                    def on_floor(ax, ay):
+                        for sx, sy in _foot(gd, r['base'], ax, ay, tl, s / float(r.get('s') or 1.0)):
+                            k = rf.cell(sx, sy)
+                            if k is None or not rf.clear[k]:
+                                return False
+                        return True
+                    if on_floor(lx, ly):
+                        report['fine'] += 1
+                        continue
+                    dx, dy = mid[0] - lx, mid[1] - ly
+                    d = math.hypot(dx, dy) or 1.0
+                    dx, dy = dx / d, dy / d
+                    got = None
+                    k = TIDY_STEP
+                    while k <= min(TIDY_REACH, d) + 1e-6:
+                        if on_floor(lx + dx * k / s, ly + dy * k / s):
+                            got = (lx + dx * k / s, ly + dy * k / s)
+                            break
+                        k += TIDY_STEP
+                    if got is None:
+                        ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
+                        report['removed'] += 1
+                        continue
+                    wx, wy = _world(p, s, got[0], got[1])
+                    ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [round(wx, 1), round(wy, 1)] + list(q[2:])})
+                    report['moved'] += 1
+    return ops, report
 
 
 def _world(p, s, lx, ly):

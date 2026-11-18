@@ -1284,3 +1284,69 @@ class Insides:
         return ops + [door,
                       {'op': 'tel', 'cell': dck, 'ref': '$' + tag + 'o', 'tel': {'door': '$' + tag + 'x', 'p': inside['arrive_in']}},
                       {'op': 'tel', 'cell': '$' + tag, 'ref': '$' + tag + 'x', 'tel': {'door': '$' + tag + 'o', 'p': arrive_out}}]
+
+
+# ---------- room round the landmarks ----------
+
+CROWD_GAP = 300.0           # (a building comes no nearer a landmark or a hotel than this: none cut into one, none pressed against one)
+
+
+def _box_dist(x, y, box):
+    bx, by, rz, x0, y0, x1, y1 = box
+    c, s = math.cos(-rz), math.sin(-rz)
+    dx, dy = x - bx, y - by
+    lx, ly = dx * c + dy * s, -dx * s + dy * c
+    return math.hypot(max(x0 - lx, 0.0, lx - x1), max(y0 - ly, 0.0, ly - y1))
+
+
+def crowding(gd, pr, world, cat, boxes, gap=CROWD_GAP):
+    """(ops, report): the buildings townbuild stood (the mod's own refs of the catalogue's) within gap of any of boxes
+    ((x, y, turn, x0, y0, x1, y1): landmarks.standing, modelsets.footprints) taken out, with what stands in their
+    footprint (doors, boards, what was on the roof); a door into one of their places then leads nowhere, so it is
+    locked and its link taken off, as townbuild leaves a door it gives no place."""
+    import landmarks
+    by_key = {b['key']: b for b in cat}
+    grid = gd.grid(world)
+    refs = []
+    for cell in grid.values():
+        ck = gd.key(cell)
+        c = pr.cells.get(ck)
+        for rk, r in (c['refs'].items() if c else ()):
+            if rk.startswith('+') and r.get('p') and not r.get('removed') and r.get('base'):
+                refs.append((ck, rk, r))
+    ops, gone, report = [], set(), {'buildings': [], 'things': 0, 'doors_unlinked': 0}
+    for ck, rk, r in refs:
+        b = by_key.get(r['base'])
+        if not b:
+            continue
+        p, s = r['p'], float(r.get('s') or 1.0)
+        bx = b['box']
+        rz = p[5] if len(p) > 5 else 0.0
+        c, sn = math.cos(rz), math.sin(rz)
+        spots = [(bx[0] + (bx[3] - bx[0]) * fx, bx[1] + (bx[4] - bx[1]) * fy) for fx in (0, 0.5, 1) for fy in (0, 0.5, 1)]
+        near = min((_box_dist(p[0] + (lx * c + ly * sn) * s, p[1] + (-lx * sn + ly * c) * s, box) for lx, ly in spots for box in boxes
+                    if abs(box[0] - p[0]) < 9000 and abs(box[1] - p[1]) < 9000), default=1e9)
+        if near >= gap:
+            continue
+        ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
+        gone.add(rk)
+        report['buildings'].append({'edid': gd.edid(gd.from_key(r['base'])), 'p': [round(v) for v in p[:3]], 'near': round(near)})
+        foot = (p, s, rz, bx[0] - 60, bx[1] - 60, bx[3] + 60, bx[4] + 60)
+        for ck2, rk2, r2 in refs:
+            if rk2 in gone or abs(r2['p'][0] - p[0]) > 6000 or abs(r2['p'][1] - p[1]) > 6000:
+                continue
+            q = r2['p']
+            lx, ly = landmarks._turn(q[0] - p[0], q[1] - p[1], -rz)
+            lx, ly = lx / s, ly / s
+            if foot[3] <= lx <= foot[5] and foot[4] <= ly <= foot[6]:
+                ops.append({'op': 'remove', 'cell': ck2, 'ref': rk2})
+                gone.add(rk2)
+                report['things'] += 1
+                t = r2.get('tel')
+                if t and t.get('door'):
+                    far = next(((c3, k3) for c3, c in pr.cells.items() for k3 in c.get('refs', {}) if k3 == t['door']), None)
+                    if far:
+                        ops.append({'op': 'tel', 'cell': far[0], 'ref': far[1], 'tel': None})
+                        ops.append({'op': 'props', 'cell': far[0], 'ref': far[1], 'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}})
+                        report['doors_unlinked'] += 1
+    return ops, report

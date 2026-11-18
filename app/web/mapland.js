@@ -405,8 +405,42 @@ async function moDraw(box){
       <div class="note">Plots that stand out (named, public buildings) always open when the game has a place behind that building. The rest stay locked.</div>
       <div class="wt-go"><button class="btn primary" id="mo-build">🏚 Put up buildings</button></div>
       <div class="note">One Undo. Plots that already have theirs are left as they are.</div>` : ''}
+    <h4>Grow this map</h4>
+    <div class="note">More of the same height file round this world, at the same scale: what's here stays as it is, only the new cells are made, their edges meeting yours. Give the box the bigger map should cover, in degrees, and an OpenStreetMap file of the whole box (above).${S.added ? ` Last grown by ${S.added.length.toLocaleString()} cells.` : ''}</div>
+    <div class="wt-row"><span>South, west</span><input id="mo-g-s" size="9" placeholder="21.24"> <input id="mo-g-w" size="9" placeholder="-157.87"></div>
+    <div class="wt-row"><span>North, east</span><input id="mo-g-n" size="9" placeholder="21.36"> <input id="mo-g-e" size="9" placeholder="-157.63"></div>
+    <div class="wt-go"><button class="btn" id="mo-g-see">How much is that?</button> <button class="btn primary" id="mo-g-go">Grow</button></div>
+    ${S.added ? `<div class="wt-go"><button class="btn primary" id="mo-g-dress">Build on the new land</button> <label><input type="checkbox" id="mo-g-nav"> and its navmesh (about 6 s a cell of land)</label></div>
+      <div class="note">Roads, plots, buildings with their places, things on the ground, the wild and the camps, on the new cells only.</div>` : ''}
     <h4>Going back</h4>
     <div class="wt-go"><button class="btn" id="mo-back" title="The mod as it was before this world, everything since gone with it">Go back to before this world…</button></div>`;
+  const gbox = () => ['s', 'w', 'n', 'e'].map(k => parseFloat(box.querySelector('#mo-g-' + k).value));
+  box.querySelector('#mo-g-see').onclick = async () => {
+    const b = gbox(); if (b.some(isNaN)) return toast('Give all four edges of the box, in degrees.', true);
+    try {
+      const r = await post('/api/maps/grow/preview', {world: OUT.world, box: b});
+      moWork(`${r.new_cells.toLocaleString()} new cells (${r.added.west} west, ${r.added.east} east, ${r.added.north} north, ${r.added.south} south): ${r.W} × ${r.H} in all.`);
+    } catch (err){ fail(err); }
+  };
+  box.querySelector('#mo-g-go').onclick = () => {
+    const b = gbox(); if (b.some(isNaN)) return toast('Give all four edges of the box, in degrees.', true);
+    if (!MO.file) return toast('Pick the OpenStreetMap file of the whole box first (above).', true);
+    moJob(post('/api/maps/grow', {world: OUT.world, box: b, file: MO.file}), async r => {
+      if (r.state) setState(r.state);
+      MO.said = `Grown by ${r.report.cells.toLocaleString()} cells. Now Build on the new land.`;
+      await moLoad(); await outsideResync(); mapLandChanged();
+    });
+  };
+  const gd_ = box.querySelector('#mo-g-dress');
+  if (gd_) gd_.onclick = () => {
+    if (!MO.file) return toast('Pick the OpenStreetMap file the map was grown with first (above).', true);
+    const steps = ['lay', 'buildings', 'dress', 'life', 'seam'].concat(box.querySelector('#mo-g-nav').checked ? ['navmesh'] : []);
+    moJob(post('/api/maps/grow/dress', {world: OUT.world, file: MO.file, steps}), async r => {
+      if (r.state) setState(r.state);
+      MO.said = 'The new land is built on.' + (r.report.navmesh ? ` Navmesh for ${r.report.navmesh.made.toLocaleString()} cells.` : '');
+      await outsideResync(); mapLandChanged();
+    });
+  };
   box.querySelector('#mo-help').onclick = e => { e.preventDefault(); helpDoc('real-maps'); };
   box.querySelector('#mo-pick').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
