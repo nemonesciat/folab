@@ -870,11 +870,12 @@ LAID = ('jungle_floor_a', 'jungle_floor_b', 'slope_cover_a', 'slope_cover_b', 'u
 EXTRA_LIMIT = {'beach': 30000, 'jungle': 40000, 'mountain': 30000}       # (things a set may add to one world: each is memory in the game)
 
 
-def extra(gd, pr, world, cover, seed=1, progress=None, which='beach', thick=1.0):
+def extra(gd, pr, world, cover, seed=1, progress=None, which='beach', thick=1.0, only=None):
     """A set's plants (which: 'beach' or 'jungle') over a world made from a map, by what the map says each spot is: (ops, report). The ops start
     with the records the mod hasn't yet (and the pieces' files are written), then one add a plant; for the same apply
     as the rest of the dressing. Nothing on roads, under water, or off the map; what lands inside a building is the
-    caller's to take out, as with everything else scattered."""
+    caller's to take out, as with everything else scattered. only: the cells (x, y) to plant, none outside them (a grown
+    world's new land, where the old cells have the set already: it adds, so never twice on a cell)."""
     import random
     import osmcover
     import osmdress
@@ -899,6 +900,9 @@ def extra(gd, pr, world, cover, seed=1, progress=None, which='beach', thick=1.0)
         return osmcover.ORDER[v - 1] if v else EXTRA_UNSAID[which]
 
     cells = sorted({(gx // 32, gy // 32) for gx in range(gx0, gx0 + A, 16) for gy in range(gy0, gy0 + D, 16)} & set(grid))
+    if only is not None:
+        only = {tuple(c) for c in only}
+        cells = [c for c in cells if c in only]
     rng.shuffle(cells)                          # (so a limit met leaves no side of the map bare)
     top = max(d for d, _r in table.values())
     out, by = [], {}
@@ -927,9 +931,10 @@ def extra(gd, pr, world, cover, seed=1, progress=None, which='beach', thick=1.0)
                     px, py = x + math.sin(a) * d, y + math.cos(a) * d
                     if kind_at(px, py) != k:
                         continue
-                cell = grid.get((int(px // 4096), int(py // 4096)))
+                cxy = (int(px // 4096), int(py // 4096))
+                cell = grid.get(cxy)
                 z = ground.at(px, py)
-                if cell is None or z is None or z < 8:
+                if cell is None or z is None or z < 8 or (only is not None and cxy not in only):
                     continue
                 scale = rng.uniform(smin, smax)
                 rx, ry, rz = 0.0, 0.0, rng.uniform(0, math.tau)

@@ -82,7 +82,35 @@ def test_within():
     check('ops on old cells dropped, the rest kept', [o.get('cell') or o.get('key') for o in mapgrow.keep_new(None, ops, {'B'})] == ['A', 'X', '+00ABCD'])
 
 
-for t in (test_side, test_seam, test_within):
+def test_cover_of_a_grown_world():
+    # (18 Nov 2026: map_cover planned from the first box's opts, so on a grown world it said nothing of the new land and
+    # every plant meant for it was dropped)
+    import api_maps
+    seen = {}
+    real = (api_maps._side_of, api_maps.raster_of, MS.heights, mapgrow.plan_of, api_maps._osm_data, api_maps.osmplace, api_maps.osmcover)
+
+    class Stop(Exception):
+        pass
+
+    def heights(plan, said=None):
+        seen['plan'] = plan
+        raise Stop()
+    api_maps.raster_of = lambda f: 'raster'
+    MS.heights = heights
+    mapgrow.plan_of = lambda r, side: ('grown', side['W'])
+    try:
+        for side, want in (({'file': 'h', 'W': 84, 'grown_from': {'W': 61}}, ('grown', 84)), ):
+            api_maps._side_of = lambda srv, w, side=side: (None, side)
+            try:
+                api_maps.map_cover(None, 'w', 'map.osm')
+            except Stop:
+                pass
+            check('the cover of a grown world is planned on the grown box', seen.get('plan') == want, seen.get('plan'))
+    finally:
+        api_maps._side_of, api_maps.raster_of, MS.heights, mapgrow.plan_of = real[:4]
+
+
+for t in (test_side, test_seam, test_within, test_cover_of_a_grown_world):
     t()
 print('%d of %d' % (sum(OK), len(OK)))
 sys.exit(0 if all(OK) else 1)

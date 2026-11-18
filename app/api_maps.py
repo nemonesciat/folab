@@ -756,7 +756,13 @@ def map_cover(srv, world, name, said=None):
     coastline), as it was when the world was made."""
     _w, side = _side_of(srv, world)
     r = raster_of(side['file'])
-    plan = MS.Plan(r, side.get('opts') or {})
+    if side.get('grown_from'):
+        # (a grown world's opts are still the first box's: a Plan worked out from them covers only the old cells, and every
+        # step asking what the new land is found nothing there, 18 Nov 2026: its plants never went in)
+        import mapgrow
+        plan = mapgrow.plan_of(r, side)
+    else:
+        plan = MS.Plan(r, side.get('opts') or {})
     grid = MS.heights(plan, said)
     if side.get('bumps'):
         _roofs_off(grid, side)
@@ -848,7 +854,8 @@ def green_job(body, srv):
 
 def plants_job(body, srv):
     """FOLab's own plants (modelsets.py; body 'set': 'beach', the default, 'jungle', or 'mountain': low cover for slopes) added to a world already
-    dressed, over and above what grows there: one Undo. Nothing inside a building or a landmark."""
+    dressed, over and above what grows there: one Undo. Nothing inside a building or a landmark. body 'only': 'new' plants only the
+    cells the last growing added (the old ones have the set already)."""
     import modelsets
     srv.not_while_playing()
     name = body['file']
@@ -862,7 +869,12 @@ def plants_job(body, srv):
             which = body.get('set', 'beach')
             if which not in modelsets.EXTRA:
                 raise ValueError('No set of plants called %s: there are %s.' % (which, ', '.join(modelsets.EXTRA)))
-            ops, report = modelsets.extra(srv.GD, srv.PR, w, cover, int(body.get('seed', 1)), _said, which, float(body.get('thick', 1.0)))
+            only = None
+            if body.get('only') == 'new':
+                only = new_cells_of(srv, body['world'])[2]
+                if not only:
+                    raise ValueError("This world hasn't been grown: it has no new land to plant.")
+            ops, report = modelsets.extra(srv.GD, srv.PR, w, cover, int(body.get('seed', 1)), _said, which, float(body.get('thick', 1.0)), only)
             ops = landmarks.clear_of(ops, landmarks.standing(srv.GD, srv.PR, w) + modelsets.footprints(srv.PR, srv.GD, w))     # (nor in a hotel)
             inside = osmdress._Stands(osmdress.standing(srv.GD, srv.PR, w, cat), margin=24.0)
             ops = [o for o in ops if o.get('op') != 'add' or not inside.hit(o['p'][0], o['p'][1])]
