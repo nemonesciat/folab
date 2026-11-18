@@ -80,3 +80,18 @@ try:
     check('a scratch FOLab may not move anything', False)
 except ValueError:
     check('a scratch FOLab may not move anything', True)
+
+# ---------- loose files an older Put in game left in Data (far view, models): 18 Nov 2026, the old ship far off ----------
+del os.environ['FOLAB_NO_GAME_WRITES']
+import json  # noqa: E402
+rels = [os.path.join('meshes', 'landscape', 'lod', 'w', 'blocks', 'w.level4.x-10.y-6.nif'), os.path.join('textures', 'folab', 'ship', 'hull.dds')]
+with open(built + '.files.json', 'w', encoding='utf-8') as f:
+    json.dump({r: 'x' for r in rels}, f)
+for r in rels:
+    put(os.path.dirname(os.path.join(data, r)), b'old', os.path.basename(r))
+s = copies.stale(built, lo, mine)
+lz = [c for c in s if c.get('loose')]
+check('loose files of an older install in Data are counted', lz and lz[0]['loose'] == 2 and lz[0]['movable'], s)
+check('two moved out', copies.move_loose(built, data) == 2)
+check('none left, and their empty folders gone', not copies.loose_left(built, data) and not os.path.exists(os.path.join(data, 'meshes')))
+check('nothing loose reported now', not any(c.get('loose') for c in copies.stale(built, lo, mine)))

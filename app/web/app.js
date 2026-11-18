@@ -676,7 +676,7 @@ function staleCopies(i, p){
   if (!old.length) return '';
   const movable = old.filter(c => c.movable);
   return `<div class="note" style="color:var(--amber);font-size:13px"><b>Not ready: an older copy of ${esc(p.plugin)} is somewhere else the game can load it from.</b>
-    The game may load that one, and you'd see old changes.<ul>${old.map(c => `<li>In ${esc(c.where)}: <code>${esc(c.path)}</code>${c.movable ? '' : ' (switch that mod off in MO2, or take the file out of it)'}</li>`).join('')}</ul>
+    The game may load that one, and you'd see old changes.<ul>${old.map(c => `<li>In ${esc(c.where)}${c.loose ? '' : `: <code>${esc(c.path)}</code>`}${c.movable ? '' : ' (switch that mod off in MO2, or take the file out of it)'}</li>`).join('')}</ul>
     ${movable.length ? `<button class="btn primary" id="m-stale-out">Move ${movable.length === 1 ? 'it' : 'them'} to FOLab's backups</button>` : ''}</div>`;
 }
 

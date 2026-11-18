@@ -2181,7 +2181,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'install': install.install(GD.data_dir, saved['path']), 'state': state()})
                 if u.path == '/api/install/stale_out':
                     not_while_playing()
-                    moved = copies.move_out([c['path'] for c in stale_copies() if c['movable']], PR.plugin)
+                    old = [c for c in stale_copies() if c['movable']]
+                    moved = copies.move_out([c['path'] for c in old if not c.get('loose')], PR.plugin)
+                    if any(c.get('loose') for c in old):
+                        n = copies.move_loose(os.path.join(project.BUILD_DIR, PR.plugin), loadout.current().data_dir)
+                        moved.append({'from': '%d loose files in the game\'s Data' % n, 'to': 'backups'})
                     if loadout.current():
                         _read_loadout_again(loadout.current())
                     return self.send({'moved': moved, 'state': state()})

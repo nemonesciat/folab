@@ -11,6 +11,7 @@ ship stood where she had been (18 Nov 2026). So nothing says "in" while another 
 `others` lists them, `stale` keeps those whose bytes differ from the build. `move_out` puts stale copies in FOLab's
 backups (only on the user's click, never into the game: a move out of it, and only of a file with the mod's name).
 """
+import json
 import os
 import shutil
 import time
@@ -44,6 +45,11 @@ def others(built, lo=None, mod_folder=None, nvrs_mods=None):
 
     if lo:
         look("the game's own Data folder (it loads when the game is started without MO2)", lo.data_dir, True)
+        left = loose_left(built, lo.data_dir)
+        if left:
+            found.append({'where': "the game's own Data folder: %d loose files of an older Put in game (far view, models, "
+                                   "textures), which the game draws beside the mod's own" % len(left),
+                          'path': lo.data_dir, 'same': False, 'movable': True, 'loose': len(left)})
         look("MO2's overwrite folder", lo.instance.overwrite_dir)
         mine = os.path.normcase(os.path.abspath(mod_folder)) if mod_folder else None
         for m in lo.modlist:
@@ -60,6 +66,39 @@ def others(built, lo=None, mod_folder=None, nvrs_mods=None):
 
 def stale(*a, **k):
     return [c for c in others(*a, **k) if not c['same']]
+
+
+def loose_left(built, data_dir):
+    """The files an older Put in game left loose in data_dir (install.py's list beside the build): far views, models,
+    textures. In a loadout the game draws them beside the mod's own, and far-view blocks named otherwise all at once:
+    the old ship stood in the distance after she had moved (18 Nov 2026)."""
+    try:
+        with open(built + '.files.json', encoding='utf-8') as f:
+            names = json.load(f)
+    except (OSError, ValueError):
+        return []
+    return [r for r in names if os.path.isfile(os.path.join(data_dir, r))]
+
+
+def move_loose(built, data_dir):
+    """Every file loose_left finds, into backups/<plugin> loose files from Data <time>/, same paths. Returns how many."""
+    if os.environ.get('FOLAB_NO_GAME_WRITES'):
+        raise ValueError('This FOLab is a scratch copy for looking at experiments: it may not move files out of the game.')
+    left = loose_left(built, data_dir)
+    back = os.path.join(os.path.dirname(project.PROJECTS_DIR), 'backups', '%s loose files from Data %s' % (os.path.basename(built), time.strftime('%Y-%m-%d %H%M%S')))
+    for r in left:
+        dest = os.path.join(back, r)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.move(os.path.join(data_dir, r), dest)
+    for d in sorted({os.path.dirname(r) for r in left}, key=len, reverse=True):
+        p = os.path.join(data_dir, d)
+        while d and os.path.normcase(p) != os.path.normcase(data_dir):
+            try:
+                os.rmdir(p)
+            except OSError:
+                break
+            p = os.path.dirname(p)
+    return len(left)
 
 
 def move_out(paths, plugin):
