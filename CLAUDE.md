@@ -176,6 +176,11 @@ the model for style, UI and approach. Python, standard library first, code in `a
   (`osmdress.seat_lying`), then things in road pieces lifted onto them (`onto_roads`, `INTO_ROAD`), then standing junk let
   down off slopes (`settle_pieces`). Each step run twice changes nothing. padfill's banks are what this replaces. Not done:
   the hotel view worlds' copies of the city keep the old heights.
+- Bare ground filled (`understory.py`, `tests/test_understory.py`; after the user's look, 18 Nov 2026: valley floors and road verges bare
+  between the dressing's clumps): by the texture the game draws on top at each land point (`CLASSES`: none on pavement, asphalt,
+  gravel, water; rock and sand thinner, `REACH_OF`), a clump (`MIXES`) wherever no plant stands within `reach` and the ground isn't
+  steeper than `STEEP`, off roads, buildings and landmarks; each clump counts at once. Waikiki took it at reach 256 (79,104 plants).
+  A grown world's `api_maps.map_cover` plans on the grown box (it covered only the first one: the new land's plants were dropped).
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
