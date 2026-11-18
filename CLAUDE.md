@@ -164,6 +164,14 @@ the model for style, UI and approach. Python, standard library first, code in `a
   Other areas out of reach (roofs, closed insides, the guard tower's top deck, which the game's own navmeshes don't
   reach either) are listed only. Run it on anything people walk on before a navmesh run: a remake of Waikiki's took
   2.5 hours. Found 17 Nov 2026: the Missouri's bridge wings join the 03 level only through a gap ~32 wide.
+- Ground upwards (`groundfit.py`, `roadbed.onto_roads`, `tests/test_groundfit.py`; after the user's look, 18 Nov 2026: buildings on
+  grass plinths, cars in road slabs, tents off hills): the order is land, then roads bedded flush (`roadbed.bed`, buildings
+  holding only their footprint), then buildings set to the street those roads make (`groundfit.fit`: `L` read past the walls,
+  the building `SINK` under it, its yard cut or filled and eased back over `EASE`, never touching a road's ground within
+  `ROAD_REACH`; close neighbours share a level, `TERRACE_MOST` the most one is lifted for it), then lying things seated
+  (`osmdress.seat_lying`), then things in road pieces lifted onto them (`onto_roads`, `INTO_ROAD`), then standing junk let
+  down off slopes (`settle_pieces`). Each step run twice changes nothing. padfill's banks are what this replaces. Not done:
+  the hotel view worlds' copies of the city keep the old heights.
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
