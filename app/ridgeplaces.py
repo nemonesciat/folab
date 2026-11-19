@@ -484,7 +484,7 @@ class Builder:
                 if piece == 'junk':
                     yaw = math.atan2(ux, uy)            # (junk walls lie along their y)
                 else:
-                    yaw = math.atan2(-uy, ux)           # (the McCarran wall along its x)
+                    yaw = math.atan2(ux, uy)            # (the McCarran wall's mesh runs along its y, whatever its bounds say)
                 pl.put(e, mx, my, yaw, r=plen / 2, sink=30.0, check=False)
                 pl.taken.append((mx, my, 120.0))
 

@@ -563,7 +563,51 @@ def _hull(mesh, part, place):
             faces = [[1, 0, 2, 3], [7, 6, 4, 5], [0, 1, 5, 4], [3, 2, 6, 7], [0, 4, 6, 2], [3, 7, 5, 1]]
             mesh.solids.append({'points': [place.point(p) for p in pts], 'faces': faces, 'material': part.get('material', 'metal')})
 
-_SHAPES = {'box': _box, 'slab': _box, 'cylinder': _round, 'cone': _round, 'card': _card, 'frond': _frond, 'ball': _ball, 'hull': _hull}
+def _sheet(mesh, part, place):
+    """A curved sheet from a grid of points, seen from both sides: 'rows': [[(x, y, z), ...], ...], each row the same
+    length (a roof: rows from its ridge to its eave, each running along it). 'look' is its upper face (the side its
+    normals point up to), 'under_look' (else the same) its lower, 'thick' units under the upper. Pictures run along
+    the rows (u) and down from one row to the next (v), by the distance walked over the sheet. Never solid: what is
+    walked under or on wants a box of its own."""
+    rows = [[tuple(float(c) for c in p) for p in row] for row in part['rows']]
+    m, n = len(rows[0]), len(rows)
+    up_look, down_look = part['look'], part.get('under_look', part['look'])
+    thick = float(part.get('thick', 4.0))
+    ul, dl = mesh.looks.get(up_look) or {}, mesh.looks.get(down_look) or {}
+    # (how far along and across each point is, for its picture)
+    U = [[0.0] * m for _ in range(n)]
+    V = [[0.0] * m for _ in range(n)]
+    for i in range(n):
+        for k in range(1, m):
+            U[i][k] = U[i][k - 1] + math.dist(rows[i][k], rows[i][k - 1])
+    for i in range(1, n):
+        for k in range(m):
+            V[i][k] = V[i - 1][k] + math.dist(rows[i][k], rows[i - 1][k])
+
+    def nrm(i, k):
+        a, b = rows[max(0, i - 1)][k], rows[min(n - 1, i + 1)][k]
+        c, d = rows[i][max(0, k - 1)], rows[i][min(m - 1, k + 1)]
+        v = _unit3(_cross3((d[0] - c[0], d[1] - c[1], d[2] - c[2]), (b[0] - a[0], b[1] - a[1], b[2] - a[2])))
+        return v if v[2] >= 0 else (-v[0], -v[1], -v[2])
+    N = [[nrm(i, k) for k in range(m)] for i in range(n)]
+    for i in range(n - 1):
+        for k in range(m - 1):
+            quad = [(i, k), (i, k + 1), (i + 1, k + 1), (i + 1, k)]
+            # (anticlockwise seen from above: turn it round if its own normal points down)
+            a, b, d = rows[i][k], rows[i][k + 1], rows[i + 1][k]
+            fn = _cross3((b[0] - a[0], b[1] - a[1], b[2] - a[2]), (d[0] - a[0], d[1] - a[1], d[2] - a[2]))
+            top = quad if fn[2] >= 0 else quad[::-1]
+            mesh.face(up_look, [(place.point(rows[ii][kk]), place.normal(N[ii][kk]), _lay(ul, U[ii][kk], V[ii][kk], 1, 1)) for ii, kk in top])
+            low = []
+            for ii, kk in top[::-1]:
+                p, q = rows[ii][kk], N[ii][kk]
+                low.append((place.point((p[0] - q[0] * thick, p[1] - q[1] * thick, p[2] - q[2] * thick)),
+                            place.normal((-q[0], -q[1], -q[2])), _lay(dl, U[ii][kk], V[ii][kk], 1, 1)))
+            mesh.face(down_look, low)
+
+
+_SHAPES = {'box': _box, 'slab': _box, 'cylinder': _round, 'cone': _round, 'card': _card, 'frond': _frond, 'ball': _ball, 'hull': _hull,
+           'sheet': _sheet}
 
 
 # What a model of FOLab's may come to (measured over the game's meshes: its buildings' median 500 to 1,700 triangles, a

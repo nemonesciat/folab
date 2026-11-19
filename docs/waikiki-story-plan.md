@@ -236,6 +236,8 @@ Four side storylines run alongside, each from a pressure building in 2281:
 - Where the Castaway washes up.
 - Which valley stops paying (proposed: the Tanks).
 - How the main story ends.
+- **Later [the user, 19 Nov 2026]:** the real emergency bunker in Diamond Head crater (the Birkhimer Tunnel, the
+  state's emergency centre in the history draft): its part in the story and what's built there, after the build list.
 
 ## Built so far
 
@@ -275,3 +277,26 @@ Four side storylines run alongside, each from a pressure building in 2281:
   side (42), a lamp at each turn; a map marker "Kaʻau Crater" on the lip. Measured: 2 steps of the ledge steeper than
   45°, none across; the track none. Its lights show only near (loaded cells): the glow seen from Waikiki needs far
   lights of FOLab's own. A look from the lip: `waikiki-vault-built.png`. Not yet walked in the game or in 3D.
+- **19 Nov 2026, the pirates** (`app/pirates.py`): the Kāhala Reef hotel (the Kāhala Hotel's place on the map) walled
+  round with junk walls a little out from its grounds (33 pieces; gaps where a road and two houses stand on the line),
+  a land gate on its town side with sandbag posts and the trade ground outside it (tables, chairs, crates, water,
+  a fire, a lantern), a sea gate to the beach and a jetty with boats. Koko Marina: 8 new piers with 24 boats moored and
+  some wrecks gone down in the basin, laid as the Ala Wai's were (`landmarks.Batch.harbour`), and the pirates' boatyard
+  on the shore (boats up on the ground, a shack, a junk wall open to the water, marker "Koko Marina"). The Flotilla:
+  not in the middle of Maunalua Bay (22 m deep there) but on the 6 m shelf off Koko Head (71,680, -46,208), round a
+  wrecked boat aground on a sandbar raised under it: a ring of dock planking, one rope-bridge gangplank up to the
+  wreck's deck, barges at the ring's ends, boats moored round, lanterns at the corners, marker "The Flotilla".
+  walkcheck: the ring, the barges, the gangplank and the deck all reached (the wreck's hold and top decks not, having
+  no way up). No guard towers at the Kāhala (no room at its corners). Picture: `waikiki-pirates-built.png`.
+- **19 Nov 2026, the settlers** (`app/settlerset.py`, FOLab's own pieces; `app/settlers.py`): the pieces drawn in
+  code: five gates (one bay and iron roofs at first; three bays, red roofs and a gold board by the last), the courtyard
+  wall, the screen wall, a hall and a red-roofed hall (curved roofs of corrugated iron, one sheet a side, the eaves
+  rising to the corners; red posts, plaster on lava stone, lattice windows), and the freighter (110 m, her house aft,
+  hatches forward, a ramp from her bow). `modelmake` gained a `sheet` shape (a curved surface seen from both sides)
+  for the roofs. Placed: the freighter run bow-first up Waimānalo's beach, her keel in the sand, the ramp down to a
+  level plaza (walkcheck: up the ramp, over the bow, along her deck between the hatches; her house's upper levels
+  and the deck aft of it have no way up yet, and her inside isn't made); the road of gates straight inland from her
+  bow, the grandest by the ship, 2,200 apart; six walled courtyards (screen inside the gateway, hall facing the road,
+  red roofs nearest the ship; two more had no room); maize fields beyond; the Border Post on the coast road north-west
+  out of Waimānalo near the map's top edge and Makapuʻu Gate on it at Makapuʻu, each a gate across the road, walls,
+  a guard tower, a marker. The city's houses where these stand were taken out. Picture: `waikiki-settlers-built.png`.

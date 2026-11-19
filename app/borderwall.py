@@ -3,7 +3,8 @@ from the Kakaʻako shore north round downtown and Chinatown, then up the map's w
 Built early, by the emergency government and the Navy, to turn back the dying; kept up since against what lives in the
 ruins. A clean separation: tall, closed, one gate.
 
-    the wall     the game's McCarran wall (concrete, 754 tall, 350 thick, along its x): long pieces (2048) where the
+    the wall     the game's McCarran wall (concrete, 754 tall, 350 thick, along its y: its record's
+                 bounds say x, swapped; 19 Nov 2026 every piece stood 90 degrees across its line): long pieces (2048) where the
                  ground along them is even within `EVEN`, short ones (512) where it isn't, a tower (660 square, ~1050
                  tall) where even a short piece would rise more than `STEEP` along its length (the uphill end would sit
                  too low). Every piece stands at the lowest ground under it, sunk `SINK`, so none hangs; pieces overlap
@@ -114,7 +115,7 @@ def plan(line, ground_at, gate_t=None, rnd=None):
     for a, b in zip(line, line[1:]):
         L = math.hypot(b[0] - a[0], b[1] - a[1])
         ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
-        rz = _turn_x(ux, uy)
+        rz = _turn_y(ux, uy)            # (its mesh runs along its y: the record's bounds have x and y swapped)
         tower_at(*a)
         t = TOWER_LEN / 2 - OVERLAP
         while t < L - OVERLAP:
