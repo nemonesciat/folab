@@ -1351,6 +1351,7 @@ def _all_sets():
     import battleship  # noqa: F401
     import shipinside  # noqa: F401
     import settlerset  # noqa: F401
+    import cargoset  # noqa: F401
 
 
 def get(path, q):

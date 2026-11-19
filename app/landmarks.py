@@ -79,8 +79,10 @@ PYLON = ('PotDockPylon01', DOCK_UP - 400.0)
 PIER_APART = 760.0      # (a real marina's fingers are a boat apart; squeezed, most of them go)
 PIER_LONG = 1792.0      # (and the ones kept are built at least this long, or a squeezed pier is two steps of planking)
 DOCK_LIMIT = 1400
-MOORED = [('Boat02a', -60.0, 3), ('Boat02b', -60.0, 3), ('Boat02c', -60.0, 3), ('Boat02d', -60.0, 2), ('Boat02e', -60.0, 2), ('Boat03a', -12.0, 2),
-          ('Boat03b', -12.0, 2), ('Boat03e', -12.0, 2), ('Barge', -8.0, 1)]
+# (how far over the water each boat's origin floats: at -60 and -12 only their cabins showed, 19 Nov 2026; the game's
+# own moored boats stand about 10 to 60 over theirs)
+MOORED = [('Boat02a', 40.0, 3), ('Boat02b', 40.0, 3), ('Boat02c', 40.0, 3), ('Boat02d', 40.0, 2), ('Boat02e', 40.0, 2), ('Boat03a', 12.0, 2),
+          ('Boat03b', 12.0, 2), ('Boat03e', 12.0, 2), ('Barge', -8.0, 1)]
 SUNK = ['Boat01a', 'Boat01b', 'Boat01d', 'dlc04boatwrecked01', 'Boat02c']
 CRANE = ('CraneStatic02', 900.0)
 

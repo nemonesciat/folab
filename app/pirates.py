@@ -374,7 +374,8 @@ def flotilla_items(gd):
     return items, [(RING[0], 0.0, 20.0)], [(0.0, 87.0, WRECK_UP + 161.0)]
 
 
-def ops(gd, pr, world, side, cat=None, only=('kahala', 'marina', 'flotilla')):
+def ops(gd, pr, world, side, cat=None, only=('kahala', 'marina')):
+    """(The Flotilla is flotilla.py's now: the grand one, 19 Nov 2026. `flotilla` here is the first, small one.)"""
     import server
     cat = cat if cat is not None else townbuild.load(gd, server.kits_folder())
     P = Pirates(gd, pr, world, side, cat)

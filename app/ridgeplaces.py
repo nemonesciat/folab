@@ -39,6 +39,8 @@ APART = 90.0                  # (things keep this far apart, edge to edge, rough
 EASE = 650.0                  # (a terrace's edge eased back into the hill over this)
 PLAZA = 700.0                 # (half the side of the level yard at a settlement's middle)
 STEP = 8.0                    # (land heights in whole steps of this)
+OWN_GROWS = ('Rock', 'Boulder', 'Jungle', 'Understory', 'Palm', 'Hibiscus', 'Banana', 'DuneGrass', 'Fern', 'Taro', 'Heliconia',
+             'Bamboo', 'Thicket', 'Undergrowth', 'FOLabPlant', 'Grass')   # (FOLab's own plants among them)
 TERRACED = ('fort', 'tanks', 'holdouts', 'loagate', 'crowsnest', 'beacon', 'watcher', 'watchtower', 'radar')
 
 SHACKS = ('WoodShack01', 'WoodShack02', 'WoodShack01ALT', 'WoodShack02ALT', 'NVShackVictor')
@@ -154,6 +156,7 @@ class Builder:
         self.w.ground = self.ground                    # (one ground for all: terraces show at once)
         self._clear_cache = {}
         self.gone = set()                              # ((cell, ref) taken out for a building or a thing)
+        self._index_own()
         self.rnd = random.Random(seed)
         self.ops, self.cells = [], set()
         self.rep = {'places': {}, 'missing': set(), 'buildings': 0}
@@ -183,6 +186,30 @@ class Builder:
             self.ground.h[k] = f['h']
         return self.forms[k]
 
+    def _index_own(self):
+        """townbuild.World knows the game's things only: the mod's own models (FOLab's plants, hotels, landmarks, the
+        settlers' pieces) go in too by their records' OBND, so a place is never laid through one (19 Nov 2026: halls and
+        walls stood through FOLab's own jungle trees)."""
+        boxes = {}
+        for k, r in self.pr.records.items():
+            if k.startswith('+') and r.get('type') == 'STAT':
+                sub = next((q for q in r.get('subs', ()) if q['tag'] == 'OBND' and q.get('kind') == 'struct'), None)
+                if sub:
+                    boxes[k] = [f['value'] for f in sub['fields']]
+        for cell in self.w.grid.values():
+            ck = self.gd.key(cell)
+            for rk, ref in self.pr.cells.get(ck, {}).get('refs', {}).items():
+                b = boxes.get(ref.get('base'))
+                if not b or ref.get('removed') or not ref.get('p'):
+                    continue
+                sc = float(ref.get('s') or 1.0)
+                fp = townbuild._foot([v * sc for v in b], ref['p'][5], ref['p'])
+                item = (ck, rk, fp, max(b[3] - b[0], b[4] - b[1]) * sc >= townbuild.CLEAR_BELOW, True)
+                xs, ys = [q[0] for q in fp], [q[1] for q in fp]
+                for bx in range(int(min(xs) // 1024), int(max(xs) // 1024) + 1):
+                    for by in range(int(min(ys) // 1024), int(max(ys) // 1024) + 1):
+                        self.w.bucket[(bx, by)].append(item)
+
     def clearable(self, ck, rk):
         """What grows or lies about (plants, trees, rubble, rocks): taken out where a place is laid, never in its way."""
         if (ck, rk) in self.gone:
@@ -196,7 +223,7 @@ class Builder:
         if b not in self._clear_cache:
             import natcompound
             e = natcompound._named(self.gd, self.pr, b)
-            self._clear_cache[b] = (any(w.lower() in e.lower() for w in natcompound.GROWS + natcompound.LIES + ('Rock', 'Boulder', 'Jungle', 'Understory'))
+            self._clear_cache[b] = (any(w.lower() in e.lower() for w in natcompound.GROWS + natcompound.LIES + OWN_GROWS)
                                     and not any(w in e for w in ('Road', 'Door', 'Marker', 'Highway', 'Overpass')))
         return self._clear_cache[b]
 

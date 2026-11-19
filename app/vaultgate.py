@@ -9,7 +9,7 @@ decided 19 Nov 2026; sketch docs/waikiki-vault-door-sketch.png):
 - **The climb.** On the crater's north wall: `LEGS` legs of a ledge path across the face, each turning back at the
   end, from the floor up to a landing `DOOR_UP` over it. A leg's points are where the wall stands at the leg's height
   (`_on_face`), so the ledge follows the cliff; the land within `LEDGE` of it is brought to the leg's height (cut into
-  the wall, built out where it falls away), eased back over `LEDGE_EASE`. Concrete barriers along the open side, a
+  the wall, built out where it falls away), eased back over `LEDGE_EASE`. The game's road guardrail along the open side, a
   lamp at each turn.
 - **The landing and the door.** A level landing (ridgeplaces.Builder.terrace) and on it the game's Vault 22 entrance
   (`ENTRANCE`, a concrete portal running back into the hill) with its gear door, as the game stands the pair; the door
@@ -38,15 +38,75 @@ LEDGE, LEDGE_EASE = 130.0, 180.0
 LANDING = (800.0, 520.0)             # (half its width and depth)
 ENTRANCE, GEAR = 'Vault22Entrance', 'VGearDoorR22'
 DOOR_IN_ENTRANCE = (-18.0, 27.0, -4.0)    # (the door in the entrance's frame, as the game has them)
-RAIL = 'JerseyBarricade01'
-RAIL_EVERY, RAIL_OUT = 150.0, 110.0
+RAIL = 'GuardRailStraight01'          # (the game's road guardrail: 248 along its own y, its middle at its origin)
+RAIL_LONG, RAIL_STEP, RAIL_OUT, RAIL_UP = 248.0, 237.0, 110.0, 48.0
+OLD_RAIL = 'JerseyBarricade01'      # (what stood there first, 19 Nov 2026: short blocks, each on its own bit of slope)
 LAMP, LAMP_LIGHT, LAMP_LIGHT_AT = 'NVStreetlight01', 'NellisStreetLight', (-1.0, 127.0, 481.0)
 DOOR_LIGHT = 'VaultExtraWarm256'
 LEDGE_GROUND = 'LDirtPebblesCanyon01'
 SHACK = 'WoodShack02'
 CAGE = 'DeathClawCage'
 CAMP = [('CampfireCrafting03', 1), ('NVBedrollL', 2), ('Barrel01', 2), ('CrateGenericNV', 2)]
-NAMES = {ENTRANCE, GEAR, RAIL, LAMP, LAMP_LIGHT, DOOR_LIGHT, SHACK, CAGE, 'SandbagStraight'} | {e for e, _n in CAMP}
+NAMES = {ENTRANCE, GEAR, RAIL, OLD_RAIL, LAMP, LAMP_LIGHT, DOOR_LIGHT, SHACK, CAGE, 'SandbagStraight'} | {e for e, _n in CAMP}
+
+
+def _tilt_for(ux, uy, uz):
+    """The game's turn (rx, ry, rz) that lays a piece's own +y along (ux, uy, uz): rz the heading, rx and ry found
+    against navgen's reading of the game's turn (its tilt goes round the world's axes, not the piece's)."""
+    import navgen
+    L = math.sqrt(ux * ux + uy * uy + uz * uz) or 1.0
+    want = (ux / L, uy / L, uz / L)
+    rz = math.atan2(ux, uy)
+    best = (9.0, 0.0, 0.0)
+    span = 0.6
+    cx = cy = 0.0
+    for _ in range(4):
+        for i in range(-6, 7):
+            for j in range(-6, 7):
+                rx, ry = cx + span * i / 6, cy + span * j / 6
+                M = navgen._turn(rx, ry, rz)
+                got = (M[0][1], M[1][1], M[2][1])
+                err = sum((a - b) ** 2 for a, b in zip(got, want))
+                if err < best[0]:
+                    best = (err, rx, ry)
+        cx, cy = best[1], best[2]
+        span /= 4
+    return best[1], best[2], rz
+
+
+def guardrails(pts, zs, side=-1):
+    """[(x, y, z, rx, ry, rz)]: guardrail sections end to end along a line (pts, its heights zs), RAIL_OUT to its open
+    side (side -1: the side towards -y, the crater's floor), each tilted to the line's climb; a fresh run after a turn."""
+    out = []
+    d = [0.0]
+    for a, b in zip(pts, pts[1:]):
+        d.append(d[-1] + math.dist(a, b))
+
+    def at(t):
+        for k in range(1, len(d)):
+            if d[k] >= t:
+                u = (t - d[k - 1]) / ((d[k] - d[k - 1]) or 1.0)
+                return (pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * u, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * u,
+                        zs[k - 1] + (zs[k] - zs[k - 1]) * u)
+        return (pts[-1][0], pts[-1][1], zs[-1])
+    t = 0.0
+    while t + RAIL_LONG < d[-1]:
+        a, b = at(t), at(t + RAIL_STEP)
+        ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+        L = math.hypot(ux, uy) or 1.0
+        c = at(t + RAIL_STEP / 2)
+        nx, ny = -uy / L, ux / L
+        if (ny > 0) != (side > 0):
+            nx, ny = -nx, -ny
+        # (a turn here: the line bends sharply over the section, so leave a gap and start again past it)
+        bend = abs(math.atan2(ux, uy) - math.atan2(c[0] - a[0], c[1] - a[1]))
+        if min(bend, math.tau - bend) > 0.35:
+            t += RAIL_STEP
+            continue
+        rx, ry, rz = _tilt_for(ux, uy, uz)
+        out.append((c[0] + nx * RAIL_OUT, c[1] + ny * RAIL_OUT, c[2] + RAIL_UP, rx, ry, rz))
+        t += RAIL_STEP
+    return out
 
 
 def _route_flat(ground, a, b, box=(-40000.0, 0.0, 20000.0, 60000.0), st=256.0):
@@ -159,22 +219,13 @@ class Gate:
         zs.append(turns[-1][2])
         self.ledge(pts, zs)
         rails = lamps = 0
-        # rails along the open (south) side of each leg, lamps at the turns
-        run = 0.0
-        for (xa, ya), (xb, yb) in zip(pts, pts[1:]):
-            L = math.hypot(xb - xa, yb - ya) or 1.0
-            run += L
-            if run < RAIL_EVERY:
-                continue
-            run = 0.0
-            ux, uy = (xb - xa) / L, (yb - ya) / L
-            nx, ny = -uy, ux
-            if ny > 0:                                          # (the side toward the floor: south)
-                nx, ny = -nx, -ny
-            rx, ry = xa + nx * RAIL_OUT, ya + ny * RAIL_OUT
-            g = B.ground.at(rx, ry)
-            if g is not None and abs(g - (B.ground.at(xa, ya) or g)) < 60:
-                rails += self.raw(RAIL, rx, ry, g - 2.0, math.atan2(ux, uy))
+        # guardrail along the open (south) side, end to end at the path's height, tilted to its climb; lamps at the turns
+        for x, y, z, rx, ry, rz in guardrails(pts, zs):
+            ck = B.w.cell_at(x, y)
+            if ck is not None:
+                B.ops.append({'op': 'add', 'cell': ck, 'base': B.key_of[RAIL], 'p': [round(x, 1), round(y, 1), round(z, 1), round(rx, 4), round(ry, 4), round(rz, 4)], 's': 1})
+                B.cells.add(ck)
+                rails += 1
         for x, y, z in turns[1:-1]:
             lamps += self._lamp(x, y + 160.0, B.ground.at(x, y + 160.0) or z, math.pi)
         self.rep['climb'] = {'landing_z': land_z, 'door': [round(DOOR_X), round(ye), round(ez)], 'legs': len(turns) - 1,

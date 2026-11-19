@@ -43,6 +43,7 @@ modelsets.TEXTURES.update({
     'settler/deck': lambda: tw.steel((84, 78, 70), size=256, seed=612, rust=0.6),
     'settler/house': lambda: tw.steel((192, 188, 176), size=256, seed=613, rust=0.35),
     'settler/dark': lambda: tp.painted_metal((40, 42, 44), seed=614, rust=0.2),
+    'settler/hull_blue': lambda: tw.hull_rust(size=512, seed=618, paint=(50, 66, 84)),
     'settler/teal': lambda: tw.wood(TEAL, size=256, seed=615, count=3, paint_left=0.75),
     'settler/lattice': lambda: lattice(seed=616),
     'settler/tiles': lambda: tw.clay_tiles(size=512, seed=617, colour=(96, 92, 86)),
@@ -75,7 +76,7 @@ def _looks():
     return {'iron': look('settler/roof_iron', tile=160), 'iron_red': look('settler/roof_red', tile=160),
             'red': look('settler/red', tile=96, turned=True), 'door': look('settler/door', tile=120),
             'plaster': look('settler/plaster', tile=320), 'gold': look('settler/gold', tile=64), 'plate': look('settler/plate', tile=160),
-            'stone': look('settler/stone', tile=160), 'hull': look('settler/hull', tile=480), 'hull_red': look('settler/hull_red', tile=480),
+            'stone': look('settler/stone', tile=160), 'hull': look('settler/hull', tile=480), 'hull_red': look('settler/hull_red', tile=480), 'hull_blue': look('settler/hull_blue', tile=480),
             'deck': look('settler/deck', tile=200), 'house': look('settler/house', tile=200), 'dark': look('settler/dark', tile=96),
             'teal': look('settler/teal', tile=96, turned=True), 'lattice': look('settler/lattice'), 'tiles': look('settler/tiles', tile=200)}
 
@@ -268,13 +269,20 @@ RAMP = (300.0, 2000.0)              # (the bow ramp: half its width, its length 
 RAMP_FOOT = F_KEEL + 90.0           # (the sand at her bow, in her frame: she is run up the beach to her keel)
 
 
-def freighter():
-    """See the module's docstring. Her frame: middle at the origin, the waterline at z 0, the bow towards -y."""
+FLOTILLA_SHIP = {'name': 'FOLabFlotillaShip', 'house': (-450.0, 350.0), 'hatches': (),
+                 'ramp': False, 'gaps': ((-1150.0, 220.0), (850.0, 220.0)), 'bands': [(-1e9, 'hull_red'), (40.0, 'hull_blue')]}
+
+
+def freighter(name='FOLabSettlerFreighter', house=(2250.0, 3050.0), hatches=(-2650.0, -1650.0, -650.0, 350.0, 1350.0), ramp=True,
+              gaps=(), bands=None):
+    """See the module's docstring. Her frame: middle at the origin, the waterline at z 0, the bow towards -y. The
+    Flotilla's heart (FLOTILLA_SHIP) is the same hull with her house amidships, fewer hatches, red above her waterline,
+    no ramp, and gaps (y, half its width) in her bulwarks where gangplanks come aboard."""
     P = [{'shape': 'hull', 'stations': [{'y': -F_HALF + s * F_LONG, 'pts': f_section(s)} for s in F_STATIONS],
-          'bands': [(-1e9, 'hull_red'), (40.0, 'hull')], 'deck_look': 'deck', 'end_look': 'hull', 'material': 'metal', 'far': True}]
+          'bands': bands or [(-1e9, 'hull_red'), (40.0, 'hull')], 'deck_look': 'deck', 'end_look': 'hull', 'material': 'metal', 'far': True}]
     dz = F_DECK
-    # the house aft: four levels, a bridge on top with a dark band of windows, the funnel behind
-    y0, y1 = 2250.0, 3050.0
+    # the house: four levels, a bridge on top with a dark band of windows, the funnel behind
+    y0, y1 = house
     for k in range(4):
         w = 1080.0 - 60.0 * k
         _box(P, [w, y1 - y0 - 40 * k, 250], [0, (y0 + y1) / 2 + 20 * k, dz + 250 * k], 'house', far=True)
@@ -284,7 +292,7 @@ def freighter():
               'look': 'dark', 'solid': False, 'material': 'metal', 'far': True})
     _box(P, [320, 460, 90], [0, y1 + 120, dz + 1330], 'hull_red', solid=False, far=True)
     # hatches forward, with masts between them
-    for k, y in enumerate((-2650.0, -1650.0, -650.0, 350.0, 1350.0)):
+    for k, y in enumerate(hatches):
         _box(P, [820, 700, 110], [0, y, dz], 'plate', far=True)
         _box(P, [840, 720, 12], [0, y, dz + 110], 'deck', solid=False)
         if k in (1, 3):
@@ -294,14 +302,29 @@ def freighter():
     for sx in (-1, 1):
         for k in range(len(F_STATIONS) - 1):
             s0, s1 = F_STATIONS[k], F_STATIONS[k + 1]
-            if s1 <= 0.1:
+            if s1 <= (0.1 if ramp else 0.03):
                 continue                        # (the bow open, where the ramp comes aboard)
             ya, yb = -F_HALF + s0 * F_LONG, -F_HALF + s1 * F_LONG
             xa, xb = f_width(s0), f_width(s1)
             mx, my = sx * (xa + xb) / 2, (ya + yb) / 2
             L = math.hypot(xb - xa, yb - ya)
             ang = math.degrees(math.atan2(sx * (xb - xa), yb - ya))
-            _box(P, [26, L + 20, 110], [mx - sx * 13, my, f_deck_z((s0 + s1) / 2) - 4], 'hull', turn=[0, 0, -ang], far=True)
+            # (cut where a gangplank comes aboard)
+            spans = [(ya, yb)]
+            for gy, gh in gaps:
+                cut = []
+                for a_, b_ in spans:
+                    if a_ < gy + gh and b_ > gy - gh:
+                        cut += [(a_, min(b_, gy - gh)), (max(a_, gy + gh), b_)]
+                    else:
+                        cut.append((a_, b_))
+                spans = [q for q in cut if q[1] - q[0] > 20]
+            for a_, b_ in spans:
+                t0, t1 = (a_ - ya) / ((yb - ya) or 1), (b_ - ya) / ((yb - ya) or 1)
+                cx_, cy_ = sx * (xa + (xb - xa) * (t0 + t1) / 2), (a_ + b_) / 2
+                _box(P, [26, L * (t1 - t0) + 20, 110], [cx_ - sx * 13, cy_, f_deck_z((s0 + s1) / 2) - 4], 'hull', turn=[0, 0, -ang], far=True)
+    if not ramp:
+        return {'name': name, 'looks': _looks(), 'parts': P}
     # the ramp from the bow down to the sand she lies in (RAMP_FOOT in her frame), in three slabs
     half, long = RAMP
     # (a landing plate on the deck out over the tip of the bow, the ramp from its end)
@@ -316,12 +339,13 @@ def freighter():
         _box(P, [2 * half, run + 8, 16], [0, y_top - long * t, z_top - drop * t - 8], 'plate', turn=[a, 0, 0])
     for sx in (-1, 1):
         _box(P, [12, math.hypot(drop, long), 80], [sx * (half - 6), y_top - long / 2, z_top - drop / 2 - 8], 'dark', solid=False, turn=[a, 0, 0])
-    return {'name': 'FOLabSettlerFreighter', 'looks': _looks(), 'parts': P}
+    return {'name': name, 'looks': _looks(), 'parts': P}
 
 
 PIECES = {'settler_gate_%d' % n: ('Settlers\' gate %d' % n, (lambda n=n: gate(n))) for n in range(1, 6)}
 PIECES.update({'settler_wall': ('Settlers\' courtyard wall', wall), 'settler_screen': ('Settlers\' screen wall', screen),
                'settler_hall': ('Settlers\' hall', hall), 'settler_hall_red': ('Settlers\' hall, red roof', lambda: hall(1300, 700, 380, True)),
-               'settler_freighter': ('The settlers\' freighter', freighter)})
+               'settler_freighter': ('The settlers\' freighter', freighter),
+               'settler_flotilla_ship': ('The Flotilla\'s ship', lambda: freighter(**FLOTILLA_SHIP))})
 for _k, (_label, _fn) in PIECES.items():
     modelsets.PIECES.setdefault(_k, {'label': _label, 'set': SET, 'file': _k[8:], 'describe': _fn, 'edid': _fn()['name']})

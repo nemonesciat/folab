@@ -177,7 +177,21 @@ out: Hawaiʻi is about 4,000 km from California.)
   asks your name, looks you over and asks where you think you're from: the game's character screens happen as that
   talk (as Doc Mitchell does it in New Vegas).
 - **The Pip-Boy isn't yours:** it washed up with the boat, on the wrist of someone who didn't make it, and is taken
-  from them. Who had it, and why a slave boat bound for the Vault carried it, is a thread to follow.
+  from them. Who had it, and why a slave boat bound for the Vault carried it, is a thread to follow. **The one who
+  finds you hands it to you** in the talk (decided 19 Nov 2026): put on while the conversation is open, as Doc
+  Mitchell's is, the one way the game takes it safely.
+- **The opening, step by step [decided, 19 Nov 2026]** (Doc Mitchell's order, each step out of the beach and the
+  wreck; the one who finds you is someone picking over it, no name or story yet):
+  1. You lie on the sand, able only to look round. They crouch and shake you: "Still breathing. Don't try to get up yet."
+  2. A shard of mirror from the flotsam held up: "Here. See what the sea left of you." (the face screen)
+  3. "Got a name?" (the name screen)
+  4. Looked over as a half-drowned person is: grip my hand, follow my finger, can you sit up. "You'll live. Let's
+     see what's left." (SPECIAL)
+  5. "Where'd they take you from?": another island, a ship from the mainland, somewhere on Oʻahu, I don't remember.
+  6. "What were you, before? What could you do?" (tag skills)
+  7. "Anything else wrong with you I should know about?" (traits)
+  8. The Pip-Boy held out: "This was on the one by the rocks. He won't need it." Put on in the talk.
+  9. You stand. "Road's up there, over the rim. Don't go north."
 
 ## The edges [decided, 19 Nov 2026]
 
@@ -323,3 +337,12 @@ Four side storylines run alongside, each from a pressure building in 2281:
   worse (1, 5, 12; 100 markers, none reaching back over the wall); none on the Crest Trail's line. On the coast road
   north of the Border Post: 19 radiation and keep-out signs, 35 of the dead, 15 wrecked carts and cars. Not yet: the
   invisible stop (FOLab can't make a border region), the distant ground and ruins past the edges.
+- **19 Nov 2026, the Flotilla rebuilt grand** (`app/flotilla.py`, `app/cargoset.py`): the first one was a small dock
+  round one wreck with its boats sunk to their cabins. Now: a captured cargo ship (the freighter's hull with her house
+  amidships, blue-grey, `settlerset.FLOTILLA_SHIP`) settled on the shelf off Koko Head, her deck 3 m over the sea,
+  stacked one to three high with shipping containers of FOLab's own, a lane down her middle; a ring of planking round
+  her with four gangplanks up through gaps in her bulwarks; rafts of barges at each end with a shack and a guard
+  tower; six of the big hulks lashed alongside (the first wreck among them); boats and rowboats floating round her.
+  About 6,000 by 10,000. walkcheck: every goal reached. The look-round fixes of the same day are in
+  `waikiki-reports.md` (the wall's turn, breakwater on a mound, water levels, the Vault's guardrail, torn cell edges,
+  2,805 plants out of buildings, boats floating).
