@@ -247,6 +247,16 @@ Four side storylines run alongside, each from a pressure building in 2281:
 8. **The edges:** radiation climbing north and west, warning signs and bones, distant ground and ruins of Ground
    Zero and the dead north; the invisible stop (a FOLab feature still to make).
 
+8a. **Shanties on the ruined freeway [decided, 19 Nov 2026]:** the old H-1's broken decks (ruinedfreeway.py) used at
+   either end, the court and the pirates each watching the road the trade runs on, the broken middle left empty:
+   - **The Kahuna's toll post** on the middle stretch at the mouth of Mānoa valley (about cells -25, 3 to -22, 1.5):
+     the collectors watching the valley road down to Waikiki; a few shacks, a lookout, a scaffold stair to the road.
+   - **The pirates' post** on the east end at Waiʻalae (about cells -10.6, -5.7 to -6.4, -5.8), over the Pālolo
+     junction where the slave road turns up to the Vault, near the Kāhala Hotel: people held there before the climb,
+     pens and shacks on the deck.
+   - The west end by the wall in Kalihi stays an empty ruin looking over into Ground Zero (the wall is Alewa Fort's).
+   Every stair and deck walked (walkcheck) before the navmesh run.
+
 **After the navmesh run** (none of this changes the ground):
 - The people of each place, with each area's payer (who it treats as friend or foe).
 - Tribute day on a timer: collectors' rounds, catchers before, someone gone after.
@@ -346,3 +356,11 @@ Four side storylines run alongside, each from a pressure building in 2281:
   About 6,000 by 10,000. walkcheck: every goal reached. The look-round fixes of the same day are in
   `waikiki-reports.md` (the wall's turn, breakwater on a mound, water levels, the Vault's guardrail, torn cell edges,
   2,805 plants out of buildings, boats floating).
+- **19 Nov 2026, the freeway posts** (`app/overpassposts.py`): the Kahuna's toll post on the section at the mouth of
+  Mānoa (cell -24.8, 2.8) and the pirates' post over the Pālolo junction (cell -9.3, -5.6). The game's overpass
+  collision reads with no level face (walkcheck and navgen find nothing to stand on), so each post stands on a platform
+  of dock planking laid on the deck's road surface (2,048 over the section's origin): two shacks, the court's sandbag
+  post, table and chairs; the pirates' cages, fire and crates; lanterns. A scaffold ramp tower of FOLab's own climbs
+  from the ground (1,408 at the court's, where one city house gave way; 960 at the pirates'), its top landing over the
+  deck's side and down onto the planking. walkcheck: from the ground to the platform at both. The pond at (21, 13)
+  drained to the sea's level as the user chose; (-19, -6) keeps its pond.

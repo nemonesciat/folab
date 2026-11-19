@@ -23,7 +23,8 @@ at the start of any Waikiki work, and before saying anything is ready.
 - **A panel of water above the land on the east coast** (19 Nov 2026, in FOLab, cells 36, 8 and 36, 9: "there's a panel
   of water above the land here"). Cause: cells (35, 7) and (35, 8) carry a stream or pond level of 295 over the whole
   square, the beach under it. A sweep found 13 such cells by the sea; 11 hold no pond and go to the sea's level (saved
-  19 Nov 2026 12:34); (-19, -6) and (21, 13) hold a pond behind the beach too: for the user to look at. Also: the
+  19 Nov 2026 12:34); (-19, -6) and (21, 13) hold a pond behind the beach too: the user, 19 Nov 2026: "get rid of the one at 21,13 and
+  keep the other one" (21, 13 to the sea's level: saved 19 Nov 2026 13:33). Also: the
   water at Hawaii Kai drew unevenly ("the lake is a cool effect with flooded buildings, but the water draws unevenly",
   cells 18, -4 and 16, -3): stream levels of 16 on ground at 16 beside the sea, and two dry cells under sea level;
   those 5 cells to the sea's level, saved 12:34.
