@@ -31,8 +31,8 @@ FLOAT = {'Boat02a': 40.0, 'Boat02b': 40.0, 'Boat02d': 40.0, 'Boat03a': 12.0, 'Bo
 HULKS = [('Boat01a', 1, -2900.0), ('dlc04boatwrecked01', 1, 0.0), ('Boat01b', 1, 2900.0),
          ('Boat01b', -1, -2900.0), ('Boat01a', -1, 0.0), ('Boat01b', -1, 2900.0)]
 CARGO = ['cargo_red', 'cargo_blue', 'cargo_green', 'cargo_rust']
-BLOCKS = ((-3300.0, 2), (1150.0, 2))       # (where a block of stacks starts along her, how many containers long)
-COLUMNS = (-470.0, -290.0, 290.0, 470.0)   # (across her: a lane 400 wide down her middle stays clear)
+BLOCKS = ((-3100.0, 2), (1150.0, 2))       # (where a block of stacks starts along her, how many containers long)
+COLUMNS = (-440.0, -262.0, 262.0, 440.0)   # (across her: a lane 400 wide down her middle stays clear)
 NAMES = {GANG, DOCK, 'Barge', 'WoodShack01', 'WoodShack02', 'CLSoldiersTent01', 'VBitterSpringsClotheslineShort', 'NVGuardTower01',
          'CrateGenericNV', 'Barrel01', 'Barrel03static', 'LLamp01', 'NVDLC04LanternLightKeyWarm'} | set(FLOAT)
 
@@ -75,6 +75,20 @@ def _rafts():
     return out
 
 
+def _fits(x, y, turn, settlerset, clear=60.0):
+    """A container at x, y turned by up to `turn` stays inside her bulwarks (their inner face, less `clear`) all along."""
+    import cargoset
+    for t in (-turn, turn) if turn else (0.0,):
+        c, s = math.cos(t), math.sin(t)
+        for lx in (-cargoset.WIDE / 2, cargoset.WIDE / 2):
+            for ly in (-cargoset.LONG / 2, cargoset.LONG / 2):
+                px, py = x + lx * c + ly * s, y - lx * s + ly * c
+                st = min(1.0, max(0.0, (py + HALF_LONG) / (2 * HALF_LONG)))
+                if abs(px) > settlerset.f_width(st) - 26.0 - clear:
+                    return False
+    return True
+
+
 def layout():
     out = [('$model_' + SHIP, 0.0, 0.0, SHIP_Z, 0.0, 0.0, 0.0)]
     # (the deck's things first known, so the walk test sees the containers too)
@@ -96,14 +110,19 @@ def layout():
     # her deck: two blocks of shipping containers in stacks, a lane down her middle and across at each gangway;
     # shacks on her stern deck, tents at her bow, washing at the gangways, crates and barrels by her house
     import cargoset
+    import settlerset
     k = 0
     for y0, n in BLOCKS:
         for j in range(n):
             y = y0 + cargoset.LONG * (j + 0.5)
             for c, x in enumerate(COLUMNS):
+                askew_ok = abs(x) < 350.0                     # (only the inner stacks knocked askew: an outer one's end went over her side)
+                if not _fits(x, y, 0.12 if askew_ok else 0.0, settlerset):
+                    k += 1
+                    continue                                 # (her hull narrows to the bow: 19 Nov 2026 the outer stacks stood through her sides)
                 high = 1 + (k * 7 + c * 3 + j) % 3
                 for level in range(high):
-                    askew = 0.12 * ((-1) ** (k + level)) if level == high - 1 and (k + c) % 4 == 0 else 0.0
+                    askew = 0.12 * ((-1) ** (k + level)) if askew_ok and level == high - 1 and (k + c) % 4 == 0 else 0.0
                     out.append(('$model_' + CARGO[(k + c + level) % len(CARGO)], x, y, DECK + level * cargoset.HIGH, 0.0, 0.0, askew))
                 k += 1
     for y in (3050.0, 3450.0):
