@@ -30,10 +30,6 @@ at the start of any Waikiki work, and before saying anything is ready.
 - **Terrain shearing** (19 Nov 2026, in FOLab, cell 31, 1: "terrain shearing here"). Cause: 25 cell edges where the
   two neighbours' heights disagreed (lines along x 30|31, -31|-30, y 18|19: an earlier ground pass). Stitched (both
   sides to their average, blended four points in), saved 12:34; a scan finds none left. Waiting for the user to see it.
-- **The Flotilla's containers clip through the ship's side** (19 Nov 2026, in FOLab, cell 16, -12: "I like the concept,
-  but the containers are clipping thru the wall of the barge"). Cause: the stacks were set out at full width where her
-  hull narrows to the bow, and outer ones knocked askew. Fix ready: each container checked against her width where it
-  stands (31 in 14 stacks, askew only inboard). Saved 19 Nov 2026 13:09; waiting for the user to see it.
 - **The Flotilla: boats sunk, and not grand** (19 Nov 2026: "shouldn't the boats be floating in a flotilla? Also, I was
   expecting something a bit more... grand"; then "make the flotilla a freighter with cargo crates on it ... a little
   more different than the settler's barge"). Rebuilt 19 Nov 2026 12:53 (`app/flotilla.py`): a cargo ship of FOLab's own
@@ -64,6 +60,9 @@ at the start of any Waikiki work, and before saying anything is ready.
 - **Ten gaps under walls beside roads** remain after close_gaps (232 to 10): not yet looked at by the user.
 
 ## Closed (seen fixed by the user)
+
+- The Flotilla's containers clipping through the ship's side: the user looked in FOLab 19 Nov 2026, "that looks much
+  better now".
 
 - Floating shacks, sandbags and crates by the start and the Moana: the user looked in the game 19 Nov 2026, "It seems
   to be fine now". (Still open from the same work: the office building and Quonset hut over the ground, the shack, car
