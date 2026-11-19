@@ -591,6 +591,9 @@ def ref_extra_subs(r, link):
                   ('TNAM', struct.pack('<BB', int(m['type']) & 0xFF, 0))]
     if r.get('link'):
         last.append(('XLKR', struct.pack('<I', link(r['link']))))
+    rad = r.get('radiation')
+    if rad:                                     # (a RadiationMarker's reach and rads a second, as the game's 216 have them)
+        last += [('XRDS', struct.pack('<f', float(rad['radius']))), ('XRAD', struct.pack('<f', float(rad['rads'])))]
     return first, last
 
 

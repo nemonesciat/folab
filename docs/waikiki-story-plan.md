@@ -170,6 +170,15 @@ raid), a ship from the mainland (a trader the pirates took), somewhere on Oʻahu
 tribute), or "I don't remember". The answer changes a few lines later, nothing more. (Vertibirds and airships are
 out: Hawaiʻi is about 4,000 km from California.)
 
+**The start [decided, 19 Nov 2026]:**
+- **Where:** Hanauma Bay, the sheltered bay inside Koko Head's broken crater, cliffs all round and one road out. The
+  boat sank off Koko Head on its way in to the Flotilla; its wreck lies on the bay's reef.
+- **Coming to:** you lie on the sand at dawn. Someone picking over what washed in finds you and shakes you awake,
+  asks your name, looks you over and asks where you think you're from: the game's character screens happen as that
+  talk (as Doc Mitchell does it in New Vegas).
+- **The Pip-Boy isn't yours:** it washed up with the boat, on the wrist of someone who didn't make it, and is taken
+  from them. Who had it, and why a slave boat bound for the Vault carried it, is a thread to follow.
+
 ## The edges [decided, 19 Nov 2026]
 
 Every edge is layered so the game's invisible stop comes where you would be dying anyway:
@@ -233,7 +242,6 @@ Four side storylines run alongside, each from a pressure building in 2281:
 
 ## Still to settle
 
-- Where the Castaway washes up.
 - Which valley stops paying (proposed: the Tanks).
 - How the main story ends.
 - **Later [the user, 19 Nov 2026]:** the real emergency bunker in Diamond Head crater (the Birkhimer Tunnel, the
@@ -300,3 +308,18 @@ Four side storylines run alongside, each from a pressure building in 2281:
   red roofs nearest the ship; two more had no room); maize fields beyond; the Border Post on the coast road north-west
   out of Waimānalo near the map's top edge and Makapuʻu Gate on it at Makapuʻu, each a gate across the road, walls,
   a guard tower, a marker. The city's houses where these stand were taken out. Picture: `waikiki-settlers-built.png`.
+- **19 Nov 2026, the Castaway's start** (`app/castaway.py`): Hanauma Bay. A boat of the pirates' aground and heeled
+  over on the bay's reef, the tideline either side of where you lie strewn with planks, broken crates, barrels, sacks
+  and a cage on its side; the comber's camp at the back of the beach where the slope climbs to the road; three named
+  heading markers for what comes later (FOLabHanaumaWake where you lie, FOLabHanaumaDrowned where the drowned slaver
+  with the Pip-Boy lies, FOLabHanaumaComber where the one who wakes you stands); marker "Hanauma Bay". The mod's own
+  new game now starts there, on the sand looking out at the wreck (it was in Waikiki by the Kilauea). Its opening
+  line still says "Waikiki. The surf still comes in. Nothing else does." The comber, the drowned and the talk that
+  carries the character screens come with the people and quests after the navmesh run; the start-based danger tiers
+  (worldlife) were worked out from the old start and want doing again with the people.
+- **19 Nov 2026, the edges** (`app/edges.py`): the game's radiation markers (worldrec gained a 'radiation' extra:
+  their reach and rads a second, XRDS and XRAD), rising in three steps across the north from just past the Border
+  Post to the map's top edge (1, 4, 12 rads a second; 171 markers), and behind the wall deeper into downtown the
+  worse (1, 5, 12; 100 markers, none reaching back over the wall); none on the Crest Trail's line. On the coast road
+  north of the Border Post: 19 radiation and keep-out signs, 35 of the dead, 15 wrecked carts and cars. Not yet: the
+  invisible stop (FOLab can't make a border region), the distant ground and ruins past the edges.
