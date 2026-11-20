@@ -431,3 +431,213 @@ def settle_pieces(gd, pr, world, cells=None):
             steep += 1
         out.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [p[0], p[1], round(p[2] - hang - SET_SINK, 1)] + list(p[3:])})
     return out, {'let_down': len(out), 'on_steep_ground': steep}
+
+
+# ---------- what fit left: daylight under a wall ----------
+
+GAP = 24.0              # land this far under a wall's foot, just outside it, is daylight under the building
+DOOR_BURY = 16.0        # a door's sill may go this far into the ground, no further
+UPHILL_BURY = 256.0     # nor the building's uphill side further than this into its slope
+FILL_EASE = 256.0       # the ground filled up to an open wall eases back to the land over this
+
+
+def _foot(b):
+    p, o, s = b['p'], b['o'], b['s']
+    return p[2] + b['mid'] * s if b['mid'] is not None else p[2] + o[2] * s + 16
+
+
+def _world(p, lx, ly):
+    """A spot in a thing's frame (lx, ly) in the world: _local's inverse."""
+    cs, sn = math.cos(p[5]), math.sin(p[5])
+    return p[0] + lx * cs + ly * sn, p[1] - lx * sn + ly * cs
+
+
+def close_gaps(gd, pr, world, cells=None, cat=None):
+    """(ops, report): every building of the mod's with daylight under a wall after fit (land GAP or more under its foot
+    just outside it: the wall stands over a road's ground, which fit leaves alone, or fit left the building), let down as
+    far as its doors allow (DOOR_BURY) and its uphill side (UPHILL_BURY), then the land within HOLD of its walls filled up
+    to its foot and eased back over FILL_EASE, only ever raised, never a road's ground. What stands in its box goes with it;
+    what stands on ground that rose rises with it. After fit, before seat_lying; a second run changes nothing."""
+    import land
+    import roadbed
+    import roadgen
+    import tes4
+    import townbuild
+    grid = gd.grid(world)
+    if cat is None:
+        import server
+        cat = townbuild.load(gd, server.kits_folder())
+    by = {b['key']: b for b in cat}
+    key_of = {gd.key(c): k for k, c in grid.items()}
+    want = {gd.key(grid[k]) for k in cells} if cells is not None else set(key_of)
+    flat = roadbed._flat_bases(gd)
+    builds, roads = [], []
+    for ck, c in pr.cells.items():
+        if ck not in key_of:
+            continue
+        for rk, r in c['refs'].items():
+            p, b = r.get('p'), r.get('base')
+            if not p or not b or r.get('removed'):
+                continue
+            if b in by and rk.startswith('+') and ck in want:
+                o = townbuild.obnd(gd, b)
+                if o:
+                    builds.append({'ck': ck, 'rk': rk, 'p': p, 's': float(r.get('s') or 1.0), 'o': o, 'mid': by[b].get('mid'),
+                                   'doors': [d for d in by[b].get('doors') or [] if isinstance(d, dict) and 'x' in d]})
+            elif b in flat:
+                roads.append((p, flat[b]))
+    G = roadgen.Ground(gd, pr, world)
+
+    def ring(b, out=32.0):
+        p, o, s = b['p'], b['o'], b['s']
+        for i in range(9):
+            for lx, ly in ((o[0] * s + (o[3] - o[0]) * s * i / 8, o[1] * s - out), (o[0] * s + (o[3] - o[0]) * s * i / 8, o[4] * s + out),
+                           (o[0] * s - out, o[1] * s + (o[4] - o[1]) * s * i / 8), (o[3] * s + out, o[1] * s + (o[4] - o[1]) * s * i / 8)):
+                yield _world(p, lx, ly)
+
+    todo = []
+    for b in builds:
+        foot = _foot(b)
+        gs = [g for g in (G.at(x, y) for x, y in ring(b)) if g is not None]
+        if not gs or foot - min(gs) < GAP:
+            continue
+        gap, buried = foot - min(gs), max(gs) - foot
+        room = UPHILL_BURY - buried
+        for d in b['doors']:
+            x, y = _world(b['p'], d['x'] * b['s'], d['y'] * b['s'])
+            g = G.at(x, y)
+            if g is not None:
+                room = min(room, DOOR_BURY - (g - (b['p'][2] + d.get('z', 0.0) * b['s'])))
+        down = max(0.0, min(gap + SINK, room))             # (its foot SINK under the land, as fit leaves one)
+        todo.append((b, math.floor(down / STEP) * STEP))
+    if not todo:
+        return [], {'gaps': 0}
+    # the land round them, one array of points
+    area = set()
+    for b, _down in todo:
+        p, o, s = b['p'], b['o'], b['s']
+        rad = math.hypot(max(abs(o[0]), abs(o[3])), max(abs(o[1]), abs(o[4]))) * s + HOLD + FILL_EASE + POINT
+        for cx in range(int((p[0] - rad) // 4096), int((p[0] + rad) // 4096) + 1):
+            for cy in range(int((p[1] - rad) // 4096), int((p[1] + rad) // 4096) + 1):
+                if (cx, cy) in grid:
+                    area.add((cx, cy))
+    x0, y0 = min(c[0] for c in area), min(c[1] for c in area)
+    A = (max(c[0] for c in area) - x0 + 1) * PER_CELL + 1
+    D = (max(c[1] for c in area) - y0 + 1) * PER_CELL + 1
+    now = [None] * (A * D)
+    forms = {}
+    for (cx, cy) in area:
+        key = gd.key(grid[(cx, cy)])
+        mine_land, e = pr.land.get(key), None
+        if mine_land:
+            h = mine_land['h']
+        else:
+            e = gd.land_at(world, cx, cy)
+            vh = dict(tes4.iter_subrecords(gd.plugins[e[0]].data(e[1]))).get('VHGT') if e else None
+            if not vh:
+                continue
+            h = land.heights_of(vh)
+        forms[(cx, cy)] = (key, mine_land, e)
+        for row in range(33):
+            at = ((cy - y0) * PER_CELL + row) * A + (cx - x0) * PER_CELL
+            for col in range(33):
+                v = h[row * 33 + col]
+                now[at + col] = v if now[at + col] is None else max(now[at + col], v)
+    start = list(now)
+
+    def k_of(x, y):
+        gx, gy = int(round(x / POINT)) - x0 * PER_CELL, int(round(y / POINT)) - y0 * PER_CELL
+        return gy * A + gx if 0 <= gx < A and 0 <= gy < D else None
+
+    def ground(arr, x, y):
+        fx, fy = x / POINT - x0 * PER_CELL, y / POINT - y0 * PER_CELL
+        i, j = int(math.floor(fx)), int(math.floor(fy))
+        if not (0 <= i < A - 1 and 0 <= j < D - 1):
+            return None
+        u, v = fx - i, fy - j
+        a, b_, c, d = arr[j * A + i], arr[j * A + i + 1], arr[(j + 1) * A + i], arr[(j + 1) * A + i + 1]
+        if None in (a, b_, c, d):
+            return None
+        return (a * (1 - u) + b_ * u) * (1 - v) + (c * (1 - u) + d * u) * v
+    held = set()
+    for p, box in roads:
+        rad = math.hypot(max(abs(box[0]), abs(box[3])), max(abs(box[1]), abs(box[4]))) + ROAD_REACH
+        for gy in range(int((p[1] - rad) // POINT), int((p[1] + rad) // POINT) + 2):
+            for gx in range(int((p[0] - rad) // POINT), int((p[0] + rad) // POINT) + 2):
+                k = k_of(gx * POINT, gy * POINT)
+                if k is None:
+                    continue
+                lx, ly = _local(p, gx * POINT, gy * POINT)
+                if box[0] - ROAD_REACH <= lx <= box[3] + ROAD_REACH and box[1] - ROAD_REACH <= ly <= box[4] + ROAD_REACH:
+                    held.add(k)
+    raise_to = {}
+    for b, down in todo:
+        p, o, s = b['p'], b['o'], b['s']
+        t = math.floor((_foot(b) - down) / STEP) * STEP          # (the wall's foot once let down: the land comes up to it)
+        rad = math.hypot(max(abs(o[0]), abs(o[3])), max(abs(o[1]), abs(o[4]))) * s + HOLD + FILL_EASE
+        for gy in range(int((p[1] - rad) // POINT), int((p[1] + rad) // POINT) + 2):
+            for gx in range(int((p[0] - rad) // POINT), int((p[0] + rad) // POINT) + 2):
+                k = k_of(gx * POINT, gy * POINT)
+                if k is None or now[k] is None or k in held:
+                    continue
+                d = _box_dist(o, s, *_local(p, gx * POINT, gy * POINT))
+                if d > HOLD + FILL_EASE:
+                    continue
+                if d <= HOLD:
+                    want_h = t
+                else:
+                    u = (d - HOLD) / FILL_EASE
+                    want_h = t + (start[k] - t) * (u * u * (3 - 2 * u))
+                if want_h > start[k] + 0.5 and want_h > raise_to.get(k, -1e9):
+                    raise_to[k] = want_h        # (only ever up: filled under a wall, never a neighbour's yard cut)
+    for k, v in raise_to.items():
+        now[k] = math.ceil(v / STEP) * STEP
+    ops, changed = [], 0
+    for (cx, cy), (key, mine_land, e) in sorted(forms.items()):
+        h, old = [], []
+        for row in range(33):
+            at = ((cy - y0) * PER_CELL + row) * A + (cx - x0) * PER_CELL
+            h += now[at:at + 33]
+            old += start[at:at + 33]
+        if all(abs(a - c) < 0.5 for a, c in zip(h, old)):
+            continue
+        form = dict(mine_land) if mine_land else land.decode(gd, e, {})
+        ops.append({'op': 'land', 'cell': key, 'land': dict(form, h=[float(v) for v in h])})
+        changed += 1
+    # the buildings and what's in their boxes go down with them; things on raised ground go up with it
+    moved = {(b['ck'], b['rk']): -down for b, down in todo if down >= 1}
+    near = {}
+    for b, down in todo:
+        near.setdefault((int(b['p'][0] // 1024), int(b['p'][1] // 1024)), []).append((b, down))
+    carried = lifted = 0
+    for ck, c in pr.cells.items():
+        if ck not in key_of:
+            continue
+        for rk, r in c['refs'].items():
+            p = r.get('p')
+            if not p or r.get('removed') or not rk.startswith('+') or (ck, rk) in moved or r.get('base') in flat:
+                continue
+            dz = None
+            i, j = int(p[0] // 1024), int(p[1] // 1024)
+            for a in (i - 1, i, i + 1):
+                for bb in (j - 1, j, j + 1):
+                    for b, down in near.get((a, bb), ()):
+                        o, s = b['o'], b['s']
+                        if _box_dist(o, s, *_local(b['p'], p[0], p[1])) <= 8 and b['p'][2] + o[2] * s - 64 <= p[2] <= b['p'][2] + o[5] * s + 64:
+                            dz = -down
+            if dz is not None:
+                if abs(dz) >= 1:
+                    moved[(ck, rk)] = dz
+                    carried += 1
+                continue
+            a0, n0 = ground(start, p[0], p[1]), ground(now, p[0], p[1])
+            if a0 is None or n0 is None or abs(n0 - a0) < 2 or abs(p[2] - a0) > ON_GROUND:
+                continue
+            moved[(ck, rk)] = n0 - a0
+            lifted += 1
+    for (ck, rk), dz in moved.items():
+        p = pr.cells[ck]['refs'][rk]['p']
+        ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [p[0], p[1], round(p[2] + dz, 1)] + list(p[3:])})
+    downs = [d for _b, d in todo]
+    return ops, {'gaps': len(todo), 'let_down': sum(1 for d in downs if d >= 1), 'most_down': round(max(downs or [0])),
+                 'land_cells': changed, 'points_raised': len(raise_to), 'carried': carried, 'lifted': lifted}

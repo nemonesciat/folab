@@ -166,6 +166,10 @@ def beyond(gd, pr, world, margin=MARGIN, coast_file=None):
     except (OSError, ValueError) as e:
         WHY = 'its height file %s could not be read: %s' % (side['file'], e)
         return None
+    if side.get('grown_from'):
+        # (a grown world's opts are still its first box's: planned from them it never matched and the far view had no land
+        # past the edge, 18 Nov 2026; the sidecar's own numbers are the world's, mapgrow.plan_of)
+        return _beyond_grown(gd, pr, world, side, raster, margin, coast_file)
     plan = mapscale.Plan(raster, side['opts'])
     if (plan.W, plan.H, plan.x0, plan.y0) != (side.get('W'), side.get('H'), side.get('x0'), side.get('y0')):
         WHY = ('its height file or scale is no longer the one the world was made from (now %s, made %s)'
@@ -206,4 +210,40 @@ def beyond(gd, pr, world, margin=MARGIN, coast_file=None):
             pass
     out = FromGrid(raster, big, grid, margin, box)
     out.join_land(opts['rect'])
+    return out
+
+
+def _beyond_grown(gd, pr, world, side, raster, margin, coast_file):
+    """beyond() for a world grown in place (mapgrow): its plan and the margin's from the sidecar's numbers."""
+    import api_maps
+    import mapgrow
+    import mapscale
+    global WHY
+    try:
+        plan = mapgrow.plan_of(raster, side)
+    except ValueError as e:
+        WHY = str(e)
+        return None
+    pcx, pcy = mapscale.CELL / plan.upx, mapscale.CELL / plan.upy
+    bigside = dict(side, W=side['W'] + 2 * margin, H=side['H'] + 2 * margin, x0=side['x0'] - margin, y0=side['y0'] - margin,
+                   col0=side['col0'] - margin * pcx, row0=side['row0'] - margin * pcy)
+    big = mapgrow.plan_of(raster, bigside)
+    grid = mapscale.heights(big)
+    rect = [side['col0'], side['row0'], side['col0'] + side['W'] * pcx, side['row0'] + side['H'] * pcy]
+    box = None
+    if side.get('coast') or coast_file:
+        try:
+            import coast
+            import osm
+            import osmplace
+            data = osm.read(coast_file or api_maps.file_path(side['coast']))
+            box = data.bounds
+            geo = osmplace.Georef(bigside, data)
+            sea = coast.shape_sea(grid, [[geo.xy(p) for p in line] for line in data.coast], big.floor)
+            if sea and not sea.get('leak'):
+                mapscale.limit_slopes(grid.pts, grid.across, grid.down)
+        except (OSError, ValueError):
+            pass
+    out = FromGrid(raster, big, grid, margin, box)
+    out.join_land(rect)
     return out

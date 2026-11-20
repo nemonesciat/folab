@@ -18,7 +18,7 @@ def check(name, cond, info=''):
 
 EXTENT = {BW.LONG: (-256, 1792), BW.SHORT: (-256, 256), BW.GATE: (-615, 615)}
 for t in BW.TOWER:
-    EXTENT[t] = (-330, 330)
+    EXTENT[t] = (-150, 150)      # (its body as drawn, where the wall's 160 thickness fits: not its 660 foot)
 
 
 def covered(line, placed):
@@ -39,8 +39,8 @@ def covered(line, placed):
             if e in BW.TOWER or e == BW.GATE:
                 spans.append((at + lo, at + hi))
             else:
-                # (the piece's own y runs along the leg: its mesh, whatever its record's bounds say)
-                px, py = math.sin(rz), math.cos(rz)
+                # (the piece's own x runs along the leg)
+                px, py = math.cos(rz), -math.sin(rz)
                 sgn = 1 if px * ux + py * uy > 0 else -1
                 spans.append((at + lo * sgn, at + hi * sgn) if sgn > 0 else (at - hi, at - lo))
         spans.sort()
@@ -75,9 +75,9 @@ bottoms = [(p[3] - BW.LOW) if p[0] in (BW.LONG, BW.SHORT) else p[3] for p in pla
 check('every piece reaches into the ground', all(b <= 100.0 for b in bottoms), max(bottoms))
 pieces = [p for p in placed if p[0] in (BW.LONG, BW.SHORT)]
 turns = {round(p[4], 3) for p in pieces if abs(p[2]) < 1}
-check('pieces on the first leg lie along it (their y along +x)', turns == {round(BW._turn_y(1, 0), 3)}, turns)
+check('pieces on the first leg lie along it (their x along +x)', turns == {0.0}, turns)
 turns = {round(p[4], 3) for p in pieces if abs(p[1] - 20000) < 1}
-check('… and on the second along +y', turns == {round(BW._turn_y(0, 1), 3)}, turns)
+check('… and on the second along +y', turns == {round(BW._turn_x(0, 1), 3)}, turns)
 
 # ---------- climbing ground ----------
 slope = lambda x, y: x * 0.5            # (1 in 2 along the leg)

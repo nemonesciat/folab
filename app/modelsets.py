@@ -58,6 +58,10 @@ TEXTURES = {
     'jungle/bark': lambda: tp.bark_furrowed(seed=46),
     'jungle/fibre': lambda: tp.bark_rings(colour=(86, 64, 46), rings=12, seed=52),
     'jungle/cane': lambda: tp.stalk(colour=(128, 150, 74), seed=53),
+    # stems as the game's plants have them, down a see-through strip (texpaint.stick, modelmake 'stick')
+    'jungle/twig': lambda: tp.stick(colour=(92, 84, 60), brown=(70, 92, 52), seed=54),
+    'jungle/cane_stick': lambda: tp.stick(colour=(132, 152, 76), brown=(176, 160, 96), rings=2, ring=(96, 104, 56), seed=55),
+    'jungle/ti_stick': lambda: tp.stick(colour=(112, 98, 76), brown=(90, 104, 66), rings=6, ring=(78, 66, 50), seed=56),
     'jungle/spray': lambda: tp.leaf_spray(seed=90),
     'jungle/spray_bush': lambda: tp.leaf_spray(seed=94, dark=(36, 82, 38), light=(116, 166, 72), leaf=0.1, slim=0.5),
     'jungle/spray_broad': lambda: tp.leaf_spray(seed=95, dark=(30, 74, 36), light=(98, 150, 64), leaf=0.13, slim=0.62),
@@ -247,6 +251,21 @@ def limb(a, b, r0, r1, look, sides=7, solid=False, caps=False):
             'turn': [0, math.degrees(math.acos(max(-1.0, min(1.0, d[2] / ln)))), math.degrees(math.atan2(d[1], d[0]))]}
 
 
+def twig(a, b, r0, r1, look):
+    """A plant's stem from a to b, r0 thick at a and r1 at b: a 'stick' (crossed see-through strips, modelmake), never
+    solid. Thin opaque tubes cast as bare lines in nv-rs's sun shadows (shadowcast); its look is a stick look."""
+    q = limb(a, b, r0, r1, look)
+    for k in ('sides', 'caps', 'solid'):
+        q.pop(k)
+    q['shape'] = 'stick'
+    return q
+
+
+def stick_look(name, tile):
+    """A see-through stem picture (texpaint.stick) for twig()."""
+    return look(name, alpha=True, tile=tile, band=tp.STICK_BAND)
+
+
 def leaves(at, r, look, rnd, flat=2, look2=None):
     """A bough's end in leaf: sprays (texpaint.leaf_spray) fanning from the point every way, some standing, most leaning
     out, some hanging, so the crown has depth and gaps and is closed seen from under. (It was pictures of a round mass
@@ -332,12 +351,12 @@ def rosette(name, texture, n, long, wide, up=(66, 12), droop=(50, 80), fold=14, 
 def ti_plant(name, texture, seed=1):
     """A ti plant: a few bare canes, each with a tuft of long leaves at its top."""
     rnd = random.Random(seed)
-    looks = {'cane': look('jungle/cane', tile=32), 'leaf': look(texture, alpha=True)}
+    looks = {'cane': stick_look('jungle/ti_stick', 32), 'leaf': look(texture, alpha=True)}
     parts = []
     for k in range(3):
         a = math.radians(k * 120 + rnd.uniform(-30, 30))
         top = (math.cos(a) * rnd.uniform(8, 26), math.sin(a) * rnd.uniform(8, 26), rnd.uniform(60, 125))
-        parts.append(limb((math.cos(a) * 4, math.sin(a) * 4, -3), top, 2.6, 2.0, 'cane', sides=5))
+        parts.append(twig((math.cos(a) * 4, math.sin(a) * 4, -3), top, 2.6, 2.0, 'cane'))
         parts += _fronds(rnd, 9, top, (48, 70), 16, 'leaf', up=(78, -15), droop=(35, 70), fold=10, segments=3)
     return {'name': name, 'looks': looks, 'parts': parts}
 
@@ -354,14 +373,14 @@ def heliconia():
 def bamboo():
     """A clump of bamboo: canes leaning out from one foot, eight metres up, leaves in their tops. Its middle is solid."""
     rnd = random.Random(10)
-    looks = {'cane': look('jungle/cane', tile=44), 'leaf': look('jungle/spray_light', alpha=True)}
+    looks = {'cane': stick_look('jungle/cane_stick', 44), 'leaf': look('jungle/spray_light', alpha=True)}
     parts = [{'shape': 'cylinder', 'r': 34, 'h': 220, 'sides': 8, 'look': None, 'material': 'wood'}]      # (only to walk into: nothing drawn)
     for k in range(16):
         a, d = math.radians(k * 137.5), rnd.uniform(6, 40)
         foot = (math.cos(a) * d, math.sin(a) * d, -4)
         tall = rnd.uniform(380, 580)
         top = (foot[0] * rnd.uniform(2.6, 4.2) + rnd.uniform(-20, 20), foot[1] * rnd.uniform(2.6, 4.2) + rnd.uniform(-20, 20), tall)
-        parts.append(limb(foot, top, rnd.uniform(2.8, 3.8), 1.6, 'cane', sides=5))
+        parts.append(twig(foot, top, rnd.uniform(2.8, 3.8), 1.6, 'cane'))
         for t in (0.62, 0.84, 1.0)[k % 2:]:
             p = tuple(foot[i] + (top[i] - foot[i]) * t for i in range(3))
             parts += leaves(p, rnd.uniform(60, 85), 'leaf', rnd, flat=0)[::2]
@@ -380,7 +399,7 @@ def shrub(name, looks, stems=7, tall=(110, 170), lean=(15, 50), spray=(55, 80), 
         tilt = math.radians(rnd.uniform(*lean))
         h = rnd.uniform(*tall)
         end = (math.cos(a) * math.sin(tilt) * h, math.sin(a) * math.sin(tilt) * h, math.cos(tilt) * h)
-        parts.append(limb((0, 0, -4), end, rnd.uniform(2.2, 3.4), 1.2, 'stem', sides=4))
+        parts.append(twig((0, 0, -4), end, rnd.uniform(2.2, 3.4), 1.2, 'stem'))
         parts += leaves(end, rnd.uniform(*spray), 'leaf', rnd, flat=1, look2='leaf2')
         for t in [0.55, 0.8][:max(0, sprays - 1)]:
             mid = tuple(v * t for v in end)
@@ -389,7 +408,7 @@ def shrub(name, looks, stems=7, tall=(110, 170), lean=(15, 50), spray=(55, 80), 
 
 
 def _bush_looks(leaf, leaf2):
-    return {'stem': look('jungle/cane', tile=32), 'leaf': look(leaf, alpha=True), 'leaf2': look(leaf2, alpha=True)}
+    return {'stem': stick_look('jungle/twig', 32), 'leaf': look(leaf, alpha=True), 'leaf2': look(leaf2, alpha=True)}
 
 
 def thicket():
@@ -1216,11 +1235,15 @@ def skyline(gd, pr, world, cover, roads=(), count=4, seed=1, progress=None, site
 
 
 _drawn = {}             # texture name -> (colour DDS, normal DDS): each is drawn once a run
+RIM_KEEP = ('cane_stick', 'ti_stick', 'twig', 'bark', 'palm_bark', 'fibre', 'stalk', 'cane')   # (repeat along their part)
 
 
 def texture_files(name):
     if name not in _drawn:
-        _drawn[name] = TEXTURES[name]().files(game=True)       # (relief and size as the game's: texpaint.normal_map)
+        # (a plant's cut-out drawn once across its card: its border clear, or the card carries a bar along its top in the
+        # game, 20 Nov 2026. Not the stems, whose pictures repeat up the stem, nor railings and the like, which repeat)
+        rim = name.split('/')[0] in ('jungle', 'beach') and name.split('/')[-1] not in RIM_KEEP
+        _drawn[name] = TEXTURES[name]().files(game=True, rim=rim)       # (relief and size as the game's: texpaint.normal_map)
     return _drawn[name]
 
 

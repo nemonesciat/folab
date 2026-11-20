@@ -97,7 +97,7 @@ check('and under it only the pole is in the way', len(pole) == 1 and max(abs(v) 
 # --- growing things: leaves see-through where their picture is ---
 yucca = nif.Nif(gd.read_file('meshes\\landscape\\trees\\nvbananayucca.nif'))
 theirs = next(yucca.data[yucca.offsets[i] + 12:yucca.offsets[i] + 15] for i, t in enumerate(yucca.types) if t == 'NiAlphaProperty')
-want = {'palm_tall': (8, 2), 'palm_young': (8, 2), 'banana': (1, 1), 'hibiscus': (0, 2), 'dune_grass': (0, 1), 'tiki_torch': (1, 0)}
+want = {'palm_tall': (8, 2), 'palm_young': (8, 2), 'banana': (1, 1), 'hibiscus': (0, 3), 'dune_grass': (0, 1), 'tiki_torch': (1, 0)}
 for piece, (solid, leafy) in want.items():
     m = made[piece] = modelsets.build(piece)
     data = m['nif']
@@ -110,7 +110,8 @@ for piece, (solid, leafy) in want.items():
           and sum(len(s['i']) // 3 for s in back) == m['triangles'] and n.offsets[-1] + n.sizes[-1] + 8 == len(data))
     cut = [s for s in back if s['alpha'] == 'test']
     check('%s: %d see-through shapes, each over a picture that is see-through' % (piece, leafy), len(cut) == leafy and all(
-        min(dds.decode(m['files'][s['tex']], 64)[2][3::4]) == 0 and max(dds.decode(m['files'][s['tex']], 64)[2][3::4]) == 255 for s in cut))
+        min(dds.decode(m['files'][s['tex']], 4096)[2][3::4]) == 0 and max(dds.decode(m['files'][s['tex']], 4096)[2][3::4]) == 255 for s in cut))
+    # (the full picture: its smaller copies' alpha is scaled to stay as full at the cut, dds.encode(cut=), so under 255)
     if leafy:
         mine = [data[n.offsets[i] + 12:n.offsets[i] + 15] for i, t in enumerate(n.types) if t == 'NiAlphaProperty']
         check('%s: cut out the way the game cuts its plants\' leaves' % piece, len(mine) == leafy and struct.unpack('<HB', mine[0])[0] == struct.unpack('<HB', theirs)[0] == 4844)
@@ -231,7 +232,8 @@ flat = sum(1 for s in crown for i in range(0, len(s['n']), 3) if abs(s['n'][i + 
 check('its crown has leaves facing down as well as sideways: a roof seen from under', flat > 60, flat)
 floor = made['jungle_floor_a']
 check('a floor piece is many plants as one thing, nothing solid, eight metres across',
-      floor['triangles'] > 2000 and not floor['solids'] and floor['box'][3] - floor['box'][0] > 550 and len(floor['shapes']) <= 6, (floor['triangles'], floor['box']))
+      floor['triangles'] > 2000 and not floor['solids'] and floor['box'][3] - floor['box'][0] > 550 and len(floor['shapes']) <= 7,
+      (floor['triangles'], floor['box'], len(floor['shapes'])))     # (7: the stems a see-through look of their own, 19 Nov 2026)
 pj = project.Project.create('Jungle Map')
 gd.overlay = library.Overlay(lambda: pj)
 jops, jrep = modelsets.extra(gd, pj, world, Cover('trees'), 5, which='jungle')

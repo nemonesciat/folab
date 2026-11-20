@@ -123,29 +123,30 @@ class Canvas:
     def text_wide(self, words, high):
         return sum(5.6 if ch != ' ' else 3.5 for ch in words) * high / 6.0 - 1.6 * high / 6.0
 
-    def files(self, bump=3.0, shine=40, game=False):
+    def files(self, bump=3.0, shine=40, game=False, rim=False):
         """(colour DDS, normal map DDS). bump: how strongly heights lean the light; shine: the normal map's fourth
         number, which the game reads as how much the surface gleams. game: as the game's own models' are (`normal_map`):
         relief from the painting too, as strong as the game's, the normal map half the size."""
         if game:
             gl = self.gloss if hasattr(self, 'gloss') and shine is None else [shine if shine is not None else 40] * (self.w * self.h)
-            return colour_map(self), normal_map(self, gl, bump)
+            return colour_map(self, rim), normal_map(self, gl, bump)
         w, h = self.w, self.h
         col = bytearray(w * h * 4)
         nor = bytearray(w * h * 4)
         ht = self.ht
         clamp = lambda v: 0 if v < 0 else 255 if v > 255 else int(v + 0.5)
+        rgb = bled(self) if self.a else self.rgb
         for y in range(h):
             up, dn = (y - 1) % h * w, (y + 1) % h * w
             for x in range(w):
                 i = y * w + x
-                r, g, b = self.rgb[i]
+                r, g, b = rgb[i]
                 col[4 * i:4 * i + 4] = bytes((clamp(r), clamp(g), clamp(b), clamp(255 * self.a[i]) if self.a else 255))
                 sx = (ht[y * w + (x + 1) % w] - ht[y * w + (x - 1) % w]) * bump
                 sy = (ht[dn + x] - ht[up + x]) * bump
                 ln = math.sqrt(sx * sx + sy * sy + 1)
                 nor[4 * i:4 * i + 4] = bytes((clamp(127.5 - 127.5 * sx / ln), clamp(127.5 - 127.5 * sy / ln), clamp(127.5 + 127.5 / ln), shine))
-        return dds.compress(dds.encode(w, h, bytes(col))), dds.compress(dds.encode(w, h, bytes(nor)))   # (compressed as the game keeps its own: dds.compress)
+        return dds.compress(dds.encode(w, h, bytes(col), cut=CUT if self.a else None)), dds.compress(dds.encode(w, h, bytes(nor)))   # (compressed as the game keeps its own: dds.compress)
 
 
 # ---------- the files, as the game's own models have them ----------
@@ -161,13 +162,70 @@ RELIEF_REACH = 3            # (pixels: what is lighter or darker than round it, 
 HALF_FROM = 512             # a picture this wide or more has its normal map at half its size
 
 
-def colour_map(c):
+CUT = 64                    # (where the game cuts a see-through picture: nifmake.ALPHA_CUT)
+
+
+def colour_map(c, rim=False):
+    """rim: a cut-out drawn once across its card (a plant's leaf or tuft), its border made clear (dds._clear_rim)."""
     w, h = c.w, c.h
     col = bytearray(w * h * 4)
     cl = lambda v: 0 if v < 0 else 255 if v > 255 else int(v + 0.5)
-    for i, (r, g, b) in enumerate(c.rgb):
+    rgb = bled(c) if c.a else c.rgb
+    for i, (r, g, b) in enumerate(rgb):
         col[4 * i:4 * i + 4] = bytes((cl(r), cl(g), cl(b), cl(255 * c.a[i]) if c.a else 255))
-    return dds.compress(dds.encode(w, h, bytes(col)))
+    # (a stem down a see-through strip, stick(): halved plainly, so the stem stays solid in every smaller copy instead of
+    # being scaled down to the cut with the rest of the picture's coverage)
+    cut = CUT if c.a and not getattr(c, 'plain_halving', False) else None
+    strips = getattr(c, 'strips', None)             # (a sheet of several pictures: plantsheet.py)
+    if strips:
+        return dds.compress(dds.encode(w, h, bytes(col), cut=CUT, strips=strips))
+    return dds.compress(dds.encode(w, h, bytes(col), cut=cut, rim=rim and cut is not None))
+
+
+def bled(c):
+    """A see-through picture's colours with what is drawn spread into the clear parts round it (each clear pixel takes
+    the colour of what shows nearest, through ever smaller copies weighted by alpha), so the game's filtering never mixes
+    the clear parts' own colour into a leaf's edge. A part-clear pixel keeps its share of its own colour."""
+    w, h = c.w, c.h
+    levels = [(w, h, list(c.rgb), list(c.a))]
+    while levels[-1][0] > 1 or levels[-1][1] > 1:
+        lw, lh, rgb, al = levels[-1]
+        nw, nh = max(1, lw // 2), max(1, lh // 2)
+        fx, fy = lw // nw, lh // nh
+        nrgb, nal = [], []
+        for y in range(nh):
+            for x in range(nw):
+                t = [0.0, 0.0, 0.0]
+                a = 0.0
+                for dy in range(fy):
+                    for dx in range(fx):
+                        i = (y * fy + dy) * lw + x * fx + dx
+                        q = al[i]
+                        r = rgb[i]
+                        t[0] += r[0] * q
+                        t[1] += r[1] * q
+                        t[2] += r[2] * q
+                        a += q
+                nrgb.append(tuple(v / a for v in t) if a > 0 else (0.0, 0.0, 0.0))
+                nal.append(min(1.0, a))                 # (some of it shows: its colour is real)
+        levels.append((nw, nh, nrgb, nal))
+    for k in range(len(levels) - 2, -1, -1):            # (from the smallest up: what is clear takes the copy above's colour)
+        lw, lh, rgb, al = levels[k]
+        pw, ph, prgb, _pal = levels[k + 1]
+        fx, fy = max(1, lw // pw), max(1, lh // ph)
+        out = []
+        for y in range(lh):
+            for x in range(lw):
+                i = y * lw + x
+                q = min(1.0, al[i])
+                if q >= 1.0:
+                    out.append(rgb[i])
+                    continue
+                p = prgb[min(ph - 1, y // fy) * pw + min(pw - 1, x // fx)]
+                r = rgb[i]
+                out.append((r[0] * q + p[0] * (1 - q), r[1] * q + p[1] * (1 - q), r[2] * q + p[2] * (1 - q)))
+        levels[k] = (lw, lh, out, [1.0] * (lw * lh))
+    return levels[0][2]
 
 
 def _blur(v, w, h, r):
@@ -569,6 +627,39 @@ def stalk(colour=(120, 150, 84), size=128, seed=35):
         col = _mix(colour, (140, 112, 72), max(0.0, brown - 0.6) * 2)
         return _shade(col, 0.85 + 0.25 * g), 0.45 + 0.1 * g
     c.paint(fn)
+    return c
+
+
+# Where a stick's stem lies across its picture (u from the left): a quarter of the width, on whole halvings of 64 so the
+# smaller copies keep it sharp down to 4 across. modelmake's 'stick' lays a strip at least STICK_LEAST wide over it and
+# shows only the band, so a stem a few units thick is drawn on a strip nv-rs doesn't take for a cable (`shadowcast`).
+STICK_BAND = (0.5, 0.75)
+
+
+def stick(colour=(96, 84, 58), w=64, h=256, rings=0, ring=(70, 62, 44), brown=(120, 96, 64), seed=60):
+    """A stem seen from the side, down the picture (repeats down it), see-through either side of it: lit on its round
+    middle and dark at its edges, streaked along its length; rings: nodes across it (bamboo's, a ti cane's scars),
+    that many down the picture."""
+    c = Canvas(w, h, clear=_shade(colour, 0.8))
+    lo, hi = int(w * STICK_BAND[0]), int(w * STICK_BAND[1])
+    half = (hi - lo) / 2.0
+    streak, big = Noise(seed, 32), Noise(seed + 1, 4)
+    for y in range(h):
+        node = 0.0
+        if rings:
+            d = abs(((y + 0.5) * rings / h) % 1.0 - 0.5) * 2         # 1 at a node, 0 between
+            node = max(0.0, (d - 0.9) / 0.1)
+        for x in range(lo, hi):
+            s = (x + 0.5 - lo - half) / half                         # -1 at one edge, 1 at the other
+            z = math.sqrt(max(0.0, 1 - s * s))
+            g = streak.at(x * 32.0 / w * 4, y * 32.0 / h)
+            col = _mix(colour, brown, max(0.0, big.at(x * 4.0 / w, y * 4.0 / h) - 0.55) * 1.6)
+            col = _mix(col, ring, node * 0.8)
+            i = y * w + x
+            c.rgb[i] = _shade(col, (0.55 + 0.5 * z) * (0.9 + 0.2 * g))
+            c.ht[i] = 0.25 + 0.5 * z + 0.15 * node + 0.04 * g
+            c.a[i] = 1.0
+    c.plain_halving = True          # (colour_map: its smaller copies keep the stem solid)
     return c
 
 

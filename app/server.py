@@ -1216,8 +1216,7 @@ def stale_copies():
         mine = None
     nv = None
     if _engine() == 'nv-rs':
-        f = _nvrs_folder()
-        nv = nvrs.mods_dir(f) if f else None
+        nv = [nvrs.mods_dir(f) for f in nvrs.all_found(load_settings().get('nvrs_dir'))]
     out = copies.stale(built, lo, mine, nv)
     # far views the game would draw nothing of (copies.far_view: settings and files counted from different corners)
     out += copies.far_view([install._assets_folder(built)] + ([mine] if mine else []))
@@ -1596,8 +1595,23 @@ def _play_nvrs(plugins):
         if os.path.basename(p) == playtest.TEST_PLUGIN:
             playtest.test_assets(p)         # (no JIP there for the script that loads a save: cleared out)
     out = {'install': nvrs.put_in(folder, plugins, _nvrs_setup()), 'autoload': None}
+    out['also'] = _nvrs_others(folder, plugins)
     out['via'] = nvrs.launch(folder)
     return out
+
+
+def _nvrs_others(folder, plugins, setup=None):
+    """The same into every other nv-rs on this PC (nvrs.all_found), so none plays an older build than this one."""
+    done = []
+    for other in nvrs.all_found(load_settings().get('nvrs_dir')):
+        if os.path.normcase(other) == os.path.normcase(folder):
+            continue
+        try:
+            nvrs.put_in(other, plugins, setup if setup is not None else _nvrs_setup())
+            done.append(other)
+        except Exception as e:                       # (one that can't take it is said, the one being started still goes)
+            done.append('%s: %s' % (other, e))
+    return done
 
 
 def _nvrs_setup():
@@ -1646,6 +1660,7 @@ def play_nvrs_setup():
         raise ValueError("No folder is on in nv-rs's list yet.")
     folder = _nvrs_folder()
     out = {'install': nvrs.put_in(folder, [], setup)}
+    out['also'] = _nvrs_others(folder, [], setup)
     out['via'] = nvrs.launch(folder)
     out['state'] = state()
     return out
@@ -2155,7 +2170,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(play_nvrs_setup())
                 if u.path == '/api/nvrs/take_out':
                     not_while_playing()
-                    return self.send({'removed': nvrs.take_out(_nvrs_folder()), 'state': state()})
+                    return self.send({'removed': [nvrs.take_out(f) for f in nvrs.all_found(load_settings().get('nvrs_dir'))], 'state': state()})
                 if u.path == '/api/give':
                     return self.send(give(body))
                 if u.path == '/api/project/new':

@@ -3,12 +3,14 @@ from the Kakaʻako shore north round downtown and Chinatown, then up the map's w
 Built early, by the emergency government and the Navy, to turn back the dying; kept up since against what lives in the
 ruins. A clean separation: tall, closed, one gate.
 
-    the wall     the game's McCarran wall (concrete, 754 tall, 350 thick, along its y: its record's
-                 bounds say x, swapped; 19 Nov 2026 every piece stood 90 degrees across its line): long pieces (2048) where the
-                 ground along them is even within `EVEN`, short ones (512) where it isn't, a tower (660 square, ~1050
-                 tall) where even a short piece would rise more than `STEEP` along its length (the uphill end would sit
-                 too low). Every piece stands at the lowest ground under it, sunk `SINK`, so none hangs; pieces overlap
-                 `OVERLAP`, so no seam lets anyone through. A tower at every bend, and one every `TOWER_EVERY` along.
+    the wall     the game's McCarran wall (concrete, 754 tall, 160 thick as drawn, along its x): long pieces (2048)
+                 where the ground along them is even within `EVEN`, short ones (512) where it isn't, stepped up steep
+                 ground (each at the lowest ground under it, so its uphill end sits deeper); where even a short piece
+                 would rise more than `STEEP` (a cliff) none, the cliff closing the way, a tower each side of it. Every piece stands at the lowest ground under it, sunk `SINK`, so
+                 none hangs; pieces overlap `OVERLAP`. A tower (round, its body `TOWER_BODY` across above a wider foot)
+                 at every bend and every `TOWER_EVERY` along, each wall end reaching `INTO` from its middle so both of its
+                 corners are inside the body (19 Nov 2026: spaced by the 660 foot they stood 130 short, daylight beside
+                 every tower; on steep ground towers alone stood in a row with 288 of air between).
                  Where the line starts in the sea the wall goes on into it as a breakwater, out to water `DEEP` deep.
     the gate     the McCarran main gate where the line crosses `GATE_ROAD` (the road out to the harbour and Pearl), a
                  tower each side, a guard tower and sandbags on the inside. Shut: nobody goes through yet.
@@ -28,9 +30,12 @@ LONG, SHORT, TOWER = 'NVMcCarranWallReg02', 'NVMcCarranWallReg01', ('NVMcCarranW
 GATE, GUARD = 'NVMcCarranMainGate', 'NVGuardTower01'
 SANDBAG = 'SandbagStraight'
 LONG_LEN, SHORT_LEN, TOWER_LEN, GATE_LEN = 2048.0, 512.0, 660.0, 1230.0
+TOWER_BODY = 348.0             # (a tower's body above its foot, as drawn: radius 174; the 660 is its foot)
+INTO = 120.0                   # (a wall end this far from a tower's middle: its corners, 80 aside, are inside the body)
+GATE_TOWER = 40.0              # (the gate's ends this far short of its towers' middles)
 LOW = 249.0                    # (the long and short pieces' bottom lies this far under their origin)
 OVERLAP = 24.0
-EVEN, STEEP = 140.0, 330.0
+EVEN, STEEP = 140.0, 520.0
 SINK = 90.0
 TOWER_EVERY = 12000.0
 DEEP = 520.0
@@ -91,7 +96,9 @@ def plan(line, ground_at, gate_t=None, rnd=None):
 
     g0 = g1 = None
     if gate_t is not None:
-        g0, g1 = gate_t - GATE_LEN / 2 - TOWER_LEN, gate_t + GATE_LEN / 2 + TOWER_LEN
+        g0, g1 = gate_t - GATE_LEN / 2 - GATE_TOWER, gate_t + GATE_LEN / 2 + GATE_TOWER    # (its towers' middles)
+
+    cliff = [False]
 
     def wall_piece(a, ux, uy, rz, t, plen, left):
         """Lay one wall piece starting t along the leg from a; returns how far it reaches (or None when nothing fits)."""
@@ -103,8 +110,22 @@ def plan(line, ground_at, gate_t=None, rnd=None):
         if not lo:
             return t + SHORT_LEN
         if lo[1] - lo[0] > STEEP:
-            tower_at(x0 + ux * TOWER_LEN / 2, y0 + uy * TOWER_LEN / 2)
-            return t + TOWER_LEN
+            # (a cliff, steeper than even a stepped piece can stand on: the wall stops against it, a tower where it meets
+            # the cliff each side; the cliff is the wall there. Towers 264 apart all the way up stood in rows, 19 Nov 2026)
+            # (one steep step alone isn't a cliff: a short piece stepped there, as on any slope)
+            x1, y1 = x0 + ux * plen * 2, y0 + uy * plen * 2
+            lo2 = low_under(x0 + ux * plen, y0 + uy * plen, x1, y1)
+            if cliff[0] or (lo2 and lo2[1] - lo2[0] > STEEP):
+                if not cliff[0]:
+                    c = t + OVERLAP + INTO
+                    tower_at(a[0] + ux * c, a[1] + uy * c)
+                    cliff[0] = True
+                return t + SHORT_LEN
+            plen = SHORT_LEN
+        elif cliff[0]:
+            c = t + INTO - 10.0
+            tower_at(a[0] + ux * c, a[1] + uy * c)
+            cliff[0] = False
         if lo[0] < -DEEP:                     # (deep water: no breakwater out there)
             return t + SHORT_LEN
         out.append((LONG if plen == LONG_LEN else SHORT, x0 + ux * 256, y0 + uy * 256, lo[0] - SINK + LOW, rz))
@@ -115,40 +136,41 @@ def plan(line, ground_at, gate_t=None, rnd=None):
     for a, b in zip(line, line[1:]):
         L = math.hypot(b[0] - a[0], b[1] - a[1])
         ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
-        rz = _turn_y(ux, uy)            # (its mesh runs along its y: the record's bounds have x and y swapped)
+        rz = _turn_x(ux, uy)
         tower_at(*a)
-        t = TOWER_LEN / 2 - OVERLAP
+        t = INTO
         while t < L - OVERLAP:
             left = L - t
-            if g0 is not None and run0 <= g0 <= run0 + L and t >= g0 - run0 - OVERLAP:
+            if g0 is not None and run0 <= g0 <= run0 + L and t >= g0 - run0 - INTO - OVERLAP - 1.0:
                 # (the gate: a tower, the gate, a tower)
                 c = gate_t - run0
-                tower_at(a[0] + ux * (c - GATE_LEN / 2 - TOWER_LEN / 2), a[1] + uy * (c - GATE_LEN / 2 - TOWER_LEN / 2))
+                tower_at(a[0] + ux * (c - GATE_LEN / 2 - GATE_TOWER), a[1] + uy * (c - GATE_LEN / 2 - GATE_TOWER))
                 gx, gy = a[0] + ux * c, a[1] + uy * c
                 lo = low_under(gx - ux * GATE_LEN / 2, gy - uy * GATE_LEN / 2, gx + ux * GATE_LEN / 2, gy + uy * GATE_LEN / 2, half=286)
                 if lo:
                     out.append((GATE, gx, gy, lo[0] - SINK / 3, _turn_y(ux, uy)))
-                tower_at(a[0] + ux * (c + GATE_LEN / 2 + TOWER_LEN / 2), a[1] + uy * (c + GATE_LEN / 2 + TOWER_LEN / 2))
-                t = g1 - run0 - OVERLAP
+                tower_at(a[0] + ux * (c + GATE_LEN / 2 + GATE_TOWER), a[1] + uy * (c + GATE_LEN / 2 + GATE_TOWER))
+                t = g1 - run0 + INTO
                 g0 = None
                 since_tower = 0.0
                 continue
             plen = LONG_LEN if left >= LONG_LEN else SHORT_LEN
             if g0 is not None and run0 <= g0 <= run0 + L:
-                room = g0 - run0 - t + OVERLAP
+                room = g0 - run0 - INTO - t
                 if room < plen:
                     plen = SHORT_LEN
-                    if room < SHORT_LEN:            # (a short piece ending at the gate's tower, reaching back)
-                        t = g0 - run0 + OVERLAP - SHORT_LEN
-            if left < plen:                         # (a leg's end: a short piece reaching back from it)
+                    if room < SHORT_LEN:            # (a short piece ending in the gate's tower, reaching back)
+                        t = g0 - run0 - INTO - SHORT_LEN
+            if left < plen:                         # (a leg's end: a short piece reaching back from the bend's tower)
                 t = L - SHORT_LEN
                 plen = SHORT_LEN
             reach = wall_piece(a, ux, uy, rz, t, plen, left)
             since_tower += reach - t
             t = reach - OVERLAP
             if since_tower >= TOWER_EVERY and L - t > TOWER_LEN * 3 and not (g0 is not None and abs(g0 - run0 - t) < 3 * TOWER_LEN):
-                tower_at(a[0] + ux * (t + TOWER_LEN / 2), a[1] + uy * (t + TOWER_LEN / 2))
-                t += TOWER_LEN - OVERLAP
+                c = reach                           # (the piece's end at the tower's middle, the next starting INTO past it)
+                tower_at(a[0] + ux * c, a[1] + uy * c)
+                t = c + INTO - OVERLAP
                 since_tower = 0.0
         run0 += L
     tower_at(*line[-1])

@@ -495,8 +495,12 @@ class Builder:
         for a, b in zip(pts, pts[1:]):
             L = math.hypot(b[0] - a[0], b[1] - a[1])
             ux, uy = (b[0] - a[0]) / L, (b[1] - a[1]) / L
-            for i in range(int(L // plen)):
-                mx, my = a[0] + ux * (i + 0.5) * plen, a[1] + uy * (i + 0.5) * plen
+            # (evenly from end to end, each step no longer than plen: the side reaches both corners. Steps of plen from
+            # one corner left the rest of the side open at the other, 200 to 300 of daylight by a corner tower, 19 Nov 2026)
+            n = max(1, math.ceil(L / plen))
+            step = L / n
+            for i in range(n):
+                mx, my = a[0] + ux * (i + 0.5) * step, a[1] + uy * (i + 0.5) * step
                 if gap_dir is not None:
                     gx, gy = pl.x + math.cos(gap_dir) * 1e4, pl.y + math.sin(gap_dir) * 1e4
                     # (the piece nearest the line to the road is left out, and those within gap/2 of it)
@@ -511,7 +515,7 @@ class Builder:
                 if piece == 'junk':
                     yaw = math.atan2(ux, uy)            # (junk walls lie along their y)
                 else:
-                    yaw = math.atan2(ux, uy)            # (the McCarran wall's mesh runs along its y, whatever its bounds say)
+                    yaw = math.atan2(-uy, ux)           # (the McCarran wall along its x)
                 pl.put(e, mx, my, yaw, r=plen / 2, sink=30.0, check=False)
                 pl.taken.append((mx, my, 120.0))
 

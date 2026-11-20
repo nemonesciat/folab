@@ -111,7 +111,9 @@ class ModForms(scriptc.GameForms):
 
     def find_edid(self, name):
         key = self.mine.get(name.lower())
-        if key is None:
+        if key is None or name.lower() == 'player':
+            # ('player' is the player's ref, whatever the mod does to the player's own record, NPC_ 7, whose editor ID is
+            # Player too: overridden for its name, 19 Nov 2026, it took 'player' from every script)
             return super().find_edid(name)
         if key.startswith('+'):
             r = self._rec(key)

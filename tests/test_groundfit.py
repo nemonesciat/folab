@@ -126,6 +126,34 @@ check('… nothing off the road moves', all(o['ref'] == '+C1' for o in ops))
 pr.cells[ops[0]['cell']]['refs']['+C1']['p'] = ops[0]['p']
 check('… and a second run does nothing', roadbed.onto_roads(gd, pr, None)[1]['lifted'] == 0)
 
+# ---------- daylight under a wall: let down, or the ground filled where a door won't let it go further ----------
+CAT_DOOR = [{'key': HOUSE, 'mid': 0.0, 'edid': 'NVHouse01', 'doors': [{'x': 0.0, 'y': -200.0, 'z': 0.0}]}]
+pr = FakePR(gd, lambda x, y: 0.0)
+ck = pr.put(gd, '+H1', HOUSE, 6144, 6144, 120.0)
+ops, rep = groundfit.close_gaps(gd, pr, None, cat=CAT)
+mv = [o for o in ops if o['op'] == 'move' and o['ref'] == '+H1']
+check('a house with daylight under it all round is let down into the ground', mv and abs(mv[0]['p'][2] - (0 - groundfit.SINK)) < 1, mv and mv[0]['p'])
+check('… and no ground is raised for it', not any(o['op'] == 'land' for o in ops), rep)
+pr.cells[ck]['refs']['+H1']['p'] = mv[0]['p']
+check('… and a second run does nothing', groundfit.close_gaps(gd, pr, None, cat=CAT)[1].get('gaps') == 0)
+# on a slope with its door on the uphill side: let down only till the door's sill meets the ground, the rest filled
+slope2 = lambda x, y: (y - 6144) * 0.3
+pr = FakePR(gd, slope2)
+pr.put(gd, '+H1', HOUSE, 6144, 6144, slope2(6144, 6144 + 232) + 0.0)   # (foot level with the uphill ground)
+ops, rep = groundfit.close_gaps(gd, pr, None, cat=CAT_DOOR)
+for o in ops:
+    if o['op'] == 'land':
+        pr.land[o['cell']] = o['land']
+    elif o['op'] == 'move':
+        pr.cells[o['cell']]['refs'][o['ref']]['p'] = o['p']
+g = roadgen.Ground(gd, pr, None)
+z = list(pr.cells.values())[0]['refs'].get('+H1', None) or next(c['refs']['+H1'] for c in pr.cells.values() if '+H1' in c['refs'])
+z = z['p'][2]
+door_g = g.at(6144, 6144 - 200)
+check('the door on the downhill wall is never buried more than DOOR_BURY', door_g - z <= groundfit.DOOR_BURY + 1, (z, door_g))
+low = min(g.at(6144 + dx, 6144 - 232) for dx in (-150, 0, 150))
+check('… and the ground under that wall comes up to its foot', z - low < groundfit.GAP, (z, low))
+
 # ---------- junk hanging off a slope is let down ----------
 pr = FakePR(gd, lambda x, y: (x - 8192) * 0.5)
 pr.put(gd, '+T1', TENT, 8192, 8192, 60.0)

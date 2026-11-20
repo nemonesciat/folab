@@ -59,8 +59,9 @@ def others(built, lo=None, mod_folder=None, nvrs_mods=None):
             if mine and os.path.normcase(os.path.abspath(folder)) == mine:
                 continue
             look('the MO2 mod "%s"' % m['name'], folder)
-    if nvrs_mods:
-        look("nv-rs's mods folder", nvrs_mods, True)
+    for nm in ([nvrs_mods] if isinstance(nvrs_mods, str) else nvrs_mods or []):
+        # (every nv-rs on the PC: each one started plays its own mods folder)
+        look("nv-rs's mods folder (%s)" % os.path.basename(os.path.dirname(nm)), nm, True)
     return found
 
 

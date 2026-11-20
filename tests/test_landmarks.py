@@ -106,7 +106,10 @@ short = [d for d in docks if abs(d['p'][1] - ly - 1500) < 1]
 check('a short one is built long enough to be a pier', len(short) >= 6, len(short))
 check('boats lie beside them, some gone down', hb['boats'] >= 3 and hb['boats'] + hb['sunk'] + hb['aground'] >= 5, hb)
 floats = [o for o in B3.ops if gd.edid(gd.from_key(o['base'])).lower().startswith('boat02') and abs(o['p'][3]) < 0.06]
-check('the ones afloat sit in the water, not over or under it', all(-80 < o['p'][2] - level < 0 for o in floats) and bool(floats), len(floats))
+# (their origins over the water by landmarks.MOORED, as the game's own moored boats stand 10 to 60 over theirs: under it
+# only their cabins showed, 19 Nov 2026)
+check('the ones afloat sit on the water as the game\'s do, their origins 0 to 70 over it',
+      all(0 < o['p'][2] - level < 70 for o in floats) and bool(floats), [round(o['p'][2] - level) for o in floats])
 check('nothing is built where there is no water', landmarks.Batch(gd, project.Project.create('Dry'), world).harbour([[(x, y), (x + 3000, y)]])['dock'] == 0)
 
 # ---------- open backs ----------

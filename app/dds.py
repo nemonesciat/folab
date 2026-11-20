@@ -103,23 +103,147 @@ def decode(data, want=128):
     return w, h, bytes(out)
 
 
-def encode(w, h, rgba):
+def _clear_rim_cols(px, w, h, x0, x1, n):
+    """_clear_rim for one strip of a sheet: columns x0 to x1 (and their top and bottom rows) clear n deep at its edges."""
+    out = bytearray(px)
+    for y in range(h):
+        edge_row = y < n or y >= h - n
+        for x in range(x0, min(x1, w)):
+            if edge_row or x < x0 + n or x >= x1 - n:
+                out[(y * w + x) * 4 + 3] = 0
+    return bytes(out)
+
+
+def _keep_cover_cols(px, w, h, x0, x1, cut, share):
+    """_keep_cover for one strip of a sheet (columns x0 to x1)."""
+    idx = [(y * w + x) * 4 + 3 for y in range(h) for x in range(x0, min(x1, w))]
+    al = [px[i] for i in idx]
+    n = len(al) or 1
+    lo, hi = 0.0, 8.0
+    for _ in range(16):
+        mid = (lo + hi) / 2
+        if sum(1 for a in al if a * mid > cut) / n < share:
+            lo = mid
+        else:
+            hi = mid
+    s = (lo + hi) / 2
+    out = bytearray(px)
+    for i, a in zip(idx, al):
+        out[i] = min(255, int(a * s + 0.5))
+    return bytes(out)
+
+
+def encode(w, h, rgba, cut=None, rim=False, strips=None):
     """A plain 32-bit DDS with its full chain of smaller copies, from RGBA bytes (rows from the top): what a picture
-    from elsewhere becomes for the game. Bigger than a compressed one, and exactly the picture."""
+    from elsewhere becomes for the game. Bigger than a compressed one, and exactly the picture.
+
+    cut: for a cut-out (drawn where alpha is at least cut, 0-255: leaves, a fence): each smaller copy's colour is the
+    mean of what shows (weighted by alpha, so the clear parts' colour never darkens it), and its alpha is lifted or
+    lowered until as much of it is at the cut or over as of the picture itself. Plain halving makes a bush blobbier and
+    darker the further off it is (FOLab's leaves: a fifth darker and half as dense again at 1/32 size)."""
     chain = []
     cur, cw, ch = rgba, w, h
+    share = None
+    if cut is not None:
+        share = sum(1 for a in rgba[3::4] if a > cut) / float(w * h)
+    shares = None
+    if strips:
+        # (a sheet of several pictures side by side, each its own strip: strips [(x0, x1, plain, rim)], in the full
+        # picture's columns; each keeps its own share over the cut, or, plain (a stem), is halved plainly)
+        shares = [None if plain else sum(1 for y in range(h) for x in range(x0, x1) if rgba[(y * w + x) * 4 + 3] > cut) / float((x1 - x0) * h)
+                  for x0, x1, plain, _r in strips]
     while True:
+        if rim and cut is not None and cw > 2 and ch > 2 and not strips:
+            cur = _clear_rim(cur, cw, ch, 2 if cur is rgba else 1)
+        if strips and cw > 2 and ch > 2:
+            f = cw / float(w)
+            for x0, x1, _plain, r in strips:
+                if r:
+                    cur = _clear_rim_cols(cur, cw, ch, int(x0 * f), int(x1 * f), 2 if cur is rgba else 1)
         bgra = bytearray(cur)
         bgra[0::4], bgra[2::4] = cur[2::4], cur[0::4]
         chain.append(bytes(bgra))
         if cw == 1 and ch == 1:
             break
-        cur, cw, ch = _half(cur, cw, ch)
+        if cut is None:
+            cur, cw, ch = _half(cur, cw, ch)
+        elif strips:
+            cur, cw, ch = _half_cutout(cur, cw, ch)
+            f = cw / float(w)
+            for (x0, x1, plain, _r), sh in zip(strips, shares):
+                a, b = int(x0 * f), max(int(x0 * f) + 1, int(x1 * f))
+                if plain or b - a < 1:
+                    # (the stem's strip: its alpha as the most of what each pixel covers, so it stays solid)
+                    continue
+                cur = _keep_cover_cols(cur, cw, ch, a, b, cut, sh)
+        else:
+            cur, cw, ch = _half_cutout(cur, cw, ch)
+            cur = _keep_cover(cur, cut, share)
     # flags: caps, height, width, pitch, pixel format, mipmap count; RGB + alpha masks in the pixel format
     head = b'DDS ' + struct.pack('<7I', 124, 0x2100F, h, w, w * 4, 0, len(chain)) + b'\0' * 44
     head += struct.pack('<2I4s5I', 32, 0x41, b'\0\0\0\0', 32, 0xFF0000, 0xFF00, 0xFF, 0xFF000000)
     head += struct.pack('<5I', 0x401008, 0, 0, 0, 0)
     return head + b''.join(chain)
+
+
+def _clear_rim(px, w, h, n):
+    """A cut-out's outermost n rows and columns made clear. The game repeats a picture across its edges, so a card's top
+    edge samples the picture's bottom row: FOLab's grass had 169 solid pixels along it and every card of every plant
+    carried a dark bar along its top in nv-rs, 20 Nov 2026."""
+    out = bytearray(px)
+    for y in range(h):
+        edge_row = y < n or y >= h - n
+        for x in range(w):
+            if edge_row or x < n or x >= w - n:
+                out[(y * w + x) * 4 + 3] = 0
+    return bytes(out)
+
+
+def _half_cutout(px, w, h):
+    """_half for a cut-out: alpha the plain mean, colour the alpha-weighted mean (the plain mean where all is clear)."""
+    nw, nh = max(1, w // 2), max(1, h // 2)
+    fx, fy = w // nw, h // nh
+    out = bytearray(nw * nh * 4)
+    for y in range(nh):
+        for x in range(nw):
+            t = [0, 0, 0, 0]
+            plain = [0, 0, 0]
+            for dy in range(fy):
+                row = (y * fy + dy) * w
+                for dx in range(fx):
+                    o = (row + x * fx + dx) * 4
+                    a = px[o + 3]
+                    for c in range(3):
+                        t[c] += px[o + c] * a
+                        plain[c] += px[o + c]
+                    t[3] += a
+            n = fx * fy
+            q = (y * nw + x) * 4
+            for c in range(3):
+                out[q + c] = (t[c] + t[3] // 2) // t[3] if t[3] else plain[c] // n
+            out[q + 3] = t[3] // n
+    return bytes(out), nw, nh
+
+
+def _keep_cover(px, cut, share):
+    """A copy's alpha scaled so that `share` of it is over `cut` (Castano's coverage: a bisection on the scale). Over, not at:
+    the game draws only alpha greater than its threshold (NiAlphaProperty test GREATER, nv-rs's too), and a picture of only
+    clear and solid (a stem) was scaled to exactly the cut in every smaller copy, so none of it drew past a couple of
+    metres (20 Nov 2026)."""
+    al = px[3::4]
+    n = len(al)
+    lo, hi = 0.0, 8.0
+    for _ in range(16):
+        mid = (lo + hi) / 2
+        got = sum(1 for a in al if a * mid > cut) / n
+        if got < share:
+            lo = mid
+        else:
+            hi = mid
+    s = (lo + hi) / 2
+    out = bytearray(px)
+    out[3::4] = bytes(min(255, int(a * s + 0.5)) for a in al)
+    return bytes(out)
 
 
 def _half(px, w, h):

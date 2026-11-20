@@ -62,6 +62,42 @@ camp with a person, a secret or a fight). Every ridge end is also a trailhead on
 | Mariner's Ridge (Kaluanui Rd) | 22, 4 | **Settlement: the Crow's Nest.** A pirate crew's hill camp watching Maunalua Bay and the marina | pirates |
 | Kamehame Ridge (Kamehame Dr) | 30, 5 | *Stop:* a Huáng watchtower, their only post on the city side, looking down on the "barbarians" | the Huáng |
 
+**The Heights [decided, 19 Nov 2026]:** the old rich who paid for places in the Vault and were shut out when it
+sealed. They remember being shut out, but don't know what goes on up there: the Vault stayed sealed a long while, and
+they have only heard rumours. Any chance of being let in, looking as they do now, is gone. They hate the Vault, and
+may try to draft you into getting in somehow. **What for [decided, 19 Nov 2026]:** they want in. Not for what they
+paid: they know it is still there 200 years later, going strong with lights and defences, while they have lived out
+in the waste, and they feel taking it for themselves would give them the comfort and security denied them so long.
+They don't know where its prosperity comes from.
+
+**The Kalihi lord [decided, 19 Nov 2026]:** holds Kalihi and the wall for the Kahuna from Alewa Fort. Too close to the
+court to be disloyal, but powerful in his own right, and he keeps the secrets of Ground Zero to himself: what his
+scouts find beyond the wall goes no further than him.
+
+**Loa Gate [decided, 19 Nov 2026]:** a market and the den of all the scum on the island: rogue pirates, random
+scoundrels, Huáng outcasts, Vault outcasts. The only glue holding them together is their common revulsion from the
+world outside. More a separate city in the hills for scoundrels than a shanty town: it has deceptively more manpower
+than its outsider standing suggests. Its leader may be a charismatic founder (a Romulus) who built a city on the hill,
+and Loa is growing into a swelling rival power the Kahuna can't face openly.
+
+**The Holdouts [decided, 19 Nov 2026]:** "taxes due" people: owing, behind, refusing. If you side with the Kahuna,
+your task may be bringing them to tribute.
+
+**Rising with a side [decided, 19 Nov 2026]:** part of winning Waikiki over is helping bring the Holdouts back to
+tribute and helping the Kahuna take the Kāhala Hotel and the fief round it (the pirates' land stronghold, nearest
+Waikiki). To rise with Loa Gate instead, you take Kāhala for Loa.
+
+**The Kahuna and the truth [decided, 19 Nov 2026]:** he can only guess what happens to the people sold, which is
+nearly knowing, but he does what he must to keep his position secure. He has no direct knowledge or evidence, only
+rumours and conspiracy talk; he has never been to the Vault, secretly or otherwise.
+
+**The Vault's hand [decided, 19 Nov 2026]:** it plays on and manipulates the factions below without directing them
+openly. The rise of Loa's Romulus, and the island's other troubles, may be its manipulation, experimenting and
+manoeuvring.
+
+**The balance of power [decided, 19 Nov 2026]:** Waikiki is not as powerful as it lets on (the guns don't work, and
+more). The pirates are the island's raider faction: everywhere and disorganised.
+
 ## The Crest Trail [decided, 18 Nov 2026]
 
 One long path along the top of the Koʻolau joins every ridge top, and leads on to Kaʻau Crater (the Vault, about cell
@@ -98,6 +134,22 @@ areas are guesses drawn round each place). The last five areas, settled 19 Nov 2
 | The wall's guard | Alewa Fort, top of Alewa Drive | -30, 18 |
 
 Plus the ridge settlements and stops below.
+
+## The settlers and the trade [decided, 19 Nov 2026]
+
+- **Why they sell people, though they need nothing from outside: it's the price of being left alone.** The only way
+  down the windward side is their secret cliff trail, so runaways from the Vault come down into Waimānalo; so do
+  unwelcome outsiders who cross north of the mountains (all outsiders are barbarians to them). A stranger hiding in
+  their fields would bring the pirates, and the Vault's own, over the ridge. So, by a quiet pact made long ago, every
+  runaway and every unwelcome outsider is caught and handed to the pirates at Makapuʻu, and the pirates and the Vault
+  leave Waimānalo alone: no raids, no catchers, no tribute. They take nothing for it, so they stay the one side whose
+  power is its own.
+- **They know the Vault's secret:** the runaways tell them before they're handed over. They know what they send
+  people back to and do it anyway: better complicit than next.
+- **The Castaway among them:** you can get on with them to an extent but will never be fully accepted; you must at
+  least be free to walk round Waimānalo and do things. The Pip-Boy may let you get away with it, a "mandate of
+  heaven" (data on the hand): you're no common rabble to be sold. Lose standing with them and you are quickly
+  unwelcome, then hostile.
 
 ## The settlers' land: built like old China [decided, 19 Nov 2026: the user's idea]
 
@@ -177,7 +229,33 @@ out: Hawaiʻi is about 4,000 km from California.)
   asks your name, looks you over and asks where you think you're from: the game's character screens happen as that
   talk (as Doc Mitchell does it in New Vegas).
 - **The Pip-Boy isn't yours:** it washed up with the boat, on the wrist of someone who didn't make it, and is taken
-  from them. Who had it, and why a slave boat bound for the Vault carried it, is a thread to follow. **The one who
+  from them. **Whose it was [decided, 19 Nov 2026]:** a runaway from the Vault, being taken back: their own Pip-Boy,
+  worn since the Vault gave it them, the one person in the story who has seen inside. Someone wanted them dead before
+  they could talk, so the boat went down in the storm with all its cargo, the Castaway too; the storm made it look like
+  an accident. **Who had it sunk [decided, 19 Nov 2026]: the Vault,** paying the pirates to do it (it is the only
+  one that pays them, and the only one with a crew at sea to hire). So the question you carry all game is answered at
+  the Vault's door, where every ending is. Along the way the Kahuna and the Captain can each look guilty (both lose if
+  the truth gets out), but neither is the answer.
+- **Why the whole boat was sunk, and why you were on it [decided, 19 Nov 2026]:** it was the regular run up to the
+  Vault, and you were ordinary cargo, aboard by chance with the runaway being taken back. Killing the runaway at the
+  door would have been enough, but **the runaway talked on the way:** told the captives chained beside them what
+  waits at the top of the mountain. Once they knew, none of them could reach the door and be sold on, or escape and
+  spread it, so the captain (one of the Vault's own) scuttled her in the storm and got away; cargo and crew drowned.
+  **So you are a witness, not only a survivor:** you heard what the runaway said, and the drugs and the drowning took
+  it away. That is what the Vault fears and the pirates hunt, and what the story slowly brings back to you. "Someone
+  wanted you drowned" means you too.
+- **What the runaway knew [decided, 19 Nov 2026, the user's words]:** what really happens at the end of the trade,
+  and that the Vault is rotting from within.
+  - **The end of the trade.** Every community below knows people are sold, traded and disappear; nobody below
+    understands exactly what happens at the end. Many are kept below: to work the farms and fields, as slaves in lewder
+    servitude, as wives or husbands, as labourers. The least useful go up the mountain and disappear, and so do the ones
+    the Vault wants most for itself.
+  - **What the Vault is.** It depends on that steady stream of people to feed itself: its people eat them. They have
+    acquired a taste for it, and enjoy being elites in the clouds who feast on the people below. A sick society.
+  - **Rotting from within.** Some of them are quite mad, from kuru or another disease of madness that the cannibalism,
+    or the way they live, has brought on.
+  - **The Castaway's way in.** The Vault's weakness is what could let the Castaway be the one who takes it over
+    (ending 2). **The one who
   finds you hands it to you** in the talk (decided 19 Nov 2026): put on while the conversation is open, as Doc
   Mitchell's is, the one way the game takes it safely.
 - **The opening, step by step [decided, 19 Nov 2026]** (Doc Mitchell's order, each step out of the beach and the
@@ -209,7 +287,78 @@ Distant ground and ruins beyond every land edge, so the world looks like it goes
 
 **The main story: the Castaway's thread.** You wash up, find out someone wanted you drowned, and follow the trade
 you were cargo in up its chain (a valley, Waikiki, the ship, the pirates) to the Vault. It takes you to every side of
-the island. How it ends is still open.
+the island.
+
+**The main quest, step by step [outline agreed, 19 Nov 2026]:**
+1. **The beach:** the opening talk; "Road's up there, over the rim."
+2. **Someone wanted you drowned:** a first clue on the wreck; who had the Pip-Boy is the thread.
+3. **A valley:** the first place that pays someone; you see the trade from the bottom.
+4. **Waikiki:** the Kahuna's court, the tribute going out.
+5. **The ship:** the Captain and the deal with the pirates.
+6. **The pirates:** the Kāhala Hotel, the slave road up Pālolo.
+7. **The Vault:** the door high in the crater wall, and the ending.
+
+**The early game [decided, 19 Nov 2026, the user's words]:** it is a while before you learn what the trade is even
+about. The beginning keeps you down on the coast exploring for a while, most likely making your way to Waikiki (though
+you could wander anywhere). The breadcrumbs lead you to a safer, quest-filled area, where you meet quest givers,
+potential companions, storekeepers and the story's main actors. (So steps 3 and 4 above come the other way round:
+the coast and Waikiki first.)
+
+**The first place on the way [decided, 19 Nov 2026]:** on the coast, before Waikiki: a poor place on the way in (Niu
+or Kuliʻouʻou, which pay both sides) where you see people being sold before you reach the safe city, without
+understanding it yet. Its people mention Waikiki and the other factions and introduce you to how things work,
+without thrusting you straight into the Kahuna's midst. **Kuliʻouʻou [decided, 19 Nov 2026]:** the first place
+people live past the pirates' marina at Hawaiʻi Kai, so the pirates are fresh in mind when you see what being squeezed
+between them and Waikiki does to people. Niu stays a smaller place further along. The coast road from Hanauma, in
+order: Hawaiʻi Kai and Koko Marina (the pirates' boatyard, passed first), Kuliʻouʻou, Niu, the Kāhala Hotel, Waikiki.
+
+**What you see in Kuliʻouʻou [decided, 19 Nov 2026]:**
+- **As you arrive, catchers take a stranger** off the road, someone nobody will miss, before tribute day. It could as
+  easily have been you.
+- **A family sells one of its own:** they can't pay both sides this time, so a son goes to a pirate boat on the beach,
+  and people treat it as ordinary.
+- **Slaving is big business, not the town's one quest:** everyone there is at it, or greedy to be, to survive. It isn't
+  one wrong to put right; it is how the town lives, which is the point.
+- **Who has Pip-Boys [decided, 19 Nov 2026]:** they come only from the Vault, the island's one vault: made for its
+  people, kept working in its workshops for 200 years; nowhere below can make or mend one. Ordinary pirates don't have
+  them. **The pirate captains are the Vault's own [decided, 19 Nov 2026]:** those it exiles, those who failed their
+  proving, and those who simply want to live outside, often its most violent and sociopathic, are allowed to set
+  themselves up nicely outside, as pirate captains: they wear Pip-Boys, live out their worst impulses, and still belong
+  to the few ancient families who eat people. They are never allowed to reveal what the Vault does. (So the Vault's
+  hold on the pirates is blood, not only payment.)
+- **Sky people below [decided, 19 Nov 2026]:** now and then the Vault's people come down of their own accord: a coming
+  of age (their proving), to trade, or other reasons. People who live in the sky with screens on their arms are a
+  rare sight below, talked of for weeks after. Nobody below harms one: the Vault's medicine, power cells and guns are
+  what everyone needs, and the pirates would come. Nobody asks what happens up there, as asking means owning that their
+  own tribute goes there. **They must stay rare.**
+- **One young companion from the Vault [decided, 19 Nov 2026]:** on their coming-of-age trip, not yet told the whole
+  truth (the young grow up in comfort and are told what their people eat only once they come of age), so they hide no
+  secret from you because they don't know it; they know only that their people are better than those below. Their
+  story runs beside yours toward finding out what they are, and they may be your way into the Vault. Other sky people
+  only as quests need them.
+- **Why the pirates attack you anyway [decided, 19 Nov 2026]:** ordinary people know the mark, not the faces; the
+  pirates know their captains by face, and know which Pip-Boy went down with that boat (the Vault paid them to sink
+  it). A survivor wearing the runaway's Pip-Boy is exactly who they've been told to find. So the mark keeps off those
+  who don't know and marks you for those who do. **Reputation outgrows the mark:** as your name grows, people know you
+  by what you've done, and the Pip-Boy matters less.
+- **Why the finder hands it over [decided, 19 Nov 2026]:** mostly to get rid of it, a little to protect you. They
+  know the rumour (a Pip-Boy means the Vault's people) and take it for a pirate captain's off the wreck: the pirates
+  will come looking, and whoever has it then is dead, so it goes on the stranger. That it also keeps you from being
+  sold is the little kindness in it. Nobody here does anything only to be kind.
+- **"It was just given to me"** is true, and nobody believes it: they hear a captain's kin being cagey, or a liar who
+  robbed a body. It goes on not working until someone who knows the truth hears it.
+- **They don't try to sell you [decided, 19 Nov 2026]:** they see the Pip-Boy on your arm and take you for no random
+  stranger to be sold.
+
+So the main quest now runs: the beach; the wreck's first clue; the coast and the poor place on the way; Waikiki
+(the court, the tribute going out); the ship; the pirates; the Vault.
+
+**How it ends [decided, 19 Nov 2026]:** more than one ending, chosen by what you did along the way, and every one of
+them turns on the Vault. Three, depending on what you did [decided, 19 Nov 2026]:
+1. **Bring the Vault down:** the trade breaks; the island has to live without its medicine and power cells.
+2. **Take the Vault's place:** you hold the door, and decide who gets light and medicine.
+3. **Get in and get out:** you learn the truth about yourself and leave the island's sides to it.
+What leads to each: still open.
 
 Four side storylines run alongside, each from a pressure building in 2281:
 
@@ -267,7 +416,7 @@ Four side storylines run alongside, each from a pressure building in 2281:
 ## Still to settle
 
 - Which valley stops paying (proposed: the Tanks).
-- How the main story ends.
+- What leads to each of the three endings.
 - **Later [the user, 19 Nov 2026]:** the real emergency bunker in Diamond Head crater (the Birkhimer Tunnel, the
   state's emergency centre in the history draft): its part in the story and what's built there, after the build list.
 

@@ -202,9 +202,9 @@ class Picture(tp.Canvas):
         tp.Canvas.__init__(self, w, h, clear)
         self.gloss = [gloss] * (w * h)
 
-    def files(self, bump=4.0, shine=None, game=False):
+    def files(self, bump=4.0, shine=None, game=False, rim=False):
         if game:
-            return tp.colour_map(self), tp.normal_map(self, self.gloss if shine is None else [shine] * (self.w * self.h), bump)
+            return tp.colour_map(self, rim), tp.normal_map(self, self.gloss if shine is None else [shine] * (self.w * self.h), bump)
         w, h = self.w, self.h
         col = bytearray(w * h * 4)
         nor = bytearray(w * h * 4)

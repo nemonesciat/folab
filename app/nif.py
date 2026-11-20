@@ -323,7 +323,7 @@ def _looks(nif, props):
     return tex.replace('/', '\\'), blend, test, double
 
 
-def mesh_from_nif(data, max_verts=200000):
+def mesh_from_nif(data, max_verts=200000, placed=True):
     """Triangles of a model in its own coordinates, with texture names, for the 3D view. The same shape as
     Morrowind Workshop's: [{'p', 'uv', 'i', 'tex', 'alpha', 'double'}] with positions in game units, and 'c' (red,
     green, blue a corner, 0-1) where the shape has colours at its corners that aren't all white."""
@@ -341,6 +341,11 @@ def mesh_from_nif(data, max_verts=200000):
         if not b or b['flags'] & APP_CULLED:
             return
         lR, lt, ls = b['R'], b['t'], b['s']
+        if i == 0 and placed:
+            # (a placed thing's own position takes the root's place: the game draws a model without its root's turn,
+            # shift and scale. McCarran's wallLong has a quarter turn on its root and the opposite on its shapes, so
+            # with both it ran along y, the game's along x; record bounds of 235 game models agree, 7 don't. 19 Nov 2026)
+            lR, lt, ls = I3, [0.0, 0.0, 0.0], 1.0
         nR = _mul(R, lR)
         nt = [t[k] + s * v for k, v in enumerate(_apply(R, lt))]
         ns = s * ls

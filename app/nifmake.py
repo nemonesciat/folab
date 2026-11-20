@@ -385,3 +385,50 @@ def check(data, shapes, solids=()):
         if any(glo[a] < lo[a] - 0.05 or ghi[a] > hi[a] + 0.05 or glo[a] > lo[a] + 3 or ghi[a] < hi[a] - 3 for a in range(3)):
             wrong.append('solid %d isn\'t where it was asked for' % k)
     return wrong
+
+
+# the game's grass models (landscape\grass\*.nif, all alike): BSFadeNode, one NiTriStrips whose properties are a
+# NiStencilProperty (both sides drawn), the TallGrassShaderProperty (the picture's path at its end) and a NiAlphaProperty,
+# then its data with a colour at each corner. Their blocks copied as the game has them, only the picture and the cut ours.
+_GRASS_STENCIL = bytes.fromhex('ffffffff00000000ffffffff804d00000000ffffffff')
+_GRASS_SHADER = bytes.fromhex('ffffffff00000000ffffffff01000000000000010080010000000000803f')   # (18 after the object's 12: one short crashed nv-rs, 20 Nov 2026)
+GRASS_CUT = 64              # (the game's grass cuts at 128; FOLab's pictures keep their share over 64: dds._keep_cover)
+
+
+def build_grass(name, shape, sway=0.3):
+    """The bytes of a grass model for a GRAS record: one shape (as build's), drawn by the game's grass shader. A corner's
+    colour's fourth number is how far the shader sways it in the wind: the game's grasses have 0 at the ground, 0.1 to
+    0.3 up the blade, up to 0.75 at a tip (read from NVGreenGrass01/03, NVGrassGolf02). FOLab's carried 1 everywhere and
+    the whole plant swung about from its foot (the user, 20 Nov 2026: "the whole plant is moving around"). So: nothing
+    at or under the ground, rising with height to `sway` at the top."""
+    s = dict(shape)
+    n = len(s['p']) // 3
+    c = list(s.get('c') or [1.0] * (4 * n))
+    top = max(s['p'][2::3]) or 1.0
+    for k in range(n):
+        z = s['p'][3 * k + 2]
+        c[4 * k + 3] = round(sway * max(0.0, z) / top, 3)
+    s['c'] = c
+    strings = [name, name + ':0']
+    blocks = []
+    identity = struct.pack('<3f9ff', 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1)
+    blocks.append(('BSFadeNode', struct.pack('<iIiI', 0, 0, -1, 0x8000E) + identity + struct.pack('<Ii', 0, -1)
+                   + struct.pack('<Ii', 1, 1) + struct.pack('<I', 0)))
+    blocks.append(('NiTriStrips', struct.pack('<iIiI', 1, 0, -1, 0x8000E) + identity + struct.pack('<I3ii', 3, 2, 3, 4, -1)
+                   + struct.pack('<iiIiB', 5, -1, 0, 0, 0)))
+    blocks.append(('NiStencilProperty', _GRASS_STENCIL))
+    blocks.append(('TallGrassShaderProperty', _GRASS_SHADER + _sized(s['tex'])))
+    blocks.append(('NiAlphaProperty', struct.pack('<iIi', -1, 0, -1) + struct.pack('<HB', 0x12EC, GRASS_CUT)))
+    blocks.append(('NiTriStripsData', _strips_data(s)))
+    types = []
+    for kind, _d in blocks:
+        if kind not in types:
+            types.append(kind)
+    head = b'Gamebryo File Format, Version 20.2.0.7\n' + struct.pack('<IBIII', nif.VERSION, 1, 11, len(blocks), 34)
+    head += _short('FOLab') + _short('') + _short('')
+    head += struct.pack('<H', len(types)) + b''.join(_sized(t) for t in types)
+    head += struct.pack('<%dH' % len(blocks), *(types.index(k) for k, _d in blocks))
+    head += struct.pack('<%dI' % len(blocks), *(len(d) for _k, d in blocks))
+    head += struct.pack('<II', len(strings), max(len(x) for x in strings)) + b''.join(_sized(x) for x in strings)
+    head += struct.pack('<I', 0)
+    return head + b''.join(d for _k, d in blocks) + struct.pack('<II', 1, 0)

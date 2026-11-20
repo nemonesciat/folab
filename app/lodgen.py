@@ -370,8 +370,9 @@ def chunks_for(box, top, only=None):
 class Sampler:
     """The land of a world as the mod has it, by point, with its colours."""
 
-    def __init__(self, gd, pr, world, painter, beyond=None):
+    def __init__(self, gd, pr, world, painter, beyond=None, foliage=None):
         self.gd, self.pr, self.world, self.p = gd, pr, world, painter
+        self.foliage = foliage                  # (farfoliage.Cover: what grows there, painted in)
         self.beyond = beyond                    # (lodbeyond.Beyond: the land and sea past the world's own edge)
         self.g = roadgen.Ground(gd, pr, world)
         d = gd.fields(world).get('DNAM')
@@ -417,6 +418,8 @@ class Sampler:
         if not rows:
             return self.beyond.colour(x, y) if self.beyond is not None else (128, 116, 96)
         c, r = min(15, int((x - k[0] * 4096) / 256)), min(15, int((y - k[1] * 4096) / 256))
+        if self.foliage is not None:
+            return self.foliage.colour(rows[r * 16 + c], x, y)
         return rows[r * 16 + c]
 
 
@@ -493,7 +496,7 @@ def report_for(gd, pr, world):
             'folder': out_folder(pr) if pr else ''}
 
 
-def generate(gd, pr, world, out, only_changed=None, progress=None, beyond=False, like=None):
+def generate(gd, pr, world, out, only_changed=None, progress=None, beyond=False, like=None, foliage=None):
     """Write a world's terrain into a folder laid out as Data is. only_changed: chunks only over the cells the mod's land changes
     (for a game world with its own files), the default when the world has files of the game's already. Returns a report.
     like: another world whose land this one's far view shows (a small world set under a city, as the Lucky 38's top
@@ -532,7 +535,7 @@ def generate(gd, pr, world, out, only_changed=None, progress=None, beyond=False,
         if not only:
             return {'chunks': 0, 'files': 0, 'note': 'Your mod hasn\'t changed the land in this world.'}
     painter = maptiles.Painter(gd)
-    S = Sampler(gd, pr, world, painter, past)
+    S = Sampler(gd, pr, world, painter, past, foliage)
     work = chunks_for(box, top, only)
     files = []
 

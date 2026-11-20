@@ -105,6 +105,15 @@ the model for style, UI and approach. Python, standard library first, code in `a
   Front (-y) is the SEA side for all four. Own pictures: `period_sheet` (arched / sash / bunker bays), `arch_board` and
   `balustrade` (see-through), `fluted`; trees of the set's own merged in by `combine`. The Natatorium's walls go `NAT_DEEP`
   down: it stands on the shore line, pool out to sea. Downtown (ʻIolani Palace, Aliʻiolani Hale) is off the Waikiki map: later.
+- Waikiki's people (`peopledress.py`, `garmentprint.py`, `tests/test_peopledress.py`; `docs/waikiki-people-dress.md`): the game's
+  spawns the mod placed outside swapped (`swap`) for NPC_ of the mod's own, one Undo a kind (`KINDS`: prospectors dress as
+  surfers; Fiends, raiders, Vipers, Jackals and wastelanders are pirates, all in the Fiends' factions). Each copy keeps the
+  game's template but its name, base data and inventory are its own (template flags 0x80, 0x100; pirates 0x04), the
+  template's clothing lists swapped for the kind's. Shirts and dresses: FOLab's hibiscus prints over the cloth of the
+  game's Pre-War Spring outfit (the check lines and the painted neckerchief taken out, folds kept), on its meshes
+  retextured (`nifwrite`), not by MODS (FOLab can't write links to its own records inside those raw entries). Places of
+  the mod's own (the hotels' floors) are left. garmentprint needs numpy/PIL/scipy (not in FOLab.exe's Python): a build step
+  run from the developer's Python. Not yet seen in game.
 - Rooms with a view (`viewworld.py`, `hotelinside.py`, `tests/test_viewworld.py`): the engine draws nothing outside an interior,
   so the game builds the Lucky 38's lounge and penthouse in a world of their own (Lucky38World, set under the Mojave: PNAM 4,
   its own copy of the land and far view; read from the game's files 16 Nov 2026). `viewworld.add_world` adds such a world
@@ -117,7 +126,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
   doors in its frame (scaled with the ref: the Kilauea stands at 0.8); `view_ops` furnishes the world and links the way in
   with a door on the city's copy. `hotelfloors.py` (its docstring; `tests/test_hotelfloors.py`) the floors between, as
   places of the mod's own, lift from the lobby to the first, the top floor's lift (on the penthouse key) to the lookout.
-  Not tried in the game.
+  Not tried in the game. After the city changes round a hotel, `viewworld.restage` brings its world in line: the city's land on
+  each of its cells, each copy moved to where its original stands now (same base within `MATCH`), what the city gained copied in;
+  the hotel's own rooms and the closed hotel (`skip`) left.
 - The USS Missouri (`battleship.py`, `shipinside.py`, `shipplace.py`, `tests/test_battleship.py`): FOLab's own battleship in place of
   Fallout 3's carrier (no borrowed files: a mod with her can be handed round). Model maker shape `hull` (stations of sections, one
   prism of collision per section: each corner on three faces, as Havok wants; solids thinner than ~10 don't close in `nifmake.check`,
@@ -174,7 +185,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
   the building `SINK` under it, its yard cut or filled and eased back over `EASE`, never touching a road's ground within
   `ROAD_REACH`; close neighbours share a level, `TERRACE_MOST` the most one is lifted for it), then lying things seated
   (`osmdress.seat_lying`), then things in road pieces lifted onto them (`onto_roads`, `INTO_ROAD`), then standing junk let
-  down off slopes (`settle_pieces`). Each step run twice changes nothing. padfill's banks are what this replaces. Not done:
+  down off slopes (`settle_pieces`). Each step run twice changes nothing. padfill's banks are what this replaces. Last, `close_gaps` (after fit): a building still
+  with daylight under a wall (`GAP`: by a road's ground, or one fit left) let down as far as its doors (`DOOR_BURY`) and its uphill
+  side (`UPHILL_BURY`) allow, the land under its open walls filled up to its foot (only raised, never a road's); Waikiki 232 to 10. Not done:
   the hotel view worlds' copies of the city keep the old heights.
 - Bare ground filled (`understory.py`, `tests/test_understory.py`; after the user's look, 18 Nov 2026: valley floors and road verges bare
   between the dressing's clumps): by the texture the game draws on top at each land point (`CLASSES`: none on pavement, asphalt,
@@ -185,6 +198,39 @@ the model for style, UI and approach. Python, standard library first, code in `a
   to `/api/edit` labelled `understory.BRUSH_LABEL`; the game's plants and the landmarks are read once and kept (`_GAME`, `_MARKS`).
   A stroke is 0.3 s; the edit after it is Waikiki's 4.7 s save (194 MB of JSON), as for any edit there.
   A grown world's `api_maps.map_cover` plans on the grown box (it covered only the first one: the new land's plants were dropped).
+- Plants that run and stand (20 Nov 2026, after a day of floating, buried, thinned and 12 fps plants on Waikiki). Count draws
+  before handing a build over (each model shape a draw, the 5 x 5 loaded cells): the game's busiest places draw ~2,000 (Freeside's
+  gate 2,196); Waikiki's start drew 12,693, 4,000 after. Low cover is the game's own grass (`plantgrass.py`): FOLab's grasses,
+  ferns, low shrubs, taro, heliconia, ti as GRAS (`KINDS`), on grass-bearing twins of the wild grounds (`WILD`, `twins`), laid
+  patch by patch (`paint`: `CLEAR_PTS` from roads, sea, beach; only `BUILT_PTS` from buildings). Grass models are
+  `nifmake.build_grass`, byte for byte the game's blocks (one byte short crashed nv-rs reading a 1.9 GB length) with the sway in
+  each corner colour's alpha, 0 at the ground (`plantgrass.SWAY`; 1 everywhere swung whole plants). Placed plants
+  (`plantsplit.py`): clumps were several plants as one model and can't follow ground (51,305 taken apart); `rework` keeps each
+  cell to `BUDGET_CITY` draws (jungle-shaping plants first, low green spaced) and `seat`s each by its own lowest points (`judge`:
+  neither hanging past `HANG` nor buried past `BURY_SHARE` of its height; leaning with banks, `LEAN_MOST`/`LEAN_LOW`; else a
+  grass, `seat_some`). One shape a plant (`plantsheet.py`: leaves, flowers, stem on one picture sheet; `dds.encode` `strips`,
+  each strip its own coverage; a stem's strip plain). Stems vanished a few metres off: `_keep_cover` left them at exactly the cut
+  and the game draws only over it (now `>`). Cut-outs drawn once across a card get a clear border (`rim`, else a bar along the
+  card's top). Far off: FOLab's trees have far versions (`plantfar.py`, ~50 triangles, in lodobj's blocks) and the far ground is
+  painted with what grows (`farfoliage.Cover`, lodgen's `foliage`). A cell's own water over a lower bank: raise the pocket.
+- A ruined freeway (`ruinedfreeway.py`, `tests/test_ruinedfreeway.py`): the map squeezed H-1's bridges flat, so the old freeway
+  stands over its ground road, broken: the game's `OverpassSectionLo01` chained along the freeway's line (`join` makes runs of the
+  street map's pieces; one height a chain, `UNDER` the land, never `DEEP`), a span fallen now and then with its rubble below, ends
+  broken or on a ramp; none where the line bends (`BEND`), a pillar lands in a building, a building reaches the deck, or the other
+  carriageway has one (`APART`) or its outline overlaps one standing (`_overlap`; `clear` takes the later of two out, and
+  whatever stands in a pillar's foot). Waikiki: 15 sections after the user's look (crossings at interchanges, both carriageways decked).
+- Loot (`lootplace.py`, `tests/test_lootplace.py`; the plan `docs/waikiki-loot-plan.md`): the game's own containers (levelled
+  contents) placed where they make sense, harder spots paying more: `band` by thirds of the way from the new game's start to the
+  world's farthest cell (not worldlife's zones: from Hanauma Bay those put all Waikiki past the last), one up for `PLACES` (held or
+  high, by map marker name), behind the wall, the north. Outside a find stands against an anchor (`ANCHOR` words: tents, crates,
+  wrecks, roof camps' crates, cairns), its back to it, its front by its model (`front_of`: the side with handles, latches or a dial;
+  a footlocker's is -x, a gun cabinet's -y, a safe's +x: the game's containers face every way), seated by `Seat` on the land and
+  every placed thing's collision (`Solids`, settleup's), never on a road piece, in water, a doorway, another thing's footprint
+  (walls seen from above are lines), and checked corner by corner as it stands (`SEATED`). Inside: empty containers become the full
+  one of the same model (`FILL`), safes, gun cabinets and some kits and boxes locked by band (the lent places lost the game's
+  locks), finds against walls where the navmesh ends. Keys: KEYM of the mod's own on the lid of another find of the spot.
+  `new_ways` adds ramp towers and roof camps through `rooftops.plan(only=, extras=False, limit=)`. Never let `modelsets.put`
+  write over a ramp's file already in the mod (its towers were walked on the old design): the run script adds missing files only.
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by

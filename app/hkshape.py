@@ -207,7 +207,7 @@ def _body(sh, i, R, t, s):
     sh.shape(shape, R, t, s * HAVOK_SCALE, layer)
 
 
-def collision_shapes(data):
+def collision_shapes(data, placed=True):
     """[{'layer', 'v': flat points, 'i': flat corners, 'soup'}] of a NIF's collision, in its own coordinates and game
     units. Empty when it has none. 'soup': a triangle soup, whose triangles face either way (it comes from strips, so
     which way a triangle winds says nothing). Raises Unread on a shape block this reader doesn't know."""
@@ -222,7 +222,8 @@ def collision_shapes(data):
         b = n.block(i)
         if not b:
             return
-        nR, nt, ns = _compose(R, t, s, b['R'], b['t'], b['s'])
+        # (the root's own transform: the placed thing's takes its place in the game, as nif.mesh_from_nif)
+        nR, nt, ns = (R, t, s) if i == 0 and placed else _compose(R, t, s, b['R'], b['t'], b['s'])
         c = b.get('collision', -1)
         if 0 <= c < len(n.types) and n.types[c] == 'bhkCollisionObject':
             r = sh._r(c)

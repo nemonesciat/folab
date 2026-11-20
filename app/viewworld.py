@@ -213,6 +213,62 @@ def stage_ops(gd, pr, parent, child, cx, cy, reach=REACH_THINGS, skip=None):
     return ops
 
 
+MATCH = 64.0            # (a copy and its city original: the same base this near on the ground; ground upwards moves things
+#                         up and down, and tilts them, but not along)
+
+
+def restage(gd, pr, parent, child, cx, cy, reach=REACH_THINGS, skip=None):
+    """(ops, report): the small world brought in line with the city as it is now, after the city changed round it (the
+    ground fit of 18 Nov 2026 moved Waikiki's land and thousands of things; the hotels' worlds kept the old). Each of the
+    world's cells takes the city's land of the same cell; each copy of a city thing goes where its original stands now
+    (the nearest of the same base within MATCH); what the city has that the world hasn't is copied in as stage_ops does.
+    The world's own things (the open hotel, its rooms, doors and lights) have no original and are left; skip as stage_ops."""
+    import copy
+    ops = []
+    pgrid, cgrid = gd.grid(parent), gd.grid(child)
+    opts = land_options(gd, pr, parent, cx, cy)
+    x0, y0, n, _n = opts['rect']
+    lands = 0
+    for xy, c in cgrid.items():
+        if not (x0 <= xy[0] < x0 + n and y0 <= xy[1] < y0 + n) or xy not in pgrid:
+            continue
+        L, _ = opts['land_for'](*xy)
+        if L and L.get('h'):
+            ops.append({'op': 'land', 'cell': gd.key(c), 'land': copy.deepcopy(L)})
+            lands += 1
+    ckeys = {gd.key(c) for c in cgrid.values()}
+    by_base = {}
+    for ck in ckeys:
+        for rk, r in pr.cells.get(ck, {}).get('refs', {}).items():
+            if rk.startswith('+') and r.get('base') and r.get('p') and not r.get('removed'):
+                by_base.setdefault(r['base'], []).append((ck, rk, r))
+    cells = [(x, y) for x in range(cx - reach, cx + reach + 1) for y in range(cy - reach, cy + reach + 1)]
+    used, moved, added, same = set(), 0, 0, 0
+    for base, p, s, kind, _src in city_things(gd, pr, parent, cells):
+        if skip and skip(base, p):
+            continue
+        near = [(math.hypot(r['p'][0] - p[0], r['p'][1] - p[1]), ck, rk, r) for ck, rk, r in by_base.get(base, ()) if rk not in used]
+        near = [t for t in near if t[0] < MATCH]
+        if near:
+            _d, ck, rk, r = min(near, key=lambda t: t[0])
+            used.add(rk)
+            if max(abs(a - b) for a, b in zip(r['p'], p)) < 0.05 and abs(float(r.get('s') or 1) - s) < 1e-3:
+                same += 1
+                continue
+            ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [round(v, 4) for v in p]})
+            moved += 1
+            continue
+        cell = cgrid.get((int(p[0] // 4096), int(p[1] // 4096)))
+        if cell is None:
+            continue
+        o = {'op': 'add', 'cell': gd.key(cell), 'base': base, 'p': [round(v, 4) for v in p], 's': round(s, 3)}
+        if kind == 'DOOR':
+            o['extra'] = {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}
+        ops.append(o)
+        added += 1
+    return ops, {'land_cells': lands, 'moved': moved, 'added': added, 'same': same}
+
+
 def far_view(gd, pr, child, parent, out):
     """The city's far ground and far buildings, drawn for the small world (into out, laid out as Data is)."""
     import lodgen

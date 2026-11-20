@@ -10,7 +10,8 @@ A description is plain data, so a piece can be kept as JSON:
              {'shape': 'cylinder', 'r': 3, 'r2': 3, 'h': 150, 'sides': 10, 'phase': 0, ...},
              {'shape': 'cone', 'r': 110, 'h': 40, 'under': True, 'paint': 'above', ...}]}
 
-Growing things: 'card' (a flat upright picture seen from both sides), 'frond' (a long leaf that bends over), 'ball';
+Growing things: 'card' (a flat upright picture seen from both sides), 'frond' (a long leaf that bends over), 'ball',
+'stick' (a thin stem as crossed strips over a see-through picture, texpaint.stick: what a plant's stems are);
 a look with 'alpha': True is see-through where its picture is (leaves).
 
 A part is made standing on its own origin (the middle of its underside), z up, its front towards -y; then stretched by
@@ -409,6 +410,49 @@ def _card(mesh, part, place):
     _two_sides(mesh, part.get('look'), [(place.point(p), n, _lay(look, u, v, w, h)) for p, (u, v) in zip(pts, where)])
 
 
+STICK_LEAST = 9.0       # (a stick's strips are never narrower: nv-rs takes anything under 7 wide for a cable, shadowcast)
+STICK_BEND = 0.8        # (how far its corners' normals lean out to its edges, so it is lit as something round)
+
+
+def _stick(mesh, part, place):
+    """A thin stem standing on the part's origin, 'h' up z, 'r' thick at its foot and 'r2' at its top, as the game's
+    plants draw theirs: 'blades' strips crossed along it (2, or 3 from 2.5 thick), each seen from both sides, over a
+    see-through picture with the stem down its 'band' (texpaint.stick, STICK_BAND). Each strip is at least STICK_LEAST
+    wide and shows only as much of the band as the stem is thick, so a stem down to about 1.5 units still looks as
+    thick as it is. Never solid (an alpha look; a stem needing collision is a cylinder).
+
+    Why not a cylinder: nv-rs's sun shadows take an opaque tube under 7 units wide for a cable and cast it out to 140 m,
+    while leaves (cut-outs) cast to 45 m: past that a bush cast its bare stems as long dark lines (shadowcast)."""
+    r = float(part['r'])
+    r2 = float(part.get('r2', r))
+    h = float(part['h'])
+    look_name = part.get('look')
+    look = mesh.looks.get(look_name) or {}
+    if not look.get('alpha'):
+        raise nifmake.MakeError('a stick needs a see-through look (texpaint.stick): %r' % (look_name,))
+    b0, b1 = look.get('band', (0.5, 0.75))
+    mid, band = (b0 + b1) / 2, b1 - b0
+    most = min(mid, 1 - mid)                                    # (the strip's picture stays within one repeat across)
+    blades = int(part.get('blades', 3 if max(r, r2) >= 2.5 else 2))
+    ph = float(part.get('phase', 0.0))
+    tile = look.get('tile')
+    vs = (0.0, h / float(tile)) if tile else (1.0, 0.0)         # (v down the picture: the foot at the bottom)
+
+    def end(rad):
+        w = max(STICK_LEAST, 2 * rad)
+        a = min(most, w * band / (4 * max(rad, 1e-3)))          # (half the picture's width the strip shows)
+        return w / 2, a
+    (w0, a0), (w1, a1) = end(r), end(r2)
+    for k in range(blades):
+        t = math.radians(ph + 180.0 * k / blades)
+        d = (math.cos(t), math.sin(t), 0.0)
+        n = (math.sin(t), -math.cos(t), 0.0)
+        for f in (1, -1):                                       # (front, then back: corners anticlockwise seen from it)
+            nm = lambda s: place.normal(_unit3(tuple(f * n[i] + STICK_BEND * s * d[i] for i in range(3))))
+            c = lambda s, w, z, a, v: (place.point((s * w * d[0], s * w * d[1], z)), nm(s), (mid + f * s * a, v))
+            mesh.face(look_name, [c(-f, w1, h, a1, vs[1]), c(-f, w0, 0.0, a0, vs[0]), c(f, w0, 0.0, a0, vs[0]), c(f, w1, h, a1, vs[1])])
+
+
 def _frond(mesh, part, place):
     """A long leaf growing from the part's origin towards +x: 'long' and 'wide', starting 'up' degrees above level and
     bending down by 'droop' degrees along its length, its two halves each folded down 'fold' degrees from the midrib.
@@ -607,7 +651,7 @@ def _sheet(mesh, part, place):
 
 
 _SHAPES = {'box': _box, 'slab': _box, 'cylinder': _round, 'cone': _round, 'card': _card, 'frond': _frond, 'ball': _ball, 'hull': _hull,
-           'sheet': _sheet}
+           'sheet': _sheet, 'stick': _stick}
 
 
 # What a model of FOLab's may come to (measured over the game's meshes: its buildings' median 500 to 1,700 triangles, a
@@ -679,7 +723,11 @@ def make(desc):
         base = len(to['p']) // 3
         to['p'] += s['p']
         to['n'] += s['n']
-        to['uv'] += s['uv']
+        if look.get('sheet'):                   # (its picture is a strip of a sheet: across, u0 to u1 of it; plantsheet)
+            u0, u1 = look['sheet']
+            to['uv'] += [u0 + (u1 - u0) * v if k % 2 == 0 else v for k, v in enumerate(s['uv'])]
+        else:
+            to['uv'] += s['uv']
         to['i'] += [i + base for i in s['i']]
     shapes = list(shapes.values())
     if desc.get('shade', True):

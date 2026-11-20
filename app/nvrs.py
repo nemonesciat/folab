@@ -42,6 +42,31 @@ def find(chosen=None):
     return None
 
 
+def all_found(chosen=None):
+    """Every nv-rs on this PC: the chosen one first, then the usual places, then any other nv-rs folder beside them
+    (C:\\Games\\nv-rs-pad, say). FOLab puts the mod in all of them, so whichever is started plays the same build: on 19
+    Nov 2026 nv-rs-pad, started by its own Play.exe, played last night's Waikiki without the wall."""
+    out, seen = [], set()
+
+    def add(d):
+        if d and is_nvrs(d):
+            n = os.path.normcase(os.path.normpath(d))
+            if n not in seen:
+                seen.add(n)
+                out.append(os.path.normpath(d))
+    first = find(chosen)
+    add(first)
+    for d in DEFAULT_PLACES:
+        add(d)
+    for parent in {os.path.dirname(os.path.normpath(d)) for d in ([first] if first else []) + DEFAULT_PLACES}:
+        try:
+            for name in sorted(os.listdir(parent)):
+                add(os.path.join(parent, name))
+        except OSError:
+            pass
+    return out
+
+
 def version(folder):
     """The first line of its BUILD.txt ('nv-rs Windows preview 2026-11-07.2'), or None."""
     try:
