@@ -447,9 +447,10 @@ def _world(p, s, lx, ly):
     return p[0] + tx, p[1] + ty
 
 
-def plan(gd, pr, world, cover, cat, seed=1, progress=None, share=SHARE):
+def plan(gd, pr, world, cover, cat, seed=1, progress=None, share=SHARE, only=None, extras=True, limit=LIMIT):
     """(ops, report): ways up, camps, walkways and lookouts for a world's buildings. cover: osmcover.MapCover (for where
-    the roads are); cat: townbuild's catalogue."""
+    the roads are); cat: townbuild's catalogue. only: the building refs to give ways up (each one, share aside); extras:
+    False for ways up and their camps alone (no walkways, lookouts or raider camps); limit: the most ways up."""
     import osmcover
     import roadgen
     rng = random.Random(seed * 104729 + 7)
@@ -513,13 +514,16 @@ def plan(gd, pr, world, cover, cat, seed=1, progress=None, share=SHARE):
     report = {'buildings': len(stands), 'roofs': 0, 'ways_up': 0, 'camps': 0, 'walkways': 0, 'lookouts': 0, 'no_room': 0}
     roofed = [st for st in stands if st['roof'] and st['roof']['z'] * st['s'] <= HIGH
               and sum(roof_floor(gd, st['b']['model'], st['roof']).clear) >= OPEN_ROOF * len(roof_floor(gd, st['b']['model'], st['roof']).clear)]
+    if only is not None:
+        roofed = [st for st in roofed if st['rk'] in only]
+        share = 1.0
     report['roofs'] = len(roofed)
     rng.shuffle(roofed)
     climbed = []
     for n, st in enumerate(roofed):
         if progress and n % 20 == 0:
             progress('Ways up to the roofs', n, len(roofed))
-        if rng.random() > share or report['ways_up'] >= LIMIT:
+        if rng.random() > share or report['ways_up'] >= limit:
             continue
         b, p, s, roof = st['b'], st['p'], st['s'], st['roof']
         rz = p[5] if len(p) > 5 else 0.0
@@ -572,6 +576,11 @@ def plan(gd, pr, world, cover, cat, seed=1, progress=None, share=SHARE):
             report[k_] = report.get(k_, 0) + v_
         report['ways_up'] += 1
         climbed.append(st)
+    if not extras:
+        report['things'] = sum(1 for o in ops if o['op'] == 'add')
+        report['pieces'] = len(keys)
+        report['climbed'] = [st['rk'] for st in climbed]
+        return first + ops, report
     # walkways: from a roof someone can reach to a neighbour's
     joined = set()
     for st in climbed:

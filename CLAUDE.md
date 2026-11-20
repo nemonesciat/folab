@@ -114,6 +114,15 @@ the model for style, UI and approach. Python, standard library first, code in `a
   retextured (`nifwrite`), not by MODS (FOLab can't write links to its own records inside those raw entries). Places of
   the mod's own (the hotels' floors) are left. garmentprint needs numpy/PIL/scipy (not in FOLab.exe's Python): a build step
   run from the developer's Python. Not yet seen in game.
+- Mojave buildings restyled (`restyleset.py`, `restyle.py`, `tests/test_restyleset.py`; the survey `docs/waikiki-mojave-misfits.md`):
+  FOLab's own pieces each made in the FRAME of the game building it replaces (its ground ~16 under the origin, doorways
+  exactly where townbuild's catalogue stands its doors and `shut`), so `restyle.ops` is a 'swap' of the ref's base, doors,
+  links and locks untouched, plus the piece's lights; its report lists the cells to navmesh again (`generate_area`), and the
+  distant blocks (lodobj) need making again. `REPLACES` {game editor ID: piece}: NVProspectorSaloon -> `beach_bar`, and the
+  plantation town (`plantation`: one kit, a piece per game building) for NVGeneralStore, NVOldWestBldgGeneric01/02,
+  NVGSSchoolHouse, NVNiptonTownHall; `GAME_SWAPS` the game's own for the game's own (billboards naming Mojave places, with a
+  lift). Only the city's cells are navmeshed again: the hotels' view worlds' copies have no paths.
+  townbuild still stands the game's building if the buildings are run afresh: run the swap after.
 - Rooms with a view (`viewworld.py`, `hotelinside.py`, `tests/test_viewworld.py`): the engine draws nothing outside an interior,
   so the game builds the Lucky 38's lounge and penthouse in a world of their own (Lucky38World, set under the Mojave: PNAM 4,
   its own copy of the land and far view; read from the game's files 16 Nov 2026). `viewworld.add_world` adds such a world
