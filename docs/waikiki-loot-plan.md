@@ -155,3 +155,13 @@ Written into Waikiki.json as one Undo, "More to find: loot, locks, keys, ways up
 1120-1448`): 1,104 finds (607 locked), 13 keys, 270 empty containers filled, about 700 locks inside, 10 ramp towers with
 camps (one new model, `ramp2t_1216_0.nif`), 14 cells' navmeshes made again; the audit after found none hanging or sunk
 past 8 units. Install into the nv-rs copies by the story session. Not yet seen in the game.
+
+## Who carries what (the user, 20 Nov 2026)
+
+- **Hawaiian clubs** (agreed split): the Kahuna's court (guards, collectors) the leiomano, its heaviest the pohaku maul; the
+  valley and ridge people the newa and the hoe paddle; pirates now and then as spoils; the settlers, the Vault and the
+  Missouri none. In finds meanwhile, more and better in harder spots, the court's tribute yard and the ridge forts.
+- **The Vault: Vault-Tec weapons. The Missouri: military gear. The wall's guard at Alewa Fort ("the gate dude"): military
+  gear salvaged from the ruins of Ground Zero and Pearl Harbor, maybe power armor** (the user's words; how much power armor,
+  and its story, still to settle with the user). Goes into each side's weapon and gear lists when the people are put in
+  (after the navmesh run), and into their finds.

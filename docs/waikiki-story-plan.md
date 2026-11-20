@@ -413,8 +413,19 @@ Four side storylines run alongside, each from a pressure building in 2281:
 - The Vault's inside (an interior: its own navmesh, any time).
 - Traders, the things each area makes and lacks, doors that open with trust.
 
+## Who carries what [decided, 20 Nov 2026: the user, through the loot session; the detail in waikiki-loot-plan.md]
+
+- Hawaiian clubs: the Kahuna's court the leiomano, its heaviest men the pōhaku maul; the valley and ridge people the newa and
+  the hoe paddle; pirates only now and then, as spoils; the settlers, the Vault and the Missouri none.
+- "The Vault will have Vault tec weapons, the Missouri will have military gear, and the gate dude will also have some military
+  gear from the ruins of ground zero and pearl harbor. Maybe even power armor? idk what the lore is behind that completely."
+  ("The gate dude" read as the wall's guard at Alewa Fort: the loot session's reading, not yet confirmed.)
+- Applies when the people are put in.
+
 ## Still to settle
 
+- Power armor at Alewa Fort: how much, and its story (the user: "idk what the lore is behind that completely").
+- Who "the gate dude" is, if not the wall's guard at Alewa Fort.
 - Which valley stops paying (proposed: the Tanks).
 - What leads to each of the three endings.
 - **Later [the user, 19 Nov 2026]:** the real emergency bunker in Diamond Head crater (the Birkhimer Tunnel, the
