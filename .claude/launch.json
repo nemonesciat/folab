@@ -173,6 +173,15 @@
         "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=%TEMP%\\claude\\e42e1d88a102c550\\0961b3e7-0a19-4ef1-b01f-6214055043b8\\scratchpad\\home&& set FOLAB_NV_INI=%TEMP%\\claude\\e42e1d88a102c550\\0961b3e7-0a19-4ef1-b01f-6214055043b8\\scratchpad\\ini&& py -3 app/server.py 8791 --no-browser"
       ],
       "port": 8791
+    },
+    {
+      "name": "folab-voice",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLab-voice\\ui&& set FOLAB_NV_INI=D:\\FOLab-voice\\ui\\ini&& set FOLAB_CHATTERBOX=D:\\FOLab-voice\\chatterbox&& py -3 app/server.py 8792 --no-browser"
+      ],
+      "port": 8792
     }
   ]
 }

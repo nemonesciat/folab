@@ -5,7 +5,7 @@ baked into the corners' colours, normal maps as strong as the game's and half th
 Missouri's ladders walked from her quarterdeck to her bridge wings."""
 import math
 
-import battleship, dds, modelmake, modelsets, nif, nifmake, shade, texpaint, walkcheck
+import battleship, dds, modelmake, modelsets, nif, nifmake, shade, texpaint, solidwalk
 
 
 def check(what, ok, got=None):
@@ -95,19 +95,19 @@ check('the Missouri: under the game\'s biggest building pieces (33,748 triangles
 check('no shape of hers over 65,535 corners', all(len(s['p']) // 3 < 65535 for s in mm['shapes']))
 Z = d['levels']
 sol = [s for s in mm['solids'] if any(-2600 < q[1] < 3700 for q in s['points']) and max(q[2] for q in s['points']) > 300]
-w_ = walkcheck.Walk(sol, margin=40.0, ground=-5000.0)
+w_ = solidwalk.Walk(sol, margin=40.0, ground=-5000.0)
 dz = battleship.deck_z(3400)
-start = [(i, j, z) for (i, j), zs in w_.stand.items() for z in zs if abs(z - dz) < 25 and 3250 < w_.y0 + j * walkcheck.STEP < 3600]
+start = [(i, j, z) for (i, j), zs in w_.stand.items() for z in zs if abs(z - dz) < 25 and 3250 < w_.y0 + j * solidwalk.STEP < 3600]
 seen, todo = set(start), list(start)
 while todo:
     i, j, z = todo.pop()
-    a = (w_.x0 + i * walkcheck.STEP, w_.y0 + j * walkcheck.STEP)
+    a = (w_.x0 + i * solidwalk.STEP, w_.y0 + j * solidwalk.STEP)
     for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
         n = (i + di, j + dj)
         for z2 in w_.stand.get(n, ()):
-            if (n[0], n[1], z2) in seen or z2 - z > walkcheck.CLIMB or z - z2 > walkcheck.DROP:
+            if (n[0], n[1], z2) in seen or z2 - z > solidwalk.CLIMB or z - z2 > solidwalk.DROP:
                 continue
-            if w_._blocked(a, z, (w_.x0 + n[0] * walkcheck.STEP, w_.y0 + n[1] * walkcheck.STEP), z2):
+            if w_._blocked(a, z, (w_.x0 + n[0] * solidwalk.STEP, w_.y0 + n[1] * solidwalk.STEP), z2):
                 continue
             seen.add((n[0], n[1], z2))
             todo.append((n[0], n[1], z2))

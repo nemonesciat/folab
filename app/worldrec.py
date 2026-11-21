@@ -589,6 +589,8 @@ def ref_extra_subs(r, link):
     if m:
         first += [('XMRK', b''), ('FNAM', bytes([int(m['flags']) & 0xFF])), ('FULL', m['name'].encode('cp1252', 'replace') + b'\0'),
                   ('TNAM', struct.pack('<BB', int(m['type']) & 0xFF, 0))]
+    if r.get('merchant'):                       # (a storekeeper's chest: XMRC, before XLKR as the game has it)
+        last.append(('XMRC', struct.pack('<I', link(r['merchant']))))
     if r.get('link'):
         last.append(('XLKR', struct.pack('<I', link(r['link']))))
     rad = r.get('radiation')
@@ -598,7 +600,7 @@ def ref_extra_subs(r, link):
 
 
 def ref_extra_keys(r):
-    return [k for k in (r.get('zone'), r.get('link')) if k]
+    return [k for k in (r.get('zone'), r.get('link'), r.get('merchant')) if k]
 
 
 # --- patrols and encounter spots ---

@@ -154,7 +154,7 @@ def settle(gd, pr, world, cat=None, cells=None, progress=None, everything=False)
     not_loose = set()
     if everything:
         import roadbed
-        not_loose = set(roadbed._flat_bases(gd)) | set(roadbed._slab_bases(gd))
+        not_loose = set(roadbed._flat_bases(gd, pr)) | set(roadbed._slab_bases(gd))
     for xy, cell in grid.items():
         ck = gd.key(cell)
         if cells is not None and ck not in cells:

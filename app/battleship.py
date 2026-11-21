@@ -610,7 +610,9 @@ def _trained(parts, first, y, deg):
     for p in parts[first:]:
         x0, y0, z0 = p['at']
         dy = y0 - y
-        p['at'] = [round(x0 * c - dy * s, 1), round(y + x0 * s + dy * c, 1), z0]
+        # (clockwise, as 'turn' turns each part: places turned the other way put turret two's muzzles out in the air
+        # off her starboard side while its barrels pointed to port, 20 Nov 2026)
+        p['at'] = [round(x0 * c + dy * s, 1), round(y - x0 * s + dy * c, 1), z0]
         t = list(p.get('turn') or [0, 0, 0])
         p['turn'] = [t[0], t[1], t[2] + deg]
 

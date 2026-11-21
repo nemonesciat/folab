@@ -5,8 +5,9 @@ that wears them can be handed round.
 The garment so far is the game's Pre-War Spring outfit (`Armor\\1950StyleCasual02`): for a man a button-up shirt over
 trousers (OutfitM.dds), for a woman a dress (OutfitF.dds), both with a worn ("Old") variant the game draws for its dirty
 copies (OutfitM02Old / OutfitF02Old, same layout). What is cloth comes from the clean picture (`GARMENTS`): inside the
-garment's triangles, where the uv says so (`keep_uv`: the man's shirt panels, the V of its neck where the game painted a
-neckerchief, the sleeves) or where the colour is the cloth's (`cloth`); the worn picture is painted through the same mask.
+garment's triangles, where the uv says so (`keep_uv`: the man's shirt panels and sleeves) or where the colour is the
+cloth's (`cloth`), never below `FEET` (the shoes share the picture: the V between the man's shirt fronts is their leather,
+which was printed until the user saw it, 21 Nov 2026); the worn picture is painted through the same mask.
 
 The shading is the picture's own light with the old pattern taken out: the game's shirt is checked in thin light lines, a
 print over that read as a "Hawaiian flannel" (the user, 20 Nov 2026). So the broad light is a median of the picture, only
@@ -33,6 +34,7 @@ GARMENTS = {
     'f': ('OutfitF.nif', 'OutfitF.dds', 'OutfitF02Old.dds', 'OutfitF_n.dds', 'OutfitFOld_n.dds'),
 }
 YELLOW = (250, 220, 90)
+FEET = 20                   # (a triangle lower than this, its middle's height in the mesh, is a shoe or a trouser cuff)
 TILE = 200                  # (pixels a repeat of the print, on a 1024 picture: about five flowers across a shirt's front)
 
 
@@ -79,8 +81,8 @@ def _shapes(gd, garment, tex):
 
 def _keep_uv(garment, u, v):
     if garment == 'm':
-        return (v > 0.53 and u < 0.89) or (u < 0.32 and v < 0.5)        # front, V neck, back, cuffs; the sleeves
-    return 0.82 < u < 0.99 and 0.02 < v < 0.28                          # the dress's sleeves
+        return (v > 0.53 and u < 0.89) or (u < 0.32 and v < 0.5)        # front, back, cuffs; the sleeves
+    return False                                                        # (the dress: by its colour alone)
 
 
 def _cloth(garment, rgb):
@@ -104,8 +106,10 @@ def cloth_mask(gd, garment):
     tri = Image.new('L', (w, h), 0)
     md = ImageDraw.Draw(tri)
     for s in _shapes(gd, garment, tex):
-        uv, idx = s['uv'], s['i']
+        uv, idx, P = s['uv'], s['i'], s['p']
         for t in range(0, len(idx), 3):
+            if sum(P[3 * idx[t + k] + 2] for k in range(3)) / 3 < FEET:
+                continue                                                # (the shoes: never printed)
             pts = [(uv[2 * idx[t + k]], uv[2 * idx[t + k] + 1]) for k in range(3)]
             cu, cv = sum(p[0] for p in pts) / 3, sum(p[1] for p in pts) / 3
             md.polygon([(u * w, v * h) for u, v in pts], fill=255 if _keep_uv(garment, cu, cv) else 128)
@@ -137,8 +141,11 @@ def shading(base, mask):
 def paint(gd, garment, style, worn=False, seed=1, mask=None):
     """The garment's picture with the print over its cloth: a PIL RGB image. style: (ground, flower, leaf) colours."""
     tex = GARMENTS[garment][2 if worn else 1]
-    base = _picture(gd, TEXTURES + tex)
-    mask = mask if mask is not None else cloth_mask(gd, garment)
+    return printed(_picture(gd, TEXTURES + tex), mask if mask is not None else cloth_mask(gd, garment), style, worn, seed)
+
+
+def printed(base, mask, style, worn=False, seed=1):
+    """A picture with the print laid over it through mask (0-255), the picture's own light kept."""
     if mask.size != base.size:
         mask = mask.resize(base.size)
     w, h = base.size
@@ -152,6 +159,43 @@ def paint(gd, garment, style, worn=False, seed=1, mask=None):
         lit = lit * 0.75 + np.asarray(base, dtype=np.float32) * 0.25 * (np.asarray(pat, dtype=np.float32).mean() / max(1.0, np.asarray(base, dtype=np.float32).mean()))
     lit = Image.fromarray(np.clip(lit, 0, 255).astype(np.uint8), 'RGB')
     return Image.composite(lit, base, mask)
+
+
+# Board shorts (the user, 21 Nov 2026: "some variants with shorts", then "beach shorts and not assless chaps ... they
+# almost seem risque"): a man's only, bare-chested in the Powder Gang's simple outfit, whose shorts reach the knee (Honest
+# Hearts' Sorrows shorts were tried first: whole all round but cut as high as briefs). Its shorts are cut-down trousers
+# panels in powdergang02.dds, apart from the belt, the bandolier's strap and the boots (powdergang01.dds): only the panels
+# below the belt are printed. A woman wears her printed dress in the same record (no woman's version has shorts).
+SHORTS = {'folder': 'meshes\\armor\\powdergang\\', 'textures': 'textures\\armor\\powdergang\\', 'picture': 'powdergang02.dds',
+          'meshes': {'m': 'powdergang04.NIF', 'go': 'powdergangv1_GO.NIF'}}
+HIPS = (20, 68)             # (a worn triangle with its middle between these heights is the shorts; the belt is over it)
+STRAP_U = 0.17              # (left of this in the picture: the bandolier's strap and pouches, never printed)
+
+
+def shorts_shapes(gd, part):
+    tex = (SHORTS['textures'] + SHORTS['picture']).lower()
+    data = gd.read_file(SHORTS['folder'] + SHORTS['meshes'][part])
+    return [s for s in nif.mesh_from_nif(data, placed=False) if s['tex'].lower() == tex]
+
+
+def shorts_mask(gd):
+    """0-255: where the shorts' print goes on their picture (the folded copy on the ground lies on the same panels)."""
+    orig = _picture(gd, SHORTS['textures'] + SHORTS['picture'])
+    w, h = orig.size
+    tri = Image.new('L', (w, h), 0)
+    md = ImageDraw.Draw(tri)
+    for s in shorts_shapes(gd, 'm'):
+        uv, idx, P = s['uv'], s['i'], s['p']
+        for t in range(0, len(idx), 3):
+            ks = [idx[t + k] for k in range(3)]
+            if HIPS[0] <= sum(P[3 * k + 2] for k in ks) / 3 <= HIPS[1] and sum(uv[2 * k] for k in ks) / 3 > STRAP_U:
+                md.polygon([(uv[2 * k] * w, uv[2 * k + 1] * h) for k in ks], fill=255)
+    return tri.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(1.0))
+
+
+def paint_shorts(gd, style, worn=False, seed=1, mask=None):
+    base = _picture(gd, SHORTS['textures'] + SHORTS['picture'])
+    return printed(base, mask if mask is not None else shorts_mask(gd), style, worn, seed)
 
 
 def dds_of(im):

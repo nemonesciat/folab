@@ -39,6 +39,7 @@ import actors
 import adopt
 import api_scripts
 import api_quests
+import api_voices
 import api_characters
 import radio
 import browse
@@ -2078,6 +2079,12 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.startswith(('/api/quest/', '/api/dlg/')):
                 with _lock:
                     return self.send(api_quests.get(u.path, q, GD, PR, BR))
+            if u.path.startswith('/api/voice/'):
+                with _lock:
+                    got = api_voices.get(u.path, q, GD, PR)
+                if got is None:
+                    return self.send({'error': 'not found'}, code=404)
+                return self.send(*got) if isinstance(got, tuple) else self.send(got)
             if u.path.startswith('/api/library/'):
                 return self.send(*library.get(u.path[13:], q))
             if u.path.startswith('/api/radio/'):
@@ -2288,6 +2295,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
                 if u.path.startswith(('/api/quest/', '/api/dlg/')):
                     return self.send(api_quests.post(u.path, body, GD, PR, BR, edit))
+                if u.path.startswith('/api/voice/'):
+                    got = api_voices.post(u.path, body, GD, PR)
+                    if got is None:
+                        return self.send({'error': 'not found'}, code=404)
+                    return self.send(*got) if isinstance(got, tuple) else self.send(got)
                 if u.path.startswith('/api/char/'):
                     return self.send(api_characters.post(u.path, body, GD, PR, BR, edit))
                 if u.path.startswith('/api/radio/'):

@@ -120,7 +120,7 @@ def _fill(px, size, pts, v):
 def _things(gd, pr, world, px, size, x0, y0, n, per):
     import roadbed
     import townbuild
-    roads = roadbed._flat_bases(gd)
+    roads = roadbed._flat_bases(gd, pr)
     slabs = roadbed._slab_bases(gd)
     try:
         import server

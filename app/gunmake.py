@@ -29,12 +29,15 @@ FORWARD = ((0.0, 1.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 0.0))           # Projec
 CASE_OUT = ((0.005, 0.988, -0.152), (-0.969, 0.043, 0.244), (0.247, 0.146, 0.958))   # ShellCasingNode: out to the right
 
 
-def build_gun(name, parts, marks, mass=9.0, material='metal'):
+def build_gun(name, parts, marks, mass=9.0, material='metal', frames=None):
     """The bytes of a gun.
 
     parts: [(node name, [shape, ...])]: a named part ('##riotClip') gets a node of its own the animations move; None is
            the body, its shapes straight under the root.
     marks: [(node name, (x, y, z), turn)]: the marker nodes (ProjectileNode, ShellCasingNode, ##SightingNode).
+    frames: {node name: ((x, y, z), turn)} for a part whose node the ride-on gun stands off the origin or turned (the
+           Assault Carbine's ##Clip at x 10): the animations' keys are that node's whole place, starting from where the
+           game's model stands it, so ours stands there too. Shapes are given in the gun's frame either way.
     Shapes as nifmake.build takes them."""
     strings, blocks = [], []
 
@@ -92,7 +95,8 @@ def build_gun(name, parts, marks, mass=9.0, material='metal'):
     children = []
     for nm, ss in parts:
         if nm:
-            children.append(node(nm, (0.0, 0.0, 0.0), IDENTITY, ss))
+            t, R = (frames or {}).get(nm, ((0.0, 0.0, 0.0), IDENTITY))
+            children.append(node(nm, t, R, [into(s, t, R) for s in ss]))
     for nm, t, R in marks:
         children.append(node(nm, t, R, []))
     for nm, ss in parts:
@@ -112,6 +116,19 @@ def build_gun(name, parts, marks, mass=9.0, material='metal'):
     head += struct.pack('<II', len(strings), max(len(s) for s in strings)) + b''.join(nifmake._sized(s) for s in strings)
     head += struct.pack('<I', 0)
     return head + b''.join(d for _k, d in blocks) + struct.pack('<II', 1, 0)
+
+
+def into(s, t, R):
+    """A shape given in the gun's frame, in the frame of a node stood at t turned by R (a point there is t + R p)."""
+    if all(abs(v) < 1e-9 for v in t) and all(abs(R[r][c] - (r == c)) < 1e-9 for r in range(3) for c in range(3)):
+        return s
+    back = lambda v: [sum(R[k][i] * v[k] for k in range(3)) for i in range(3)]       # R turned back (R is a turn)
+    p, n = s['p'], s['n']
+    q, m = [], []
+    for k in range(0, len(p), 3):
+        q += back([p[k] - t[0], p[k + 1] - t[1], p[k + 2] - t[2]])
+        m += back(n[k:k + 3])
+    return dict(s, p=q, n=m)
 
 
 # ---------- shapes ----------

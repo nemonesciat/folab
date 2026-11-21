@@ -165,3 +165,64 @@ check('nothing outside touched', list(pr2.cells[ck]['refs']) == ['+900006'])
 check('the report counts by side', rep['removed'] == {'+PLACE': {'Powder Gangers': 1, 'Fiends': 1}}, rep['removed'])
 pr2.undo()
 check('one Undo puts them back', len(pr2.cells['+PLACE']['refs']) == 5)
+
+# ---- the shoes never printed (they share the outfit's picture: the man's V between his shirt fronts is their leather) ----
+for g in ('m', 'f'):
+    M = np.asarray(gp.cloth_mask(gd, g))
+    h, w = M.shape
+    feet = []
+    for s in gp._shapes(gd, g, gp.GARMENTS[g][1]):
+        uv, idx, Pz = s['uv'], s['i'], s['p']
+        for t in range(0, len(idx), 3):
+            ks = [idx[t + k] for k in range(3)]
+            if max(Pz[3 * k + 2] for k in ks) < 12:
+                cu, cv = sum(uv[2 * k] for k in ks) / 3, sum(uv[2 * k + 1] for k in ks) / 3
+                feet.append(M[min(h - 1, int(cv * h)), min(w - 1, int(cu * w))])
+    check('%s: no shoe printed' % g, feet and max(feet) == 0, (len(feet), max(feet) if feet else None))
+
+# ---- board shorts: the Powder Gang's knee-length shorts printed (a woman in her dress), a third of the surfers' list ----
+sm = np.asarray(gp.shorts_mask(gd))
+check('shorts: the print is a fair share of their picture', 0.08 < (sm > 128).mean() < 0.45, round((sm > 128).mean(), 3))
+skin = []
+for part in ('m',):
+    for s in gp.shorts_shapes(gd, part):
+        uv, idx, Pz = s['uv'], s['i'], s['p']
+        for t in range(0, len(idx), 3):
+            ks = [idx[t + k] for k in range(3)]
+            z = sum(Pz[3 * k + 2] for k in ks) / 3
+            if gp.HIPS[0] + 4 < z < gp.HIPS[1] - 4 and sum(uv[2 * k] for k in ks) / 3 > gp.STRAP_U + 0.02:
+                cu, cv = sum(uv[2 * k] for k in ks) / 3, sum(uv[2 * k + 1] for k in ks) / 3
+                skin.append(sm[int(cv * 1023), int(cu * 1023)])
+check('shorts: the legs and seat printed', skin and np.mean(np.asarray(skin) == 255) > 0.9, round(float(np.mean(np.asarray(skin) == 255)), 3))
+before = {k: [s for s in pr.records[k]['subs'] if s['tag'] == 'LVLO'] for k, r in pr.records.items()
+          if (recordio.field(r, 'EDID') or '') in ('FOLabSurferBodyList', 'FOLabPirateBodyList')}
+first = pr.next_id
+ops, rep = P.shorts_ops(gd, pr)
+made = pr.apply('shorts', ops)
+check('shorts: the keys as planned', made[:6] == ['+%06X' % (first + n) for n in range(6)], made[:6])
+for kind, info in rep['lists'].items():
+    rows = [s for s in pr.records[info['list']]['subs'] if s['tag'] == 'LVLO']
+    got = [next(f['value'] for f in s['fields'] if f.get('code') == 'F') for s in rows]
+    olds = [next(f['value'] for f in s['fields'] if f.get('code') == 'F') for s in before[info['list']]]
+    check('%s: every old entry twice and three shorts once' % kind, len(rows) == 2 * len(olds) + 3 and all(got.count(o) == 2 * olds.count(o) for o in set(olds)), len(rows))
+try:
+    P.shorts_ops(gd, pr)
+    check('shorts: a second time refused', False)
+except ValueError:
+    check('shorts: a second time refused', True)
+path3 = path[:-4] + ' shorts.esp'          # (gd2 holds the first file open)
+espwrite.write(gd, pr, path3)
+gd3 = gamedata.GameData(plugins=list(gamedata.OFFICIAL) + [path3])
+me3 = len(gd3.plugins) - 1
+sor = dict(tes4.iter_subrecords(gd.plugins[gd.forms[find('ARMO', P.OUTFIT)][0]].data(gd.forms[find('ARMO', P.OUTFIT)][1])))
+for e, info in rep['shorts'].items():
+    fid = (me3 << 24) | int(info['key'][1:], 16)
+    d = dict(tes4.iter_subrecords(gd3.plugins[gd3.forms[fid][0]].data(gd3.forms[fid][1])))
+    models = [tes4.zstr(d[t]) for t in ('MODL', 'MOD3', 'MOD2')]
+    pics = set()
+    for m in models:
+        pics |= {t['path'].lower() for t in nifwrite.textures_in(open(os.path.join(root, 'meshes', m), 'rb').read())}
+    mine = [p for p in pics if '\\folab\\' in p]
+    check('%s: clothes as the shirts; a man\'s shorts and their folded copy, a woman\'s printed dress' % e,
+          d['BMDT'] == sor['BMDT'] and d['DATA'] == sor['DATA'] and 'shorts' in models[0] and 'shorts' in models[2] and
+          models[1].endswith('_f.nif') and 'shorts' not in models[1] and all(os.path.exists(os.path.join(root, p)) for p in mine), models)

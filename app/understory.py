@@ -126,7 +126,7 @@ class _Grid:
 
 def _roads(gd, pr, world, keys):
     import roadbed
-    flat, slabs = roadbed._flat_bases(gd), roadbed._slab_bases(gd)
+    flat, slabs = roadbed._flat_bases(gd, pr), roadbed._slab_bases(gd)
     by = {}
     for ck in keys:
         for r in pr.cells.get(ck, {}).get('refs', {}).values():

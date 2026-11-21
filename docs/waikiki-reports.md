@@ -6,6 +6,57 @@ at the start of any Waikiki work, and before saying anything is ready.
 
 ## Open
 
+- **Requests and feedback before going out** (21 Nov 2026, ~09:25), the user's words, each passed to a session:
+  - "roads and rubble we made could use a little more detail. they're great so far, but look plain." (roads and rubble session)
+  - "the trees in distance - the palm variety looks pretty good, the bulbous ones are still a little simplistic, and they
+    need more variety - they all look like the same exact tree" (story session, `plantfar.py`)
+  - "want to consider adding some custom armor types- would you suggest any? are there any that give hawaiian warrior
+    vibe? pirate options? something for the Huang, neo-traditionalistic even?" and "maybe some unique chinese themed dress
+    for the huang?" (people's dress session; suggestions first)
+  - "at least a couple more types of chinese guns" (guns session)
+  - "would like to see more neon lights, maybe some on the hotel signs, would be cool to see them from a distance glowing
+    thru as storms roll in?" and "is it possible to get better, more stylized signage in general? text and theme is very
+    simplistic." (own models session)
+
+- **The QLZ-87 not seen when aiming** (21 Nov 2026, told to the guns session; seen earlier, game not yet said): "about the
+  custom gun, i remember not seeing it when i zoomed down the barrel". The user, later: drawn in hand, then gone on aiming.
+  Not yet known: nv-rs or the original game. Checked so far: the model's shape bounds are right (not culled by them);
+  its sight line and ##SightingNode are the Light Machine Gun's exactly; no scope model (MOD3) on the record (nv-rs hides
+  the first-person gun on aim only when there is one); the aim animations name none of its parts. Still different from the
+  LMG's model: the shader's alpha-texture bit and the collision material. The check asked of the user: aim the game's own
+  Light Machine Gun in the same game. The Huáng guns went in 21 Nov 15:06 (nv-rs, nv-rs-pad, MO2) with the QLZ-87's
+  corrected model; not yet seen whether they show when aimed.
+
+- **Out of a house and into its walls** (21 Nov 2026, morning, in nv-rs-pad: "exiting a house placed me inside the
+  building shell"; screenshot `docs/waikiki-report-inside-shell.webp`): coming out of a house's door left the player in a
+  narrow dark gap between the building's walls and a row of stakes, not on the street. Suspect, not checked: the arrival
+  point outside (`townbuild._arrive_out`, "a step outside the wall" for borrowed places, or a game arrival kept after
+  groundfit moved or `restyle` swapped the building).
+  Cause (story session, 21 Nov ~08:50): not the arrival. townbuild stood the game's `DoorBarricade` / boards for a doorway
+  (`shut`) as well as the door itself, because the game stands its barricade 90-120 in front of the door and the catalogue
+  counted only within 80 as the same doorway. 316 of 1,732 ways out had boards within 200. Fix rehearsed on a copy, not yet
+  in the mod: `app/doorclear.py` takes out 542 pieces at 397 doors (316 -> 57 within 200; leftovers mostly the next
+  doorway's), townbuild leaves them out from now on. Not checked: boards over a window beside a door.
+  In the mod 21 Nov 08:57 (backup 'Waikiki before doors unbarred 1121-0856'); in nv-rs, nv-rs-pad and MO2 09:03 (MD5
+  f5cbad00...; the plain game's Data too at 09:14, on the user's "Yes, update it"). Waiting for the user to see it.
+
+- **Thin green lines across the view** (20 Nov 2026, ~21:00, in nv-rs-pad (main-d9243748) at night by the Natatorium and the Missouri: "why are these here again?", "see all these green lines?"; screenshots `docs/waikiki-report-green-lines-1.webp`, `-2.webp`): faint hairlines, long and nearly straight, drawn across the water and the air in front of the shore, as if a triangle or card had a corner pulled far away. Seen after tonight's installs (far trees remade, the city's grass thickened, guard towers, bamboo). Suspects, none checked: the new far tree models or rebuilt far blocks, a grass or plant model with a stray point, the bamboo or tower models' see-through edges. The user found it (screenshot `-3.webp`, marked in red): "its the top line of how this grass is drawn, it goes thru itself 3 ways, and the lines always appear at the top edge": a FOLab grass clump of three crossed cards, a thin line along each card's TOP edge. Likely the picture wrapping top-to-bottom: the stems kept opaque on the bottom rows (`modelsets.RIM_KEEP`, from the black-bars fix) are sampled at the top edge too (wrap mode, filtering and smaller mip levels). Fix to try: clamp the texture in v (the shader property's texture clamp mode) and/or keep the card's v inside half a pixel of each edge. Also in the first shot: grass blades growing up through a beach lounger (engine grass on sand under things); not yet confirmed with the user that this is what "these" meant.
+- **A house with a wall missing inside** (20 Nov 2026, evening, in nv-rs-pad: "obviously interiors will need checking and work, but this house has a bare wall"; screenshot `docs/waikiki-report-bare-wall.webp`): inside a dark lent house, one whole wall opens onto blank white. The user wants interiors checked generally.
+  Cause (proven 20 Nov 19:30 on the mod's data): `roomvary` (rooms not the same twice) took the game's whole house shell
+  `UshomIntLight01` ("Light" means lightly worn in the game's house kit, read as a lamp) for a thing in the room and swapped
+  it for `UshomIntLight02`, a shell of another shape: every copy after the first of the game's Usonian home, Goodsprings
+  house and Nipton houses 3 and 4 stood with a side open. Not XESP / initially-off (the first guess): no copied place is
+  missing a wall piece from what the game stands. Which house: the save's spot (nv-rs-pad autosave 19:19) is by
+  FOLabWaikikiHouse330, a Nipton House 3 copy. Survey of all 1,787 places: 134 pieces in 105 places swapped that are part
+  of the building (60 house shells in 53 houses, 4 army hut shells, wallpaper, rubble banks, signs). Code: `roomvary.MOST`
+  (nothing over 600 across is ever swapped), `roomvary.mend` puts them back as the game has them; tests in
+  `tests/test_roomvary.py`. In the mod 20 Nov 2026 ~20:05 (backup 'Waikiki before bare walls and Mojave things 1120-1954'), rehearsed first on a copy: 158 pieces in 126 places put back (also 24 Sunset Sarsaparilla posters the swaps had turned into the Strip's and McCarran's far walls: 'Imposter' read as 'poster'), health 0 errors, same warnings as before. Install: the story session's next.
+  Found on the way: 61 places nothing leads to (left from buildings taken out); in the
+  hotels' view worlds 18 copied city doors still lead into 12 places whose own door is locked and unlinked (you can't reach
+  those doors from the hotels' rooms, but they're wrong); 60 shacks with no light of their own (the game's own are so);
+  Mojave things on show inside (the user: "Mojave things out"; taken out in the same save, `townbuild.MOJAVE_SHOWN` / `mojave_out`, 370 in 179 places, Novac's dinosaur boxes made household boxes; copies made from now leave them out; `tests/test_mojaveout.py`): 59 Legion flags, 146 NCR posters, 35 Caesar bedrolls, 11 NCR decals, 10 Kings chalkboards,
+  20 Novac dinosaur souvenir boxes and a few Primm, Lucky 38 and Gomorrah posters, in 186 places. Not checked: things floating or sunk.
+- **Far trees look like lollipops** (20 Nov 2026, evening, in nv-rs-pad (main-d9243748) at Hanauma Bay, 45 fps: "right idea, but poor execution on distant foliage"; screenshot `docs/waikiki-report-far-trees.webp`): past the loaded cells FOLab's far trees are flat-shaded green blobs on bare poles, round tops sitting on the ridges like balls and a few hanging over the hills; they don't read as palms or forest beside the near trees. The far ground's green under them looks right. Passed to the story session. Fixed (~19:15): the far trees as lumps where each tree's leaves mass (broadleaf) or a fan of drooping fronds (palms), each in its own leaves' colour, every trunk 400 under its foot so a hilltop's coarser far ground can't leave it on air (`plantfar.py`); the blocks remade with the mod's own files seen (a bug of mine: without the overlay lodobj saw no FOLab far model; 175 blocks, 20,640 far things). Not yet in the game (it was running).
 - **Desert plants on the dry ridges** (20 Nov 2026, the user via the build session: "yes, swap"; the list in waikiki-mojave-misfits.md): all 3,372 swapped: creosote and yucca to koa haole (FOLab's leafy shrubs) and kiawe (the game's mesquite), sagebrush to pili grass (FOLab's gold and dry tufts), the pickable banana yucca to pickable mesquite, barrel cactus to prickly pear; 609 on ground too steep for a FOLab plant became the game's mesquite in their own spot. None left. Reruns: `modelsets.DESERT` stand-ins on every dressing run, osmdress/understory lists changed. In MO2 and every nv-rs ~16:40. Not yet seen.
 - **The Prospector Saloon in Waikiki, and other Mojave buildings** (20 Nov 2026, a screenshot in Mōʻiliʻili, the
   "PROSPECTOR SALOON" sign among plain wooden houses: "We should see about replacing more of the unique models in the
@@ -30,7 +81,13 @@ at the start of any Waikiki work, and before saying anything is ready.
   replaced or removed please"; the user chose removed): 138 out (48 Fiends Royal Hawaiian, 39 Fiends + 1 raider Kilauea,
   51 Powder Gangers Moana), `peopledress.apply_clear`, one Undo, 16:44 (backup 'Waikiki before hotel gangs out
   1120-1640'), in MO2 and every nv-rs 16:46. Mojave animals left for now (the user's choice). Open: what a surfer is (a
-  gang?). The boater and a lauhala sun hat made (`hats.py`, `docs/waikiki-hats.png`), the surfers' in place of the Rattan Cowboy Hat: in the mod 17:17 (one Undo; backup 'Waikiki before straw hats 1120-1714'), in MO2 and every nv-rs 17:18. Not yet seen in game.
+  gang?). The boater and a lauhala sun hat made (`hats.py`, `docs/waikiki-hats.png`), the surfers' in place of the Rattan Cowboy Hat: in the mod 17:17 (one Undo; backup 'Waikiki before straw hats 1120-1714'), in MO2 and every nv-rs 17:18. Not yet seen in game. The user's look (21 Nov 2026): "havent seen any hats yet, the hawaiian shirts look good, but the shoes are also
+  haweaiian printed like the shirts", "some variants with shorts", then of the first shorts tried "be sure those shorts look
+  like beach shorts and not assless chaps. they almost seem risque". Found: the man's shoes' leather sits in his outfit's
+  picture between the shirt fronts and was taken for a neckerchief, the woman's shoes where her sleeves were thought to be;
+  now nothing below the ankle is printed (`garmentprint.FEET`). Shorts: Honest Hearts' Sorrows shorts were cut as high as
+  briefs; now the Powder Gang's knee-length shorts on a bare-chested man (boots and belt plain, `docs/waikiki-board-shorts.png`),
+  a woman in the same record in her printed dress, a third of surfers. Not yet in the mod. Hats: not yet looked into.
 - **A glitched water tile up the shore** (20 Nov 2026, in nv-rs by the ruined freeway: "glitched water tile up shore"): a cell's own river level laid flat over a bank lower than it. 13 cells of 51 with their own water had such banks; the low pockets inside each cell raised 12 over the water (294 points, 50 things raised with them), one cell whose level was wrong written dry; none left inside a cell (pockets on a cell's edge, shared with its neighbour, left). In every nv-rs ~12:05. The user's look: "Better".
 - **The city feels like the Mojave: "WHERE ARE THE PLANTS"** (20 Nov 2026, in nv-rs over the city, 21-27 fps: "this shit feels so unrealistic"; "i dont want a barren desert, but i dont want 10 fps. is this impossible?"). The grass grows on most wild ground (the census: about half the dry land by grassrule, more counting the mod's own twins it can't read; the rest roads and pavement) but thin. Made thick (`plantgrass.KINDS`: grasses 36-60, ferns 16-30, shrubs 12) and taro, heliconia and ti grown by the ground too; the far ground painted with what grows (`farfoliage.py`, through lodgen) next. Then the user's look at a lush stretch ("this has fewer trees and looks good too ... the answer isnt just more trees"): its ground is covered. Grass now right up to buildings (`plantgrass.BUILT_PTS`) and 384 from roads, not 512 (`CLEAR_PTS`). In every nv-rs ~12:05 with the thick grass. The user's look: "Better". Far ground green running.
 - **Water banding at the start's bay** (20 Nov 2026, in nv-rs, looking over Hanauma's bay: "what causes this water banding?"): a straight-edged lighter band across the water. Ruled out: no cell there is dry (one in the whole map, (21, -7)), all the bay's cells the same water (XCWT FalloutNV 030009), the world's far water (NAM4) is 0 in the mod. Likely, not proven: the far ground under the sea (distant land, coarser) standing shallower than the near sea bed, so the water past the loaded cells is drawn as shallow water.

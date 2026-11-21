@@ -186,14 +186,28 @@ def sink(edid):
     return float(_lies_on()[1].get(edid.lower(), 0.0))
 
 
+def _own_box(rec):
+    """A record's bounds (OBND) as [x0, y0, z0, x1, y1, z1], or None."""
+    for sub in (rec or {}).get('subs', ()):
+        if sub.get('tag') == 'OBND':
+            v = [f['value'] for f in sub.get('fields', ()) if 'name' in f]
+            if len(v) == 6 and (v[3] > v[0] or v[4] > v[1]):
+                return [float(x) for x in v]
+    return None
+
+
 def seat_lying(gd, pr, world, progress=None):
     """(ops, report): every thing of the mod's own that lies on the ground (LIES), laid on it as it now is: its tilt fitted
     to the ground under its whole footprint (nine spots), then let down until no part of its underside hangs over the
     ground, never sunk by more than SEAT_DEEP of its height. Ground moved after it was put down (plots levelled, the
     coast cut, roads bedded) left 2,500 of 6,000 such things on Waikiki with an edge in the air. One that still hangs
-    after that, if it is rubble or the like (GONE_IF_HANGING), is taken out."""
+    after that, if it is rubble or the like (GONE_IF_HANGING), is taken out. FOLab's own rubble (rubbleset) is laid by
+    its rim (rubbleswap.seat_one); a game model merged in one piece (onepiece) as the game's of that name."""
     import navgen
+    import recordio
     import roadbed
+    import rubbleset
+    import rubbleswap
     import townbuild
     g = roadgen.Ground(gd, pr, world)
     keys = {gd.key(c) for c in gd.grid(world).values()}
@@ -204,8 +218,29 @@ def seat_lying(gd, pr, world, progress=None):
             continue
         for rk, r in c['refs'].items():
             base, p = r.get('base'), r.get('p')
-            if not rk.startswith('+') or not base or not p or r.get('removed') or base.startswith('+'):
+            if not rk.startswith('+') or not base or not p or r.get('removed'):
                 continue
+            if base.startswith('+'):
+                # (the mod's own: rubbleset's pieces lie by their rim and skirt; a game model merged in one piece,
+                # onepiece's 'FOLab' + its editor ID, lies as the game's does, by its record's bounds)
+                if base not in names:
+                    e = recordio.field(pr.records.get(base) or {}, 'EDID') or ''
+                    own = rubbleset.piece_of_edid(e)
+                    names[base] = ('own', own) if own and not rubbleset.is_road(own) else \
+                        '' if own else e[5:].lower() if e.startswith('FOLab') else ''      # (roads are roadbed's)
+                    if not isinstance(names[base], tuple):
+                        boxes[base] = _own_box(pr.records.get(base))
+                if isinstance(names[base], tuple):
+                    new = rubbleswap.seat_one(g, p, float(r.get('s') or 1.0), names[base][1])
+                    looked += 1
+                    if new and rubbleswap.gone(g, new, float(r.get('s') or 1.0), names[base][1]):
+                        ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
+                        gone += 1
+                        continue
+                    if new and (abs(new[2] - p[2]) > 1.0 or any(abs(u - v) > 0.01 for u, v in zip(new[3:6], p[3:6]))):
+                        ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': new})
+                        moved += 1
+                    continue
             if base not in names:
                 try:
                     names[base] = (gd.edid(gd.from_key(base)) or '').lower()

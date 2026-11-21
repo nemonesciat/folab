@@ -35,6 +35,7 @@ import random
 import re
 import struct
 
+import doorclear
 import kitindex
 import landshape
 import navbuild
@@ -70,6 +71,12 @@ INSIDE_SHARE = 0.6         # (of ordinary buildings that have a real place behin
 MAX_INSIDES = 300          # (places made in one go: each needs a navmesh, a few seconds)
 INITIALLY_OFF = 0x800      # (a ref's record flag: off until something switches it on)
 NOT_INSIDE = {'NPC_', 'CREA', 'LVLN', 'LVLC', 'KEYM', 'NOTE', 'TACT', 'TERM'}
+# What says Mojave at a glance in the game's places (its factions' flags, posters, bedrolls and kit, its towns' flyers and
+# maps, the Strip's far walls, its desert's fruit): a copy leaves it out. The user, 20 Nov 2026: "Mojave things out".
+MOJAVE_SHOWN = re.compile(r'^(NCRPoster|NVNCRFlag|NVNCRDecal|NVLegionFlag|NVBedrollCaesar|KingsChalkboard|OutfitKings|VFSLegionWHAmbush'
+                          r'|NVLucky38Poster|NVGomorrahPoster|PosterPrimm|FlyerPrimm|HooverSignGraffiti|HooverDamMap|HelmetNVNCR|OutfitNCR'
+                          r'|GlassesNCR|NevadaAgave)|Imposter', re.I)
+MOJAVE_INSTEAD = {'NovacMetalBox01DinoSouvenir': 'MetalBox01Household'}   # (the same box, without Novac's dinosaur souvenirs)
 PLACE_NAME = {'house': 'House', 'shop': 'Shop', 'apartments': 'Offices', 'civic': 'Hall', 'industrial': 'Works'}
 
 # (words in an editor ID that say it isn't a building: signs, walls, roads, ruins in heaps, far-off stand-ins, parts)
@@ -464,7 +471,10 @@ def inside_ops(gd, inside, tag, edid, full):
             continue
         if btag != 'DOOR' and 'SCRI' in gd.fields(r['base']):
             continue                     # (a script of its own may be part of a game quest: a safehouse's bed, a terminal's menu)
-        o = {'op': 'add', 'cell': '$' + tag, 'base': gd.key(r['base']), 'p': [round(v, 4) for v in list(r['pos']) + list(r['rot'])], 's': round(r['scale'], 4)}
+        base = mojave_free(gd, r['base'])
+        if base is None:
+            continue
+        o = {'op': 'add', 'cell': '$' + tag, 'base': gd.key(base), 'p': [round(v, 4) for v in list(r['pos']) + list(r['rot'])], 's': round(r['scale'], 4)}
         if r['ref'] == exit_fid:
             o['name'] = tag + 'x'
         elif btag == 'DOOR':
@@ -476,6 +486,51 @@ def inside_ops(gd, inside, tag, edid, full):
         ops.append(o)
         kept += 1
     return ops, kept, doors
+
+
+_instead = {}
+
+
+def mojave_free(gd, fid):
+    """A game base as a copied place shows it here: None for what says Mojave at a glance (`MOJAVE_SHOWN`), the plain twin
+    for what has one (`MOJAVE_INSTEAD`), else itself."""
+    edid = gd.edid(fid)
+    if MOJAVE_SHOWN.search(edid or ''):
+        return None
+    if edid in MOJAVE_INSTEAD:
+        if id(gd) not in _instead:
+            want = set(MOJAVE_INSTEAD.values())
+            _instead[id(gd)] = {gd.edid(f): f for f, (i, r) in gd.forms.items() if r.tag in ('CONT', 'STAT', 'MISC') and gd.edid(f) in want}
+        return _instead[id(gd)].get(MOJAVE_INSTEAD[edid], fid)
+    return fid
+
+
+def mojave_out(gd, pr, keys=None):
+    """Ops that take what says Mojave out of the mod's own places as they stand (what `inside_ops` now leaves out of a copy):
+    removed, or its plain twin swapped in. Doors, ways and anything with a lock, an owner or a link are left. Returns
+    (ops, {editor ID: how many})."""
+    import roomvary
+    keys = roomvary.interiors(pr) if keys is None else keys
+    ops, count = [], collections.Counter()
+    for k in keys:
+        for rk, ch in sorted(pr.cells[k].get('refs', {}).items()):
+            if not rk.startswith('+') or ch.get('removed') or 'base' not in ch or ch['base'].startswith('+') or roomvary._kept(ch):
+                continue
+            try:
+                fid = gd.from_key(ch['base'])
+            except Exception:
+                continue
+            if fid not in gd.forms:
+                continue
+            now = mojave_free(gd, fid)
+            if now == fid:
+                continue
+            count[gd.edid(fid)] += 1
+            if now is None:
+                ops.append({'op': 'remove', 'cell': k, 'ref': rk})
+            else:
+                ops.append({'op': 'swap', 'cell': k, 'ref': rk, 'base': gd.key(now)})
+    return ops, dict(count)
 
 
 def copied_navmesh(gd, pr, src, ckey, door_keys):
@@ -967,7 +1022,7 @@ def plan(gd, pr, world, rows, cat, seed=1, progress=None, insides=INSIDE_SHARE, 
             rep['nothing_fits'] += 1
         else:
             rep['built'] += 1
-    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'opened': rep.get('opened', 0), 'rooms': rep.get('rooms', 0), 'unboarded': rep.get('unboarded', 0), 'twins': rep.get('twins', 0), 'backed': rep.get('backed', 0), 'too_small': rep['too_small'],
+    report = {'plots': rep['plots'], 'built': rep['built'], 'buildings': rep['buildings'], 'doors': rep['doors'], 'shut': rep.get('shut', 0), 'opened': rep.get('opened', 0), 'rooms': rep.get('rooms', 0), 'unboarded': rep.get('unboarded', 0), 'unbarred': rep.get('unbarred', 0), 'twins': rep.get('twins', 0), 'backed': rep.get('backed', 0), 'too_small': rep['too_small'],
               'nothing_fits': rep['nothing_fits'], 'blocked': rep['blocked'], 'steep': rep['steep'], 'had_one': rep['had_one'],
               'cleared': len(gone), 'families': dict(fams), 'catalogue': len(cat), 'roads_seen': len(roads), 'poi': rep['poi'], 'landmarks': rep['landmarks'],
               'insides': len(w.ins.tags) if w.ins else 0, 'inside_things': w.ins.things if w.ins else 0, 'made': list(w.ins.tags) if w.ins else [],
@@ -1174,7 +1229,15 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
             o['extra'] = DOOR_LOCK
             ops.append(o)
     stood = [(e['base'], e['x'], e['y'], e['z']) for e in b['doors']]
+    # (the doorways given a way in: the game's barricade for them stands 75-125 out, past SHUT_SAME, and shut you in
+    # between it and the wall when you came out, doorclear.py)
+    ways = ([b['doors'][inside['door']]] if inside and 'door' in inside and inside['door'] < len(b['doors']) else []) + \
+        [shut[n] for n in ([entry[0]] if entry is not None and inside else []) + list(rooms) if n < len(shut)]
     for n, d in enumerate(shut):
+        if ways and not any(d is u for u in ways) and doorclear.is_bar(w.gd.edid(w.gd.from_key(d['base']))) and \
+                any(doorclear.in_the_way((u['x'], u['y']), u['z'], d['x'], d['y'], d['z']) for u in ways):
+            rep['unbarred'] = rep.get('unbarred', 0) + 1
+            continue
         # (the same door the catalogue has as a way in, or twice as shut: once is enough; 28 buildings of Waikiki had
         # two locked office doors in one doorway)
         if any(base == d['base'] and math.hypot(d['x'] - x, d['y'] - y) < TWIN and abs(d['z'] - z_) < TWIN for base, x, y, z_ in stood):

@@ -63,7 +63,7 @@ BOXES = {HOUSE: [-200, -200, -50, 200, 200, 400], ROAD: [-256, -256, -25, 256, 2
 CAT = [{'key': HOUSE, 'mid': 0.0, 'edid': 'NVHouse01'}]
 townbuild.obnd = lambda gd, b: BOXES.get(b)
 townbuild.load = lambda gd, folder: CAT
-roadbed._flat_bases = lambda gd: {ROAD: BOXES[ROAD]}
+roadbed._flat_bases = lambda gd, pr=None: {ROAD: BOXES[ROAD]}
 roadbed._slab_bases = lambda gd: {}
 import server  # noqa: E402
 server.kits_folder = lambda: ''

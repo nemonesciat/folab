@@ -488,7 +488,7 @@ def pad(gd, pr, world, steep=PAD_STEEP, only=None, level_at=LEVEL_AT):
         except (KeyError, ValueError):
             return ''
 
-    flat = roadbed._flat_bases(gd)
+    flat = roadbed._flat_bases(gd, pr)
     held = set()
     for c in pr.cells.values():
         for r in (c.get('refs') or {}).values():

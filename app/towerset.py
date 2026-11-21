@@ -221,8 +221,8 @@ def _looks():
         'tiles': look('resort/kil_tiles', tile=420, far='resort/kil_far_tiles'),
         'fins': look('resort/kil_fins', tile=700, far='resort/far_white'),
         'flame': waikikiset.lit('resort/kil_amber', 3.0),
-        'blade': look('resort/kil_signs', region=(0, 0, 1, 0.5), turned=True),
-        'casino': look('resort/kil_signs', region=(0, 0.5, 1, 1)),
+        'blade': modelsets.neon('resort/kil_signs', 8.0, region=(0, 0, 1, 0.5), turned=True),     # (its neon: signsheets.kil_signs)
+        'casino': modelsets.neon('resort/kil_signs', 8.0, region=(0, 0.5, 1, 1)),
     })
     out['deck_glass'] = dict(out['glass'])
     return out

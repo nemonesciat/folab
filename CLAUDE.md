@@ -64,6 +64,29 @@ the model for style, UI and approach. Python, standard library first, code in `a
   (Open in game), and tests for outdoor and own-place starts (`tests/test_newgame_places.py`). A crash
   leaves `%LOCALAPPDATA%\CrashDumps\FalloutNV.exe.*.dmp`: the faulting thread's stack against fnv_decomp's `@fnv`
   addresses names the loop.
+- Waikiki's first quest (`castawayquest.py`, `tests/test_castawayquest.py`; the recipe for later quests in
+  `docs/waikiki-quest-recipe.md`): "What the Sea Brought In", after the opening (castawaytalk). One Undo: keys reserved,
+  the script compiled against `extra` before anything exists. The quest's own script moves every step (StartConversation,
+  `MenuMode 1009` heard, GetItemCount, GetDistance to persistent refs, objectives shown and completed by script); no line
+  carries a result script (the opening's never ran in the game). Silent lines; reward `player.AddItem` of the duffle bag's
+  levelled lists; no caps until the user says what Waikiki's money is.
+- Waikiki's second quest (`kuliouquest.py`, `tests/test_kuliouquest.py`): "The First Place on the Way", after the first quest's
+  stage 30. At Kuliouou's camp: catchers lead a stranger off the coast road, a father sells his son to a pirate whose boat is
+  on the beach, a woman by the fire takes the Pip-Boy for a captain's kin and points you to Waikiki. Seven NPC_ of its own,
+  placed off and switched on by the script; travel packages to markers of its own; one Undo. Spots are worked out from the
+  camp's map marker (`spots`). Built and rehearsed on a copy; not yet in Waikiki or seen in game.
+- Waikiki made livelier (`waikikilife.py`, `tests/test_waikikilife.py`; the user, 21 Nov 2026): the road start to Waikiki found
+  through road pieces (`way`, `Way`); hostiles out of Waikiki (`WAIKIKI_R` round the hotels) and dangerous ones off the road
+  (`BAND`; small ones too for the first `QUIET`; a mod's own dangerous one past it becomes a small one); locals (surfer copies,
+  sandbox) round the three hotels, four storekeepers by the Royal Hawaiian with buried copies of the game's merchant chests
+  (a ref's `merchant` extra writes XMRC), quest FOLabWaikikiPeople with GREETING lines and top-level topics, "Let's trade."
+  opening barter by a result script (not yet seen to run); camps (bedroll, campfire, first aid kit, ammo box) every
+  `CAMP_EVERY` along the road. Rehearsed on a copy; not yet in Waikiki.
+- Waikiki's first side quests (`sidequests.py`, `tests/test_sidequests.py`; plan `docs/waikiki-quests-next.md`): one shape, ask, do, come
+  back, reward, as `SPECS`. The Doctor's Stock (waikikilife's doctor, her ref given an EDID by `ref_set`; a trunk of supplies by the
+  road halfway between where it passes Kuliouou and the Kahala; five stimpaks) and Through Makapu'u Gate (a guard of its own in the
+  Lamellar Armor; walk to the last gate by the settlers' ship and back; FOLab's dao). Script names rewards by editor ID. One Undo each.
+  Rehearsed on a copy; not yet in Waikiki.
 - Create page (`web/create.js`): items in plain fields over the same records Browse edits; "Give it to me in game"
   (`/api/give`) reuses FOLab Test.esp: its quest runs player.AddItem once (bytes as the game's Hull20GaAddScript).
 - Outside: `gamedata.py` indexes exterior cells (`ext_cells`, `grid(world)`), LAND (`land`, `land_at`, parent
@@ -139,6 +162,24 @@ the model for style, UI and approach. Python, standard library first, code in `a
   walked at both sizes and at several offsets and turns. A tower the ridge builders seated on a slope (lowest point: flights in
   the hill) goes onto a level pad (`pad`: flattest spot near, land cut low so it reads as a terrace, plants in the footprint
   out, things on moved ground carried), each level tried until a fresh navmesh reaches its deck (`deck_reached`).
+- Waikiki's armour and dress (`armourset.py`, `tests/test_armourset.py`; `docs/waikiki-armour-ideas.md`, pictures
+  `docs/waikiki-armour-built.png`): game armour with FOLab's own pictures (nifwrite retexture), each picture's pixels
+  labelled by where they land on the body (`part_of`, from every model's triangles) and what they're made of (`stuff`,
+  by colour), a recipe per armour (`ARMOURS`) of patterns over the game's own light and alpha (Legion cut-outs stay
+  DXT5); records copy the base without SCRI, EITM, alternate textures. The mahiole is a hats.py-style model (`mahiole_*`,
+  0.18 clear of the head; a rim below the band hit it). `WHO`: only pirates exist as people, so only the boarding armour
+  is worn; the rest wait for their groups. Board shorts (`peopledress.shorts_ops`) ride the Powder Gang's knee-length
+  shorts (the Sorrows pair read as briefs); `garmentprint.FEET` keeps shoes plain (the man's "neckerchief" V was his shoes).
+  Both modules are DEV_ONLY in packaging (numpy, PIL, scipy).
+- Waikiki's people of its own (`factionfolk.py`, `tests/test_factionfolk.py`; picture `docs/waikiki-people-placed.png`; the user's
+  answers 21 Nov 2026): the Huáng (pinyin names: ten Shouwei in lamellar with the Chinese guns at their gates, twelve Nongmin in
+  changshan / silk gown in the courtyards, three Zhanglao in the official's robe on the freighter's deck; their own faction,
+  neutral), six Kahuna's Guard (feather cloak, mahiole, leiomano) at the Royal Hawaiian, eight Court Fighters (koa armour,
+  newa / hoe) at the toll post and round the hotels, three Pirate Captains (officer's coat, PipBoyNPC; a copy of the mod's
+  pirate). A person is a record of the mod's own whose look is a game ordinary person's by template (traits only, so the game's
+  painted face comes with it), never one face twice. Ground spots only over a navmesh (`_on_mesh`); the freighter's deck and
+  the toll post's planking have none, so those stand. Two greetings (the guards'), in FOLabWaikikiPeople. `trade_ops`: the
+  Huáng's containers a clothes list, the gunsmith the court's clubs, the trader koa armour and the coat. Not yet in game.
 - Bamboo and thatch (`bambooset.py`, `bambooplace.py`, `tests/test_bambooset.py`; pictures `docs/waikiki-bamboo.png`,
   `docs/waikiki-bamboo-in-place.png`): what the island's people build from what grows back, against the ruins. Set 'bamboo'
   of modelsets: huts (two sizes), cookhouse, canoe shed, storehouse on posts, `bamboo_fence_lashed` (waikikiset already has a
@@ -200,6 +241,11 @@ the model for style, UI and approach. Python, standard library first, code in `a
   `W.grabbing` keeps world.js's own Esc and right-button cancel off it. `web/placefold.js`: Place panel's Prefabs,
   Recently used and Suggested fold away (remembered), Suggested and Recently used by themselves while a search is typed.
   FOLab.exe waits as long as the server runs (it gave up after 180 s: through MO2 a big load order took longer).
+- Doors you can walk out of (`doorclear.py`, `tests/test_doorclear.py`; the user, 21 Nov 2026: "exiting a house placed me inside
+  the building shell"): the game stands its DoorBarricade ~90-120 out in front of a door it bars, past `townbuild.SHUT_SAME`, so
+  townbuild stood it in front of doors given a place too and you came out between wall and boards (274 of Waikiki's 1,732 ways
+  out). `doorclear.ops` takes out bars near a linked door and beside its arrival (542 in Waikiki, 21 Nov 09:00); townbuild leaves
+  them out (`unbarred`). Not yet seen in game; boards taken out beside a door may have been over a window.
 - Rooms not the same twice (`roomvary.py`, `tests/test_roomvary.py`): the game lends only 116 places to a city's buildings
   (5 shops), so one place stood behind up to nine doors of Waikiki. `twins` finds copies of one place by what they're built
   of; every copy after the first gets things swapped like for like (`Swaps`: same nouns, bounds within `FIT`, same game file,
@@ -207,6 +253,24 @@ the model for style, UI and approach. Python, standard library first, code in `a
   bits cleared); doors and anything named, locked or linked kept; navmeshes stay current. Runs at the end of
   `/api/maps/buildings`; a copy no longer like the first is left alone. townbuild stands a door the catalogue has twice
   in one doorway once (`TWIN`: Waikiki had 80 doubled: office doors, shop-front door statics, planks).
+- Road and rubble with no edges (`rubbleset.py`, `rubbleswap.py`, `tests/test_rubbleset.py`; picture `docs/waikiki-rubble-roads.png`;
+  21 Nov 2026): FOLab's own road pieces and heaps, one shape over one sheet each ('rubble/road', 'rubble/heap'), every edge going
+  down into the land. Roads are `modelmake` 'field' surfaces in the game slab's frame (crown, verge falling `VERGE_DROP`, skirt to
+  `DEEP_DROP`, flaps past each end), so `REPLACES` swaps them by base and roadbed lays them (`_flat_bases(gd, pr)` knows them by
+  record: pass pr; `apart` lifts them as the game piece). Heaps are rings round a wavy rim with a skirt to `SKIRT_2` under and
+  chunks on one sheet; `rubbleswap.seat_one` lays one by its rim (`rubbleset.foot`), and osmdress.seat_lying does the same for them
+  and seats onepiece's merged piles by their record's bounds (it had skipped every base of the mod's own). A heap whose skirt still
+  hangs past `GONE_HANG`, or is buried past `BURY_GONE`, is taken out. `check` is the float check. Rehearsed on a copy of Waikiki:
+  heaps 0 of 3,861 hang over 8 (233 by at most 3.2), roads 37 of 7,211 over 8 after roadbed; rubble spots 7,332 to 6,056 draws (the rest
+  is trees, skeletons, car hulks, onepiece's 6,952 small piles). In Waikiki since 21 Nov 2026 05:32 (not yet seen in game). Run the swap after any rebuild that lays the game's roads or rubble. More to them (the user: "look plain", 21 Nov; picture
+  `docs/waikiki-rubble-detail.png`; not yet in Waikiki): the road sheet is one whole piece (1,024 along, `ROAD_SHEET_LONG`), its
+  marks laid out in units (`_road_marks`: cracks across, sealed ones, holes, cut patches, crazed wheel paths), a faded double
+  centre line, wheel ruts `RUT` in the mesh only; the heap sheet has eight parts (`Q`: stucco, siding, the rough inside of a
+  break as chunks' sides, `SIDES`), its ground stones by `_cells` (`GRIT`), chunks twice as many with some on end and planks in
+  twos, fist-sized bits; heap_c, heap_d, heap_low_c are new looks, `rubbleswap.apply(respread=True)` spreads them over what
+  was swapped. Still one shape a piece; feet unchanged, so seating is as before. Far: each road piece has a `_lod.nif` (`_far_strip`, 12
+  triangles, the picture once along; without it lodobj dropped the 7,211 roads from the far view); `rubbleswap.refresh(pr)`
+  writes every piece's files again and marks the far ones `modelsets.VWD`. Rebuild the distant blocks after it.
 - Walk before navmesh (`walkcheck.py`, `tests/test_walkcheck.py`; `py -3 app/walkcheck.py [name ...]`): a set's real
   collision walked as navgen sees it (Field, Graph, erosion), from flat ground round it or given starts (a ship's
   gangway, an open hotel's `arrive_in`). Faults: `invisible` (walked on, nothing drawn within `SEEN`: the guard tower
@@ -280,6 +344,22 @@ the model for style, UI and approach. Python, standard library first, code in `a
   is the ride-on gun's (animation type, reload, attack) with a fire gun's ammo, projectile, sounds and numbers laid over
   (`FROM_FIRES`, `DNAM_FROM_FIRES`), mods dropped. The QLZ-87 rides on the Light Machine Gun, fires the Grenade Machinegun's
   25mm grenades. Not yet seen in either game.
+  More Chinese guns (21 Nov 2026, not in Waikiki): QSZ-92 pistol on the 9mm Pistol, Type 81 rifle on the Assault Carbine
+  (5.56 by `OVERRIDES`), Type 79 SMG on the 10mm SMG. These bases stand some parts off the origin or turned, and a
+  reload's keys are the node's whole place (ReloadF's ##Clip starts at x 10), so `BASE_NODES` stands ours exactly there
+  (`gunmake.build_gun(frames=)`, shapes still given in the gun's frame); cases fly from `BASE_CASE`. The LMG's
+  ##riotMechanism is at z -0.54 too: the QLZ-87's model changed with it (Waikiki's copy is the older one).
+- Signs (`signfont.py`, `signpaint.py`, `signart.py`, `signsheets.py`, `nifglow.py`, `tests/test_signsheets.py`; `docs/waikiki-neon-signs.md`): FOLab's own alphabet
+  drawn as neon tubes, deco, brush or chisel on shaped boards, with beach pictures (palms, umbrellas, parrots, waves...). `signsheets.install` (last in `modelsets._all_sets`) redraws
+  the sets' sign sheets at their old size and layout, so models need no change. `modelsets.neon` is a look lit by the picture's own glow (`_g`, `glow_path`, written by `build`);
+  `nifglow.light_up` gives a model a mod already has its glow (texture set slot 2 + material emissive, nothing else). Not yet seen in the game.
+- Storms (`stormsched.py`, `tests/test_stormsched.py`; `docs/waikiki-weather-plan.md`): one quest script on the game clock (squalls,
+  a 31-hour big storm with a hurricane peak every 3 to 6 days, `BIG_STEPS`), steps walked one a frame so waits and sleeps land
+  right; sky and rain only in the island's world, the hotels' small worlds get window rain outside the glass (`view_spots`, one
+  parent), other worlds the override let go. Rain is Honest Hearts' particle models re-thrown (`blow`), kept on the player and
+  turned to the player's heading (the only way it reads as sideways in nv-rs); pictures in `app/stormpictures` (made by
+  `tools/stormpictures.py`, numpy). `run` executes the script's own text with frames, waits and sleeps; `check` the rules.
+  Not yet in Waikiki or seen in game (test 10 on D:).
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Backups (`backups.py`, `web/backups.js` the Tools tab Backups, `/api/tools/backups`, `tests/test_backups.py`): kinds by the name
   with its time taken out; per kind the newest `KEEP` and one a day for `DAYS`, then a size cap, never the newest of a kind or
@@ -350,6 +430,36 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - MO2 loadouts (`loadout.py`, `web/loadouts.js`, Tools tab, `/api/tools/loadout`): an instance's ModOrganizer.ini, a profile's modlist.txt (highest priority first; `*` unmanaged), plugins.txt and loadorder.txt (a new profile has none: order goes by the files' dates, as the game's). A `Loadout` is the virtual folder worked out from the files (real Data, mods on, overwrite); `server.use_loadout` makes it what `load_game` loads and `GD.view` what files come through. Anything opening a plugin goes through `loadout.plugin_path`, a loose file through `GD.loose_path`, not `data_dir`. `loadout.py` only reads; while one is current `refuse_writes` stops everything that writes to the real game. `mod_needs` refuses a mod whose links name plugins not loaded. A patch is an ordinary new mod made in a loadout: records load from the winner (`recordio.load`, `src`), which `espwrite` makes a master. `mo2write.py` is the one place MO2 changes: Put in MO2 (`put_in_mo2`) makes a mod folder marked `madeByFOLab=true` in meta.ini, adds it to modlist.txt, plugins.txt and loadorder.txt with backups, refuses while MO2 runs (it rewrites the lists when it closes) and never touches a folder it didn't make. Test only on a separate profile. Started from MO2 (`loadout.under_mo2`: usvfs is hooked in; `running_setup` finds the profile by the plugins.txt MO2 shows it): MO2 is locked and running, so Put in MO2 writes only the folder (`switch_on`), and `playtest.launch` may start the game, whose child process gets the virtual folder. `add_to_run_list` adds FOLab beside MO2's Run button. Play here in a loadout (FOLab opened on its own): `server._put_in_setup`/`_put_test_in_setup` put the mod and a `FOLab Test` mod in the profile (`install_mod`'s `may_be_open`: MO2 may be open if the lists need no change), `playtest.launch_through_mo2` runs `ModOrganizer.exe -p profile run -e <title>`; tests replace `playtest._start`. `playtest.floor_near` puts you on a mod's own place's floor, wherever the view was. Started from MO2, Play here, Open in game and Give it to me go in for one run (`server._run_inside`, `mo2write.place_inside`): files written through the virtual Data (new ones land in overwrite, checked; the mod's own FOLab folder written in place; anything real Data or another mod has is never written through), `FOLab Play Here.esp` (not FOLab Test.esp, which real Data may hold), lines added to the profile's plugins.txt and taken out `RELEASE_AFTER` the game starts; files out at Open in game, quit and next start (`clean_inside`, noted in `mo2_inside.json` in FOLab's home; a file changed since stays). Tests swap `mo2write.VIRTUAL`.
 - Mod conflicts (`conflicts.py`, `web/conflicts.js`, under `/api/tools/conflicts/`): a plugin against the active load order, read only. Headers first (`Index`: formid, type, offset, flags, parent, kept sorted in `cache/conflicts`, named by file size and date), then only copies of what it touches. A change is what differs from its base, the last copy among the files it's built on; it's lost if the winner doesn't say the same in that field (`lost_fields`: struct fields by `schema.py`, repeated subrecords as a bag, links through `recdiff.spelled`). NAVI is never a clash (the game merges it). Moves go through `loadorder.save`, only at a click; test with a fake Data and `LOCALAPPDATA`. The script's globals are `MCF`/`mcf*`, since comforts.js has `CF`/`cf*`.
 - Quests and dialogue: `questrec.py` (QUST/DIAL/INFO as plain data and back, byte exact over every game record; `write_lines` puts each INFO in its DIAL's type-7 group, copying a game topic from the file that first has it with our quests added), `api_quests.py` (routes under /api/quest, /api/dlg; scripts compiled on save through `ModForms`; board, check), `web/quests.js`, `dialogue.js`, `questboard.js`. An INFO record keeps its topic in `rec['topic']` and its place in `rec['seq']`. Silent lines need no voice files (TRDT sound 0, words in NAM1). Conditions: `schema.condition_fields` reads CTDA parameters by function, so their links are keys and re-point; only conditions in records saved before this keep raw numbers.
+- Voiced lines (`lipwrite.py`, `tests/test_lipwrite.py`, `test_g2p.py`, `test_api_voices.py`; `docs/voiced-dialogue-plan.md`): .lip
+  read and written byte for byte over all 60,702 of the game's (`py -3 app/lipwrite.py`), `from_timeline` makes one from timed
+  ARPAbet or IPA sounds (30 frames a second, 16 mouth shapes, 17 face movements). A line's voice is
+  `sound\voice\<plugin>\<voice type EDID>\<quest>_<topic>_<INFO id & 0xFFFFFF %08X>_<response>.ogg` (quest+topic over 25:
+  10 and 15), Vorbis mono 24 kHz as the game's. nv-rs has the game's lip loading and playing ported; not seen working yet.
+  `voicegen.py` (`tests/test_voicegen.py`: the rule names every game voice file of a line it has): Kokoro (model-files-v1.1's
+  kokoro-v1.0.onnx, the one with a `duration` output; user-downloaded, `find_model`) speaks with its sound timings, the .lip
+  comes from them. Test plugin on D: (`D:\FOLab-voice\home`); heard with the mouth moving in nv-rs 20 Nov 2026 (not yet tried
+  in the original). No GPL in FOLab (the user's choice, 20 Nov): never kokoro-onnx, phonemizer or espeak-ng; `voicegen.Kokoro`
+  runs the model itself (onnxruntime, `kokorovocab.json`), `g2p.py` is FOLab's own words to sounds (CMU dictionary
+  `cmudict.dict`, Hawaiian spelling, spelling rules) in misaki's letters (A I O W Y glides, which `voicegen.GLIDES` splits for
+  the lip). FOLab.exe carries numpy, onnxruntime, soundfile from `packaging/voice packages` (PyPI wheels, staged by hand: see
+  build.py `VOICE`). In the editor: `api_voices.py` (`/api/voice/`), `web/voices.js` (a Voice part in dialogue.js's line
+  editor: voice, speed, pitch, hear, "Voice this line", "Voice every line for"); choices and what was voiced in
+  `projects/<mod> voices/voices.json`, not the mod's file, not in Undo. Only the mod's own lines; the speaker's voice type
+  (following a template with traits) names the folder. Less flat (the user, 21 Nov: "everyone will sound flat and
+  generic"): `voicefx.py` (numpy) moves pitch by pitch-synchronous overlap-add (length and formants kept: the old
+  speed-up made voices thin or cassette-slow), widens the tune (`lively`, default `api_voices.LIVELY` 1.3), bends sentence
+  ends (questions rise), and `master`s each line to the game's voices as measured (`GAME_MEN`/`GAME_WOMEN`, -22 dB
+  speech): Kokoro had boom under 130 Hz and too little 1-10 kHz. A voice may be a blend ('am_onyx*0.7+bm_george*0.3',
+  `voicegen.blend`); nobody chosen gets one of their own (`own_default`, from their key). Moods nudge the tune too
+  (`MOODS`' third number). A voiced line is out of date when its voice settings change. Chatterbox (Resemble AI, MIT): the user
+  heard the beachcomber's lines every way (`D:\FOLab-voice\compare\listen.html`) and found Chatterbox at calm settings
+  (`voicegen.CALM`) far more human than Kokoro. It needs torch and a graphics card, so it lives in a folder of its own
+  (`voicegen.chatterbox_folder`: FOLAB_CHATTERBOX, setting `chatterbox`, or chatterbox\ under FOLab's home; venv\ its
+  Python 3.10, hf\ its model; the user's is D:\FOLab-voice\chatterbox), run as a child process (`chatterbox_run.py`, JSON
+  lines). It copies a clip of the character's Kokoro voice (`reference`, kept in models\refs), so voice choices still
+  hold; the emotion sets its feeling dial (`api_voices.FEELING`). It reports no timings: `voicealign.py` lays Kokoro's take
+  of the same words on it by time warping (sounds within ~10 ms). A mod uses Chatterbox when it's there unless its
+  voices.json says `engine` kokoro (Voice maker on the page). About 40 s to load, then ~4 s a line.
 - Library (`library.py`, `web/library.js`, hooks `/api/library/*`): `Index` over every mesh, texture and sound; thumbnails in
   cache/thumbs (`meshthumb.py` software-draws meshes, `dds.decode`). A mod's own files live in `projects/<mod> assets/`, seen through
   `GameData.overlay` first; Save copies them to `build/<plugin> assets/`, `install.py` puts them in Data with the plugin and lists them in

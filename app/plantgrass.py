@@ -17,6 +17,7 @@ shader. So FOLab's low plants become grasses:
 Where grass grows is grassrule.py's, and it is the land's paint that decides it: a step that lays more grass-bearing
 ground lays these too. What still stands one at a time is what gives the jungle its shape (taro, ti, heliconia, ferns,
 shrubs, trees: plantsplit)."""
+import math
 import os
 
 import library
@@ -285,6 +286,7 @@ def paint(gd, pr, world, cells, twin, progress=None):
     G = roadgen.Ground(gd, pr, world)
     twin_keys = set(twin.values())
     cache, rep, ops = {}, {'patches given': 0, 'already growing': 0}, []
+    forms = {}
     bad_at = {}
 
     def bad(x, y):
@@ -358,5 +360,225 @@ def paint(gd, pr, world, cells, twin, progress=None):
                     rep['patches given'] += 1
                     changed = True
         if changed:
+            forms[ck] = form
+    # (and none of it up through what stands there: a beach lounger, 21 Nov 2026)
+    clear_under(gd, pr, world, cells=set(by_xy_keys(gd, world, cells)), forms=forms, rep=rep)
+    for ck, form in forms.items():
+        ops.append({'op': 'land', 'cell': ck, 'land': form})
+    return ops, rep
+
+
+def by_xy_keys(gd, world, cells):
+    """The cell keys of these grid squares (x, y)."""
+    grid = gd.grid(world)
+    return [gd.key(grid[xy]) for xy in cells if xy in grid]
+
+
+# --- no grass through what stands on the ground ------------------------------------------------------------------------
+# (the user, 21 Nov 2026: grass growing up through a beach lounger. The game's grass knows nothing of placed things: a
+# sample's nine points spread their weights over 512 units, so anything standing on grass-bearing ground has blades
+# through it. Each of the nine points weighs a square round its own spot in the patch (the patch's tent: a quarter of the
+# thickness 192 off, nothing at 256), blades moved at random by up to their spacing. Wherever such a square meets a placed
+# thing's footprint, that point is made to grow nothing: a grass-bearing layer's strength there moves to the same picture
+# with no grass (its plain twin), and a grass-bearing base is covered by that twin. The look stays.)
+INFLUENCE = 192.0           # half the side of the square one of a sample's nine points puts blades over (thick enough to see)
+JITTER = 32.0               # and a thing's footprint widened by this much (blades are moved at random from their spot)
+ON_GROUND = 64.0            # a thing whose underside is more than this over the land (on a roof, a table) is left out
+NOT_ON_GRASS = (r'(door|light|lamp|lantern|sign|wire|cable|vine|road|pavement|sidewalk|curb|kerb|plant|tree|bush|grass|'
+                r'fern|palm|shrub|marker|fx|flower|weed|taro|heliconia)')
+
+
+def _overlaps(cx, cy, half, foot):
+    """Does the square (centre, half side) meet a turned box? foot: (x, y, cos, sin, x0, y0, x1, y1), local to world as
+    settleup turns things: (x + lx cos + ly sin, y - lx sin + ly cos)."""
+    px, py, c, s, x0, y0, x1, y1 = foot
+    corners = [(px + lx * c + ly * s, py - lx * s + ly * c) for lx, ly in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+    sq = [(cx - half, cy - half), (cx + half, cy - half), (cx + half, cy + half), (cx - half, cy + half)]
+    for ax in ((1.0, 0.0), (0.0, 1.0), (c, -s), (s, c)):
+        a = [p[0] * ax[0] + p[1] * ax[1] for p in corners]
+        b = [p[0] * ax[0] + p[1] * ax[1] for p in sq]
+        if max(a) < min(b) or max(b) < min(a):
+            return False
+    return True
+
+
+def points_under(foot, half=INFLUENCE):
+    """{(cell x, cell y): {(quarter, point)}}: every grass sample point whose blades would reach a footprint (`_overlaps`).
+    A sample's nine points are rows and columns 1-3, 5-7, 9-11, 13-15 of a quarter: never an edge, so never shared."""
+    px, py, c, s, x0, y0, x1, y1 = foot
+    xs = [px + lx * c + ly * s for lx in (x0, x1) for ly in (y0, y1)]
+    ys = [py - lx * s + ly * c for lx in (x0, x1) for ly in (y0, y1)]
+    reach = half + 128.0
+    out = {}
+    for gy in range(int((min(ys) - reach) // 128), int((max(ys) + reach) // 128) + 2):
+        for gx in range(int((min(xs) - reach) // 128), int((max(xs) + reach) // 128) + 2):
+            u, v = gx % 32, gy % 32
+            i, j = u % 16, v % 16
+            if i % 4 == 0 or j % 4 == 0:
+                continue                    # (not one of any sample's nine)
+            si, sj = (i // 4) * 4 + 2, (j // 4) * 4 + 2
+            # (the point's weight is spread round the patch spot two of its steps out from the sample: one step from it)
+            cx, cy = (gx + i - si) * 128.0, (gy + j - sj) * 128.0
+            if not _overlaps(cx, cy, half, foot):
+                continue
+            q = (1 if u >= 16 else 0) + (2 if v >= 16 else 0)
+            out.setdefault((gx // 32, gy // 32), set()).add((q, j * 17 + i))
+    return out
+
+
+def _layer_of(layers, key, after):
+    """The quarter's layer of `key` (made, just over `after` or at the bottom, if there is room), or None."""
+    for l in layers:
+        if l.get('key') == key:
+            if not isinstance(l['a'], list):
+                l['a'] = list(l['a'])
+            return l
+    if len(layers) >= 6:
+        return None
+    l = {'key': key, 'a': [0.0] * 289}
+    layers.insert(layers.index(after) + 1 if after is not None else 0, l)
+    return l
+
+
+def clear_points(form, hits, grows, plain, rep):
+    """Makes each (quarter, point) of `hits` in a land form grow nothing (see above). grows(key) -> bool; plain(key) -> the
+    same picture with no grass, or None. True if the form changed."""
+    changed = False
+    for q, n in sorted(hits):
+        quarter = form['q'][q]
+        layers = quarter['layers']
+        for l in list(layers):
+            if not l.get('key') or not grows(l['key']) or l['a'][n] <= 0.0:
+                continue
+            if not isinstance(l['a'], list):
+                l['a'] = list(l['a'])
+            v, l['a'][n] = l['a'][n], 0.0
+            changed = True
+            rep['points cleared'] = rep.get('points cleared', 0) + 1
+            pk = plain(l['key'])
+            twin = _layer_of(layers, pk, after=l) if pk else None
+            if twin is None:
+                rep['cleared with no plain twin'] = rep.get('cleared with no plain twin', 0) + 1
+                continue
+            twin['a'][n] = min(1.0, twin['a'][n] + v)
+        b = quarter.get('bkey')
+        if b and grows(b):
+            have = sum(l['a'][n] for l in layers if l.get('key'))
+            if have >= 1.0:
+                continue
+            pk = plain(b)
+            twin = _layer_of(layers, pk, after=None) if pk else None
+            if twin is None:
+                rep['base grows grass, no plain twin'] = rep.get('base grows grass, no plain twin', 0) + 1
+                continue
+            twin['a'][n] = min(1.0, twin['a'][n] + 1.0 - have)
+            changed = True
+            rep['points cleared'] = rep.get('points cleared', 0) + 1
+    return changed
+
+
+def ltex_rules(gd, pr):
+    """(grows, plain): does an LTEX key carry grass; the same picture with none (by editor ID: a twin's game ground,
+    '<edid>Plain', '<edid>NoGrass'), or None."""
+    mine = {recordio.field(r, 'EDID'): k for k, r in pr.records.items() if r.get('type') == 'LTEX'}
+    game = {}
+    for f, (_i, r) in gd.forms.items():
+        if r.tag == 'LTEX':
+            game.setdefault(gd.edid(f), gd.key(f))
+    seen_g, seen_p = {}, {}
+
+    def rec_of(key):
+        if key.startswith('+'):
+            return pr.records.get(key)
+        try:
+            return recordio.load(gd, gd.from_key(key))
+        except Exception:
+            return None
+
+    def grows(key):
+        if key not in seen_g:
+            rec = rec_of(key) or {}
+            seen_g[key] = any(s['tag'] == 'GNAM' and s.get('value') for s in rec.get('subs', ()))
+        return seen_g[key]
+
+    def plain(key):
+        if key not in seen_p:
+            rec = rec_of(key) or {}
+            e = recordio.field(rec, 'EDID') if rec.get('subs') else None
+            got = None
+            if e:
+                bare = e[len('FOLabGrass'):] if e.startswith('FOLabGrass') else None
+                tries = (bare, bare[:-5] if bare and bare.endswith('Grass') else None, e + 'Plain', e + 'NoGrass',
+                         e[:-5] + 'NoGrass' if e.endswith('Grass') else None)
+                for t in tries:
+                    k = (mine.get(t) or game.get(t)) if t else None
+                    if k and not grows(k):
+                        got = k
+                        break
+            seen_p[key] = got
+        return seen_p[key]
+    return grows, plain
+
+
+def clear_under(gd, pr, world, cells=None, forms=None, rep=None, progress=None):
+    """'land' ops so that no grass grows through the things the mod placed on the ground in these cells (keys; None: every
+    cell of the world): settleup's loose kinds but not doors, lights, signs, roads or plants, standing on the land. forms:
+    {cell key: land form} already changed (paint's), laid over the mod's land and changed in place; cells changed here are
+    added to it. (ops, report)."""
+    import copy
+    import re
+    import types
+    import land
+    import roadgen
+    import settleup
+    rep = {} if rep is None else rep
+    forms = {} if forms is None else forms
+    skip = re.compile(NOT_ON_GRASS, re.I)
+    by_xy = {xy: gd.key(c) for xy, c in gd.grid(world).items()}
+    G = roadgen.Ground(gd, pr, world)
+    solids = types.SimpleNamespace(cache={}, report={'collision': 0, 'drawn': 0, 'unread': 0, 'placed': 0})
+    kinds, bounds, hits = {}, {}, {}
+    todo = [ck for ck in by_xy.values() if (cells is None or ck in cells) and ck in pr.cells]
+    for n, ck in enumerate(todo):
+        if progress and n % 50 == 0:
+            progress('Keeping grass out from under things', n, len(todo))
+        for rk, r in pr.cells[ck].get('refs', {}).items():
+            p, b = r.get('p'), r.get('base')
+            if not rk.startswith('+') or r.get('removed') or not p or not b:
+                continue
+            if b not in kinds:
+                kinds[b] = (settleup._type(gd, pr, b) in settleup.LOOSE_TYPES
+                            and not skip.search(settleup._edid(gd, pr, b) or ''))
+                bounds[b] = settleup._bounds(gd, pr, b, solids) if kinds[b] else None
+            o = bounds[b]
+            if not o:
+                continue
+            s = float(r.get('s') or 1.0)
+            g = G.at(p[0], p[1])
+            if g is None or p[2] + o[2] * s - g > ON_GROUND:
+                continue
+            foot = (p[0], p[1], math.cos(p[5]), math.sin(p[5]), o[0] * s - JITTER, o[1] * s - JITTER,
+                    o[3] * s + JITTER, o[4] * s + JITTER)
+            rep['things on the ground'] = rep.get('things on the ground', 0) + 1
+            for xy, pts in points_under(foot).items():
+                hits.setdefault(xy, set()).update(pts)
+    if not hits:
+        return [], rep
+    grows, plain = ltex_rules(gd, pr)
+    cache, ops = {}, []
+    for xy, pts in sorted(hits.items()):
+        ck = by_xy.get(xy)
+        if ck is None:
+            continue
+        form = forms.get(ck)
+        if form is None:
+            form = copy.deepcopy(pr.land.get(ck)) if pr.land.get(ck) else None
+            if not form:
+                e = gd.land_at(world, *xy)
+                form = land.decode(gd, e, cache) if e else None
+        if not form or not form.get('q'):
+            continue
+        if clear_points(form, pts, grows, plain, rep):
+            forms[ck] = form
             ops.append({'op': 'land', 'cell': ck, 'land': form})
     return ops, rep

@@ -650,8 +650,54 @@ def _sheet(mesh, part, place):
             mesh.face(down_look, low)
 
 
+def _field(mesh, part, place):
+    """A surface over a grid of points, drawn from above only, each point with its own texture coordinates: 'rows'
+    [[(x, y, z), ...], ...] and 'uv' [[(u, v), ...], ...] of the same shape, 'look'. What lies in the land (rubbleset: a
+    road, a heap whose skirt goes down under the ground): nobody sees its underside. Rows may close on themselves (a ring
+    of a heap) and a row may be one point repeated (its middle): triangles with no area are left out. Never solid."""
+    rows = [[tuple(float(c) for c in p) for p in row] for row in part['rows']]
+    uvs = [[tuple(float(c) for c in t) for t in row] for row in part['uv']]
+    n, m = len(rows), len(rows[0])
+    look_name = part['look']
+
+    def nrm(i, k):
+        a, b = rows[max(0, i - 1)][k], rows[min(n - 1, i + 1)][k]
+        c, d = rows[i][max(0, k - 1)], rows[i][min(m - 1, k + 1)]
+        if part.get('closed'):                  # (a ring: its first and last points are one)
+            c, d = rows[i][k - 1 if k > 0 else m - 2], rows[i][k + 1 if k < m - 1 else 1]
+        v = _cross3((d[0] - c[0], d[1] - c[1], d[2] - c[2]), (b[0] - a[0], b[1] - a[1], b[2] - a[2]))
+        if math.sqrt(sum(x * x for x in v)) < 1e-9:
+            return (0.0, 0.0, 1.0)
+        v = _unit3(v)
+        return v if v[2] >= 0 else (-v[0], -v[1], -v[2])
+    N = [[place.normal(nrm(i, k)) for k in range(m)] for i in range(n)]
+    P = [[place.point(p) for p in row] for row in rows]
+    for i in range(n - 1):
+        for k in range(m - 1):
+            q = [(i, k), (i, k + 1), (i + 1, k + 1), (i + 1, k)]
+            # (cut along the shorter diagonal: a lumpy quad bends where it should)
+            d0 = math.dist(P[i][k], P[i + 1][k + 1])
+            d1 = math.dist(P[i][k + 1], P[i + 1][k])
+            tris = ((q[0], q[1], q[2]), (q[0], q[2], q[3])) if d0 <= d1 else ((q[0], q[1], q[3]), (q[1], q[2], q[3]))
+            for t in tris:
+                a, b, c = (P[ii][kk] for ii, kk in t)
+                fn = _cross3((b[0] - a[0], b[1] - a[1], b[2] - a[2]), (c[0] - a[0], c[1] - a[1], c[2] - a[2]))
+                if math.sqrt(sum(x * x for x in fn)) < 1e-3:
+                    continue                    # (no area: the middle of a ring)
+                if fn[2] < 0:
+                    t = t[::-1]
+                mesh.face(look_name, [(P[ii][kk], N[ii][kk], uvs[ii][kk]) for ii, kk in t])
+
+
+def _solid(mesh, part, place):
+    """Collision alone, drawn nowhere: 'points' and 'faces' (each a list of corner numbers, anticlockwise from outside)
+    of one convex solid."""
+    mesh.solids.append({'points': [place.point(p) for p in part['points']], 'faces': [list(f) for f in part['faces']],
+                        'material': part.get('material', 'stone')})
+
+
 _SHAPES = {'box': _box, 'slab': _box, 'cylinder': _round, 'cone': _round, 'card': _card, 'frond': _frond, 'ball': _ball, 'hull': _hull,
-           'sheet': _sheet, 'stick': _stick}
+           'sheet': _sheet, 'stick': _stick, 'field': _field, 'solid': _solid}
 
 
 # What a model of FOLab's may come to (measured over the game's meshes: its buildings' median 500 to 1,700 triangles, a

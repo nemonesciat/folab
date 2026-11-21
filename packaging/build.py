@@ -36,7 +36,14 @@ DLL_SKIP = re.compile(r'^(_test|xxlimited|_tkinter|_ctypes_test|tcl|tk)', re.I)
 APP_SKIP = {'__pycache__'}
 # modules run only from the developer's Python (they need numpy/PIL/scipy, which FOLab.exe's Python hasn't): copied, not
 # import-checked; FOLab.exe never imports them at start
-DEV_ONLY = {'garmentprint'}
+DEV_ONLY = {'garmentprint', 'armourset'}
+# the voice maker's packages (numpy, onnxruntime, soundfile and what they need), every one under a permissive licence:
+# staged from PyPI's own wheels (not this Python's: Anaconda's numpy drags in Intel's maths libraries) by
+#     py -3 -m pip install --target "packaging\voice packages" --only-binary=:all: numpy onnxruntime soundfile
+# Never kokoro-onnx, phonemizer or espeak-ng: GPL (g2p.py is FOLab's own words to sounds instead).
+VOICE = os.path.join(HERE, 'voice packages')
+VOICE_SKIP = {'bin', '__pycache__'}
+VOICE_NEVER = ('phonemizer', 'espeakng_loader', 'kokoro_onnx')
 
 
 def log(*a):
@@ -104,6 +111,9 @@ def collect_dlls(py_dir):
     search = [PY, os.path.join(PY, 'DLLs'), os.path.join(PY, 'Library', 'bin')]
     sys32 = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'System32')
     have = {n.lower() for n in os.listdir(py_dir)} | {n.lower() for n in os.listdir(os.path.join(py_dir, 'DLLs'))}
+    # (the voice packages bring their own DLLs, each package finding its own: none is fetched from this Python)
+    have |= {f.lower() for _dp, _d, fs in os.walk(os.path.join(py_dir, 'Lib', 'site-packages')) for f in fs
+             if f.lower().endswith('.dll')}
     todo = [os.path.join(dp, f) for dp, _d, fs in os.walk(py_dir) for f in fs if f.lower().endswith(('.dll', '.pyd', '.exe'))]
     added = []
     while todo:
@@ -136,11 +146,21 @@ def build_python(py_dir):
     lib = os.path.join(py_dir, 'Lib')
     os.makedirs(lib)
     copy_tree(os.path.join(PY, 'Lib'), lib, LIB_SKIP)
+    site = os.path.join(lib, 'site-packages')
+    os.makedirs(site)
+    if os.path.isdir(VOICE):
+        if any(n.lower().startswith(VOICE_NEVER) for n in os.listdir(VOICE)):
+            raise SystemExit('"packaging\\voice packages" holds a GPL package (one of %s): stage it again with only numpy, '
+                             'onnxruntime, soundfile' % ', '.join(VOICE_NEVER))
+        copy_tree(VOICE, site, VOICE_SKIP)
+        log('  voice packages:', ', '.join(sorted(n.split('-')[0] for n in os.listdir(site) if n.endswith('.dist-info'))))
+    else:
+        log('  ! no voice packages staged: this FOLab will have no voice maker')
     added = collect_dlls(py_dir)
     log('  DLLs the modules need:', ', '.join(added) or 'none')
     # a "._pth" file makes this Python ignore any other Python on the computer
     with open(os.path.join(py_dir, PYVER + '._pth'), 'w', encoding='ascii') as f:
-        f.write('Lib\nDLLs\n..\\app\n')
+        f.write('Lib\nLib\\site-packages\nDLLs\n..\\app\n')
 
 
 def check_python(py_dir):
@@ -149,9 +169,14 @@ def check_python(py_dir):
     env['PATH'] = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'System32')
     mods = sorted(os.path.splitext(f)[0] for f in os.listdir(os.path.join(STAGE, 'app')) if f.endswith('.py')
                   and os.path.splitext(f)[0] not in DEV_ONLY)
+    # the voice maker: its packages load (each finds its own DLLs), Ogg can be written, words become sounds, nothing GPL
+    voice = ('import numpy, onnxruntime, soundfile, g2p\n'
+             'assert "OGG" in soundfile.available_formats()\n'
+             'assert g2p.phonemes("Aloha, stranger.")\n'
+             'assert not [m for m in sys.modules if m.split(".")[0] in %r]\n' % (VOICE_NEVER,)) if os.path.isdir(VOICE) else ''
     code = ('import sys, ctypes, zlib, json, http.server, webbrowser, mmap, hashlib, base64\n'
-            'for m in %r: __import__(m)\n'
-            'print("ok", sys.version.split()[0], sys.prefix)\n') % mods
+            'for m in %r: __import__(m)\n' % mods + voice +
+            'print("ok", sys.version.split()[0], sys.prefix)\n')
     r = subprocess.run([os.path.join(py_dir, 'python.exe'), '-c', code], env=env, capture_output=True, text=True,
                        cwd=os.path.join(STAGE, 'app'))
     if r.returncode != 0 or not r.stdout.startswith('ok'):
@@ -190,6 +215,12 @@ Python {py} (Python Software Foundation License) - python\\LICENSE.txt. https://
 three.js, its DDSLoader and TransformControls (MIT License, Copyright 2010-2021 three.js authors). https://threejs.org/
 Cinzel (Natanael Gama), Inter (Rasmus Andersson), Oswald (Vernon Adams and contributors) and Share Tech Mono (Carrois
 Type Design): SIL Open Font License 1.1 - app\\web\\vendor\\OFL-*.txt and app\\web\\vendor\\licenses.
+
+For voiced lines: numpy (BSD), onnxruntime (MIT), soundfile (BSD) with libsndfile (LGPL 2.1, its own DLL), cffi (MIT),
+pycparser (BSD), protobuf (BSD), flatbuffers (Apache 2.0), packaging (Apache 2.0 or BSD), typing_extensions (PSF): their
+licences are in python\\Lib\\site-packages\\*.dist-info. The CMU Pronouncing Dictionary (Carnegie Mellon University,
+BSD-style) - app\\cmudict-LICENSE.txt. Kokoro's token table (app\\kokorovocab.json, from Kokoro-82M, Apache 2.0).
+Kokoro's model itself is not included: you download it, and FOLab finds it in your Downloads folder.
 
 FOLab downloads nothing itself. xNVSE, JIP LN NVSE and NVTF are their makers' own: you get them from their pages.
 Fallout: New Vegas is Bethesda Softworks' and Obsidian Entertainment's. FOLab contains none of the game's files and

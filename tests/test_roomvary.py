@@ -97,3 +97,34 @@ data = espwrite.Writer(gd, pr).build()
 check('the mod is written', len(data) > 1000)
 pr.undo()
 check('one Undo puts them back', all(pr.cells[k] == before[k] for k in keys))
+
+# ---------- a building's own pieces stay as the game has them ----------
+# (the user's look in nv-rs, 20 Nov 2026: copies of the game's houses stood with a wall open onto white. The house's whole
+# inside, UshomIntLight01, had been swapped for UshomIntLight02 of another shape: 'Light' read as a lamp)
+shell = next(f for f, (i, r) in gd.forms.items() if r.tag == 'STAT' and gd.edid(f) == 'UshomIntLight01')
+other = next(f for f, (i, r) in gd.forms.items() if r.tag == 'STAT' and gd.edid(f) == 'UshomIntLight02')
+lamp = next(f for f, (i, r) in gd.forms.items() if r.tag == 'STAT' and gd.edid(f) == 'OffRmLight01')
+check("a house's whole inside is part of the building, a ceiling lamp isn't",
+      roomvary.building_piece('UshomIntLight01', roomvary._bounds(gd, shell)) and not roomvary.building_piece('OffRmLight01', roomvary._bounds(gd, lamp)))
+check('so nothing swaps it, or is swapped for it', shell not in sw.info and other not in sw.info and lamp in sw.info)
+house = townbuild.grand_inside(gd, 'NiptonHouse3')
+check('a game house to copy', bool(house))
+pr2 = project.Project.create('Room Vary Houses')
+ops = []
+for tag in ('ha', 'hb'):
+    ops += townbuild.inside_ops(gd, house, tag, 'FOLabVary' + tag, 'House')[0]
+pr2.apply('Two houses', ops)
+hk = sorted((k for k, r in pr2.records.items() if k.startswith('+') and r.get('type') == 'CELL'), key=lambda k: int(k[1:], 16))
+shell_key = gd.key(shell)
+held = [(k, rk) for k in hk for rk, ch in pr2.cells[k]['refs'].items() if ch.get('base') == shell_key]
+check('each copy has the house', len(held) == 2)
+roomvary.vary(gd, pr2, sw=sw)
+check('making the second its own leaves the house as it is', all(pr2.cells[k]['refs'][rk]['base'] == shell_key for k, rk in held))
+# (what an earlier run did: the second's house swapped for another)
+pr2.apply('An old swap', [{'op': 'swap', 'cell': held[1][0], 'ref': held[1][1], 'base': gd.key(other)}])
+found = roomvary.mend(gd, pr2)
+check('mend puts the house back as the game has it: %s' % found,
+      pr2.cells[held[1][0]]['refs'][held[1][1]]['base'] == shell_key and list(found) == [held[1][0]])
+check('and finds nothing more on a second run', roomvary.mend(gd, pr2, apply=False) == {})
+pr2.undo()
+check('one Undo takes the mend back', pr2.cells[held[1][0]]['refs'][held[1][1]]['base'] == gd.key(other))

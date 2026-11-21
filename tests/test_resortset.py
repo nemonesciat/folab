@@ -5,7 +5,7 @@ tall and far-seen ones have far models, the ones made to be walked are walked, t
 and are drawn the same every time, and resortplace reads its marks from a map."""
 import tempfile
 
-import dds, gamedata, modelmake, modelsets, nifmake, texpaint as tp, texwear as tw, waikikiset, walkcheck
+import dds, gamedata, modelmake, modelsets, nifmake, texpaint as tp, texwear as tw, waikikiset, solidwalk
 
 
 def check(what, ok, got=None):
@@ -30,7 +30,7 @@ check('the crescent bends towards the sea: its ends further out than its middle'
 
 walk_bad = []
 for piece, deck in (('tradewinds_lodge', modelsets.FLOOR), ('band_shell', 110.0)):
-    f = walkcheck.Walk(built[piece]['solids']).floors([deck], band=4)[0]
+    f = solidwalk.Walk(built[piece]['solids']).floors([deck], band=4)[0]
     if not f[0] or f[1] < 0.6 * f[0]:
         walk_bad.append((piece, f))
 check("the lodge's upper walkway (up its stairs) and the band shell's stage are walked from the ground", not walk_bad, walk_bad)

@@ -51,12 +51,20 @@ for name in guns.GUNS:
     body = raw(n.types.index('bhkRigidBody'))
     check(name + ': a loose body on the weapons\' layer', len(body) == 236 and body[4] == 5)
     base = guns.BASE_PARTS[m['base']]
-    for part in ('##riotClip', '##riotMechanism', '##Trigger'):
-        if part not in m['parts']:
+    frames = guns.BASE_NODES.get(m['base'], {})
+    for part in m['parts']:
+        if not part:
             continue
         i, b = nodes.get(part, (None, None))
-        check(name + ': ' + part + ' is a node of the root, at its origin, unturned', b is not None and i in root['children']
-              and all(abs(v) < 1e-6 for v in b['t']) and all(abs(b['R'][r][c] - (r == c)) < 1e-6 for r in range(3) for c in range(3)))
+        t, R = frames.get(part, ((0.0, 0.0, 0.0), guns._I))
+        check(name + ': ' + part + ' is a node of the root, standing and turned as the ride-on gun\'s', b is not None and i in root['children']
+              and all(abs(b['t'][a] - t[a]) < 1e-4 for a in range(3)) and all(abs(b['R'][r][c] - R[r][c]) < 1e-4 for r in range(3) for c in range(3)))
+    # what the model draws is where the shapes were given, nodes' places and turns and all
+    drawn = nif.mesh_from_nif(data)
+    dpts = [s['p'][k:k + 3] for s in drawn for k in range(0, len(s['p']), 3)]
+    given = bounds([s for ss in m['parts'].values() for s in ss])
+    check(name + ': drawn where it was made', all(abs(min(q[a] for q in dpts) - given[0][a]) < 0.01 and abs(max(q[a] for q in dpts) - given[1][a]) < 0.01
+                                                  for a in range(3)), given)
     for nm, (i, b) in nodes.items():
         if i == 0:
             continue
@@ -67,28 +75,32 @@ for name in guns.GUNS:
             ok = target == i and n.types[interp] == 'NiTransformInterpolator' and raw(interp)[:4] == struct.pack('<f', 3.4028234663852886e+38)
         check(name + ': ' + nm + ' carries an empty transform controller', ok)
     # where the parts lie against the ride-on gun's
-    lo, hi = bounds(m['parts']['##riotClip'])
-    blo, bhi = base['##riotClip']
-    mid, bmid = middle(lo, hi), middle(blo, bhi)
-    check(name + ': the drum where the hands take the box', math.dist(mid, bmid) < 3.5 and lo[0] > 5.0, (mid, bmid))
-    lo, hi = bounds(m['parts']['##Trigger'])
-    blo, bhi = base['##Trigger']
-    check(name + ': the trigger under the finger', all(lo[a] < bhi[a] + 0.5 and hi[a] > blo[a] - 0.5 for a in range(3)), (lo, hi))
-    lo, hi = bounds(m['parts']['##riotMechanism'])
-    mid, bmid = middle(lo, hi), middle(*base['##riotMechanism'])
-    check(name + ': the charging handle on the right, near the LMG\'s', lo[2] > 2.0 and math.dist(mid, bmid) < 3.0, (mid, bmid))
+    for part, want in base.items():
+        if part not in m['parts'] or not isinstance(want[0], tuple):
+            continue
+        lo, hi = bounds(m['parts'][part])
+        blo, bhi = want
+        if 'trigger' in part.lower():
+            check(name + ': the trigger under the finger', all(lo[a] < bhi[a] + 0.5 and hi[a] > blo[a] - 0.5 for a in range(3)), (lo, hi))
+        else:
+            mid, bmid = middle(lo, hi), middle(blo, bhi)
+            check(name + ': ' + part + ' where the hands take the ride-on gun\'s', math.dist(mid, bmid) < 3.5, (mid, bmid))
+    if name == 'qlz87':
+        check(name + ': the charging handle on the right', bounds(m['parts']['##riotMechanism'])[0][2] > 2.0)
     marks = m['marks']
     check(name + ': the muzzle ahead of everything, at the barrel\'s height', marks['ProjectileNode'][0] >= max(
         bounds([s for ss in m['parts'].values() for s in ss])[1][0] - 0.1, 0) and abs(marks['ProjectileNode'][1] - base['ProjectileNode'][1]) < 0.5)
-    check(name + ': the eye where the LMG\'s is', math.dist(marks['##SightingNode'], base['##SightingNode']) < 0.1)
-    # nothing stands in the sight line between the rear ring and the front post but those
+    check(name + ': the eye where the ride-on gun\'s is', math.dist(marks['##SightingNode'], base['##SightingNode']) < 0.1)
+    # nothing stands in the sight line between the rear sight and the front post but those
     every = [s for ss in m['parts'].values() for s in ss]
+    x0, x1 = guns.SIGHTS[name]
+    eye = marks['##SightingNode']
     blocked = 0
     for s in every:
         p = s['p']
         for k in range(0, len(p), 3):
             x, y, z = p[k:k + 3]
-            if -0.6 < x < 42.7 and abs(z) < 0.3 and abs(y - marks['##SightingNode'][1]) < 0.35:
+            if x0 < x < x1 and abs(z - eye[2]) < 0.3 and abs(y - eye[1]) < 0.35:
                 blocked += 1
     check(name + ': the sight line clear', blocked == 0, blocked)
     # every triangle faces the way its corners' normals do
@@ -127,8 +139,27 @@ if '--no-game' not in sys.argv:
                     p += 29
         return names
     first = 'meshes\\characters\\_1stperson\\'
-    check('the reload the QLZ-87 rides on moves the drum', '##riotClip' in kf_targets(first + '2hareloadi.kf'))
     check('every automatic shot moves the charging handle', '##riotMechanism' in kf_targets(first + '2haattackloop.kf'))
+    PREFIX = {3: '1hp', 6: '2ha'}
+    for name in guns.GUNS:
+        m = guns.build(name)
+        rec = recordio.load(gd, guns._game(gd, m['base'], 'WEAP'))
+        dn = {f.get('name'): f.get('value') for f in next(s for s in rec['subs'] if s['tag'] == 'DNAM')['fields']}
+        kf = '%sreload%s.kf' % (PREFIX[dn['Animation type']], 'abcdefghijklmnopqrstuvwxyz'[dn['Reload animation']])
+        clip = next(p for p in m['parts'] if p and ('clip' in p.lower()))
+        check('%s: the reload it rides on (%s) moves its magazine (%s)' % (name, kf, clip), clip in kf_targets(first + kf))
+
+    def placed(gn, i, R, t):
+        """Every corner under block i, the block standing at t turned R in the gun."""
+        b = gn.block(i)
+        R2 = nif._mul(R, b['R'])
+        t2 = [t[k] + v for k, v in enumerate(nif._apply(R, b['t']))]
+        if 'children' in b:
+            return [q for c in b['children'] if c >= 0 for q in placed(gn, c, R2, t2)]
+        if b.get('data', -1) < 0:
+            return []
+        v = gn.block(b['data'])['verts']
+        return [[t2[a] + b['s'] * nif._apply(R2, v[j:j + 3])[a] for a in range(3)] for j in range(0, len(v), 3)]
     for gun, parts in guns.BASE_PARTS.items():
         rec = recordio.load(gd, guns._game(gd, gun, 'WEAP'))
         model = next(s['value'] for s in rec['subs'] if s['tag'] == 'MODL')
@@ -137,17 +168,17 @@ if '--no-game' not in sys.argv:
         for part, want in parts.items():
             i, b = gnodes[part]
             if isinstance(want[0], tuple):
-                shapes = [gn.block(c) for c in b['children']]
-                pts = []
-                for s in shapes:
-                    v = gn.block(s['data'])['verts']
-                    pts += [tuple(s['s'] * v[j + a] + s['t'][a] + b['t'][a] for a in range(3)) for j in range(0, len(v), 3)]
+                pts = placed(gn, i, guns._I, [0.0, 0.0, 0.0])
                 lo = tuple(min(q[a] for q in pts) for a in range(3))
                 hi = tuple(max(q[a] for q in pts) for a in range(3))
                 ok = all(abs(lo[a] - want[0][a]) < 0.1 and abs(hi[a] - want[1][a]) < 0.1 for a in range(3))
             else:
                 ok = all(abs(b['t'][a] - want[a]) < 0.05 for a in range(3))
-            check('%s: %s lies where FOLab thinks' % (gun, part), ok)
+            check('%s: %s lies where FOLab thinks' % (gun, part), ok, (lo, hi) if isinstance(want[0], tuple) else b['t'])
+        for part, (t, R) in list(guns.BASE_NODES.get(gun, {}).items()) + ([('ShellCasingNode', guns.BASE_CASE[gun])] if gun in guns.BASE_CASE else []):
+            i, b = gnodes[part]
+            check('%s: %s stands and turns where FOLab thinks' % (gun, part), all(abs(b['t'][a] - t[a]) < 1e-3 for a in range(3))
+                  and all(abs(b['R'][r][c] - R[r][c]) < 1e-3 for r in range(3) for c in range(3)), (b['t'], b['R']))
     for name in guns.GUNS:
         m = guns.build(name)
         rec = guns.weapon(gd, name, m, '+000001')
@@ -158,8 +189,8 @@ if '--no-game' not in sys.argv:
         dn = lambda r: {f.get('name'): f.get('value') for f in next(s for s in r['subs'] if s['tag'] == 'DNAM')['fields']}
         mine, theirs, fire = dn(rec), dn(base), dn(fires)
         check(name + ': the ride-on gun\'s hold, reload and fire', all(mine[k] == theirs[k] for k in ('Animation type', 'Reload animation', 'Attack animation', 'Flags', 'Reload time')))
-        check(name + ': the fire gun\'s rounds and projectile', get('NAM0')['value'] == next(s['value'] for s in fires['subs'] if s['tag'] == 'NAM0')
-              and mine['Projectile'] == fire['Projectile'])
+        rounds = guns.rounds_of(gd, guns.OVERRIDES.get(name, {}).get('ammo', m['fires']))
+        check(name + ': the fire gun\'s projectile, the rounds it should take', get('NAM0')['value'] == rounds and mine['Projectile'] == fire['Projectile'])
         check(name + ': its own model, name, clip; no mods', get('MODL')['value'] == m['mesh'][7:] and get('WNAM')['value'] == '+000001'
               and get('FULL')['value'] == m['shown'] and not any(t in tags for t in ('MODT', 'WMI1', 'MWD1', 'WNM1'))
               and {f['name']: f['value'] for f in get('DATA')['fields']}['Clip size'] == guns.GUNS[name][3] and mine['Mod 2 effect'] == 0)
@@ -195,6 +226,32 @@ if '--no-game' not in sys.argv:
         check('written: DNAM as long as the game\'s, the LMG\'s animation bytes', len(subs['DNAM']) == len(theirs['DNAM'])
               and subs['DNAM'][:4] == theirs['DNAM'][:4])
         for p in gd2.plugins:
+            p.close()
+
+        # the Huang's: their guns in their own stores
+        pr2 = project.Project.create('Gun Huang Test')
+        pr2.apply('a store', [{'op': 'record_new', 'record': guns.test_crate(gd, 'FOLabNVDuffleBagRandomLootHuang', [('FalloutNV.esm:0FAB0D', 1)])}])
+        ops, keys, made, rep = guns.huang_ops(pr2, gd)
+        pr2.apply('Huang guns', ops)
+        check('huang: the keys foretold are the guns made', all(recordio.field(pr2.records[keys[x]], 'EDID') == 'FOLabWeap' + x.upper() for x in guns.HUANG_GUNS))
+        store = next(r for r in pr2.records.values() if recordio.field(r, 'EDID') == 'FOLabNVDuffleBagRandomLootHuang')
+        held = [f['value'] for s in store['subs'] if s['tag'] == 'CNTO' for f in s['fields'] if f.get('name') == 'Item']
+        check('huang: the store keeps what it had and gains the two lists', held == ['FalloutNV.esm:0FAB0D'] + rep['lists'], held)
+        lst = pr2.records[rep['lists'][0]]
+        check('huang: the list holds the three guns, mostly empty', sorted(f['value'] for s in lst['subs'] if s['tag'] == 'LVLO' for f in s['fields'] if f.get('name') == 'Item')
+              == sorted(keys.values()) and recordio.field(lst, 'LVLD') is not None)
+        try:
+            guns.huang_ops(pr2, gd)
+            again = False
+        except ValueError:
+            again = True
+        check('huang: run again, refused (nothing added twice)', again)
+        path = pr2.plugin_path()
+        espwrite.write(gd, pr2, path)
+        gd3 = gamedata.GameData(plugins=list(gamedata.OFFICIAL) + [path])
+        check('huang: written and read back', sum(1 for f, (i, r) in gd3.forms.items() if r.tag == 'WEAP' and (gd3.edid(f) or '').startswith('FOLabWeap')) == 3
+              and any(gd3.edid(f) == 'FOLabGunsHuang' for f in gd3.forms))
+        for p in gd3.plugins:
             p.close()
 
 print('%d of %d' % (sum(OK), len(OK)))

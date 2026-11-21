@@ -41,14 +41,33 @@ SLAB_ROUGH = 8.0        # the ground under a slab that stays is flat to within t
 SLAB_DRY = 8.0          # and no lower than this: not in the sea
 
 
-def _flat_bases(gd):
-    """{key: its box} of the road pieces this lays."""
+def _flat_bases(gd, pr=None):
+    """{key: its box} of the road pieces this lays: the game's, and with pr FOLab's own (rubbleset: made in the game
+    slab's frame, so its box is the game piece's)."""
     import townbuild
     out = {}
     for key in roadgen.pieces(gd).values():
         b = townbuild.obnd(gd, key)
         if b:
             out[key] = b
+    for key, game in _own_roads(gd, pr).items():
+        b = townbuild.obnd(gd, game)
+        if b:
+            out[key] = b
+    return out
+
+
+def _own_roads(gd, pr):
+    """{the mod's record key of a rubbleset road piece: the game piece's key whose frame it has}."""
+    if pr is None:
+        return {}
+    import rubbleset
+    import rubbleswap
+    by_edid = {gd.edid(gd.from_key(k)): k for k in roadgen.pieces(gd).values()}
+    out = {}
+    for key, piece in rubbleswap.pieces_of(pr).items():
+        if rubbleset.is_road(piece) and rubbleset.ROADS[piece][3] in by_edid:
+            out[key] = by_edid[rubbleset.ROADS[piece][3]]
     return out
 
 
@@ -117,7 +136,7 @@ def bed(gd, pr, world, keep=(), progress=None):
     import land
     import osmplace
     grid = gd.grid(world)
-    boxes = _flat_bases(gd)
+    boxes = _flat_bases(gd, pr)
     before = roadgen.Ground(gd, pr, world)
     g = roadgen.Ground(gd, pr, world)            # (the ground as it is being made: its cells copied as they change)
     inside = {gd.key(c): k for k, c in grid.items()}
@@ -257,11 +276,12 @@ def bed(gd, pr, world, keep=(), progress=None):
     fit_all()
     # the pieces where they now belong; ones that lie over each other a hair apart (they'd flicker)
     fake, who = [], []
+    own = _own_roads(gd, pr)                     # (FOLab's own pieces lifted apart as the game piece whose frame they have)
     for ck, rk, r, x, y, dx, dy, _box, plane in found:
         if plane is None:
             continue
         a, b, c = plane
-        fake.append({'op': 'add', 'base': r['base'], 'p': [x, y, round(a + SUNK, 2)] + [round(v, 4) for v in _turn_plane(dx, dy, b, c)]})
+        fake.append({'op': 'add', 'base': own.get(r['base'], r['base']), 'p': [x, y, round(a + SUNK, 2)] + [round(v, 4) for v in _turn_plane(dx, dy, b, c)]})
         who.append((ck, rk, r))
     osmplace.apart(gd, fake)
     ops, relaid, mine = [], 0, set()
@@ -338,7 +358,7 @@ def slab_gaps(gd, pr, world):
 def gaps(gd, pr, world):
     """How the mod's road pieces lie: [(highest point over the land, lowest)] a piece, its origin's plane against the ground
     at fifteen spots of its footprint. For checks."""
-    boxes = _flat_bases(gd)
+    boxes = _flat_bases(gd, pr)
     g = roadgen.Ground(gd, pr, world)
     out = []
     for c in pr.cells.values():
@@ -372,7 +392,7 @@ def onto_roads(gd, pr, world, cells=None):
     stands on the road as deep as it stood in the land. Road pieces, pavement slabs and buildings are left. cells: only
     things in these cell keys."""
     import townbuild
-    flat = _flat_bases(gd)
+    flat = _flat_bases(gd, pr)
     skip = set(flat) | set(_slab_bases(gd))
     import server
     skip |= {b['key'] for b in townbuild.load(gd, server.kits_folder())}

@@ -525,7 +525,8 @@ def judge(G, piece, p, s):
 # 9,990 of them (20 Nov 2026). The jungle's shape first, then the low green, spaced evenly, where the game's own grass
 # doesn't grow first.
 SHAPE = ('taro', 'ti_red', 'ti_green', 'heliconia', 'shrub_tall_a', 'shrub_tall_b', 'shrub_tall_c', 'hibiscus', 'banana',
-         'tree_fern', 'jungle_tree', 'jungle_banyan', 'jungle_tall', 'palm_tall', 'palm_young', 'bamboo', 'mossy_log')
+         'tree_fern', 'jungle_tree', 'jungle_banyan', 'jungle_tall', 'palm_tall', 'palm_young', 'bamboo', 'mossy_log',
+         'jungle_tree_b', 'jungle_tree_c', 'jungle_banyan_b', 'jungle_banyan_c', 'jungle_tall_b', 'jungle_tall_c')
 LOW_GREEN = ('shrub_low_a', 'shrub_low_b', 'ground_fern', 'fern_small', 'taro_small') + tuple(GRASSES)
 BUDGET = {'shape': 24, 'low': 36}       # draws a cell, for each
 

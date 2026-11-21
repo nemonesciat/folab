@@ -55,7 +55,7 @@ def fit(gd, pr, world, cells=None, cat=None, progress=None, debug=None):
     by = {b['key']: b for b in cat}
     key_of = {gd.key(c): k for k, c in grid.items()}
     want = {gd.key(grid[k]) for k in cells} if cells is not None else set(key_of)
-    flat = roadbed._flat_bases(gd)
+    flat = roadbed._flat_bases(gd, pr)
     builds, roads = [], []
     for ck, c in pr.cells.items():
         if ck not in key_of:
@@ -369,7 +369,7 @@ def settle_pieces(gd, pr, world, cells=None):
     import townbuild
     import server
     cat = {b['key'] for b in townbuild.load(gd, server.kits_folder())}
-    flat = roadbed._flat_bases(gd)
+    flat = roadbed._flat_bases(gd, pr)
     skip = cat | set(flat) | set(roadbed._slab_bases(gd))
     g = roadgen.Ground(gd, pr, world)
     inside = {gd.key(c) for c in gd.grid(world).values()}
@@ -470,7 +470,7 @@ def close_gaps(gd, pr, world, cells=None, cat=None):
     by = {b['key']: b for b in cat}
     key_of = {gd.key(c): k for k, c in grid.items()}
     want = {gd.key(grid[k]) for k in cells} if cells is not None else set(key_of)
-    flat = roadbed._flat_bases(gd)
+    flat = roadbed._flat_bases(gd, pr)
     builds, roads = [], []
     for ck, c in pr.cells.items():
         if ck not in key_of:

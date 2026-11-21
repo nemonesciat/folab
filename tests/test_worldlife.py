@@ -76,7 +76,8 @@ refs = [r for c in pr.cells.values() for r in c['refs'].values()]
 markers = [r for r in refs if (r.get('extra') or r).get('marker') or r.get('marker')]
 names = sorted((r.get('marker') or (r.get('extra') or {}).get('marker'))['name'] for r in markers)
 check('the places are named on the map', names == ['Haven', 'The Far Place'], names)
-actors = [r for r in refs if gd.forms[gd.from_key(r['base'])][1].tag in ('NPC_', 'CREA')]
+# (a base of the mod's own, '+...', is FOLab's guard tower in the settlement: guardtower.instead)
+actors = [r for r in refs if not r['base'].startswith('+') and gd.forms[gd.from_key(r['base'])][1].tag in ('NPC_', 'CREA')]
 edid = lambda r: gd.edid(gd.from_key(r['base']))
 hostile = [r for r in actors if any(w in edid(r).lower() for w in ('raider', 'fiend', 'jackal', 'viper', 'ghoul', 'gecko', 'mantis', 'cazador', 'lurk', 'scorpion', 'dog', 'molerat', 'coyote', 'nightstalker', 'bloatfly'))]
 near = [r for r in hostile if math.hypot(r['p'][0] - start[0], r['p'][1] - start[1]) < worldlife.SAFE - 400]

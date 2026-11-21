@@ -422,6 +422,95 @@ def apply_clear(server):
     return rep
 
 
+SHORTS_NAME = {'surfer': 'Board Shorts', 'pirate': 'Old Board Shorts'}
+
+
+def _shorts_files(gd, pr, look, shirts):
+    """{style: {'m', 'go', 'f': mesh}} of the look's printed board shorts (a man's, and the folded copy on the ground,
+    one picture), among the mod's own files; a woman's is the style's printed dress (shirts: _shirt_files')."""
+    import garmentprint
+    import nifwrite
+    worn, styles = PRINTS[look]
+    root = library.assets_dir(pr)
+    slug = library.slug(pr.name)
+    sh = garmentprint.SHORTS
+    mask = garmentprint.shorts_mask(gd)
+    out = {}
+    for n, (word, ground, flower, leaf) in enumerate(styles):
+        pic = 'textures\\folab\\%s\\people\\%s_shorts_%s.dds' % (slug, look, word.lower())
+        im = garmentprint.paint_shorts(gd, (ground, flower, leaf), worn=worn, seed=SEED[look] + 7 + n, mask=mask)
+        library._put(root, pic, garmentprint.dds_of(im))
+        changes = {sh['textures'] + sh['picture']: pic}
+        out[word] = {'f': shirts[word]['f']}
+        for part, mesh in sh['meshes'].items():
+            rel = 'meshes\\folab\\%s\\%s_shorts_%s_%s.nif' % (slug, look, word.lower(), part)
+            data = gd.read_file(sh['folder'] + mesh)
+            new = nifwrite.retexture(data, changes)
+            wrong = nifwrite.prove(data, changes)
+            if wrong:
+                raise ValueError('%s: %s' % (rel, '; '.join(wrong)))
+            library._put(root, rel, new)
+            out[word][part] = rel
+    return out
+
+
+def shorts_ops(gd, pr):
+    """(ops, report): board shorts for each look that is dressed (the user, 21 Nov 2026: "some variants with shorts"), put
+    in its body list: every entry there twice, then each pair of shorts once (surfers: a third in shorts). A woman given
+    a pair wears the style's printed dress (garmentprint.SHORTS). Also paints the shirts' pictures again, the same files."""
+    have = {(recordio.field(r, 'EDID') or '').lower(): k for k, r in pr.records.items()}
+    items = _edids(gd, ('ARMO',))
+    outfit = items[OUTFIT.lower()]                  # (clothes, as the shirts: the Powder Gang's outfit is armour)
+    keys = _Keys(pr)
+    rep = {'shorts': {}, 'lists': {}}
+    changed = []
+    for kind, k in KINDS.items():
+        look = k['look']
+        lk = have.get(('FOLab%sBodyList' % k['name']).lower())
+        if not lk:
+            continue
+        made = []
+        shirts = _shirt_files(gd, pr, look)        # (written again: the shirts' pictures with the shoes left plain)
+        for style, f in _shorts_files(gd, pr, look, shirts).items():
+            edid = 'FOLab%s%s' % (SHORTS_NAME[look].replace(' ', ''), style)
+            if edid.lower() in have:
+                raise ValueError('The mod already has %s (Undo the shorts first to make them again).' % edid)
+            rec = _shirt_record(gd, outfit, edid, '%s (%s)' % (SHORTS_NAME[look], style.lower()), f)
+            made.append(keys.add(rec))
+            rep['shorts'][edid] = {'key': made[-1], 'files': f}
+        lst = json.loads(json.dumps(pr.records[lk]))
+        rows = [s for s in lst['subs'] if s['tag'] == 'LVLO']
+        if not rows:
+            raise ValueError('%s has no entries' % lk)
+        at = lst['subs'].index(rows[-1]) + 1
+        extra = [json.loads(json.dumps(s)) for s in rows]
+        for key in made:
+            s = json.loads(json.dumps(rows[0]))
+            for fl in s['fields']:
+                if fl.get('code') == 'F':
+                    fl['value'] = key
+            extra.append(s)
+        lst['subs'][at:at] = extra
+        changed.append({'op': 'record', 'key': lk, 'record': lst})
+        rep['lists'][kind] = {'list': lk, 'entries': len(rows) * 2 + len(made), 'shorts': len(made)}
+    if not changed:
+        raise ValueError('No dressed kind to give shorts to: dress the surfers or pirates first.')
+    return keys.ops + changed, rep
+
+
+def apply_shorts(server):
+    """shorts_ops as one Undo; checks the keys."""
+    pr = server.PR
+    first = pr.next_id
+    o, rep = shorts_ops(server.GD, pr)
+    out = server.edit('Board shorts for Waikiki\'s people', o)
+    made = list(out.get('made') or []) if isinstance(out, dict) else []
+    want = ['+%06X' % (first + n) for n in range(sum(1 for x in o if x['op'] == 'record_new'))]
+    if made[:len(want)] != want:
+        raise RuntimeError('the shorts got other keys than planned (%s vs %s): undo this step' % (made[:2], want[:2]))
+    return rep
+
+
 def apply(server, kind):
     """Plan and put one kind in as one Undo; checks the records got the keys they were planned with."""
     pr = server.PR

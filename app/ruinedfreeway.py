@@ -272,7 +272,7 @@ def clear(gd, pr, world, cat=None):
     for f, (_i, r) in gd.forms.items():
         if r.tag == 'STAT' and gd.edid(f) in (SECTION, RAMP, CHUNK):
             mine[gd.key(f)] = gd.edid(f)
-    keep = set(roadbed._flat_bases(gd)) | set(roadbed._slab_bases(gd)) | {b['key'] for b in cat} | set(mine)
+    keep = set(roadbed._flat_bases(gd, pr)) | set(roadbed._slab_bases(gd)) | {b['key'] for b in cat} | set(mine)
     built = osmdress._Stands(osmdress.standing(gd, pr, world, cat), margin=CLEAR)
     marks = list(landmarks.standing(gd, pr, world))
 

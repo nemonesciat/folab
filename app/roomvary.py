@@ -20,6 +20,7 @@ import random
 import re
 import struct
 
+import gamedata
 import navbuild
 import recordio
 
@@ -38,7 +39,8 @@ WORD_RE = re.compile('[A-Z]+(?![a-z])|[A-Z]?[a-z]+')
 # one faction or one famous place, which say where they're from in any room)
 _NOT_LED = re.compile(r'^([A-Z]{1,4}\d{1,3}|V[A-Z][a-z]|(?!NV|TV)[A-Z]{2,4}[a-z])')
 _NOT_WORD = re.compile(r'restricted|vault|enclave|safehouse|brotherhood|lucky38|sierra|tenpenny|ultraluxe|gomorrah|thetops|legion|caesar'
-                       r'|khan|followers|kingsschool|^test|dummy|debug|unused|quest|unique', re.I)
+                       r'|khan|followers|kingsschool|^test|dummy|debug|unused|quest|unique'
+                       r'|imposter|crater|ncr|mojave|nevada|vegas', re.I)   # (an imposter is a far wall, not a poster)
 
 
 class _NotIn:
@@ -73,6 +75,19 @@ def nouns(edid):
     """The kind of thing an editor ID names: its words that are things a room has (frozenset; empty: not one of them)."""
     plain = (edid or '').lower()
     return frozenset(w for w in NOUNS if w in words(edid) or (len(w) >= 5 and w in plain))
+
+
+# A building's own pieces are never swapped: a whole room's shell, a hangar's, a bank of rubble. The game names how worn a
+# kit's piece 'Light' or 'Heavy' (UshomIntLight01, Barracks01IntLight, NVCraftsmanRmLight), which read as a lamp: a
+# house's inside was swapped for another house's of another shape and the copies stood with a wall open onto nothing
+# (the user's look in nv-rs, 20 Nov 2026). The name can't tell (OffRmLight01 is a real ceiling lamp), the size can: every
+# such shell is over 1,000 across, a lamp 255 at most. Anything wider than MOST either way is a building's part.
+MOST = 600
+
+
+def building_piece(edid, b):
+    """Part of the building, not a thing in the room: never swapped, never swapped in (edid kept for a rule by name)."""
+    return b is not None and max(b[3] - b[0], b[4] - b[1]) > MOST
 
 
 def _bounds(gd, fid):
@@ -115,7 +130,7 @@ class Swaps:
             if not n and rec.tag != 'LIGH':
                 continue
             b = _bounds(gd, fid)
-            if b is None:
+            if b is None or building_piece(edid, b):
                 continue
             key = (rec.tag, i, n, 'MODL' in f)
             style = frozenset(w for w in words(edid) if w not in NOUNS and len(w) > 2)
@@ -313,3 +328,80 @@ def vary(gd, pr, apply=True, sw=None, merge=False, label='Make repeated rooms th
         pr.apply(label, nav, merge=True)
     rep['navmeshes'] = len(nav)
     return rep
+
+
+def _spot(base, p):
+    return (base, round(p[0] / 8), round(p[1] / 8), round(p[2] / 8))
+
+
+def sources(gd, pr, keys=None):
+    """{place key: the game's interior it is a copy of}: the game place most of its things stand in, where it is most of
+    them (a place built some other way, a vault or a ship, has none)."""
+    keys = interiors(pr) if keys is None else keys
+    want = collections.defaultdict(list)
+    for k in keys:
+        for rk, ch in pr.cells[k].get('refs', {}).items():
+            if rk.startswith('+') and 'base' in ch and 'p' in ch and not ch.get('removed'):
+                want[_spot(ch['base'], ch['p'])].append(k)
+    votes = collections.defaultdict(collections.Counter)
+    game = {n.lower() for n in gamedata.OFFICIAL}
+    for c in gd.interiors:
+        if gd.names[c >> 24] not in game:
+            continue             # (only the game's own: a mod's plugin may hold copies of its places)
+        for r in gd.refs(c):
+            if r['base'] and r['pos'] and r['base'] in gd.forms:
+                for k in want.get(_spot(gd.key(r['base']), r['pos']), ()):
+                    votes[k][c] += 1
+    out = {}
+    for k in keys:
+        if votes[k]:
+            c, n = votes[k].most_common(1)[0]
+            mine = sum(1 for rk, ch in pr.cells[k].get('refs', {}).items() if rk.startswith('+') and 'base' in ch and not ch.get('removed'))
+            if n >= 0.5 * mine:
+                out[k] = c
+    return out
+
+
+def mend(gd, pr, apply=True, label='Rooms: the buildings put back', sw=None):
+    """What an earlier run swapped that today's rules wouldn't put back as the game has it, every place, one Undo: the copy's
+    thing standing exactly where the game's piece does, of another base, gets the piece's base again, where the piece is
+    part of the building (`building_piece`), or what stands there now is nothing a swap may bring in (a Strip wall's far
+    model taken for a poster). Fixed things only (STAT, MSTT): a container filled since (lootplace) is left. Returns
+    {place key: [(the game piece's editor ID, what stood there)]}."""
+    sw = sw or Swaps(gd)
+    fixed = ('STAT', 'MSTT')
+    found = {}
+    ops = []
+    for k, c in sources(gd, pr).items():
+        here = {}
+        for rk, ch in pr.cells[k].get('refs', {}).items():
+            if rk.startswith('+') and 'base' in ch and 'p' in ch and not ch.get('removed') and not ch['base'].startswith('+'):
+                here.setdefault(tuple(round(v, 2) for v in ch['p']), []).append((rk, ch['base']))
+        for r in gd.refs(c):
+            if not r['base'] or not r['pos'] or not r['rot'] or r['base'] not in gd.forms or gd.forms[r['base']][1].tag not in fixed:
+                continue
+            want = gd.key(r['base'])
+            p = tuple(round(v, 2) for v in [round(v, 4) for v in list(r['pos']) + list(r['rot'])])
+            there = here.get(p, [])
+            if not there or any(b == want for _rk, b in there):
+                continue
+            rk, b = there[0]
+            try:
+                bf = gd.from_key(b)
+            except Exception:
+                continue
+            if bf not in gd.forms or gd.forms[bf][1].tag not in fixed:
+                continue
+            edid = gd.edid(r['base'])
+            if not (building_piece(edid, _bounds(gd, r['base'])) or bf not in sw.info):
+                continue
+            ops.append({'op': 'swap', 'cell': k, 'ref': rk, 'base': want})
+            found.setdefault(k, []).append((edid, gd.edid(bf)))
+    if apply and ops:
+        current = {k: m for k, m in pr.navmesh.items() if k in found and m.get('sig') == navbuild.signature(navbuild.place_refs(gd, pr, k))}
+        pr.apply(label, ops)
+        nav = [{'op': 'navmesh', 'cell': k, 'mesh': dict(m, sig=navbuild.signature(navbuild.place_refs(gd, pr, k)))}
+               for k, m in current.items()]
+        if nav:
+            pr.apply(label, nav, merge=True)
+    return found

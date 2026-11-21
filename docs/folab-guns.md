@@ -56,6 +56,24 @@ Rifles and pistols later pick their base the same way: find the game gun whose p
   trigger on the trigger), the marker nodes are there, every node has its controller, the record's animations are the
   base's and its ammo the fire gun's.
 
+## More Chinese guns (21 Nov 2026)
+
+| Gun | Rides on (hold, reload, fire) | Fires | Its moving parts |
+|---|---|---|---|
+| QSZ-92 pistol | 9mm Pistol (ReloadL) | 9mm, 15 a magazine | slide `##nmBar`, hammer `##nmHammer`, magazine `##nmClip`, trigger |
+| Type 81 rifle | Assault Carbine (ReloadF, AttackLoop: automatic) | 5.56mm (the Service Rifle's), 30 | curved magazine `##Clip`, bolt carrier and handle `##ChargingHandle`, trigger |
+| Type 79 SMG | 10mm Submachine Gun (ReloadG; held in one hand) | 9mm (the 9mm SMG's numbers), 20 | magazine `##SMGClip`, trigger `##SMGTrigger` |
+
+Not the bullpups (QBZ-95, QBU-88): their magazine is behind the grip, and the game has no bullpup whose reload puts the
+hand there, so the hand would grab air ahead of the trigger. The Type 56 is in Fallout 3, not here, but the Type 81 is
+the newer one.
+
+What these taught: the game's guns don't all keep their parts at the origin. The Assault Carbine's `##Clip` stands at
+x 10 and its `##CockingMech` is turned; the 10mm SMG's trigger is turned 10 degrees. A reload's keys are the node's whole
+place (ReloadF's first key for `##Clip` is (10, 0, 0)), so a part at the origin would jump 10 forward the moment the hand
+took it. `guns.BASE_NODES` stands each of ours where the game's stands, and `gunmake` turns the shapes into that node's
+frame.
+
 ## Not known yet
 
 - Whether nv-rs plays the parts' keys (it has to, for the game's own guns).

@@ -181,7 +181,10 @@ class Cover:
 pm = project.Project.create('Beach Map')
 gd.overlay = library.Overlay(lambda: pm)
 first, sw = modelsets.swaps(pm)
-check('every stand-in piece is written and asks for its record', sorted(o['name'] for o in first) == ['model_banana', 'model_dune_grass', 'model_hibiscus', 'model_palm_tall', 'model_palm_young']
+# (the beach's five, and since 20 Nov the desert's stand-ins too: creosote, sagebrush and yucca as FOLab's shrubs and grasses)
+stand_pieces = {p for rows in modelsets.STAND_IN.values() for p, *_r in rows}
+check('every stand-in piece is written and asks for its record', sorted(o['name'] for o in first) == sorted('model_' + p for p in stand_pieces)
+      and {'banana', 'dune_grass', 'hibiscus', 'palm_tall', 'palm_young'} <= stand_pieces
       and all(gd.find_file('meshes\\folab\\beach\\%s.nif' % f) == 'your mod' for f in ('palm_tall', 'palm_young', 'banana', 'hibiscus', 'dune_grass')))
 plain, _rep = osmdress.ops(gd, pm, world, Cover('yard'), [], 5)
 ours, rep = osmdress.ops(gd, pm, world, Cover('yard'), [], 5, swaps=sw)
@@ -423,20 +426,20 @@ check('a tight tower for a short wall: shorter along the wall, still walkable', 
 sname, sreach, sup = citypieces.shanty(3, 1)
 sm = modelsets.build(sname)
 # every piece made to be climbed is walked, over its own collision, from the ground to every floor it has
-import walkcheck  # noqa: E402
+import solidwalk  # noqa: E402
 check('a shanty of three floors has its ramps in front, its floors behind, and is shot from at every storey',
       nifmake.check(sm['nif'], sm['shapes'], sm['solids']) == [] and len({sh['tex'] for sh in sm['shapes']}) >= 3 and sm['box'][3] - sm['box'][0] >= 2 * sreach - 2)
 not_walked = []
 for desc, levels in ([(citypieces.describe_tower(h, d, tight=t), [h] + ([h - d] if d else [])) for h in (192, 384, 576, 832, 1088, 1344, 1728) for d in (0, 64, 160) for t in (False, True)]
                      + [(citypieces.describe_tower(h, hut=True), [h]) for h in (640, 768, 896)]
                      + [(citypieces.describe_shanty(lv, sd), [256 * k for k in range(1, lv + 1)]) for lv in (2, 3, 4) for sd in (1, 2, 5)]):
-    f = walkcheck.Walk(modelmake.make(desc)['solids']).floors(levels, band=4)
+    f = solidwalk.Walk(modelmake.make(desc)['solids']).floors(levels, band=4)
     if not all(p_ and r_ > 0.9 * p_ for p_, r_ in f):
         not_walked.append((desc['name'], f))
 check('every ramp tower, lookout and shanty is walked from the ground to every floor', not not_walked, not_walked)
 blocked = {'name': 'B', 'looks': {'p': {'tex': 'a.dds'}}, 'parts': [{'shape': 'slab', 'size': [900, 300, 8], 'look': 'p'}, {'shape': 'slab', 'size': [300, 300, 8], 'at': [0, 0, 120], 'look': 'p'}]}
 check('the walk check finds a floor with no headroom over it, and a floor no way up reaches',
-      walkcheck.Walk(modelmake.make(blocked)['solids']).floors([128], band=4)[0][1] == 0)
+      solidwalk.Walk(modelmake.make(blocked)['solids']).floors([128], band=4)[0][1] == 0)
 lm2 = modelsets.build(citypieces.leanto(2))
 check('a lean-to: three walls and a roof, open in front', nifmake.check(lm2['nif'], lm2['shapes'], lm2['solids']) == [] and len(lm2['solids']) == 3 and 150 < lm2['box'][5] < 260)
 import waikikiset  # noqa: E402
@@ -448,7 +451,7 @@ for piece in waikikiset.PIECES:
 check('every Waikiki piece builds, every block checked, none over MOST_THING triangles', not bad, bad)
 walk_bad = []
 for piece, deck in (('lifeguard_tower', 210), ('hale', 24), ('hula_stage', 40)):
-    f = walkcheck.Walk(modelsets.build(piece)['solids']).floors([deck], band=4)[0]
+    f = solidwalk.Walk(modelsets.build(piece)['solids']).floors([deck], band=4)[0]
     if not f[0] or f[1] < 0.9 * f[0]:
         walk_bad.append((piece, f))
 check('the lifeguard tower, the hale and the hula stage are walked up from the ground', not walk_bad, walk_bad)
@@ -486,11 +489,11 @@ check('Moana Kai is the tallest hotel, Kahala Reef the longest and lowest of the
       and built['kahala_reef']['box'][5] < min(b[5] for b in hb.values()))
 walk_bad = []
 for piece, deck in (('groin_walk', 0), ('groin_pavilion', 0), ('kahala_reef', 120)):
-    f = walkcheck.Walk(built[piece]['solids']).floors([deck], band=4)[0]
+    f = solidwalk.Walk(built[piece]['solids']).floors([deck], band=4)[0]
     if not f[0] or f[1] < 0.6 * f[0]:
         walk_bad.append((piece, f))
 check("the groin's walk, the pavilion's deck and the resort's terrace (up its ramps) are walked", not walk_bad, walk_bad)
-wd = walkcheck.Walk(built['wreck']['solids']).floors([coastset.WRECK_HIGH], band=4)[0]
+wd = solidwalk.Walk(built['wreck']['solids']).floors([coastset.WRECK_HIGH], band=4)[0]
 check("the wreck has a deck to stand on (got to from the water, so not walked from the ground)", wd[0] > 3000, wd)
 gb = built['groin_walk']['box']
 check("a length of groin is GROIN_STEP long, its top at its origin, its sides reaching far under",

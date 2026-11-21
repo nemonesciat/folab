@@ -113,6 +113,17 @@ def look(name, **how):
     return dict(how, tex=tex_path(name), normal=tex_path(name, True))
 
 
+def glow_path(name):
+    """Where a texture's glow picture goes (the game's way: beside it, `_g`)."""
+    return tex_path(name)[:-4] + '_g.dds'
+
+
+def neon(name, mult=4.0, **how):
+    """A look over a sign picture that lights where its own glow picture says (signpaint: the tubes and lit letters
+    only), `mult` times over as the Strip's neon (4 to 25)."""
+    return dict(look(name, **how), glow=glow_path(name), glow_mult=mult)
+
+
 # ---------- the pieces ----------
 
 def kiosk():
@@ -779,6 +790,21 @@ PIECES = {
                       'describe': lambda: jungle_tree('FOLabJungleBanyan', seed=2, tall=780, spread=1250, girth=44, limbs=6, vines=9, roots=14, leaf='dark')},
     'jungle_tall': {'label': 'Jungle tree, tall', 'set': 'jungle', 'file': 'tree_tall',
                     'describe': lambda: jungle_tree('FOLabJungleTall', seed=3, tall=1500, spread=760, girth=36, limbs=5, vines=5, straight=True)},
+    # (two more of each, grown from other seeds and proportions, the trunk as thick: a grove of one tree read as clones
+    # from afar, the user, 21 Nov 2026: "they all look like the same exact tree". Each has its own far model, made from
+    # its own leaves by plantfar, so near and far always agree. `VARIANTS` names them; treevary.py spreads them.)
+    'jungle_tree_b': {'label': 'Jungle tree, spreading, wide', 'set': 'jungle', 'file': 'tree_spreading_b',
+                      'describe': lambda: jungle_tree('FOLabJungleTreeB', seed=11, tall=820, spread=1200, girth=30, limbs=6, vines=6)},
+    'jungle_tree_c': {'label': 'Jungle tree, spreading, high', 'set': 'jungle', 'file': 'tree_spreading_c',
+                      'describe': lambda: jungle_tree('FOLabJungleTreeC', seed=12, tall=1000, spread=880, girth=30, limbs=4, vines=8, leaf='dark')},
+    'jungle_banyan_b': {'label': 'Banyan, broad', 'set': 'jungle', 'file': 'banyan_b',
+                        'describe': lambda: jungle_tree('FOLabJungleBanyanB', seed=13, tall=700, spread=1420, girth=44, limbs=7, vines=10, roots=12, leaf='dark')},
+    'jungle_banyan_c': {'label': 'Banyan, tall', 'set': 'jungle', 'file': 'banyan_c',
+                        'describe': lambda: jungle_tree('FOLabJungleBanyanC', seed=14, tall=880, spread=1100, girth=44, limbs=5, vines=8, roots=16)},
+    'jungle_tall_b': {'label': 'Jungle tree, tall and narrow', 'set': 'jungle', 'file': 'tree_tall_b',
+                      'describe': lambda: jungle_tree('FOLabJungleTallB', seed=15, tall=1680, spread=660, girth=36, limbs=4, vines=4, straight=True, leaf='dark')},
+    'jungle_tall_c': {'label': 'Jungle tree, tall and full', 'set': 'jungle', 'file': 'tree_tall_c',
+                      'describe': lambda: jungle_tree('FOLabJungleTallC', seed=16, tall=1340, spread=900, girth=36, limbs=6, vines=6, straight=True)},
     'tree_fern': {'label': 'Tree fern', 'set': 'jungle', 'file': 'tree_fern', 'describe': lambda: tree_fern('FOLabJungleTreeFern', 170, seed=4)},
     'ground_fern': {'label': 'Fern', 'set': 'jungle', 'file': 'fern', 'describe': lambda: rosette('FOLabJungleFern', 'jungle/fern', 11, (80, 125), 44, seed=5)},
     'taro': {'label': 'Giant taro', 'set': 'jungle', 'file': 'taro',
@@ -1250,12 +1276,28 @@ _drawn = {}             # texture name -> (colour DDS, normal DDS): each is draw
 RIM_KEEP = ('cane_stick', 'ti_stick', 'twig', 'bark', 'palm_bark', 'fibre', 'stalk', 'cane')   # (repeat along their part)
 
 
+RIM_ALSO = ('bamboo/fringe', 'restyle/fringe')     # (thatch fringes: a solid top row showed as a line along each fringe's foot)
+
+
+_glows = {}             # texture name -> its glow picture's DDS, for the pictures that have one (signpaint)
+
+
+def glow_file(name):
+    texture_files(name)
+    return _glows.get(name)
+
+
 def texture_files(name):
     if name not in _drawn:
         # (a plant's cut-out drawn once across its card: its border clear, or the card carries a bar along its top in the
         # game, 20 Nov 2026. Not the stems, whose pictures repeat up the stem, nor railings and the like, which repeat)
-        rim = name.split('/')[0] in ('jungle', 'beach') and name.split('/')[-1] not in RIM_KEEP
-        _drawn[name] = TEXTURES[name]().files(game=True, rim=rim)       # (relief and size as the game's: texpaint.normal_map)
+        rim = ((name.rpartition('/')[0] or SET) in ('jungle', 'beach') or name in RIM_ALSO) and name.split('/')[-1] not in RIM_KEEP
+        # (the beach set's own pictures have no folder in their names: by that test they had no border at all, 20 Nov 2026)
+        pic = TEXTURES[name]()
+        _drawn[name] = pic.files(game=True, rim=rim)       # (relief and size as the game's: texpaint.normal_map)
+        if getattr(pic, 'glow', None) is not None:
+            import signpaint
+            _glows[name] = signpaint.glow_files(pic.glow)
     return _drawn[name]
 
 
@@ -1275,6 +1317,16 @@ def build(piece):
     for name in list(TEXTURES):                 # (drawing one may bring in a set that adds more)
         if tex_path(name) in made['textures']:
             files[tex_path(name)], files[tex_path(name, True)] = texture_files(name)
+    for lk in list(desc['looks'].values()) + list((far or {}).get('looks', {}).values()):
+        gp = lk.get('glow') or ''
+        if lk.get('tex') not in made['textures']:
+            continue                            # (a look the set offers that this piece doesn't show)
+        if gp.lower().startswith('textures\\folab\\') and gp not in files:     # (a sign's own glow picture)
+            name = next((n for n in TEXTURES if glow_path(n) == gp), None)
+            data = glow_file(name) if name else None
+            if data is None:
+                raise ValueError('%s names a glow picture no sign draws: %s' % (piece, gp))
+            files[gp] = data
     missing = [t for t in made['textures'] if t not in files]
     if missing:
         raise ValueError('%s names textures the set doesn\'t draw: %s' % (piece, ', '.join(missing)))
@@ -1390,6 +1442,9 @@ def _all_sets():
     import restyleset  # noqa: F401
     import guardtower  # noqa: F401
     import bambooset  # noqa: F401
+    import rubbleset  # noqa: F401
+    import signsheets                   # (last: Waikiki's sign pictures redrawn, in place of the sets' own)
+    signsheets.install()
 
 
 def get(path, q):
