@@ -157,6 +157,7 @@ def take_backup(data_dir):
     data = {'taken': time.time(), 'plugins_txt': _read_raw(txt), 'times': {r['name']: r['mtime'] for r in scan_files(data_dir).values()}}
     with open(os.path.join(d, name), 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=1)
+    install.backups.after_backup()
     return name
 
 

@@ -134,3 +134,26 @@ def move_out(paths, plugin):
         shutil.move(p, os.path.join(dest, plugin))
         moved.append({'from': p, 'to': os.path.join(dest, plugin)})
     return moved
+
+
+def everywhere(built, main, main_where, main_path, lo=None, mod_folder=None, nvrs_folders=(), nvrs_chosen=False):
+    """Every place the game could load the mod from, each with how it stands: the place FOLab puts it (main: install.status
+    or mo2write.status, said as main_where), every nv-rs on the PC, and any other copy that would load instead (others).
+    [{where, path, kind: 'main' | 'nv-rs' | 'other', state: 'current' | 'old' | 'off' | 'missing', target, movable}].
+    target: Bring everything up to date puts the build there (the main place; an nv-rs when nv-rs is what plays, or when
+    it holds a copy already: none is left playing an older build). Another copy is never a target: it goes to backups."""
+    plugin = os.path.basename(built)
+    rows = []
+    st = 'missing' if not main.get('installed') else 'old' if not main.get('current') else 'off' if not main.get('active') else 'current'
+    rows.append({'where': main_where, 'path': main_path, 'kind': 'main', 'state': st, 'target': True, 'movable': False})
+    for f in nvrs_folders or ():
+        p = os.path.join(f, 'mods', plugin)
+        there = os.path.isfile(p)
+        rows.append({'where': "nv-rs in %s" % f, 'path': p, 'kind': 'nv-rs', 'folder': f,
+                     'state': 'missing' if not there else 'current' if _same(p, built) else 'old',
+                     'target': bool(nvrs_chosen or there), 'movable': False})
+    for c in others(built, lo, mod_folder):
+        if c['same'] and not c.get('loose'):
+            continue                        # (the very same bytes elsewhere: harmless)
+        rows.append(dict(c, kind='other', state='old', target=False))
+    return rows

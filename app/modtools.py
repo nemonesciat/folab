@@ -5,6 +5,8 @@ S.edit..."""
 import os
 
 import adopt
+import backups
+import worldcheck
 import changes
 import gametest
 import conflicts
@@ -76,6 +78,10 @@ def get(name, q, S):
         return out
     if name == 'plugins':
         return plugin_list(S)
+    if name == 'backups':
+        return backups.page()
+    if name == 'worldcheck':
+        return worldcheck.job(S, start=bool(q.get('start')))
     if name == 'loadorder':
         return loadorder.read(S.GD.data_dir, S.PR.plugin if S.PR else None)
     if name == 'loadorder/conflicts':
@@ -138,6 +144,18 @@ def post(name, body, S):
         return loadorder.restore(S.GD.data_dir, body['name'])
     if name == 'loadorder/sorted':
         return loadorder.sorted_for_masters(S.GD.data_dir, body['order'], body['active'])
+    if name == 'backups/delete':        # (exactly the names the card showed, never a fresh plan the user didn't see)
+        freed = backups.delete(body.get('names') or [])
+        return dict(backups.page(), freed=freed)
+    if name == 'backups/rules':
+        r = body or {}
+        S.save_settings(backups_keep=max(1, int(r.get('keep', backups.KEEP))), backups_days=max(0, int(r.get('days', backups.DAYS))),
+                        backups_cap_gb=max(0.5, float(r.get('cap_gb', backups.CAP_GB))), backups_auto=bool(r.get('auto', True)))
+        return backups.page()
+    if name == 'backups/folder':
+        os.makedirs(backups.folder(), exist_ok=True)
+        os.startfile(backups.folder())
+        return {'ok': True}
     need_mod(S)
     if name == 'release/info':
         return release.save_info(S, body)

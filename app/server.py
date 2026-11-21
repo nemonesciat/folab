@@ -28,6 +28,8 @@ import kitplan
 import navbuild
 import worldapi
 import api_maps
+import bigjobs
+import drawcount
 import nif
 import nvrs
 import nvse
@@ -1113,6 +1115,7 @@ def state():
     if PR:
         s['installed'] = mo2write.status(loadout.current(), os.path.join(project.BUILD_DIR, PR.plugin), PR.name) if loadout.current() else install.status(GD.data_dir, PR.plugin)
         s['installed']['stale'] = stale_copies()
+        s['installed']['places'] = install_places(s['installed'])
         built = os.path.join(project.BUILD_DIR, PR.plugin)
         s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= os.path.getmtime(PR.path)
         s['project']['masters'] = masters()
@@ -1220,6 +1223,99 @@ def stale_copies():
     out = copies.stale(built, lo, mine, nv)
     # far views the game would draw nothing of (copies.far_view: settings and files counted from different corners)
     out += copies.far_view([install._assets_folder(built)] + ([mine] if mine else []))
+    return out
+
+
+def draws_here(q):
+    """The draw count round a spot outside (world, x, y) or in a place (cell): drawcount.py."""
+    with _lock:
+        C = drawcount.counter(GD, PR)
+        if q.get('cell'):
+            return C.inside(q['cell'])
+        return C.around(GD.from_key(q['world']), float(q['x']), float(q['y']))
+
+
+_busiest = {'running': False}
+
+
+def draws_busiest(q):
+    """The heaviest spots round the cells the mod changed in a world: started in the background, asked again for the
+    answer ({'running'} until it's there)."""
+    world = q.get('world')
+    if q.get('start') and not _busiest.get('running'):
+        _busiest.clear()
+        _busiest.update(running=True, world=world, said='Starting', done=0, total=0)
+
+        def work():
+            try:
+                with _lock:
+                    spots = drawcount.counter(GD, PR).busiest(GD.from_key(world), progress=lambda w, d, t: _busiest.update(said=w, done=d, total=t))
+                _busiest.update(spots=spots, ok=True)
+            except Exception as e:
+                _busiest.update(error=str(e), ok=False)
+            _busiest['running'] = False
+        threading.Thread(target=work, daemon=True).start()
+    return dict(_busiest)
+
+
+def install_places(main=None):
+    """Every place the game could load the mod from, current or not (copies.everywhere): the place Put in game / Put in MO2
+    puts it, every nv-rs on the PC, and other copies that would load instead."""
+    if not PR:
+        return []
+    built = os.path.join(project.BUILD_DIR, PR.plugin)
+    if not os.path.isfile(built):
+        return []
+    lo = loadout.current()
+    if main is None:
+        main = mo2write.status(lo, built, PR.name) if lo else install.status(GD.data_dir, PR.plugin)
+    try:
+        mine = mo2write.mod_folder(lo, PR.name) if lo else None
+    except ValueError:
+        mine = None
+    if lo:
+        where, path = 'MO2, profile "%s"' % lo.title, os.path.join(mine, PR.plugin) if mine else ''
+    else:
+        where, path = "the game's Data folder", os.path.join(GD.data_dir, PR.plugin)
+    rows = copies.everywhere(built, main, where, path, lo, mine, nvrs.all_found(load_settings().get('nvrs_dir')),
+                             _engine() == 'nv-rs')
+    if loadout.under_mo2():
+        for r in rows:
+            if r['kind'] == 'nv-rs':
+                r['note'] = 'FOLab was started from MO2, which breaks nv-rs: start FOLab on its own to update this one.'
+    return rows
+
+
+def install_everywhere():
+    """Bring everything up to date: the save put in its place (the game or MO2) and into every nv-rs that should have it;
+    then the list again. Old copies elsewhere aren't touched here (the card's Move to backups does that)."""
+    not_while_playing()
+    if os.environ.get('FOLAB_NO_GAME_WRITES'):
+        loadout.refuse_writes('Putting the mod in every copy of the game')
+    saved = save()
+    out = {'done': [], 'failed': []}
+    lo = loadout.current()
+    try:
+        if lo:
+            put_in_mo2(saved)
+            out['done'].append('MO2, profile "%s"' % lo.title)
+        else:
+            install.install(GD.data_dir, saved['path'])
+            out['done'].append("the game's Data folder")
+    except Exception as e:
+        out['failed'].append({'where': 'MO2' if lo else "the game's Data folder", 'why': str(e)})
+    for r in install_places():
+        if r['kind'] != 'nv-rs' or not r['target'] or r['state'] == 'current':
+            continue
+        if r.get('note'):
+            out['failed'].append({'where': r['where'], 'why': r['note']})
+            continue
+        try:
+            nvrs.put_in(r['folder'], [saved['path']], _nvrs_setup())
+            out['done'].append(r['where'])
+        except Exception as e:
+            out['failed'].append({'where': r['where'], 'why': str(e)})
+    out['state'] = state()
     return out
 
 
@@ -1998,6 +2094,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(report().encode('utf-8'), 'text/plain; charset=utf-8')
             if u.path.startswith('/api/maps/'):
                 return self.send(*api_maps.get(u.path, q, sys.modules[__name__]))
+            if u.path == '/api/draws':
+                return self.send(draws_here(q))
+            if u.path == '/api/draws/busiest':
+                return self.send(draws_busiest(q))
+            if u.path == '/api/jobs' or u.path.startswith('/api/jobs/'):
+                return self.send(bigjobs.get(u.path, q, sys.modules[__name__]))
             if u.path == '/api/doc':
                 name = os.path.basename(q['name'])
                 return self.file(os.path.join(WEB, 'docs', name + '.md'))
@@ -2132,6 +2234,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({'error': 'FOLab hasn\'t found New Vegas yet.'}, code=503)
             if u.path.startswith('/api/maps/'):
                 return self.send(api_maps.post(u.path, body, sys.modules[__name__]))
+            if u.path.startswith('/api/jobs/'):
+                return self.send(bigjobs.post(u.path, body, sys.modules[__name__]))
             if u.path == '/api/quit':
                 # (FOLab.exe asks this when its window closes or Quit is picked: everything is saved as it's made)
                 if self.headers.get('X-FOLab-Quit') != '1':
@@ -2274,6 +2378,8 @@ class Handler(BaseHTTPRequestHandler):
                     if loadout.current():
                         return self.send(put_in_mo2(saved))
                     return self.send({'install': install.install(GD.data_dir, saved['path']), 'state': state()})
+                if u.path == '/api/install/everywhere':
+                    return self.send(install_everywhere())
                 if u.path == '/api/install/stale_out':
                     not_while_playing()
                     old = [c for c in stale_copies() if c['movable']]

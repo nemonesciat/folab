@@ -22,6 +22,15 @@
       "port": 8772
     },
     {
+      "name": "folab-try-d",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\backups-try&& set FOLAB_NV_INI=D:\\FOLabScratch\\backups-try\\ini&& py -3 app/server.py 8776 --no-browser"
+      ],
+      "port": 8776
+    },
+    {
       "name": "folab-look",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [

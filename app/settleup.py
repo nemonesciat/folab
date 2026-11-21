@@ -125,12 +125,36 @@ def _bounds(gd, pr, key, solids):
     return [min(xs), min(ys), min(zs), max(xs), max(ys), max(zs)] if xs else None
 
 
-def settle(gd, pr, world, cat=None, cells=None, progress=None):
+# (everything=True, the Big jobs' "Things floating or sunk": every small thing the mod placed, not only the roof camps;
+# never buildings of the catalogue, road pieces, pavement, doors, lights, plants; and never one with something taller right
+# beside it, which may hold it: a sign on a wall, boards over a doorway, a lamp on a post)
+LOOSE_TYPES = {'STAT', 'MSTT', 'CONT', 'MISC', 'FURN', 'ACTI', 'SCOL', 'WEAP', 'ARMO', 'AMMO', 'ALCH', 'BOOK', 'KEYM', 'NOTE'}
+NOT_LOOSE = re.compile(r'(door|light|lamp|lantern|sign|wire|cable|vine|board|plank|window|billboard|pole|bridge|road|'
+                       r'pavement|sidewalk|curb|kerb|fence|wall|rail|pipe|plant|tree|bush|grass|fern|palm|shrub|marker|fx)', re.I)
+BESIDE = 24.0       # how far round a loose thing to look for something taller that may hold it
+
+
+def _type(gd, pr, key):
+    if key.startswith('+'):
+        return (pr.records.get(key) or {}).get('type', '')
+    try:
+        f = gd.from_key(key)
+        got = gd.forms.get(f)
+        return got[1].tag if got else ''
+    except (ValueError, KeyError, AttributeError, TypeError):
+        return ''
+
+
+def settle(gd, pr, world, cat=None, cells=None, progress=None, everything=False):
     grid = gd.grid(world)
     by_xy = {xy: gd.key(c) for xy, c in grid.items()}
     G = roadgen.Ground(gd, pr, world)
     by_key = {b['key']: b for b in (cat or [])}
     kinds, todo = {}, []
+    not_loose = set()
+    if everything:
+        import roadbed
+        not_loose = set(roadbed._flat_bases(gd)) | set(roadbed._slab_bases(gd))
     for xy, cell in grid.items():
         ck = gd.key(cell)
         if cells is not None and ck not in cells:
@@ -144,6 +168,8 @@ def settle(gd, pr, world, cat=None, cells=None, progress=None):
                 e = _edid(gd, pr, b)
                 kinds[b] = ('camp' if (e in CAMP_EDIDS or ROOF_PIECE.match(e)) else 'ground' if GROUND_PIECE.match(e)
                             else 'ramp' if RAMP_PIECE.match(e) else None)
+                if kinds[b] is None and everything and b not in by_key and b not in not_loose                         and _type(gd, pr, b) in LOOSE_TYPES and not NOT_LOOSE.search(e or ''):
+                    kinds[b] = 'loose'
             if kinds[b]:
                 todo.append((xy, ck, rk, r, kinds[b]))
     solids = _Solids(gd, pr, {rk for _xy, _ck, rk, _r, _k in todo})
@@ -153,7 +179,7 @@ def settle(gd, pr, world, cat=None, cells=None, progress=None):
             if r.get('base') in by_key and r.get('p') and not r.get('removed'):
                 buildings[rk] = (r['p'], float(r.get('s') or 1.0), by_key[r['base']])
     ops, report = [], {'looked_at': len(todo), 'resting': 0, 'let_down': 0, 'lifted': 0, 'taken_out': 0, 'most_fall': 0,
-                       'ramps': 0, 'ramps_to_nowhere': 0}
+                       'ramps': 0, 'ramps_to_nowhere': 0, 'held': 0}
     todo.sort(key=lambda t: t[0])
     for n, (xy, ck, rk, r, kind) in enumerate(todo):
         if progress and n % 200 == 0:
@@ -206,6 +232,12 @@ def settle(gd, pr, world, cat=None, cells=None, progress=None):
             ops.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': [round(v, 2) for v in p]})
             report['lifted'] += 1
             continue
+        if kind == 'loose':
+            w = max(o[3] - o[0], o[4] - o[1]) * s / 2 + BESIDE
+            if any(under + GAP < z for dx, dy in ((w, 0), (-w, 0), (0, w), (0, -w), (w, w), (-w, w), (w, -w), (-w, -w))
+                   for z, _ref in solids.tops(p[0] + dx, p[1] + dy)):
+                report['held'] += 1         # (something taller right beside it may hold it: left)
+                continue
         on_roof = False
         if rest_ref in buildings:
             bp, bs, bcat = buildings[rest_ref]

@@ -103,6 +103,8 @@ def write(changes, files=FILES):
             f.write('\n'.join(lines) + '\n')
         if ro:
             os.chmod(p, 0o444)
+    import backups                      # (late: backups is only wanted once a copy was made)
+    backups.after_backup()
     return bk
 
 

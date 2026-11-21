@@ -34,6 +34,9 @@ LIB_SKIP = {'site-packages', 'test', 'tests', 'idlelib', 'tkinter', 'turtledemo'
             '__pycache__', 'venv', 'pydoc_data', 'distutils', 'turtle.py', 'unittest', 'pydoc.py'}
 DLL_SKIP = re.compile(r'^(_test|xxlimited|_tkinter|_ctypes_test|tcl|tk)', re.I)
 APP_SKIP = {'__pycache__'}
+# modules run only from the developer's Python (they need numpy/PIL/scipy, which FOLab.exe's Python hasn't): copied, not
+# import-checked; FOLab.exe never imports them at start
+DEV_ONLY = {'garmentprint'}
 
 
 def log(*a):
@@ -144,7 +147,8 @@ def check_python(py_dir):
     """Import everything FOLab uses with the bundled Python, with nothing else on PATH."""
     env = {k: v for k, v in os.environ.items() if not k.upper().startswith(('PYTHON', 'CONDA'))}
     env['PATH'] = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'System32')
-    mods = sorted(os.path.splitext(f)[0] for f in os.listdir(os.path.join(STAGE, 'app')) if f.endswith('.py'))
+    mods = sorted(os.path.splitext(f)[0] for f in os.listdir(os.path.join(STAGE, 'app')) if f.endswith('.py')
+                  and os.path.splitext(f)[0] not in DEV_ONLY)
     code = ('import sys, ctypes, zlib, json, http.server, webbrowser, mmap, hashlib, base64\n'
             'for m in %r: __import__(m)\n'
             'print("ok", sys.version.split()[0], sys.prefix)\n') % mods

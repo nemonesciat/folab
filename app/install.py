@@ -11,6 +11,7 @@ import os
 import shutil
 import time
 
+import backups
 import loadout
 import project
 
@@ -63,6 +64,7 @@ def _backup(path):
             n += 1
             dest = os.path.join(BACKUPS, '%s %d %s' % (stamp, n, os.path.basename(path)))
         shutil.copy2(path, dest)
+        backups.after_backup()                      # (the oldest of these go by themselves: backups.py)
         return dest
 
 

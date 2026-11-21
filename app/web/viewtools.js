@@ -37,6 +37,7 @@ function vtDraw(){
     <label class="vt-row">Field of view <input type="range" min="40" max="110" value="${VT.fov}" data-v="fov"><b>${VT.fov}°</b></label>
     <label class="vt-row"><input type="checkbox" data-v="mini" ${VT.mini ? 'checked' : ''}> Minimap in the corner</label>
     <label class="vt-row"><input type="checkbox" data-v="borders" ${VT.borders ? 'checked' : ''}> Cell borders (outside)</label>
+    <label class="vt-row"><input type="checkbox" data-v="draws" ${VT.draws !== false ? 'checked' : ''}> Draw count in the corner (how heavy for the game)</label>
     <div class="h">Outside</div>
     <label class="vt-row">Ground round you <input type="range" min="1" max="5" value="${VT.landR}" data-v="landR"><b>${VT.landR * 2 + 1} × ${VT.landR * 2 + 1}</b></label>
     <label class="vt-row">Things round you <input type="range" min="1" max="4" value="${VT.thingR}" data-v="thingR"><b>${VT.thingR * 2 + 1} × ${VT.thingR * 2 + 1}</b></label>

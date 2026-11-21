@@ -281,7 +281,37 @@ the model for style, UI and approach. Python, standard library first, code in `a
   (`FROM_FIRES`, `DNAM_FROM_FIRES`), mods dropped. The QLZ-87 rides on the Light Machine Gun, fires the Grenade Machinegun's
   25mm grenades. Not yet seen in either game.
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
-- Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
+- Backups (`backups.py`, `web/backups.js` the Tools tab Backups, `/api/tools/backups`, `tests/test_backups.py`): kinds by the name
+  with its time taken out; per kind the newest `KEEP` and one a day for `DAYS`, then a size cap, never the newest of a kind or
+  anything under `FRESH`; names with no time (`<plugin> distant land`) never. `after_backup` (install, loadorder, gameini call it)
+  tidies only `AUTO` kinds by itself; a mod's "before <job>" copies and moved-out copies go only on the card's click. The plan
+  of what goes: `docs/folab-from-waikiki.md` (what Waikiki taught, ranked).
+- Big jobs (`bigjobs.py`, `web/bigjobs.js` the Tools tab Big jobs, `/api/jobs`, `tests/test_bigjobs.py`): whole-world steps as
+  buttons, what scripts did by hand ~100 times. `JOBS` {key: (title, words, steps, then, needs a world)}; a step is
+  fn(Ctx) -> (ops, report), the builder's own entry point, applied before the next (later ones `merge`: one Undo). The mod
+  copied to backups as "<mod> before <job> MMDD-HHMM" just before the first change; refused while the game runs or a map
+  step or navmesh run is going; report cut to numbers, `cells` named become "make these navmeshes again". Builders that
+  `import server` got an empty second copy under FOLab (server runs as __main__): `_one_server` points the name at the
+  running one. A new job: a step function and a line in `JOBS`. `settleup.settle(everything=True)` is its floating job:
+  every small thing the mod placed (`LOOSE_TYPES`, not `NOT_LOOSE` words), never one with something taller `BESIDE` it.
+- Where the game can load it from (`copies.everywhere`, `server.install_places` in state's `installed.places`, `placesCard` on My
+  mod, `/api/install/everywhere`, `tests/test_installplaces.py`): the main place (Data or the MO2 profile), every nv-rs
+  (`nvrs.all_found`), other copies; each current / old / off / missing. Bring everything up to date puts the save in the main
+  place and in each nv-rs that is a `target` (nv-rs is what plays, or it holds a copy already); not into nv-rs when FOLab runs
+  under MO2. `nvrs.put_in` refuses under `FOLAB_NO_GAME_WRITES` too (it didn't).
+- Draw count (`drawcount.py`, `web/drawcount.js` the badge in the 3D view's corner, View tab's switch `VT.draws`, `/api/draws`,
+  `/api/draws/busiest`, `tests/test_drawcount.py`): things in the 5 x 5 cells round the camera (or the place), each model
+  shape a draw, the mod's over the game's; Freeside's gate 1,691 / 2,196 and Novac 1,109 / 1,403 exactly as measured by
+  hand. `band`: `HEAVY` 4,000, `TOO_MUCH` 7,000. `busiest` looks round the cells the mod changed. Not counted: GRAS, the
+  far view, actors.
+- New-world checklist (`worldcheck.py`, `web/worldcheck.js` wraps `healthRender`: Health's "Your worlds" section,
+  `/api/tools/worldcheck`, `tests/test_worldcheck.py`): per world the mod changed outside: Pip-Boy map (own worlds only, not
+  one under a parent: the game's Lucky38World has none), far view (build/<mod> distant land/ or the mod's own files, folder
+  named by editor ID in any case), torn edges (`TORN`), own water over a beach beside world-level cells, draws (drawcount).
+  Read only. Waikiki 20 Nov 2026 ~22:00, 21 s: 5 spots over 7,000 draws (worst 10,395 at cell -34, 13), 19 cells' water to look at.
+- Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip (it imports
+  every app module with FOLab.exe's Python first: one needing numpy/PIL goes in `DEV_ONLY`, or the build stops with
+  FOLab.exe gone from out/FOLab);
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by
   `folab_running.json`, opens an Edge app window titled "FOLab", quits it with POST /api/quit (X-FOLab-Quit).
   `brand.py` draws the logo/icon (wrench F, gear O, LAB) into app/web/vendor. Themes: `web/theme.js` (CSS variables; `TH_FONTS` is a choice of its own, any font with any theme).

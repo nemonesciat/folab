@@ -298,6 +298,9 @@ def put_in(folder, built_plugins, setup=None):
     """The setup's folders, then these saved plugins (in load order: the mod, then FOLab Test.esp) with their own files,
     into nv-rs's mods folder, and what FOLab put there before and doesn't now taken out. With plugins on in the
     setup, a plugins.txt there says what loads. {'folder', 'plugins', 'files', 'linked', 'copied', 'backups', 'nvse'}"""
+    if os.environ.get('FOLAB_NO_GAME_WRITES'):      # (a scratch FOLab: nv-rs is a real game too)
+        raise ValueError('Putting the mod in nv-rs would change a real game, and this FOLab is a scratch copy for looking at '
+                         'experiments: it may not. Use your own FOLab for that.')
     setup = clean_setup(setup)
     rows = plugin_rows(setup)
     mine = {os.path.basename(b).lower() for b in built_plugins}     # (the mod's own plugin in a folder too: the saved one wins)
