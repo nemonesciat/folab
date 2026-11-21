@@ -257,6 +257,100 @@ def _rigid_body(shape):
         b'\0' * 12, struct.pack('<II', 0, 0)))                      # spare; nothing tied to it; no flags
 
 
+def _held_body(shape, mass, box, layer=5):
+    """A loose body on the weapons' layer, as the game's melee weapons have (lead pipe, bat, sledgehammer: layer 5, a box's
+    inertia, quality 'debris', damping, friction and bounce the same in all of them). box: (x0, y0, z0, x1, y1, z1), game
+    units; the inertia is a solid box's of that size and mass, round its middle, in Havok units. Layer 4 is clutter, as the
+    game's hats lying on the ground are (their _GO models)."""
+    weapon = struct.pack('<BBH', layer, 0, 0)
+    respond = struct.pack('<BBH', 1, 0, 0xFFFF)
+    d = [(box[3 + k] - box[k]) / HAVOK_SCALE for k in range(3)]
+    mid = [(box[3 + k] + box[k]) / 2 / HAVOK_SCALE for k in range(3)]
+    ixx, iyy, izz = (mass / 12.0 * (d[1] ** 2 + d[2] ** 2), mass / 12.0 * (d[0] ** 2 + d[2] ** 2), mass / 12.0 * (d[0] ** 2 + d[1] ** 2))
+    return b''.join((
+        struct.pack('<i', shape), weapon,
+        b'\0' * 4, b'\x01\0\0\0', _PROPERTY,
+        respond,
+        b'\0' * 4, weapon, b'\0' * 4, respond, b'\0' * 4,
+        struct.pack('<4f', 0, 0, 0, 0), struct.pack('<4f', 0, 0, 0, 1),
+        b'\0' * 32,
+        struct.pack('<12f', ixx, 0, 0, 0, 0, iyy, 0, 0, 0, 0, izz, 0), struct.pack('<4f', mid[0], mid[1], mid[2], 0),
+        struct.pack('<8f', mass, 0.1, 0.05, 0.5, 0.4, 1068.0, 31.57, 0.15),
+        bytes((4, 2, 2, 3)),                                        # box inertia, deactivates, debris quality: the game's weapons'
+        b'\0' * 12, struct.pack('<II', 0, 0)))
+
+
+def _relay(data, root=None, bsx=None, body=None, extras=()):
+    """A built file's blocks laid out again: the root's type (`root`), its BSXFlags' number (`bsx`), its collision body's
+    bytes (`body(shape)`), more NiStringExtraData on the root (`extras`: [(name, text)])."""
+    n = nif.Nif(data)
+    blocks = [data[n.offsets[i]:n.offsets[i] + n.sizes[i]] for i in range(len(n.types))]
+    types = list(n.types)
+    strings = list(n.strings)
+    for pair in extras:
+        for s in pair:
+            if s not in strings:
+                strings.append(s)
+    if root:
+        types[0] = root
+    if bsx is not None:
+        k = types.index('BSXFlags')
+        blocks[k] = struct.pack('<iI', strings.index('BSX'), bsx)
+    if body:
+        k = types.index('bhkRigidBody')
+        blocks[k] = body(struct.unpack_from('<i', blocks[k])[0])
+    more = []
+    for a, b in extras:
+        types.append('NiStringExtraData')
+        blocks.append(struct.pack('<ii', strings.index(a), strings.index(b)))
+        more.append(len(blocks) - 1)
+    top = blocks[0]
+    nm, count = struct.unpack_from('<iI', top)
+    have = list(struct.unpack_from('<%di' % count, top, 8)) + more
+    blocks[0] = struct.pack('<iI%di' % len(have), nm, len(have), *have) + top[8 + 4 * count:]
+    order = []
+    for t in types:
+        if t not in order:
+            order.append(t)
+    head = b'Gamebryo File Format, Version 20.2.0.7\n' + struct.pack('<IBIII', nif.VERSION, 1, 11, len(blocks), 34)
+    head += _short('FOLab') + _short('') + _short('')
+    head += struct.pack('<H', len(order)) + b''.join(_sized(t) for t in order)
+    head += struct.pack('<%dH' % len(blocks), *(order.index(k) for k in types))
+    head += struct.pack('<%dI' % len(blocks), *(len(b) for b in blocks))
+    head += struct.pack('<II', len(strings), max(len(s) for s in strings)) + b''.join(_sized(s) for s in strings)
+    head += struct.pack('<I', 0)
+    return head + b''.join(blocks) + struct.pack('<II', 1, 0)
+
+
+def _loose(name, shapes, mass, material, layer, extras):
+    pts = [(s['p'][k], s['p'][k + 1], s['p'][k + 2]) for s in shapes for k in range(0, len(s['p']), 3)]
+    box = [min(q[k] for q in pts) for k in range(3)] + [max(q[k] for q in pts) for k in range(3)]
+    corners = [(box[0 if i & 1 == 0 else 3], box[1 if i & 2 == 0 else 4], box[2 if i & 4 == 0 else 5]) for i in range(8)]
+    faces = [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]]
+    data = build(name, shapes, [{'points': corners, 'faces': faces, 'material': material}])
+    return _relay(data, bsx=66, body=lambda shape: _held_body(shape, mass, box, layer), extras=extras)
+
+
+def build_held(name, shapes, mass=10.0, material='wood'):
+    """The bytes of a weapon held in the hand (a melee weapon's model, worn and dropped), laid out as the game's own: the
+    root's extras say it has collision (BSXFlags 66, as every melee weapon of the game) and which bone holds it
+    ('Prn' = 'Weapon'); its collision is one box round the shapes on the weapons' layer (`_held_body`). In the model's own
+    frame the grip is at the origin, the business end along +y and the striking side along x, as the game's weapons lie."""
+    return _loose(name, shapes, mass, material, 5, [('Prn', 'Weapon')])
+
+
+def build_dropped(name, shapes, mass=0.5, material='cloth'):
+    """The bytes of a thing lying loose on the ground (a hat's _GO model): BSXFlags 66, one box round it on the clutter
+    layer (4), as the game's Pre-War Hat and cowboy hats lie."""
+    return _loose(name, shapes, mass, material, 4, [])
+
+
+def build_worn(name, shapes, bone='Bip01 Head'):
+    """The bytes of a rigid thing worn on one bone (a hat), as the game's Pre-War Hat: a NiNode with 'Prn' = the bone,
+    no collision, the shapes in that bone's frame."""
+    return _relay(build(name, shapes), root='NiNode', extras=[('Prn', bone)])
+
+
 # ---------- the file ----------
 
 def build(name, shapes, solids=()):

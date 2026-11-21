@@ -348,4 +348,4 @@ def ops(gd, pr, world, side, roads, cat=None):
     B = S.B
     rep = dict(S.rep, missing=sorted(B.rep['missing']), removed=sum(1 for o in B.ops if o['op'] == 'remove'),
                added=sum(1 for o in B.ops if o['op'] == 'add'))
-    return B.ops, rep, sorted(B.cells)
+    return __import__('guardtower').instead(gd, pr, B.ops), rep, sorted(B.cells)     # (FOLab's guard tower for the game's)

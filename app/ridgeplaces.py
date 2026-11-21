@@ -565,4 +565,4 @@ def ops(gd, pr, world, side, cat=None, only=None, seed=5):
         B.cells.add(ck)
     moves = [{'op': 'move', 'cell': ck, 'ref': rk, 'p': p} for (ck, rk), p in sorted(B.moved.items())]
     B.rep['land_cells'], B.rep['moved'] = len(lands), len(moves)
-    return lands + moves + B.ops, B.rep, sorted(B.cells)
+    return __import__('guardtower').instead(gd, pr, lands + moves + B.ops), B.rep, sorted(B.cells)     # (FOLab's guard tower for the game's)

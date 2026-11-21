@@ -102,6 +102,7 @@ FREEWAY_UP = 1000.0
 CAIRN_EVERY = 4                 # (a stash behind one cairn in this many)
 RUINS_BEHIND = 25               # (finds against ruins behind the wall)
 DOOR_CLEAR = 260.0              # (no find this near a door)
+TALL = 600.0                    # (an anchor taller than this: the ground beside it is the level, not its underside)
 FOOT_MOST = 60.0                # (things this big or bigger are kept out of a find's footprint)
 APART = 90.0                    # (finds this far apart, edge to edge)
 LEVEL = 8.0                     # (a find on a deck or floor: its supports agree within this)
@@ -559,7 +560,11 @@ class Outside:
         for x, y, rz in self.beside(a, edid):
             if not self.ok_spot(x, y) or not self.S.free(x, y, r):
                 continue
-            p = self.S.at(x, y, rz, fb, level)
+            lvl = level
+            if (a[5][5] - a[5][2]) * a[4] > TALL and self.S.G:     # (beside a building or a ship: its underside is
+                g = self.S.G.at(x, y)                               # no guide to the ground beside it)
+                lvl = g if g is not None else level
+            p = self.S.at(x, y, rz, fb, lvl)
             if p is None:
                 continue
             ck = self.A.grid.get((int(x // 4096), int(y // 4096)))

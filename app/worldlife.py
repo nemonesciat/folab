@@ -294,4 +294,4 @@ class Life:
             self.ops.append({'op': 'cellinfo', 'cell': ck, 'info': now})
         self.report['actors'] = sum(1 for o in self.ops if o.get('op') == 'add' and self.gd.forms.get(self.gd.from_key(o['base']), (0, None))[1] is not None
                                     and self.gd.forms[self.gd.from_key(o['base'])][1].tag in ('NPC_', 'CREA'))
-        return self.ops, self.report
+        return __import__('guardtower').instead(self.gd, self.pr, self.ops), self.report     # (FOLab's guard tower for the game's)

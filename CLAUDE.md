@@ -113,7 +113,12 @@ the model for style, UI and approach. Python, standard library first, code in `a
   game's Pre-War Spring outfit (the check lines and the painted neckerchief taken out, folds kept), on its meshes
   retextured (`nifwrite`), not by MODS (FOLab can't write links to its own records inside those raw entries). Places of
   the mod's own (the hotels' floors) are left. garmentprint needs numpy/PIL/scipy (not in FOLab.exe's Python): a build step
-  run from the developer's Python. Not yet seen in game.
+  run from the developer's Python. `apply_clear` takes the Mojave's gangs (`MOJAVE_SIDES`, by faction) out of places of the
+  mod's own (the hotels' floors: 138 out, 20 Nov 2026). Straw hats (`hats.py`, `tests/test_hats.py`): FOLab's boater and
+  lauhala sun hat, lathed profiles; worn = NiNode + 'Prn' 'Bip01 Head' (`nifmake.build_worn`), dropped = `build_dropped`
+  (clutter layer). A hat's frame is offsets from the head bone along the WORLD's axes (z up, +y the face), not the bone's
+  own turned axes: measured from the Pre-War Hat and the skeleton; `clearance` checks the game's head inside the crown.
+  `hats.ops` puts them in the surfers' head list in the Rattan Cowboy Hat's place. Not yet seen in game.
 - Mojave buildings restyled (`restyleset.py`, `restyle.py`, `tests/test_restyleset.py`; the survey `docs/waikiki-mojave-misfits.md`):
   FOLab's own pieces each made in the FRAME of the game building it replaces (its ground ~16 under the origin, doorways
   exactly where townbuild's catalogue stands its doors and `shut`), so `restyle.ops` is a 'swap' of the ref's base, doors,
@@ -123,6 +128,27 @@ the model for style, UI and approach. Python, standard library first, code in `a
   NVGSSchoolHouse, NVNiptonTownHall; `GAME_SWAPS` the game's own for the game's own (billboards naming Mojave places, with a
   lift). Only the city's cells are navmeshed again: the hotels' view worlds' copies have no paths.
   townbuild still stands the game's building if the buildings are run afresh: run the swap after.
+- FOLab's guard tower (`guardtower.py`, `tests/test_guardtower.py`): one model in place of the game's NVGuardTower01 and its parts
+  a-d (in nv-rs the game's showed panels and netting in the air, 20 Nov 2026; cause not found). Same frame (origin on the ground,
+  legs ±`LEG`), three flights round the legs to a deck at `DECK` 840 in a plank parapet, tin roof; rails on every fall; walked by
+  walkcheck to each landing and the deck. `swap_ops` swaps the mod's towers' base and removes the parts at their spots; every
+  builder that stands the game's tower (pirates, settlers, ridgeplaces, seats, borderwall, worldlife, landmarks.Batch) passes its
+  ops through `instead`, so a rebuild stands FOLab's. Outdoor navmeshes are made in 32-unit columns (`navgen.VOXEL_OUT`) and
+  walkcheck walks in 16 unless told (`voxel=`): the first tower walked at 16 and got no navmesh up its stairs. Flights 176 wide
+  with rails wholly outside, ramps 12 thick (a thick ramp's square end left a steep strip at one column size or the other);
+  walked at both sizes and at several offsets and turns. A tower the ridge builders seated on a slope (lowest point: flights in
+  the hill) goes onto a level pad (`pad`: flattest spot near, land cut low so it reads as a terrace, plants in the footprint
+  out, things on moved ground carried), each level tried until a fresh navmesh reaches its deck (`deck_reached`).
+- Bamboo and thatch (`bambooset.py`, `bambooplace.py`, `tests/test_bambooset.py`; pictures `docs/waikiki-bamboo.png`,
+  `docs/waikiki-bamboo-in-place.png`): what the island's people build from what grows back, against the ruins. Set 'bamboo'
+  of modelsets: huts (two sizes), cookhouse, canoe shed, storehouse on posts, `bamboo_fence_lashed` (waikikiset already has a
+  `bamboo_fence`), screen, drying rack, lookout (guardtower's flight and rails), market stall, and `bamboo_tower`: guardtower's
+  tower re-dressed (`_bamboo_desc`), every solid part identical, so it walks as the tower does and swaps for it by base. Fresh
+  golden thatch (`FRESH`), not restyle's aged grey. `bambooplace.ops` (the user: "Settlers and ridges"): shacks at the Beacon,
+  Tanks and Holdouts to huts, FOLab's towers at Crow's Nest, Settlers' Watchtower, Border Post and Makapu'u Gate to bamboo,
+  pieces added by recipe round map markers (each on its own turned footprint's lowest ground, `LEVEL` per piece, a pad where
+  steeper, `PAD_MOST`), canoe sheds by the freighter, storehouses by the maize. In Waikiki since 20 Nov 2026 18:32; not yet
+  seen in game. Anything that looks for the mod's guard towers by `guard_tower`'s record misses those four.
 - Rooms with a view (`viewworld.py`, `hotelinside.py`, `tests/test_viewworld.py`): the engine draws nothing outside an interior,
   so the game builds the Lucky 38's lounge and penthouse in a world of their own (Lucky38World, set under the Mojave: PNAM 4,
   its own copy of the land and far view; read from the game's files 16 Nov 2026). `viewworld.add_world` adds such a world
@@ -240,6 +266,20 @@ the model for style, UI and approach. Python, standard library first, code in `a
   locks), finds against walls where the navmesh ends. Keys: KEYM of the mod's own on the lid of another find of the spot.
   `new_ways` adds ramp towers and roof camps through `rooftops.plan(only=, extras=False, limit=)`. Never let `modelsets.put`
   write over a ramp's file already in the mod (its towers were walked on the old design): the run script adds missing files only.
+- Held weapons (`nifmake.build_held`, `clubs.py`, `tests/test_clubs.py`): a melee weapon's model as the game lays its own out
+  (measured over the machete, lead pipe, baton, bat, sledgehammers): BSXFlags 66, NiStringExtraData 'Prn' = 'Weapon' on the
+  root, one convex box on layer 5 in a loose body (`_held_body`: box inertia, quality debris, the game's damping); the grip at
+  the origin, the business end along +y, the striking side along x. A weapon record is a copy of the game weapon it swings as
+  (MODT dropped, WNAM a first-person STAT of the same model). Waikiki's five Hawaiian clubs; in finds through containers of the
+  mod's own (game container, same model, a club LVLI added) swapped onto loot refs.
+- Guns (`gunmake.py`, `guns.py`, `tests/test_guns.py`; how and why in `docs/folab-guns.md`): the game's guns aren't skinned. Their
+  moving parts are named nodes at the gun's origin, each with an empty NiTransformController, and the first-person .kf files
+  move them by name (ReloadI: `##riotClip`, AttackLoop: `##riotMechanism`). A FOLab gun rides on a game gun: its parts are named
+  as that gun's and their shapes sit where that gun's do (`BASE_PARTS`, checked against the game's model), in its frame (x
+  forward, y up, z right, grip at the origin; `ProjectileNode`, `ShellCasingNode`, `##SightingNode` as markers). The WEAP
+  is the ride-on gun's (animation type, reload, attack) with a fire gun's ammo, projectile, sounds and numbers laid over
+  (`FROM_FIRES`, `DNAM_FROM_FIRES`), mods dropped. The QLZ-87 rides on the Light Machine Gun, fires the Grenade Machinegun's
+  25mm grenades. Not yet seen in either game.
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip;
   FOLab.exe (`launcher.cs`, after MWWS's) runs `python\pythonw app\server.py --no-browser`, finds it by

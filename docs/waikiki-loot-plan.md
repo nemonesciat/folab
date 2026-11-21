@@ -165,3 +165,38 @@ past 8 units. Install into the nv-rs copies by the story session. Not yet seen i
   gear salvaged from the ruins of Ground Zero and Pearl Harbor, maybe power armor** (the user's words; how much power armor,
   and its story, still to settle with the user). Goes into each side's weapon and gear lists when the people are put in
   (after the navmesh run), and into their finds.
+- **Power armor (the user, 20 Nov 2026):** the Missouri and the Vault each have some of their higher ranks trained to wear
+  it, and the wall's guard at Alewa Fort as well. Not nonexistent, but rare and a sign of high prestige. No raider power
+  armor (not as Fallout 4 has it). As the game has it, wearing it needs Power Armor Training, taught by someone who has it.
+  Who taught the wall's guard is still open (proposed: the Missouri's crew).
+- **The Missouri and the wall (the user, 20 Nov 2026):** the Missouri stays where she is. The Kalihi lord gets his power
+  armor training from the Missouri. The two are to be connected: the Captain defends the beach, the wall is another
+  front to defend (a second in command, a forward base, something like that). **Settled (the user: "Yes, that"):** Alewa
+  Fort is the Missouri's forward base and the Kalihi lord the Captain's second in command: the Kahuna rules, the Captain
+  holds the guns and the fronts, the sea his, the land front (the wall, Ground Zero) the Kalihi lord's. He came up on the
+  ship and was trained aboard (power armor too, so only he and his best men wear it at the wall). Salvage from Pearl Harbor
+  and Ground Zero goes to the ship; trained men, the drill and orders come to the fort. He still holds the wall for the
+  Kahuna (through the Captain), still keeps Ground Zero's secrets, some even from the Captain; he may know the big guns
+  can't fire. No third figure at the top. Later, when people go in: the Missouri's gear and colours at the fort, a radio link
+  (small touches, each to be asked first).
+
+## The Hawaiian clubs, saved (20 Nov 2026, 15:58)
+
+`app/clubs.py` (tests `tests/test_clubs.py`, 42 of 42; picture `docs/waikiki-clubs.png`), one Undo "Hawaiian clubs" (backup
+`backups/Waikiki before the clubs 1120-1558`): five weapons of FOLab's own models, each a copy of the game weapon it swings as
+(Leiomano: machete; Newa: lead pipe; La'au Palau: baseball bat; Hoe War Paddle: sledgehammer; Pohaku Maul: super sledge),
+with a first-person static, three club lists (court: leiomano, la'au palau, maul; valley: newa, hoe; spoils: any, half the
+time nothing) and 21 containers of the mod's own (the game's, same model, a list added) swapped in for 36 of the loot's finds:
+the Royal Hawaiian's tribute yard 7 (court), the Kahala Reef 4, Koko Marina 1, Loa Gate 1 (spoils), the Tanks, the Holdouts,
+the Watcher's Hut and 13 valley camps and refuges 21 (valley). The la'au palau went to the court's list (the split left it
+unsaid). Names are plain letters (the game's font has no okina or macrons). The Pip-Boy pictures are still the game weapons'.
+Not yet seen in the game: how each sits in the hand is the game's grip convention, measured, not tried.
+
+## Chinese and Japanese blades (the user, 20 Nov 2026)
+
+"start with the blades"; "chinese weps owned by huang"; "you should find them in huang land, and on huang people, and only
+their weapons except in rare cases". So: the dao and jian (and any Chinese weapon) are found in Huang land (the settlers at
+Waimanalo) and carried by Huang people, who carry only their own weapons but in rare cases. Japanese (katana, wakizashi,
+naginata, yari) belong to nobody for now and turn up in loot. The museum: "not sure about museum yet, it was just mentioned
+in passing": nothing built for it. Each blade FOLab's own model on a game weapon's swings: dao machete, jian Machete Gladius,
+katana Blade of the East, wakizashi machete, naginata fire axe, yari Dead Money's knife spear.

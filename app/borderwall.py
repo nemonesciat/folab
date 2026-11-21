@@ -320,4 +320,4 @@ def ops(gd, pr, world, roads=None, cat=None, seed=11):
             out.append({'op': 'remove', 'cell': ck, 'ref': rk})
             rep['things_cleared'] += 1
             cells.add(ck)
-    return out, rep, sorted(cells)
+    return __import__('guardtower').instead(gd, pr, out), rep, sorted(cells)     # (FOLab's guard tower for the game's)

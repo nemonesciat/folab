@@ -597,7 +597,8 @@ class Batch:
     def done(self):
         """Every op: what goes, the ground, then what's stood."""
         lands = [{'op': 'land', 'cell': self.gd.key(self.grid[k]), 'land': f} for k, f in sorted(self.forms.items())]
-        return self.records + [o for o in self.ops if o['op'] == 'remove'] + lands + [o for o in self.ops if o['op'] == 'add']
+        adds = __import__('guardtower').instead(self.gd, self.pr, [o for o in self.ops if o['op'] == 'add'])     # (FOLab's guard tower for the game's)
+        return self.records + [o for o in self.ops if o['op'] == 'remove'] + lands + adds
 
 
 def clear_of(ops, boxes):

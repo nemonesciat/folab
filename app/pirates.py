@@ -393,4 +393,4 @@ def ops(gd, pr, world, side, cat=None, only=('kahala', 'marina')):
     allops = lands + moves + B.ops + P.harbour_ops
     rep = dict(P.rep, missing=sorted(B.rep['missing']), added=sum(1 for o in allops if o['op'] == 'add'),
                removed=sum(1 for o in allops if o['op'] == 'remove'), land_cells=len(lands))
-    return allops, rep, sorted(B.cells)
+    return __import__('guardtower').instead(gd, pr, allops), rep, sorted(B.cells)     # (FOLab's guard tower for the game's)

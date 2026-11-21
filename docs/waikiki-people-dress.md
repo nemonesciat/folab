@@ -88,3 +88,30 @@ wrong shows only there. Until then the Rattan Cowboy Hat is the straw hat.
 1. What a surfer is (a gang?): later.
 2. The boater: make it now (about a day), or the rattan straw hat for now?
 3. The hostile Fiends and Powder Gangers inside the Royal Hawaiian, the Kilauea and the Moana.
+
+## Every Mojave enemy left in Waikiki (survey 20 Nov 2026, after the surfers and pirates went in)
+
+The user: "yes, all mojave themed enemies need to be replaced or removed please". Counted over every actor the mod
+places (its source plugin places none), read only.
+
+Outside: no Mojave gang is left (all 382 are pirates). Inside, only the three hotels' floors:
+
+| Place | Who | How many |
+| --- | --- | --- |
+| Royal Hawaiian, Guest Floor and Top Floor (the Kahuna's court) | Fiends | 20 + 28 |
+| Moana, Guest Floor and Top Floor | Powder Gangers (Vault 19's, some named Escaped Convict) | 24 + 27 |
+| Kilauea, Guest Floors 1, 2 and Top Floor | Fiends, 1 raider | 9 + 10 + 20 |
+
+Left alone as not Mojave: feral ghouls (the hotels' kitchens 53, outside 232), giant rats (function rooms 24), spore
+plants and carriers (302), the Beachcomber (FOLab's own).
+
+Mojave wildlife outside (worldlife.wildlife), for the user to decide: cazadores 64, geckos 90, giant mantises 31,
+nightstalkers 24, radscorpions 6, lakelurks 5, and 72 from the game's mixed lists (deathclaws, Mister Gutsies,
+protectrons, molerats, bloatflies, dogs).
+
+## Straw hats (20 Nov 2026: "do both then please")
+
+FOLab's own boater and lauhala sun hat (`app/hats.py`, picture `docs/waikiki-hats.png`) take the Rattan Cowboy Hat's
+place in the surfers' head list (chance of none kept at 45%). Each ARMO is a copy of the Rattan Cowboy Hat (its slots,
+value, weight), one worn model for men and women as the game's hats have. The Pip-Boy picture is the game's (the
+fedora's, as the Rattan Cowboy Hat uses). Pirates keep their bandanas and head wraps.

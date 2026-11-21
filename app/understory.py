@@ -50,7 +50,7 @@ MIXES = {
              ('jungle_tree', 1, 0.7, 1.1, 8, 1)],
     'rock': [('ground_fern', 6, 0.9, 1.8, 2, 3), ('slope_cover_a', 5, 0.9, 1.3, 3, 1), ('slope_cover_b', 5, 0.9, 1.3, 3, 1),
              ('v22Grass', 5, 1.5, 3.0, 2, 3), ('v22Fern', 4, 1.5, 3.5, 2, 2), ('undergrowth', 3, 0.8, 1.3, 4, 1),
-             ('ti_green', 2, 0.9, 1.4, 2, 2), ('NVSagebrush', 2, 0.8, 1.4, 2, 2), ('tree_fern', 1, 0.8, 1.3, 4, 1)],
+             ('ti_green', 2, 0.9, 1.4, 2, 2), ('NVHoneyMesquite', 2, 0.8, 1.4, 2, 2), ('tree_fern', 1, 0.8, 1.3, 4, 1)],
     'lawn': [('v22Grass', 8, 1.2, 3.0, 2, 4), ('hibiscus', 3, 0.7, 1.2, 3, 2), ('NVGoldfingerBanana', 3, 1.0, 1.8, 2, 2),
              ('palm_young', 2, 0.7, 1.2, 5, 1), ('taro', 2, 0.8, 1.3, 2, 2), ('ti_red', 2, 0.9, 1.3, 2, 2),
              ('ground_fern', 2, 0.9, 1.5, 2, 2), ('undergrowth', 2, 0.7, 1.2, 4, 1)],

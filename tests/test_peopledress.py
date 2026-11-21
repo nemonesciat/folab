@@ -142,3 +142,26 @@ for fid in lists:
     s = raw(fid)
     entries = [tag_of(to(struct.unpack_from('<I', x, 4)[0])) for t, x in s if t == 'LVLO']
     check('%s: only apparel in it' % gd2.edid(fid), entries and all(e == 'ARMO' for e in entries), entries)
+
+# ---- the Mojave's gangs taken out of the mod's own places (the hotels' floors), nothing else ----
+pr2 = project.Project.create('People Clear Test')
+key = lambda tag, e: gd.key(find(tag, e))
+side = {e: P.mojave_side(gd, key('NPC_', e)) for e in ('PowderGangerGunAAMTEMPLATE', 'LvlFiend2GunVarNV', 'LvlRaider1MeleeVar',
+                                                      'VJackalGangSpawnMale', 'VViperGangSpawnGunA', 'VSpawnProspectorAll')}
+check('the Mojave\'s sides told by their factions', side == {'PowderGangerGunAAMTEMPLATE': 'Powder Gangers', 'LvlFiend2GunVarNV': 'Fiends',
+      'LvlRaider1MeleeVar': 'Raiders', 'VJackalGangSpawnMale': 'Jackals', 'VViperGangSpawnGunA': 'Vipers', 'VSpawnProspectorAll': None}, side)
+check('a creature and a record of the mod\'s own are no Mojave side',
+      P.mojave_side(gd, key('CREA', 'CrFeralGhoul1A')) is None and P.mojave_side(gd, '+000800') is None)
+spot = lambda b, **kw: dict({'base': b, 'p': [0, 0, 0, 0, 0, 0], 's': 1}, **kw)
+pr2.cells['+PLACE'] = {'refs': {'+900001': spot(key('NPC_', 'PowderGangerGunAAMTEMPLATE')), '+900002': spot(key('NPC_', 'LvlFiend2GunVarNV')),
+                                '+900003': spot(key('CREA', 'CrFeralGhoul1A')), '+900004': spot(key('NPC_', 'LvlFiend2GunVarNV')),
+                                '+900005': spot(key('NPC_', 'VSpawnProspectorAll'), props={'parent': {'ref': '+900004'}})}}
+pr2.cells[ck] = {'refs': {'+900006': spot(key('NPC_', 'LvlFiend2GunVarNV'))}}
+ops, rep = P.clear_inside(gd, pr2)
+pr2.apply('clear', ops)
+check('the gangs in a place of the mod\'s own removed, one another ref names kept',
+      sorted(pr2.cells['+PLACE']['refs']) == ['+900003', '+900004', '+900005'] and rep['kept_named'] == ['+900004'], (sorted(pr2.cells['+PLACE']['refs']), rep))
+check('nothing outside touched', list(pr2.cells[ck]['refs']) == ['+900006'])
+check('the report counts by side', rep['removed'] == {'+PLACE': {'Powder Gangers': 1, 'Fiends': 1}}, rep['removed'])
+pr2.undo()
+check('one Undo puts them back', len(pr2.cells['+PLACE']['refs']) == 5)

@@ -818,19 +818,31 @@ STAND_IN = {
     'euonymusbush01': [('hibiscus', 0.7, 1.2, 3)],
     'nvfalsespireaplant': [('hibiscus', 0.6, 1.0, 3)],
     'v22grass': [('dune_grass', 1.0, 2.2, 2)],
+    # the Mojave's desert plants don't grow on Oʻahu (the user: "yes, swap", 20 Nov 2026; docs/waikiki-mojave-misfits.md):
+    # creosote and yucca are koa haole here (FOLab's leafy shrubs), sagebrush pili grass (its gold and dry tufts)
+    'creosotebushlg': [('shrub_tall_b', 0.8, 1.1, 3), ('shrub_tall_a', 0.8, 1.1, 3)],
+    'creosotebushsm': [('shrub_low_a', 0.9, 1.3, 3), ('shrub_low_b', 0.9, 1.3, 3)],
+    'nvsagebrush': [('grass_gold', 1.0, 1.6, 2), ('grass_dry', 1.0, 1.6, 2)],
+    'yuccaanv': [('shrub_low_a', 0.9, 1.3, 3)], 'yuccabnv': [('shrub_low_b', 0.9, 1.3, 3)], 'yuccacnv': [('shrub_low_a', 0.9, 1.3, 3)],
 }
 
 
-def swaps(pr):
+DESERT = ('creosotebushlg', 'creosotebushsm', 'nvsagebrush', 'yuccaanv', 'yuccabnv', 'yuccacnv')   # (swapped on every run)
+
+
+def swaps(pr, only=None):
     """What osmdress.ops takes as `swaps`, and the ops that must go before its own in the same apply: every piece that
     stands in for something is written among the mod's files, and its record made if the mod hasn't it (named, so the
-    scatter's ops say '$model_<piece>' for a record made in the same Undo)."""
+    scatter's ops say '$model_<piece>' for a record made in the same Undo). only: these game editor IDs alone (DESERT:
+    what is swapped even when the beach's palms aren't)."""
+    import plantsplit  # noqa: F401  (its pieces, the koa haole shrubs and pili grass among them, in PIECES)
+    stand = {e: rows for e, rows in STAND_IN.items() if only is None or e in only}
     first, key_of = [], {}
-    for piece in sorted({p for rows in STAND_IN.values() for p, *_r in rows}):
+    for piece in sorted({p for rows in stand.values() for p, *_r in rows}):
         ops, info = put(pr, piece)
         first += ops
         key_of[piece] = info['key'] or '$model_' + piece
-    return first, {edid: [(key_of[p], a, b, sink) for p, a, b, sink in rows] for edid, rows in STAND_IN.items()}
+    return first, {edid: [(key_of[p], a, b, sink) for p, a, b, sink in rows] for edid, rows in stand.items()}
 
 
 # A set's plants over and above what the scatter puts down (the game's stay as they are). set: ground kind (osmcover's):
@@ -1376,6 +1388,8 @@ def _all_sets():
     import settlerset  # noqa: F401
     import cargoset  # noqa: F401
     import restyleset  # noqa: F401
+    import guardtower  # noqa: F401
+    import bambooset  # noqa: F401
 
 
 def get(path, q):

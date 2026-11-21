@@ -320,4 +320,4 @@ def ops(gd, pr, world, side, roads, cat=None):
     allops = S.records + cut + lands + moves + own_ops
     rep = dict(S.rep, pieces=sorted(S.own), buildings_taken=len(crep['buildings']), moved=len(moves),
                removed=sum(1 for o in allops if o['op'] == 'remove'), added=sum(1 for o in allops if o['op'] == 'add'), land_cells=len(lands))
-    return allops, rep, sorted(B.cells)
+    return __import__('guardtower').instead(gd, pr, allops), rep, sorted(B.cells)     # (FOLab's guard tower for the game's)

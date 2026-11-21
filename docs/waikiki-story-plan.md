@@ -420,12 +420,34 @@ Four side storylines run alongside, each from a pressure building in 2281:
 - "The Vault will have Vault tec weapons, the Missouri will have military gear, and the gate dude will also have some military
   gear from the ruins of ground zero and pearl harbor. Maybe even power armor? idk what the lore is behind that completely."
   ("The gate dude" read as the wall's guard at Alewa Fort: the loot session's reading, not yet confirmed.)
+- Power armor (the user, 20 Nov 2026, through the loot session): "I think the missouri and the vault should both have an ability
+  for some of their rank to wear armor, including the gate guard as well. it shouldn't be nonexistent exactly, but rare and a
+  sign of high prestige. we won't have raider power armor like fallout 4".
 - Applies when the people are put in.
 
-## Still to settle
+- The Missouri and the Kalihi lord (the user, 20 Nov 2026, through the loot session): "keep it where she is. the kahili lord
+  gets his power armor training from the missouri. no moving, but they should somehow be connected. if the right hand man is
+  the defender of the beach, then the wall on the other side is just another front to defend. it could be a second in
+  command, a forward base, something like that." So the Missouri stays off the Natatorium, and her crew trained the Kalihi
+  lord in power armor.
+- How they connect [the loot session's proposal, the user: "Yes, that", 20 Nov 2026; its wording in waikiki-loot-plan.md]:
+  Alewa Fort is the Missouri's forward base and the Kalihi lord the Captain's second in command. The Kahuna rules; the
+  Captain holds the guns and the fronts, the sea his own, the land front (the wall, Ground Zero) the Kalihi lord's. He came up
+  on the ship and was trained aboard, power armor included: at the wall only he and his best wear it. Salvage from Pearl
+  Harbor and Ground Zero goes to the ship; trained men, drill and orders come to the fort. He holds the wall for the Kahuna,
+  now through the Captain, and keeps Ground Zero's secrets, some even from the Captain; he may know the big guns can't fire.
+  No third figure at the top.
+- How it came about and works [this session's proposal, the user: "that seems pretty reasonable", 20 Nov 2026]: when the
+  Kahuna took Waikiki the Missouri was the threat that made everyone pay (the big guns), and holding the beach made the
+  Captain his right hand. The Kalihi lord was one of the ship's young crew, sent up to the wall because Ground Zero is close,
+  dangerous and rich in salvage and the Captain wanted his own man there; power armor at the wall marks him as the Captain's.
+  The fort is a piece of the ship's discipline on land (drilled guards, the lord in armor, rare enough to stand out); going
+  between ship and fort, the player sees one chain of command from both ends, and people speak of each other. What he
+  knows of Ground Zero is his own leverage: knowing the guns can't fire, he knows the Kahuna's power is partly a bluff. That
+  can matter on the Waikiki and Loa paths: whether he ever tells, and whom, could be the player's to bring about.
+- Not yet agreed (each needs the user's yes when people are put in): the Missouri's gear and colours at the fort, a radio link.
 
-- Power armor at Alewa Fort: how much, and its story (the user: "idk what the lore is behind that completely").
-- Who "the gate dude" is, if not the wall's guard at Alewa Fort.
+## Still to settle
 - Which valley stops paying (proposed: the Tanks).
 - What leads to each of the three endings.
 - **Later [the user, 19 Nov 2026]:** the real emergency bunker in Diamond Head crater (the Birkhimer Tunnel, the

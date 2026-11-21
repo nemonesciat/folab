@@ -901,10 +901,9 @@ def dress_job(body, srv):
             seed = int(body.get('seed', 1))
             # FOLab's own palms, banana plants, hibiscus and dune grass: 'beach' adds them to the game's plants,
             # 'beach instead' puts them where the game's palms, banana plants, bushes and grass would have gone
-            first, swaps = [], None
-            if body.get('plants') == 'beach instead':
-                import modelsets
-                first, swaps = modelsets.swaps(srv.PR)
+            # (and the Mojave's desert plants, which don't grow on Oʻahu, always: modelsets.DESERT)
+            import modelsets
+            first, swaps = modelsets.swaps(srv.PR, only=None if body.get('plants') == 'beach instead' else modelsets.DESERT)
             ops, report = osmdress.ops(srv.GD, srv.PR, w, cover, lay['roads'], seed, _said, swaps=swaps)
             if body.get('plants') == 'beach':
                 import modelsets

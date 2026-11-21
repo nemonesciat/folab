@@ -333,6 +333,95 @@ def plan(gd, pr, kind):
     return keys.ops + swaps, rep
 
 
+# the Mojave's sides, by words in their factions' editor IDs: the user, 20 Nov 2026, "all mojave themed enemies need to be
+# replaced or removed"; inside the places of the mod's own (the hotels' floors) they go
+MOJAVE_SIDES = {'Fiends': ('fiend',), 'Powder Gangers': ('powderganger',), 'Raiders': ('raiderfaction',),
+                'Jackals': ('jackalsgang',), 'Vipers': ('banditviper', 'vipergang'), 'Legion': ('caesarslegion', 'legionfaction'),
+                'Great Khans': ('greatkhan',)}
+
+
+def factions(gd, fid, depth=0, seen=None):
+    """Editor IDs of every faction a spawn can be in: its own, or its template's where it takes them, every list entry."""
+    seen = set() if seen is None else seen
+    if depth > 8 or fid in seen or fid not in gd.forms:
+        return set()
+    seen.add(fid)
+    if gd.forms[fid][1].tag in ('LVLN', 'LVLC'):
+        out = set()
+        for e in _entries(gd, fid):
+            out |= factions(gd, e, depth + 1, seen)
+        return out
+    rec = recordio.load(gd, fid)
+    tp = recordio.field(rec, 'TPLT')
+    if tp and _num(rec, 'ACBS', 'Template flags') & 0x04:
+        return factions(gd, gd.from_key(tp), depth + 1, seen)
+    return {gd.edid(gd.from_key(f['value'])) or '' for s in rec['subs'] if s['tag'] == 'SNAM'
+            for f in s['fields'] if f.get('code') == 'F' and f.get('value')}
+
+
+def mojave_side(gd, base):
+    """The Mojave side a placed actor's base belongs to, or None (a record of the mod's own is never one)."""
+    if not base or base.startswith('+'):
+        return None
+    fid = gd.from_key(base)
+    if fid not in gd.forms or gd.forms[fid][1].tag not in ('NPC_', 'LVLN'):
+        return None
+    words = ' '.join(factions(gd, fid)).lower()
+    return next((side for side, ws in MOJAVE_SIDES.items() if any(w in words for w in ws)), None)
+
+
+def _names(value, keys):
+    """The keys among `keys` a ref's change names anywhere in it."""
+    if isinstance(value, str):
+        return {value} & keys
+    if isinstance(value, dict):
+        return set().union(*(_names(v, keys) for v in value.values())) if value else set()
+    if isinstance(value, list):
+        return set().union(*(_names(v, keys) for v in value)) if value else set()
+    return set()
+
+
+def clear_inside(gd, pr):
+    """(ops, report): every Mojave enemy the mod placed in a place of its own removed (a 'remove' each), one Undo. One that
+    another ref names (an enable parent, a link) is left and reported, so nothing points at a ref that isn't there."""
+    gone, rep = {}, {'removed': {}, 'kept_named': []}
+    side_of = {}
+    for ck, cell in pr.cells.items():
+        if not ck.startswith('+'):
+            continue
+        for rk, r in (cell.get('refs') or {}).items():
+            b = r.get('base')
+            if r.get('removed') or not b:
+                continue
+            if b not in side_of:
+                side_of[b] = mojave_side(gd, b)
+            if side_of[b]:
+                gone[rk] = (ck, side_of[b])
+    keys = set(gone)
+    for ck, cell in pr.cells.items():
+        for rk, r in (cell.get('refs') or {}).items():
+            if rk in keys or r.get('removed'):
+                continue
+            for k in _names(r, keys):
+                rep['kept_named'].append(k)
+                gone.pop(k, None)
+    ops = []
+    for rk, (ck, side) in sorted(gone.items()):
+        ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
+        name = recordio.field(pr.records[ck], 'FULL') if ck in pr.records else ck
+        rep['removed'].setdefault(name or ck, {}).setdefault(side, 0)
+        rep['removed'][name or ck][side] += 1
+    return ops, rep
+
+
+def apply_clear(server):
+    """clear_inside as one Undo."""
+    ops, rep = clear_inside(server.GD, server.PR)
+    if ops:
+        server.edit('Take the Mojave\'s gangs out of Waikiki\'s places', ops)
+    return rep
+
+
 def apply(server, kind):
     """Plan and put one kind in as one Undo; checks the records got the keys they were planned with."""
     pr = server.PR

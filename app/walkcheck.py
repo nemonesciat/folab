@@ -93,13 +93,15 @@ def _box(field):
     return min(ixs) * v, min(iys) * v, (max(ixs) + 1) * v, (max(iys) + 1) * v
 
 
-def walk(gd, items, ground=0.0, starts=None, goals=None, labels=None):
+def walk(gd, items, ground=0.0, starts=None, goals=None, labels=None, voxel=None):
     """{'reached', 'standing' (places), 'unreached': [area], 'invisible': [area], 'goals': [{'label', 'at', 'reached'}],
     'ok'}. An area is {'at': (x, y, z) its middle, 'places', 'item': the label of what stands under its middle}.
-    ground: the height of flat ground round the set (None: no ground, start from `starts` only)."""
+    ground: the height of flat ground round the set (None: no ground, start from `starts` only). voxel: the columns'
+    size, VOXEL unless given: outdoor navmeshes are made at navgen.VOXEL_OUT (32), where a way narrow at 16 closes."""
+    vox = voxel or VOXEL
     cos = math.cos(math.radians(navgen.SLOPE_MAX))
-    field = navgen.Field(VOXEL, cos)
-    seen = navgen.Field(VOXEL, -1.0)
+    field = navgen.Field(vox, cos)
+    seen = navgen.Field(vox, -1.0)
     cache = {}
     solid_by = []
     for n, item in enumerate(items):
@@ -118,7 +120,7 @@ def walk(gd, items, ground=0.0, starts=None, goals=None, labels=None):
         x0, y0, x1, y1 = x0 - MARGIN, y0 - MARGIN, x1 + MARGIN, y1 + MARGIN
         field.add(x0, y0, ground, x1, y0, ground, x1, y1, ground, True)
         field.add(x0, y0, ground, x1, y1, ground, x0, y1, ground, True)
-    g = navgen.Graph(navgen._places(field, navgen.HEADROOM), VOXEL, navgen.STEP, navgen.HEADROOM)
+    g = navgen.Graph(navgen._places(field, navgen.HEADROOM), vox, navgen.STEP, navgen.HEADROOM)
     keep = g.erode([True] * len(g.p), navgen.RADIUS)
     pieces, label = g.pieces(keep)
     start = set()
@@ -131,8 +133,8 @@ def walk(gd, items, ground=0.0, starts=None, goals=None, labels=None):
             start.add(label[i])
 
     def where(piece):
-        xs = [(g.p[i][1] + 0.5) * VOXEL for i in piece]
-        ys = [(g.p[i][0] + 0.5) * VOXEL for i in piece]
+        xs = [(g.p[i][1] + 0.5) * vox for i in piece]
+        ys = [(g.p[i][0] + 0.5) * vox for i in piece]
         zs = [g.p[i][2] for i in piece]
         mid = (sum(xs) / len(xs), sum(ys) / len(ys), sum(zs) / len(zs))
         return tuple(round(c) for c in mid)
@@ -179,11 +181,11 @@ def walk(gd, items, ground=0.0, starts=None, goals=None, labels=None):
             at = where(piece)
             invisible.append({'at': at, 'places': len(piece), 'item': under(at)})
     out_goals = []
-    r = int(GOAL_REACH // VOXEL)
+    r = int(GOAL_REACH // vox)
     for goal in goals or ():
         lab, at = goal[0], goal[1]
-        cx, cy = math.floor(at[0] / VOXEL), math.floor(at[1] / VOXEL)
-        hit = any(on[i] and abs(g.p[i][2] - at[2]) <= GOAL_UP and math.hypot(dx, dy) * VOXEL <= GOAL_REACH
+        cx, cy = math.floor(at[0] / vox), math.floor(at[1] / vox)
+        hit = any(on[i] and abs(g.p[i][2] - at[2]) <= GOAL_UP and math.hypot(dx, dy) * vox <= GOAL_REACH
                   for dy in range(-r, r + 1) for dx in range(-r, r + 1) for i in g.by.get((cy + dy, cx + dx), ()))
         out_goals.append({'label': lab, 'at': tuple(round(c) for c in at), 'reached': hit})
     unreached.sort(key=lambda a: -a['places'])
@@ -246,8 +248,8 @@ def walkable():
                      'goals': [('quarterdeck door', (qx, qy + 60.0, qz)), ('the bow', (0.0, -8000.0, z(-8000.0))),
                                ('the bridge door', (battleship.SPOTS['bridge'][0], battleship.SPOTS['bridge'][1] + 60.0, z3)),
                                ('port bridge wing', (-560.0, -1700.0, z3)), ('starboard bridge wing', (560.0, -1700.0, z3))]},
-        'natatorium': {}, 'battery_randolph': {},
-    } | {v['open']: {'ground': None, 'starts': [tuple(v['arrive_in'][:3])]} for v in _views().values()}
+        'natatorium': {}, 'battery_randolph': {}, 'guard_tower': __import__('guardtower').WALK,
+    } | __import__('bambooset').WALKS | {v['open']: {'ground': None, 'starts': [tuple(v['arrive_in'][:3])]} for v in _views().values()}
 
 
 def _views():
@@ -259,9 +261,9 @@ def _views():
 def check_piece(gd, piece, how=None):
     import modelsets
     if piece not in modelsets.PIECES:
-        import battleship, historicset, towerset  # noqa: F401  (they add their pieces)
+        import bambooset, battleship, guardtower, historicset, towerset  # noqa: F401  (they add their pieces)
     how = how if how is not None else walkable().get(piece, {})
-    return walk(gd, [of_piece(piece)], ground=how.get('ground', 0.0), starts=how.get('starts'), goals=how.get('goals'))
+    return walk(gd, [of_piece(piece)], ground=how.get('ground', 0.0), starts=how.get('starts'), goals=how.get('goals'), voxel=how.get('voxel'))
 
 
 def check_set(gd, name, skip=()):
@@ -293,7 +295,7 @@ def main(names):
     import gamedata
     import landmarks
     gd = gamedata.GameData()
-    import battleship, historicset, towerset  # noqa: F401
+    import bambooset, battleship, guardtower, historicset, towerset  # noqa: F401
     own = list(walkable())
     sets = [n for n, s in landmarks.SETS.items() if not s.get('own')]
     for name in names or own + sets:
