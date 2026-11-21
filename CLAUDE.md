@@ -309,6 +309,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   one under a parent: the game's Lucky38World has none), far view (build/<mod> distant land/ or the mod's own files, folder
   named by editor ID in any case), torn edges (`TORN`), own water over a beach beside world-level cells, draws (drawcount).
   Read only. Waikiki 20 Nov 2026 ~22:00, 21 s: 5 spots over 7,000 draws (worst 10,395 at cell -34, 13), 19 cells' water to look at.
+- Real map's city steps (`web/citysteps.js`, `tests/test_citysteps.py`): the Real map panel's "Build the city, step by step"
+  over the routes that had no button: landmarks (a set placed by a click on the map: `/api/maps/landmarks` takes `x, y`
+  as well as lat/lon; `/api/maps/sets` lists the sets), dress, coast, hotels, green, plants, life. It hooks
+  `WT.tabs.realmap.draw`/`map`/`mouse` (the tab holds moDraw itself, so wrapping moDraw does nothing).
 - Packaging (`packaging/`): `build.py` makes out/FOLab (FOLab.exe + its own Python + app) and a portable zip (it imports
   every app module with FOLab.exe's Python first: one needing numpy/PIL goes in `DEV_ONLY`, or the build stops with
   FOLab.exe gone from out/FOLab);

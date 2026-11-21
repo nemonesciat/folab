@@ -1050,7 +1050,7 @@ def life_job(body, srv):
 
 def landmarks_job(body, srv):
     """The game's great buildings stood where the map has its own, and its piers built as a harbour (landmarks.py): one Undo.
-    body: file (the OpenStreetMap file), sites [{set, lat, lon, turn, scale, level}], harbour."""
+    body: file (the OpenStreetMap file), sites [{set, lat, lon (or x, y on the world), turn, scale, level}], harbour."""
     srv.not_while_playing()
     name = body['file']
     file_path(name)
@@ -1069,7 +1069,10 @@ def landmarks_job(body, srv):
                 if s.get('set') not in landmarks.SETS:
                     report['missed'].append(s.get('set'))
                     continue
-                x, y = geo.xy((float(s['lat']), float(s['lon'])))
+                if s.get('x') is not None and s.get('y') is not None:      # (a spot clicked on the map: the world's own units)
+                    x, y = float(s['x']), float(s['y'])
+                else:
+                    x, y = geo.xy((float(s['lat']), float(s['lon'])))
                 got = B.stand(s['set'], x, y, s.get('turn'), float(s.get('scale') or 1.0), level=s.get('level', True))
                 if got:
                     report['stood'].append(dict(got, name=s.get('name')))
@@ -1166,6 +1169,10 @@ def get(path, q, srv):
     if path == '/api/maps/worlds':
         with srv._lock:
             return (read_sidecar(srv.PR) if srv.PR else {},)
+    if path == '/api/maps/sets':          # (the landmark sets and the plant sets, for the Real map panel's buttons)
+        import modelsets
+        return ({'landmarks': [{'key': k, 'label': v.get('label') or k} for k, v in landmarks.SETS.items()],
+                 'plants': list(modelsets.EXTRA)},)
     if path == '/api/maps/layers':
         with srv._lock:
             return (read_layers(srv.PR).get(q.get('edid'), {}) if srv.PR else {},)
