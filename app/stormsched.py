@@ -791,6 +791,9 @@ def fair_ops(gd, pr, world=WORLD):
                     out.append(w)
                 else:
                     keep.append(row)
+            if not keep:                    # (every weather rainy: the list is left as it is)
+                out = []
+                continue
             _set_rdwt(s, keep)
         if out:
             ops.append({'op': 'record', 'key': k, 'record': rec})
@@ -832,12 +835,13 @@ def _set_rdwt(sub, rows):
 
 
 def _pleasant(gd, pr, key):
+    """Not rainy or snowy. (Cloudy stays: Zion Valley's sunny day weather is filed as cloudy, kind 2.)"""
     import recordio
     rec = pr.records.get(key) if key.startswith('+') else recordio.load(gd, gd.from_key(key))
     for s in rec['subs']:
         if s['tag'] == 'DATA':
-            flags = _fields(s)[-4]['value'] if len(_fields(s)) >= 4 else 0
-            return bool(flags & 1) and not flags & 6
+            kind = next((f['value'] for f in _fields(s) if (f.get('name') or '').lower() == 'kind'), 0)
+            return not kind & 12
     return False
 
 

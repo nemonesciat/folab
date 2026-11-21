@@ -37,6 +37,7 @@ _SHAPE_TAIL = bytes.fromhex('0000803f0000000000000000000000000000803f00000000000
                             '0100000002000000ffffffff04000000ffffffff000000000000000000')
 _LIGHTING = bytes.fromhex('ffffffff00000000ffffffff01000100000000200000040000000000803f00000000030000000000000000000000000000410000803f')
 MAX_VERTS = 65000           # (a shape's corners are numbered in 16 bits)
+MAX_TRIS = 65535            # (and its triangles counted in 16 bits)
 TILE = 256                  # each texture's square on the sheet, in pixels (at 128 a ship's hull seen across the bay was a smear)
 OWN_BIG = 500.0             # a thing of the mod's own this big with no far model of its own is shown far off as it is
 MAX_REPEAT = 4              # a texture a stand-in repeats more than this many times across is shown this many
@@ -307,7 +308,21 @@ def things_of(gd, pr, world):
     return out
 
 
-def generate(gd, pr, world, out, progress=None, trees=False, like=None):
+_sizes = {}
+
+
+def _size(shapes):
+    """A far model's height or width, whichever is more (in its own units), cached by the shapes."""
+    k = id(shapes)
+    if k not in _sizes:
+        ps = [p for sh in shapes for p in [sh['p']]]
+        zs = [v for p in ps for v in p[2::3]] or [0.0]
+        xs = [v for p in ps for v in p[0::3]] or [0.0]
+        _sizes[k] = max(max(zs) - min(zs), max(xs) - min(xs))
+    return _sizes[k]
+
+
+def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=False):
     """Write a world's distant buildings into a folder laid out as Data is. Returns a report. trees: far plants too (the
     game shows its own trees another way; as plain models they cost a lot for what they add). like: another world whose
     things this one shows far off (as lodgen's like), named for this one."""
@@ -322,7 +337,13 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None):
     # one the game reads. Counted from the world's own corner they missed the settings on 18 Nov 2026 and none were drawn.)
     sw_x, sw_y = lodgen.corner(gd, edid, out, world)
     kinds = {}
-    for base, x, y, z, rz, s in things_of(gd, pr, world):
+    things = things_of(gd, pr, world)
+    if plants:
+        # (plants enough to read as growth, not every one: farplants.pick; trees then go in like anything else)
+        import farplants
+        trees = True
+        things = farplants.pick(gd, things, lambda b: (stand.of(b), stand.models.get(b))[1], lambda b: farplants._name(gd, pr, b))
+    for base, x, y, z, rz, s in things:
         shapes = stand.of(base)
         if not shapes:
             skipped += 1
@@ -358,11 +379,15 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None):
             progress(n, len(blocks))
         verts, normals, uvs = [], [], []
         segments = [[] for _ in range(16)]
+        ntri = 0
         ox, oy = bx * CELL, by * CELL
+        # (biggest first: when a block is full, what's left out is the smallest)
+        items.sort(key=lambda q: -_size(q[0]) * q[5])
         for shapes, x, y, z, rz, s, seg in items:
-            if len(verts) + sum(len(sh['p']) // 3 for sh in shapes) > MAX_VERTS:
+            if len(verts) + sum(len(sh['p']) // 3 for sh in shapes) > MAX_VERTS or                     ntri + sum(len(sh['i']) // 3 for sh in shapes) > MAX_TRIS:
                 dropped += 1
                 continue
+            ntri += sum(len(sh['i']) // 3 for sh in shapes)
             c, sn = math.cos(rz), math.sin(rz)
             for sh in shapes:
                 p, uv, idx = sh['p'], sh['uv'], sh['i']

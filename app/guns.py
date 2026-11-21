@@ -95,77 +95,107 @@ SIGHTS = {'qlz87': (-0.6, 42.7), 'qsz92': (-1.6, 13.9), 'type81': (12.5, 34.5), 
 
 
 # ---------- textures ----------
+# 512 a picture over `Mesh.per` (12 units): ~42 pixels a unit, as sharp as the game's own guns (the first pictures were 128,
+# plain noise: "could use enhanced texturing", 21 Nov 2026). Every pattern repeats exactly across the picture's edges: a
+# Noise is sampled at its own period, a line pattern at whole cycles.
+SIZE = 512
 
-def steel(size=128, seed=301):
-    """Dark phosphated steel: a little mottled, fine scratches worn bright."""
+
+def _lines(u, v, n, wob, k):
+    """Fine lines along u (n of them across v), their phase wandering by the noise `wob` (sampled at its own period k)."""
+    return math.sin((v * n + 0.8 * wob.at(u * k, v * k)) * math.pi * 2)
+
+
+def steel(size=SIZE, seed=301, tint=(54, 57, 54), worn=(132, 134, 130)):
+    """Machined steel, phosphated dark: tool marks along the part, a mottle in the finish, pits, fine scratches and the
+    finish rubbed through to bright metal where hands and holsters wear it."""
     c = tp.Canvas(size, size)
-    big, fine, scr = tp.Noise(seed, 8), tp.Noise(seed + 1, 64), tp.Noise(seed + 2, 16)
+    big, mid, fine, scr, wob, rub = (tp.Noise(seed, 8), tp.Noise(seed + 1, 32), tp.Noise(seed + 2, 128), tp.Noise(seed + 3, 64),
+                                     tp.Noise(seed + 4, 16), tp.Noise(seed + 5, 4))
 
     def fn(x, y):
         u, v = x / float(size), y / float(size)
-        b = big.at(u * 8, v * 8)
-        f = fine.at(u * 64, v * 64)
-        s = scr.at(u * 16, v * 2)
-        col = tp._shade((54, 57, 54), 0.85 + 0.25 * b + 0.1 * f)
-        if s > 0.8:
-            col = tp._mix(col, (120, 122, 118), (s - 0.8) * 3)
-        return col, 0.5 + 0.04 * f
+        b, m, f = big.at(u * 8, v * 8), mid.at(u * 32, v * 32), fine.at(u * 128, v * 128)
+        ln = _lines(u, v, 180, wob, 16)
+        col = tp._shade(tint, 0.8 + 0.22 * b + 0.08 * m + 0.05 * f + 0.04 * ln)
+        r = 0.6 * rub.at(u * 4, v * 4) + 0.4 * m                            # (ragged, not round)
+        if r > 0.62:                                                        # worn through
+            col = tp._mix(col, worn, min(1.0, (r - 0.62) * 5) * (0.35 + 0.2 * ln))
+        s = scr.at(u * 64, v * 64)
+        if 0.495 < s < 0.505 and b > 0.45:                                  # hair-fine scratches
+            col = tp._mix(col, worn, 0.6)
+        h = 0.5 + 0.015 * ln + 0.01 * f
+        if f > 0.93:                                                        # pits
+            col, h = tp._shade(col, 0.7), h - 0.05
+        return col, h
     c.paint(fn)
     return c
 
 
-def olive(size=128, seed=302):
-    """Olive drab paint over steel, chipped here and there to the dark metal, a little dust."""
+def blued(size=SIZE, seed=322):
+    """Blued steel: blue-black, a little sheen of colour, worn grey at the edges of use."""
+    return steel(size, seed, tint=(40, 43, 50), worn=(118, 122, 128))
+
+
+def olive(size=SIZE, seed=302):
+    """Olive drab paint over steel: an orange-peel finish, chips to the dark metal with a paler rim, dust settled in."""
     c = tp.Canvas(size, size)
-    big, fine, chip = tp.Noise(seed, 6), tp.Noise(seed + 1, 64), tp.Noise(seed + 2, 24)
+    big, fine, peel, chip, dust = tp.Noise(seed, 6), tp.Noise(seed + 1, 64), tp.Noise(seed + 3, 128), tp.Noise(seed + 2, 24), tp.Noise(seed + 4, 12)
 
     def fn(x, y):
         u, v = x / float(size), y / float(size)
-        b = big.at(u * 6, v * 6)
-        f = fine.at(u * 64, v * 64)
+        b, f, pl = big.at(u * 6, v * 6), fine.at(u * 64, v * 64), peel.at(u * 128, v * 128)
         k = chip.at(u * 24, v * 24)
-        if k > 0.82:
-            return tp._shade((58, 58, 54), 0.9 + 0.1 * f), 0.44
-        col = tp._shade((86, 92, 60), 0.88 + 0.2 * b + 0.08 * f)
-        col = tp._mix(col, (140, 128, 100), max(0.0, b - 0.7) * 0.6)
-        return col, 0.5 + 0.03 * f
+        if k > 0.8:
+            return tp._shade((60, 60, 56), 0.85 + 0.15 * f), 0.42
+        col = tp._shade((86, 92, 60), 0.86 + 0.18 * b + 0.06 * f + 0.05 * pl)
+        if k > 0.76:                                                        # the paint's lifted rim round a chip
+            col = tp._mix(col, (118, 122, 92), (k - 0.76) * 20)
+        col = tp._mix(col, (150, 136, 104), max(0.0, dust.at(u * 12, v * 12) - 0.66) * 1.2)
+        return col, 0.5 + 0.02 * pl + 0.01 * f
     c.paint(fn)
     return c
 
 
-def black(size=128, seed=303):
-    """Black polymer and rubber: a fine stipple for the grip."""
+def black(size=SIZE, seed=303):
+    """Black polymer: a moulded stipple that catches the light, the high spots polished a little by hands."""
     c = tp.Canvas(size, size)
-    fine, big = tp.Noise(seed, 64), tp.Noise(seed + 1, 8)
+    dot, fine, big = tp.Noise(seed, 128), tp.Noise(seed + 2, 64), tp.Noise(seed + 1, 8)
 
     def fn(x, y):
         u, v = x / float(size), y / float(size)
-        f = fine.at(u * 64, v * 64)
-        b = big.at(u * 8, v * 8)
-        return tp._shade((36, 36, 34), 0.85 + 0.25 * f + 0.1 * b), 0.45 + 0.12 * f
+        d, f, b = dot.at(u * 128, v * 128), fine.at(u * 64, v * 64), big.at(u * 8, v * 8)
+        col = tp._shade((34, 34, 33), 0.8 + 0.3 * d + 0.08 * f + 0.1 * b)
+        if d > 0.72:
+            col = tp._mix(col, (70, 70, 68), (d - 0.72) * 1.5)
+        return col, 0.42 + 0.16 * d
     c.paint(fn)
     return c
 
 
-def wood(size=128, seed=311):
-    """Oiled reddish wood, the grain running along the picture's width, worn paler in places."""
+def wood(size=SIZE, seed=311):
+    """Oiled reddish wood, the grain running along the picture's width with its pores, worn paler in places."""
     c = tp.Canvas(size, size)
-    grain, wav, fine = tp.Noise(seed, 4), tp.Noise(seed + 1, 8), tp.Noise(seed + 2, 64)
+    grain, wav, fine, pore = tp.Noise(seed, 4), tp.Noise(seed + 1, 8), tp.Noise(seed + 2, 64), tp.Noise(seed + 3, 128)
 
     def fn(x, y):
         u, v = x / float(size), y / float(size)
         w = wav.at(u * 8, v * 8)
         g = math.sin((v * 22 + 1.6 * grain.at(u * 4, v * 4) + 0.3 * w) * math.pi * 2)
         f = fine.at(u * 64, v * 64)
-        col = tp._shade((112, 58, 30), 0.82 + 0.12 * g + 0.08 * f)
+        col = tp._shade((112, 58, 30), 0.8 + 0.14 * g + 0.06 * f + 0.04 * _lines(u, v, 140, wav, 8))
         col = tp._mix(col, (150, 96, 58), max(0.0, w - 0.72) * 0.9)
-        return col, 0.5 + 0.03 * g
+        p = pore.at(u * 128, v * 128)
+        h = 0.5 + 0.03 * g
+        if p > 0.82 and g < 0.2:                                            # open pores in the darker grain
+            col, h = tp._shade(col, 0.72), h - 0.04
+        return col, h
     c.paint(fn)
     return c
 
 
 TEXTURES = {'qlz_steel': steel, 'qlz_olive': olive, 'qlz_black': black,
-            'cn_steel': lambda: steel(seed=321), 'cn_blued': lambda: steel(seed=322), 'cn_black': lambda: black(seed=323),
+            'cn_steel': lambda: steel(seed=321), 'cn_blued': blued, 'cn_black': lambda: black(seed=323),
             'cn_wood': wood}
 GLOSS = {'qlz_steel': 40.0, 'qlz_olive': 18.0, 'qlz_black': 10.0, 'cn_steel': 40.0, 'cn_blued': 50.0, 'cn_black': 10.0, 'cn_wood': 22.0}
 SHINE = {'qlz_steel': 60, 'qlz_olive': 25, 'qlz_black': 12, 'cn_steel': 60, 'cn_blued': 70, 'cn_black': 12, 'cn_wood': 30}
@@ -453,7 +483,8 @@ DNAM_FROM_FIRES = ('Projectile', 'Skill', 'Min spread', 'Spread', 'Min range', '
                    'Override action points', 'V.A.T.S. to-hit chance', 'Rumble left motor', 'Rumble right motor', 'Rumble duration',
                    'Rumble pattern', 'Rumble wavelength', 'Strength needed')
 # what it has of neither: the ride-on gun's mods are its own
-DROP = ('MODT', 'MODS', 'MOD4', 'MO4T', 'MO4S', 'MWD1', 'MWD2', 'MWD3', 'MWD4', 'MWD5', 'MWD6', 'MWD7', 'WNM1', 'WNM2', 'WNM3', 'WNM4',
+# (MOD3 is the scope's overlay: with mods gone it can never be fitted, and a weapon that has one shows no gun when aimed in nv-rs)
+DROP = ('MODT', 'MODS', 'MOD3', 'MO3T', 'MO3S', 'MOD4', 'MO4T', 'MO4S', 'MWD1', 'MWD2', 'MWD3', 'MWD4', 'MWD5', 'MWD6', 'MWD7', 'WNM1', 'WNM2', 'WNM3', 'WNM4',
         'WNM5', 'WNM6', 'WNM7', 'WMI1', 'WMI2', 'WMI3', 'WMS1', 'WMS2', 'EITM', 'EAMT')
 NO_MODS = {'Mod 1 effect': 0, 'Mod 2 effect': 0, 'Mod 3 effect': 0, 'Mod 1 value': 0.0, 'Mod 2 value': 0.0, 'Mod 3 value': 0.0,
            'Mod 1 value B': 0.0, 'Mod 2 value B': 0.0, 'Mod 3 value B': 0.0}

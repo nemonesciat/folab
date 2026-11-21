@@ -345,10 +345,13 @@ def build_dropped(name, shapes, mass=0.5, material='cloth'):
     return _loose(name, shapes, mass, material, 4, [])
 
 
-def build_worn(name, shapes, bone='Bip01 Head'):
-    """The bytes of a rigid thing worn on one bone (a hat), as the game's Pre-War Hat: a NiNode with 'Prn' = the bone,
-    no collision, the shapes in that bone's frame."""
-    return _relay(build(name, shapes), root='NiNode', extras=[('Prn', bone)])
+def build_worn(name, shapes, bone=None):
+    """The bytes of a rigid thing worn on the head (a hat), as the game's cowboy hats: a NiNode, no collision, no 'Prn'.
+    The game hangs it on the head slot's own node (HeadAnims, square to the world: z up, +y the face), so its shapes are
+    laid out along the world's axes. A 'Prn' of 'Bip01 Head' hangs it on that bone instead, which the skeleton turns a
+    quarter (its z is the head's left): the boater sat on its edge on the side of the head (the user, 21 Nov 2026).
+    `bone` names a Prn for a model made in that bone's own frame."""
+    return _relay(build(name, shapes), root='NiNode', extras=[('Prn', bone)] if bone else [])
 
 
 # ---------- the file ----------

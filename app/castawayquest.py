@@ -41,7 +41,9 @@ MARKER_BASE = 'XMarkerHeading'
 KULIOUOU = "Kuliouou Squatters' Camp"       # (the map marker the walk ends at)
 WRECK = 'Boat02a'
 REEF = (99300.0, -37600.0)                  # (castaway.REEF: where the wreck lies)
-REWARD = [('LootDuffleBag100', 1), ('LootDuffleBag25', 3)]     # (the game's duffle bag's own lists: lootplace's 'bag', easy band)
+# (the captain's share, the user's choice 21 Nov 2026: "Coat, pistol, stimpaks". It was the duffle bag's levelled lists,
+# "4 clipboards and some ammo". The coat and pistol are the mod's own (factionfolk, guns): a mod without them can't build it.)
+REWARD = [('FOLabOfficersCoat', 1), ('FOLabWeapQSZ92', 1), ('Ammo9mm', 48), ('Stimpak', 5)]
 
 WORDS = {
     'ask': "One more thing. The captain's trunk is still out on the wreck. You came off her, you can swim out to her. "
@@ -319,6 +321,42 @@ def ops(gd, pr, where):
     out += [{'op': 'record_new', 'record': l} for l in lines]
     rep = {'keys': keys, 'trunk': where['trunk'], 'arrive': where['arrive'], 'lines': len(lines), 'script_bytes': len(c.code) if hasattr(c, 'code') else None}
     return out, rep
+
+
+def _script_key(gd, pr):
+    """The quest script's key in the mod: one of its own records, or one baked into the plugin it was opened from."""
+    for k, r in pr.records.items():
+        if r.get('type') == 'SCPT' and recordio.field(r, 'EDID') == SCRIPT:
+            return k
+    for f, (_i, r) in gd.forms.items():
+        if r.tag == 'SCPT' and tes4.zstr(gd.fields(f).get('EDID', b'')) == SCRIPT:
+            return gd.key(f)
+    raise ValueError('the mod has no %s' % SCRIPT)
+
+
+def reward_ops(gd, pr):
+    """(ops, report): the quest's script compiled again with today's REWARD, for a mod built with an older one. Only the
+    AddItem lines differ, the variables are the same and in the same order, so a save in the middle of the quest goes on."""
+    import api_scripts
+    key = _script_key(gd, pr)
+    sc = api_scripts.scripts()
+    import newgame
+    extra = {}
+    for edid in (COMBER_REF, TRUNK_REF, ARRIVE):      # (the mod's own refs, if not yet baked into its plugin, by their EDID)
+        _ck, rk = _ref_by_edid(pr, edid)
+        if rk:
+            extra[rk] = {'type': 'REFR', 'flags': newgame.PERSISTENT, 'subs': [{'tag': 'EDID', 'label': 'Editor ID', 'kind': 'z', 'value': edid}]}
+    c = sc.compile(script_source(), key, 'quest', extra)
+    if not hasattr(c, 'subrecords'):
+        raise ValueError('the quest script does not compile: %s' % (c,))
+    return [{'op': 'record', 'key': key, 'record': sc._record_of(c, SCRIPT)}], {'script': key, 'reward': REWARD}
+
+
+def give_reward(server):
+    """The new reward put into the open mod as one Undo."""
+    o, rep = reward_ops(server.GD, server.PR)
+    server.edit("Waikiki's first quest: the captain's share", o)
+    return rep
 
 
 def build(server):

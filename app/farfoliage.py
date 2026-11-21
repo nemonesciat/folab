@@ -14,9 +14,9 @@ import math
 import re
 import zlib
 
-CANOPY = (54, 88, 40)          # a jungle's crowns from afar
+CANOPY = (44, 74, 32)          # a jungle's crowns from afar (darker since 21 Nov 2026: the far trees stand on it)
 SUNLIT = (92, 124, 58)
-SHADE = (30, 52, 26)
+SHADE = (24, 42, 21)
 MOST = 0.88                    # the most the ground's own colour gives way (a little of it always shows)
 TREE = re.compile(r'tree|palm|banyan|bamboo|treefern|cypress|birch|oak|pine', re.I)
 PLANT = re.compile(r'fern|shrub|bush|taro|heliconia|hibiscus|banana|ti(red|green)|plant|grass|thicket|undergrowth|floor|slope|vine|agave|yucca|sage', re.I)
@@ -100,12 +100,15 @@ class Cover:
         h = zlib.crc32(b'%d,%d' % (int(x // 64), int(y // 64))) & 0xFFFF
         big = zlib.crc32(b'%d;%d' % (int(x // 512), int(y // 512))) & 0xFF
         t = h / 65535.0
-        if t < 0.18:
+        # (rough: clumps a few hundred units across, each its own darker or lighter, so far slopes read as many crowns)
+        clump = (zlib.crc32(b'%d:%d' % (int(x // 192), int(y // 192))) & 0xFF) / 255.0
+        if t < 0.28:
             leaf = SHADE
         elif t > 0.82:
             leaf = SUNLIT
         else:
             f = 0.82 + 0.3 * t + 0.12 * (big / 255.0 - 0.5)
             leaf = tuple(min(255, int(v * f)) for v in CANOPY)
+        leaf = tuple(min(255, int(v * (0.78 + 0.4 * clump))) for v in leaf)
         k = MOST * min(1.0, a * 1.4)
         return tuple(int(g * (1 - k) + l * k) for g, l in zip(ground, leaf))

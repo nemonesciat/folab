@@ -226,3 +226,68 @@ for e, info in rep['shorts'].items():
     check('%s: clothes as the shirts; a man\'s shorts and their folded copy, a woman\'s printed dress' % e,
           d['BMDT'] == sor['BMDT'] and d['DATA'] == sor['DATA'] and 'shorts' in models[0] and 'shorts' in models[2] and
           models[1].endswith('_f.nif') and 'shorts' not in models[1] and all(os.path.exists(os.path.join(root, p)) for p in mine), models)
+
+# ---- shirt and shorts: the shirt's top over the Powder Gang's shorts, khaki or denim, alongside the rest (a third) ----
+import nif  # noqa: E402
+import outfitjoin  # noqa: E402
+cm = np.asarray(gp.plain_shorts_mask(gd))
+cloth = gp.paint_cloth_shorts(gd, 'Khaki')
+pg = np.asarray(gp._picture(gd, gp.SHORTS['textures'] + gp.SHORTS['picture']), dtype=np.int16)
+kh = np.asarray(cloth, dtype=np.int16)
+check('shirt and shorts: the cloth covers more of the shorts than the print did (the flap too)', (cm > 128).sum() > (sm > 128).sum(), ((cm > 128).sum(), (sm > 128).sum()))
+check('shirt and shorts: nothing off the cloth changes', np.abs(kh - pg)[cm == 0].max() == 0)
+top = gd.read_file(gp.FOLDER + gp.GARMENTS['m'][0])
+bottom = gd.read_file(gp.SHORTS['folder'] + gp.SHORTS['meshes']['m'])
+joined = outfitjoin.join(top, bottom, gp.JOIN_CUT, gp.JOIN_TAKE, top_keep=['UpperBody'], bottom_cut=gp.JOIN_UNDER)
+barefoot = gp.shirt_and_shorts(gd)
+bare = outfitjoin.drawn(barefoot)
+lows = {}
+for sh_ in nif.mesh_from_nif(barefoot, placed=False):
+    for k in range(0, len(sh_['i']), 3):
+        z = sum(sh_['p'][3 * sh_['i'][k + j] + 2] for j in range(3)) / 3
+        if z < 8 and sh_['i'][k] != sh_['i'][k + 1]:
+            lows[sh_['tex'].lower().rsplit('\\', 1)[-1]] = lows.get(sh_['tex'].lower().rsplit('\\', 1)[-1], 0) + 1
+check('barefoot: nothing but skin (and caps) at the feet, the boots gone', lows and all(t.startswith('upperbody') or 'gore' in t for t in lows), lows)
+check('barefoot: two bodies\' skin, the Powder Gang\'s to the socks and White Legs\' below',
+      sum(1 for nm, k in bare if nm == 'Arms:0' and k > 0) == 2, bare)
+drawn = dict(outfitjoin.drawn(joined))
+was_top, was_bottom = dict(outfitjoin.drawn(top)), dict(outfitjoin.drawn(bottom))
+check('joined: the top\'s shapes all there, its shirt cut to its top part', all(k in drawn for k in was_top) and 0 < drawn['UpperBody'] < was_top['UpperBody'], drawn['UpperBody'])
+check('joined: the shorts whole, the legs\' skin and the belt and boots cut to their lower part',
+      drawn['objdefault01:1'] == was_bottom['objdefault01:1'] and 0 < drawn['Arms:0'] < was_bottom['Arms:0'] and 0 < drawn['objdefault01:0'] < was_bottom['objdefault01:0'], drawn)
+jn = nif.Nif(joined)
+for i in range(len(jn.types)):
+    jn.block(i)                                                             # (every block it reads, read to its end)
+bones = {jn.block(i)['name'] for i, t in enumerate(jn.types) if t == 'NiNode'}
+names_ok = True
+for i, t in enumerate(jn.types):
+    if t == 'BSDismemberSkinInstance':
+        nb = struct.unpack_from('<I', joined, jn.offsets[i] + 12)[0]
+        for k in range(nb):
+            r = struct.unpack_from('<i', joined, jn.offsets[i] + 16 + 4 * k)[0]
+            names_ok &= jn.types[r] == 'NiNode' and jn.block(r)['name'] in bones
+check('joined: one skeleton, every skin naming the top\'s own bones', names_ok and len(bones) == len({n for n, t in zip([nif.Nif(top).block(i).get('name') if t == 'NiNode' else None for i, t in enumerate(nif.Nif(top).types)], nif.Nif(top).types) if t == 'NiNode'}))
+heights = {}
+for s in nif.mesh_from_nif(joined, placed=False):
+    zs = s['p'][2::3]
+    heights.setdefault(s['tex'].lower(), []).extend(zs)
+first = pr.next_id
+before = {k: [s for s in pr.records[k]['subs'] if s['tag'] == 'LVLO'] for k, r in pr.records.items() if (recordio.field(r, 'EDID') or '') == 'FOLabSurferBodyList'}
+ops, rep = P.combo_ops(gd, pr)
+made = pr.apply('shirts and shorts', ops)
+check('shirt and shorts: six, the keys as planned', len(rep['outfits']) == 6 and made[:6] == ['+%06X' % (first + n) for n in range(6)], made[:6])
+info = rep['lists']['surfers']
+check('surfers: shirt and trousers, board shorts, shirt and shorts evenly', info['entries'] == {'shirt and trousers': 6, 'board shorts': 6, 'shirt and shorts': 6}, info['entries'])
+kept = [next(f['value'] for f in s['fields'] if f.get('code') == 'F') for s in before[info['list']]]
+now = [next(f['value'] for f in s['fields'] if f.get('code') == 'F') for s in pr.records[info['list']]['subs'] if s['tag'] == 'LVLO']
+check('surfers: every entry there before still there', all(now.count(k) >= kept.count(k) for k in set(kept)))
+try:
+    P.combo_ops(gd, pr)
+    check('shirt and shorts: a second time refused', False)
+except ValueError:
+    check('shirt and shorts: a second time refused', True)
+for e, o in rep['outfits'].items():
+    pics = {t['path'].lower() for t in nifwrite.textures_in(open(os.path.join(root, o['files']['m']), 'rb').read())}
+    check('%s: the man\'s model wears the printed shirt and the plain shorts, the woman\'s her dress' % e,
+          any('_m.dds' in p and '\\folab\\' in p for p in pics) and any('shorts_' in p for p in pics) and o['files']['f'].endswith('_f.nif')
+          and not any(p.endswith('outfitm.dds') or p.endswith('powdergang02.dds') for p in pics), sorted(pics))

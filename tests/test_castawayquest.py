@@ -40,20 +40,34 @@ cell = next(c for c, w in G.ext_cells.items() if G.edid(w) == 'WastelandNV' and 
 far = next(c for c, w in G.ext_cells.items() if G.edid(w) == 'WastelandNV' and G.cell_grid(c) == (-16, 2))
 base = (-18 * 4096.0 + 2000, 2000.0)
 comber = pr.apply('beachcomber', [{'op': 'add', 'cell': G.key(cell), 'base': keys[2], 'p': [base[0], base[1], 9000.0, 0, 0, 0], 'extra': {'persistent': True, 'edid': cq.COMBER_REF}}])[0]
+# (the captain's share is the mod's own coat and pistol: stand-ins for them)
+coat = cq._named(recordio.load(G, cq._game_form(G, 'OutfitMerc05', 'ARMO')), 'FOLabOfficersCoat', "Officer's Coat")
+pistol = cq._named(recordio.load(G, cq._game_form(G, 'WeapNV9mmPistol', 'WEAP')), 'FOLabWeapQSZ92', 'QSZ-92')
+pr.apply('share stand-ins', [{'op': 'record_new', 'record': coat}, {'op': 'record_new', 'record': pistol}])
 where = {'trunk': (G.key(cell), [base[0] + 600, base[1], 9000.0, 0.0, 0.0, 1.0]), 'arrive': (G.key(far), [-16 * 4096.0 + 2000, 2 * 4096.0 + 2000, 9000.0, 0, 0, 0]),
          'comber': comber, 'comber_cell': G.key(cell)}
 before = (len(pr.records), sum(len(c.get('refs', {})) for c in pr.cells.values()), len(pr.undo_stack))
 
 # ---- the quest ----
+NEW_REWARD, cq.REWARD = cq.REWARD, [('LootDuffleBag100', 1), ('LootDuffleBag25', 3)]   # (built as it first was, then given the share)
 ops, rep = cq.ops(G, pr, where)
 made = server.edit('first quest', ops)['made']
+cq.REWARD = NEW_REWARD
 check('one Undo step', len(pr.undo_stack) == before[2] + 1)
 check('keys as reserved', made[:10] == [rep['keys'][k] for k in ('lockbox', 'trunk', 'message', 'script', 'quest', 'ask', 'back', 'cut', 'trunk_ref', 'arrive_ref')])
 k = rep['keys']
 src = api_scripts.source_of(pr.records[k['script']]).replace('\r', '')
 check('the script is the quest\'s own source, kept with it', 'scn ' + cq.SCRIPT in src and 'StartConversation PlayerREF ' + cq.TOPICS['back'] in src)
 check('the script waits for the opening to be over', '%s.step != 9' % cq.OPENING in src)
-check('the reward is the game\'s levelled duffle lists', all('player.AddItem %s %d' % r in src for r in cq.REWARD))
+check('built as it first was: the duffle lists', 'player.AddItem LootDuffleBag25 3' in src)
+o2, rep2 = cq.reward_ops(G, pr)
+n0 = len(pr.undo_stack)
+server.edit('the captain\'s share', o2)
+src2 = api_scripts.source_of(pr.records[k['script']]).replace('\r', '')
+check('the share: coat, pistol, rounds, stimpaks, in one Undo', len(pr.undo_stack) == n0 + 1 and rep2['script'] == k['script'] and
+      all('player.AddItem %s %d' % r in src2 for r in cq.REWARD) and 'LootDuffleBag' not in src2)
+check('only the reward lines changed (a save mid-quest goes on)',
+      [l for l in src.split('\n') if 'AddItem' not in l] == [l for l in src2.split('\n') if 'AddItem' not in l])
 check('it shows, completes and ends by itself', src.count('SetObjectiveDisplayed') == 3 and src.count('SetObjectiveCompleted') == 3 and 'CompleteQuest ' + cq.QUEST in src)
 try:
     cq.ops(G, pr, where)
@@ -90,7 +104,7 @@ scf = mine[cq.SCRIPT]
 scro = [g.to_global(i, struct.unpack('<I', d)[0]) for t, d in tes4.iter_subrecords(g.plugins[i].data(g.forms[scf][1])) if t == 'SCRO']
 named = {tes4.zstr(g.fields(f).get('EDID', b'')) if f in g.forms else None for f in scro} | {n for n, (rf, _e) in refs.items() if rf in scro}
 check('the script names what it uses', {cq.OPENING, cq.QUEST, cq.LOCKBOX, cq.MESSAGE, cq.TOPICS['ask'], cq.TOPICS['back'],
-                                         cq.ARRIVE, cq.COMBER_REF, 'LootDuffleBag100', 'LootDuffleBag25'} <= named, named)
+                                         cq.ARRIVE, cq.COMBER_REF} | {e for e, n in cq.REWARD} <= named, named)
 cont = list(tes4.iter_subrecords(g.plugins[i].data(g.forms[mine[cq.TRUNK]][1])))
 check('the trunk holds the lockbox', [g.to_global(i, struct.unpack('<I', d[:4])[0]) for t, d in cont if t == 'CNTO'] == [mine[cq.LOCKBOX]])
 infos = [f for f, (n, r) in g.forms.items() if n == i and r.tag == 'INFO']
@@ -113,4 +127,5 @@ check('the plugin passes the health check', summary['error'] == 0, summary)
 
 # ---- Undo ----
 pr.undo()
-check('one Undo takes it all away', (len(pr.records), sum(len(c.get('refs', {})) for c in pr.cells.values())) == before[:2])
+pr.undo()
+check('two Undos take it all away', (len(pr.records), sum(len(c.get('refs', {})) for c in pr.cells.values())) == before[:2])

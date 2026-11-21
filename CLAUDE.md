@@ -138,10 +138,19 @@ the model for style, UI and approach. Python, standard library first, code in `a
   the mod's own (the hotels' floors) are left. garmentprint needs numpy/PIL/scipy (not in FOLab.exe's Python): a build step
   run from the developer's Python. `apply_clear` takes the Mojave's gangs (`MOJAVE_SIDES`, by faction) out of places of the
   mod's own (the hotels' floors: 138 out, 20 Nov 2026). Straw hats (`hats.py`, `tests/test_hats.py`): FOLab's boater and
-  lauhala sun hat, lathed profiles; worn = NiNode + 'Prn' 'Bip01 Head' (`nifmake.build_worn`), dropped = `build_dropped`
-  (clutter layer). A hat's frame is offsets from the head bone along the WORLD's axes (z up, +y the face), not the bone's
-  own turned axes: measured from the Pre-War Hat and the skeleton; `clearance` checks the game's head inside the crown.
-  `hats.ops` puts them in the surfers' head list in the Rattan Cowboy Hat's place. Not yet seen in game.
+  lauhala sun hat, lathed profiles; worn = a NiNode with NO 'Prn' (`nifmake.build_worn`, as the cowboy hats: the game hangs
+  it on HeadAnims, square to the world; a Prn of 'Bip01 Head', the Pre-War Hat's, puts it on that bone, which the skeleton
+  turns a quarter, and the boater sat on its edge on the side of the head in game, 21 Nov 2026), dropped = `build_dropped`
+  (clutter layer). A hat's frame is offsets from the head along the WORLD's axes (z up, +y the face); `clearance` checks
+  the game's head inside the crown. `hats.ops` puts them in the surfers' head list in the Rattan Cowboy Hat's place.
+  Shirt and shorts (`outfitjoin.py`; the user, 21 Nov 2026: "hawaiian shirt+shorts (like khaki or jean)"; picture
+  `docs/waikiki-shirt-shorts-mock.png`): no game outfit is one, so `outfitjoin.join` makes one model of two worn outfits
+  (the top of one over the bottom of another, overlapping a little; triangles left out of a shape's data as three of one
+  corner and out of its NiSkinPartition, rewritten as triangle lists; the other's skinned blocks added, linked to the top's
+  bones by name). `garmentprint.shirt_and_shorts`: the Pre-War Spring shirt over the Powder Gang's shorts (its boots are on
+  the shorts' shape), barefoot from White Legs (the game has no sandals; FOLab's own flip-flops later), shorts in plain
+  khaki or denim (`CLOTHS`). `peopledress.combo_ops`: 6 ARMO, the surfers' body list a third each shirt and trousers,
+  board shorts, shirt and shorts ("variety is good"); women keep the printed dress.
 - Mojave buildings restyled (`restyleset.py`, `restyle.py`, `tests/test_restyleset.py`; the survey `docs/waikiki-mojave-misfits.md`):
   FOLab's own pieces each made in the FRAME of the game building it replaces (its ground ~16 under the origin, doorways
   exactly where townbuild's catalogue stands its doors and `shut`), so `restyle.ops` is a 'swap' of the ref's base, doors,
@@ -312,6 +321,15 @@ the model for style, UI and approach. Python, standard library first, code in `a
   and the game draws only over it (now `>`). Cut-outs drawn once across a card get a clear border (`rim`, else a bar along the
   card's top). Far off: FOLab's trees have far versions (`plantfar.py`, ~50 triangles, in lodobj's blocks) and the far ground is
   painted with what grows (`farfoliage.Cover`, lodgen's `foliage`). A cell's own water over a lower bank: raise the pocket.
+- Far plants (`farplants.py`, `tests/test_farplants.py`; the user, 21 Nov 2026: far slopes bare, "just enough to give the
+  illusion of foliation"): `far_model` makes a far version of any plant's model from its own shapes (plantfar's crown masses
+  fitted to its leaves, a trunk on one shared `BARK`, boughs, `VINES` as their own shape and picture, `VINE`; shrubs one or
+  two low masses), pictures 64 square shared by leaf colour. `pick` chooses what shows: the tallest plant a `PATCH`, two
+  where the plants' own feet say the ground is steep, all over `ALWAYS`; ground cover under `LOW` is the far ground's green.
+  `lodobj.generate(plants=True)` takes the picked plants (trees included) and fills each block biggest first, within
+  `MAX_VERTS` and `MAX_TRIS` (both 16-bit). Waikiki: 44,208 far things (20,770 before), 1,713 small ones left out of full
+  blocks. FOLab's own far trees (plantfar) have vines too. The far ground was not repainted (farfoliage's darker, rougher
+  green waits for its next repaint: the user, "do not repaint all the ground again").
 - A ruined freeway (`ruinedfreeway.py`, `tests/test_ruinedfreeway.py`): the map squeezed H-1's bridges flat, so the old freeway
   stands over its ground road, broken: the game's `OverpassSectionLo01` chained along the freeway's line (`join` makes runs of the
   street map's pieces; one height a chain, `UNDER` the land, never `DEEP`), a span fallen now and then with its rubble below, ends
@@ -344,6 +362,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
   is the ride-on gun's (animation type, reload, attack) with a fire gun's ammo, projectile, sounds and numbers laid over
   (`FROM_FIRES`, `DNAM_FROM_FIRES`), mods dropped. The QLZ-87 rides on the Light Machine Gun, fires the Grenade Machinegun's
   25mm grenades. Not yet seen in either game.
+  Shown when aimed (21 Nov 2026: the QLZ-87 and QSZ-92 vanished on aiming): an interpolator's unset pose is -FLT_MAX as
+  in every game gun (`gunmake.UNSET`; +FLT_MAX is a real place 10^38 away and the game runs these controllers when you aim),
+  and no weapon keeps the ride-on gun's scope overlay (MOD3 in `guns.DROP`). Pictures 512 a tile (`guns.SIZE`).
   More Chinese guns (21 Nov 2026, not in Waikiki): QSZ-92 pistol on the 9mm Pistol, Type 81 rifle on the Assault Carbine
   (5.56 by `OVERRIDES`), Type 79 SMG on the 10mm SMG. These bases stand some parts off the origin or turned, and a
   reload's keys are the node's whole place (ReloadF's ##Clip starts at x 10), so `BASE_NODES` stands ours exactly there
@@ -359,7 +380,9 @@ the model for style, UI and approach. Python, standard library first, code in `a
   parent), other worlds the override let go. Rain is Honest Hearts' particle models re-thrown (`blow`), kept on the player and
   turned to the player's heading (the only way it reads as sideways in nv-rs); pictures in `app/stormpictures` (made by
   `tools/stormpictures.py`, numpy). `run` executes the script's own text with frames, waits and sleeps; `check` the rules.
-  Not yet in Waikiki or seen in game (test 10 on D:).
+  `fair_ops` takes only rainy/snowy weathers (kind 4, 8) out of the island's region: Zion Valley's sunny day is filed as
+  cloudy (2). Test 10's storms seen cycling in nv-rs-pad (21 Nov); in Waikiki since 21 Nov 2026 16:03 (D:\FOLab-weather11\
+  storms_into_waikiki.py); the hurricane peak not yet seen in game.
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Backups (`backups.py`, `web/backups.js` the Tools tab Backups, `/api/tools/backups`, `tests/test_backups.py`): kinds by the name
   with its time taken out; per kind the newest `KEEP` and one a day for `DAYS`, then a size cap, never the newest of a kind or

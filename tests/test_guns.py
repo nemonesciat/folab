@@ -72,7 +72,7 @@ for name in guns.GUNS:
         ok = c >= 0 and n.types[c] == 'NiTransformController'
         if ok:
             _nx, _fl, _f, _p, _s, _e, target, interp = struct.unpack('<iHffffii', raw(c))
-            ok = target == i and n.types[interp] == 'NiTransformInterpolator' and raw(interp)[:4] == struct.pack('<f', 3.4028234663852886e+38)
+            ok = target == i and n.types[interp] == 'NiTransformInterpolator' and raw(interp)[:4] == struct.pack('<f', -3.4028234663852886e+38)
         check(name + ': ' + nm + ' carries an empty transform controller', ok)
     # where the parts lie against the ride-on gun's
     for part, want in base.items():
@@ -175,6 +175,10 @@ if '--no-game' not in sys.argv:
             else:
                 ok = all(abs(b['t'][a] - want[a]) < 0.05 for a in range(3))
             check('%s: %s lies where FOLab thinks' % (gun, part), ok, (lo, hi) if isinstance(want[0], tuple) else b['t'])
+        for name in [n for n in guns.GUNS if guns.GUNS[n][1] == gun]:
+            mine = nif.Nif(guns.build(name)['nif'])
+            unset = lambda n: {n.data[n.offsets[i]:n.offsets[i] + 28] for i, t in enumerate(n.types) if t == 'NiTransformInterpolator'}
+            check("%s: its parts' poses unset exactly as %s's (else they fly off when aimed)" % (name, gun), unset(mine) == unset(gn), unset(mine))
         for part, (t, R) in list(guns.BASE_NODES.get(gun, {}).items()) + ([('ShellCasingNode', guns.BASE_CASE[gun])] if gun in guns.BASE_CASE else []):
             i, b = gnodes[part]
             check('%s: %s stands and turns where FOLab thinks' % (gun, part), all(abs(b['t'][a] - t[a]) < 1e-3 for a in range(3))
@@ -195,6 +199,7 @@ if '--no-game' not in sys.argv:
               and get('FULL')['value'] == m['shown'] and not any(t in tags for t in ('MODT', 'WMI1', 'MWD1', 'WNM1'))
               and {f['name']: f['value'] for f in get('DATA')['fields']}['Clip size'] == guns.GUNS[name][3] and mine['Mod 2 effect'] == 0)
         check(name + ': one of each subrecord the game has once', all(tags.count(t) == 1 for t in ('EDID', 'MODL', 'NAM0', 'DATA', 'DNAM', 'ETYP')))
+        check(name + ': no scope overlay (MOD3: the gun is hidden when aimed)', 'MOD3' not in tags)
 
     # into a mod of its own and out through the writer (only in a scratch home: tests/run.py gives one)
     if os.environ.get('FOLAB_HOME'):

@@ -1,5 +1,5 @@
-"""FOLab's straw hats (hats.py): each worn model is laid out as the game's Pre-War Hat (a NiNode, 'Prn' = 'Bip01 Head', no
-collision) and reads back as built; each dropped one has a box on the clutter layer; the game's head fits inside both
+"""FOLab's straw hats (hats.py): each worn model is laid out as the game's cowboy hats (a NiNode, no 'Prn', no
+collision; a Prn on Bip01 Head turned the boater on its side) and reads back as built; each dropped one has a box on the clutter layer; the game's head fits inside both
 crowns; the ops make two ARMO of the mod's own after the Rattan Cowboy Hat and put them in the surfers' head list in its
 place, which the written plugin shows."""
 import os
@@ -32,8 +32,8 @@ for name in hats.HATS:
     n = nif.Nif(m['worn'])
     root = n.block(0)
     extras = [(n.string(struct.unpack_from('<i', m['worn'], n.offsets[e])[0]), n.string(struct.unpack_from('<i', m['worn'], n.offsets[e] + 4)[0])) for e in root['extra']]
-    check('%s: worn as the game\'s hats are (a NiNode, Prn on the head, no collision)' % name,
-          n.types[0] == 'NiNode' and extras == [('Prn', 'Bip01 Head')] and root['collision'] == -1 and 'bhkRigidBody' not in n.types, (n.types[0], extras))
+    check('%s: worn as the game\'s cowboy hats are (a NiNode, no Prn: never on the quarter-turned Bip01 Head, no collision)' % name,
+          n.types[0] == 'NiNode' and extras == [] and root['collision'] == -1 and 'bhkRigidBody' not in n.types, (n.types[0], extras))
     got = hkshape.collision_shapes(m['go'])
     check('%s: the dropped model reads back, a box on the clutter layer' % name,
           nifmake.check(m['go'], m['go_shapes'])[1:] == [] and len(got) == 1 and got[0]['layer'] == 4, [g['layer'] for g in got])

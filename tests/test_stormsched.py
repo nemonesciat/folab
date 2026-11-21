@@ -41,6 +41,18 @@ def test_script_reads_as_the_game_does():
     assert {'sheets', 'scud', 'fury', 'squall'} <= s.refs
 
 
+def test_fair_weather_keeps_a_sunny_sky():
+    import gamedata
+    gd = gamedata.GameData()
+
+    class P:
+        records = {}
+    keys = {e: gd.key(S._game_form(gd, 'WTHR', e)) for e in ('NVDLC02ZionValleyWeather', 'NVDLC02ZVRainWeather', 'NVDLC02TheNarrowsWeather')}
+    assert S._pleasant(gd, P, keys['NVDLC02ZionValleyWeather'])       # (filed as cloudy, kind 2: still a sunny day)
+    assert S._pleasant(gd, P, keys['NVDLC02TheNarrowsWeather'])
+    assert not S._pleasant(gd, P, keys['NVDLC02ZVRainWeather'])
+
+
 if __name__ == '__main__':
     for n, f in list(globals().items()):
         if n.startswith('test_'):

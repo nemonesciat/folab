@@ -6,6 +6,17 @@ at the start of any Waikiki work, and before saying anything is ready.
 
 ## Open
 
+- **Distant trees too sparse** (21 Nov 2026, afternoon, 52 fps, looking NE at a green hill from a jungle rise; screenshot
+  `docs/waikiki-report-far-foliage-sparse.webp`): "the distant foliage is a reallygood idea. its starting to look good. it
+  should be a little denser though, maybe offer a few more sized to break monotony and big open stretches on distant
+  landscapes". The far trees stand alone on bare slopes, all about one size. Passed to the story session (plantfar, lodobj).
+
+- **The first quest's reward is lame** (21 Nov 2026, after 15:06): "captain;s lockbox loot is lame. it was like 4
+  clipboards and some ammo", the reward "when u give box to beach comber". It was the game's duffle-bag lists
+  (`castawayquest.REWARD`: LootDuffleBag100 once, LootDuffleBag25 three times), which are mostly junk. The user's choice: "Coat, pistol, stimpaks": the
+  Officer's Coat, the QSZ-92 with 48 rounds of 9mm, five stimpaks (`REWARD`; `castawayquest.give_reward` compiles the
+  script again, only the AddItem lines changed, so a save mid-quest goes on). A save past the reward keeps the old one.
+
 - **Requests and feedback before going out** (21 Nov 2026, ~09:25), the user's words, each passed to a session:
   - "roads and rubble we made could use a little more detail. they're great so far, but look plain." (roads and rubble session)
   - "the trees in distance - the palm variety looks pretty good, the bulbous ones are still a little simplistic, and they
@@ -26,6 +37,10 @@ at the start of any Waikiki work, and before saying anything is ready.
   LMG's model: the shader's alpha-texture bit and the collision material. The check asked of the user: aim the game's own
   Light Machine Gun in the same game. The Huáng guns went in 21 Nov 15:06 (nv-rs, nv-rs-pad, MO2) with the QLZ-87's
   corrected model; not yet seen whether they show when aimed.
+  Still gone on aim (the user, 21 Nov ~15:20, nv-rs-pad: the QLZ-87 and the QSZ-92, "could use enhanced texturing too").
+  Cause found: every FOLab gun's parts had their unset pose written as +FLT_MAX (the game's is -FLT_MAX), a real pose
+  10^38 away that the parts fly to once the controllers run; the QSZ-92 also kept the 9mm's scope overlay (MOD3). Fixed
+  in gunmake/guns with tests; pictures 512 with machining, wear, stipple. Waiting for the game to close to go in.
 
 - **Out of a house and into its walls** (21 Nov 2026, morning, in nv-rs-pad: "exiting a house placed me inside the
   building shell"; screenshot `docs/waikiki-report-inside-shell.webp`): coming out of a house's door left the player in a
@@ -88,6 +103,22 @@ at the start of any Waikiki work, and before saying anything is ready.
   now nothing below the ankle is printed (`garmentprint.FEET`). Shorts: Honest Hearts' Sorrows shorts were cut as high as
   briefs; now the Powder Gang's knee-length shorts on a bare-chested man (boots and belt plain, `docs/waikiki-board-shorts.png`),
   a woman in the same record in her printed dress, a third of surfers. Not yet in the mod. Hats: not yet looked into.
+- **Hawaiian shirt with shorts, as well** (21 Nov 2026, via the beach kiosk session: "i like the swimming trunks you added,
+  but i ALSO meant hawaiian shirt + short combos too, additionally, like the shirt/pants combos we have now. hawaiian
+  shirt+shorts(like khaki or jean) would be cool to have too"). Wanted alongside the trunks and the shirt-and-trousers,
+  not in their place. No game outfit is a collared shirt with shorts; mock-up of the shirt's top over the Powder Gang's
+  knee-length shorts, khaki and denim: `docs/waikiki-shirt-shorts-mock.png`. The user's choices: the flap under the belt
+  coloured in (it was the shirt outfit's own trousers: cut at the belt now), surfers an even mix (shirt and trousers,
+  board shorts, shirt and shorts: "variety is good. some surfers having just shorts too"), and "maybe the shorts variant
+  should be wearing sandals?": the game has none, so barefoot now (White Legs' feet), FOLab's own flip-flops later.
+  Built (`outfitjoin.py`, `peopledress.combo_ops`, tests pass); into Waikiki through the story session (`dressup.py`).
+  Not yet in the mod or seen in game.
+- **The boater sits on the side of the head** (21 Nov 2026, in game, the player from behind: "boater also is on side of
+  head"; the hat on its edge against the left of the head). Found: FOLab's worn hats (boater, lauhala, mahiole) named
+  'Bip01 Head' as their parent ('Prn'), as the Pre-War Hat does; that bone is turned a quarter in the game's skeleton
+  (its z is the head's left), so a hat made along the world's axes lies on its side. The game's cowboy hats name no bone
+  and hang on HeadAnims, square to the world. Fixed in code (`nifmake.build_worn`: no Prn); the three hats' files
+  go into Waikiki with the shirts and shorts (`dressup.py`). Not yet seen in game.
 - **A glitched water tile up the shore** (20 Nov 2026, in nv-rs by the ruined freeway: "glitched water tile up shore"): a cell's own river level laid flat over a bank lower than it. 13 cells of 51 with their own water had such banks; the low pockets inside each cell raised 12 over the water (294 points, 50 things raised with them), one cell whose level was wrong written dry; none left inside a cell (pockets on a cell's edge, shared with its neighbour, left). In every nv-rs ~12:05. The user's look: "Better".
 - **The city feels like the Mojave: "WHERE ARE THE PLANTS"** (20 Nov 2026, in nv-rs over the city, 21-27 fps: "this shit feels so unrealistic"; "i dont want a barren desert, but i dont want 10 fps. is this impossible?"). The grass grows on most wild ground (the census: about half the dry land by grassrule, more counting the mod's own twins it can't read; the rest roads and pavement) but thin. Made thick (`plantgrass.KINDS`: grasses 36-60, ferns 16-30, shrubs 12) and taro, heliconia and ti grown by the ground too; the far ground painted with what grows (`farfoliage.py`, through lodgen) next. Then the user's look at a lush stretch ("this has fewer trees and looks good too ... the answer isnt just more trees"): its ground is covered. Grass now right up to buildings (`plantgrass.BUILT_PTS`) and 384 from roads, not 512 (`CLEAR_PTS`). In every nv-rs ~12:05 with the thick grass. The user's look: "Better". Far ground green running.
 - **Water banding at the start's bay** (20 Nov 2026, in nv-rs, looking over Hanauma's bay: "what causes this water banding?"): a straight-edged lighter band across the water. Ruled out: no cell there is dry (one in the whole map, (21, -7)), all the bay's cells the same water (XCWT FalloutNV 030009), the world's far water (NAM4) is 0 in the mod. Likely, not proven: the far ground under the sea (distant land, coarser) standing shallower than the near sea bed, so the water past the loaded cells is drawn as shallow water.

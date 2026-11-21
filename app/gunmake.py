@@ -9,7 +9,7 @@ animations move by name, marker nodes for the muzzle, the case and the sights, o
   NiNode                        at the gun's origin, unturned (the animations' keys are moves from there; a marker node
                                 is placed and turned as the game's are)
   NiTransformController         flags 0x4C, its target the node: what an animation's keys bind to
-  NiTransformInterpolator       the pose unset (FLT_MAX), no keys
+  NiTransformInterpolator       the pose unset (-FLT_MAX, as the game), no keys
   the part's shapes             as nifmake writes a static's (shader, texture set, material, strips)
   and last the body's shapes, straight under the root.
 
@@ -20,7 +20,9 @@ import struct
 import nif
 import nifmake
 
-UNSET = struct.pack('<f', 3.4028234663852886e+38)
+# Gamebryo's "no pose" is the LOWEST float, as every game gun has it. +FLT_MAX is a real pose 10^38 away: the game runs these
+# controllers when you aim, every part went there, and FOLab's guns vanished on aiming (21 Nov 2026).
+UNSET = struct.pack('<f', -3.4028234663852886e+38)
 FLAGS = 0x8000E
 BSX_GUN = 67                    # (the Light Machine Gun's, the Riot Shotgun's)
 IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))

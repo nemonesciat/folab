@@ -498,6 +498,109 @@ def shorts_ops(gd, pr):
     return keys.ops + changed, rep
 
 
+COMBO_NAME = '%s and %s Shorts'
+
+
+def _combo_files(gd, pr, look, shirts):
+    """{(style, cloth): {'m', 'f', 'go': mesh}}: the style's printed shirt over khaki or denim shorts, barefoot (a man's: one
+    model joined by outfitjoin, garmentprint.shirt_and_shorts), a woman's the style's printed dress, on the ground the
+    style's folded shirt."""
+    import garmentprint
+    import nifwrite
+    root = library.assets_dir(pr)
+    slug = library.slug(pr.name)
+    sh = garmentprint.SHORTS
+    g = garmentprint.GARMENTS['m']
+    shorts_tex = sh['textures'] + sh['picture']
+    mask = garmentprint.plain_shorts_mask(gd)
+    fmask = garmentprint.flap_mask(gd)
+    joined = garmentprint.shirt_and_shorts(gd)
+    out = {}
+    for cloth in garmentprint.CLOTHS:
+        pic = 'textures\\folab\\%s\\people\\shorts_%s.dds' % (slug, cloth.lower())
+        library._put(root, pic, garmentprint.dds_of(garmentprint.paint_cloth_shorts(gd, cloth, mask)))
+        belt = 'textures\\folab\\%s\\people\\shorts_%s_belt.dds' % (slug, cloth.lower())
+        library._put(root, belt, garmentprint.dds_of(garmentprint.paint_cloth_flap(gd, cloth, fmask)))
+        for word in shirts:
+            changes = {garmentprint.TEXTURES + g[1]: 'textures\\folab\\%s\\people\\%s_%s_m.dds' % (slug, look, word.lower()),
+                       shorts_tex: pic, sh['textures'] + garmentprint.FLAP_PICTURE: belt}
+            if PRINTS[look][0]:
+                changes[garmentprint.TEXTURES + g[3]] = garmentprint.TEXTURES + g[4]
+            rel = 'meshes\\folab\\%s\\%s_%s_%s_m.nif' % (slug, look, word.lower(), cloth.lower())
+            new = nifwrite.retexture(joined, changes)
+            wrong = nifwrite.prove(joined, changes)
+            if wrong:
+                raise ValueError('%s: %s' % (rel, '; '.join(wrong)))
+            library._put(root, rel, new)
+            out[(word, cloth)] = {'m': rel, 'f': shirts[word]['f'], 'go': shirts[word]['go']}
+    return out
+
+
+def combo_ops(gd, pr, looks=('surfer',)):
+    """(ops, report): the Hawaiian shirt over khaki or denim shorts (the user, 21 Nov 2026), alongside the shirt and
+    trousers and the board shorts, never in their place ("variety is good. some surfers having just shorts too"). Each
+    look's body list then holds the three evenly: its shirts twice each (as now), its board shorts once more (twice each),
+    each shirt-and-shorts once a print and cloth (the same count again). Surfers only, the user's choice."""
+    have = {(recordio.field(r, 'EDID') or '').lower(): k for k, r in pr.records.items()}
+    items = _edids(gd, ('ARMO',))
+    outfit = items[OUTFIT.lower()]
+    keys = _Keys(pr)
+    rep = {'outfits': {}, 'lists': {}}
+    changed = []
+    for kind, k in KINDS.items():
+        look = k['look']
+        if look not in looks:
+            continue
+        lk = have.get(('FOLab%sBodyList' % k['name']).lower())
+        if not lk:
+            raise ValueError('%s are not dressed yet' % kind)
+        board = [have.get(('FOLab%s%s' % (SHORTS_NAME[look].replace(' ', ''), row[0])).lower()) for row in PRINTS[look][1]]
+        if not all(board):
+            raise ValueError('the %s have no board shorts yet: put those in first' % kind)
+        made = []
+        shirts = _shirt_files(gd, pr, look)
+        for (word, cloth), f in _combo_files(gd, pr, look, shirts).items():
+            edid = 'FOLab%s%s%s' % (SHIRT_NAME[look].replace(' ', ''), cloth, word)
+            if edid.lower() in have:
+                raise ValueError('The mod already has %s (Undo the shirts and shorts first to make them again).' % edid)
+            name = '%s (%s)' % (COMBO_NAME % (SHIRT_NAME[look], cloth), word.lower())
+            made.append(keys.add(_shirt_record(gd, outfit, edid, name, f)))
+            rep['outfits'][edid] = {'key': made[-1], 'files': f}
+        lst = json.loads(json.dumps(pr.records[lk]))
+        rows = [s for s in lst['subs'] if s['tag'] == 'LVLO']
+        at = lst['subs'].index(rows[-1]) + 1
+        extra = []
+        for key in board + made:
+            s = json.loads(json.dumps(rows[0]))
+            for fl in s['fields']:
+                if fl.get('code') == 'F':
+                    fl['value'] = key
+            extra.append(s)
+        lst['subs'][at:at] = extra
+        changed.append({'op': 'record', 'key': lk, 'record': lst})
+        count = {}
+        for s in lst['subs']:
+            if s['tag'] == 'LVLO':
+                key = next(fl['value'] for fl in s['fields'] if fl.get('code') == 'F')
+                what = 'board shorts' if key in board else 'shirt and shorts' if key in made else 'shirt and trousers'
+                count[what] = count.get(what, 0) + 1
+        rep['lists'][kind] = {'list': lk, 'entries': count}
+    return keys.ops + changed, rep
+
+
+def apply_combos(server):
+    """combo_ops as one Undo; checks the keys."""
+    pr = server.PR
+    first = pr.next_id
+    o, rep = combo_ops(server.GD, pr)
+    out = server.edit('Hawaiian shirts with khaki and denim shorts', o)
+    made = list(out.get('made') or []) if isinstance(out, dict) else []
+    want = ['+%06X' % (first + n) for n in range(sum(1 for x in o if x['op'] == 'record_new'))]
+    if made[:len(want)] != want:
+        raise RuntimeError('the shirts and shorts got other keys than planned (%s vs %s): undo this step' % (made[:2], want[:2]))
+    return rep
+
+
 def apply_shorts(server):
     """shorts_ops as one Undo; checks the keys."""
     pr = server.PR

@@ -198,6 +198,92 @@ def paint_shorts(gd, style, worn=False, seed=1, mask=None):
     return printed(base, mask if mask is not None else shorts_mask(gd), style, worn, seed)
 
 
+# Shirt and shorts (the user, 21 Nov 2026: "hawaiian shirt+shorts (like khaki or jean)"): the Powder Gang's shorts, in
+# plain cloth, under the shirt's top (outfitjoin). The whole of the shorts' shape is the cloth, the
+# ragged flap below the belt with it (the user: colour it in), never the strap and pouches left of STRAP_U.
+CLOTHS = {'Khaki': ((186, 166, 120), 0.04), 'Denim': ((62, 88, 128), 0.08)}
+JOIN_CUT = 68.0             # (outfitjoin: the shirt's triangles over this height, the Powder Gang's under it)
+JOIN_UNDER = 74.0           # (the Powder Gang's kept to this height: under the shirt's belt, so nothing between shows)
+JOIN_TAKE = ['Arms:0', 'objdefault01:0', 'objdefault01:1']      # (its legs' skin, belt and boots, the shorts)
+# Barefoot (the user, 21 Nov 2026: "maybe the shorts variant should be wearing sandals?"; the game has none, so bare feet now,
+# FOLab's own flip-flops later): under the socks the Powder Gang's legs and boots (the boots are on the shorts' shape) give way to Honest Hearts' White Legs'
+# bare legs and feet (its body's skin, 'Arms:0'), the two overlapping a little.
+FEET_FROM = 'meshes\\nvdlc02\\armor\\whitelegs\\whitelegs_v02.nif'
+FEET_CUT, FEET_UNDER = 26.0, 28.0
+
+
+def plain_shorts_mask(gd):
+    """0-255: every triangle of the shorts (the joined outfit keeps them whole), the flap included."""
+    orig = _picture(gd, SHORTS['textures'] + SHORTS['picture'])
+    w, h = orig.size
+    tri = Image.new('L', (w, h), 0)
+    md = ImageDraw.Draw(tri)
+    for s in shorts_shapes(gd, 'm'):
+        uv, idx, P = s['uv'], s['i'], s['p']
+        for t in range(0, len(idx), 3):
+            ks = [idx[t + k] for k in range(3)]
+            if sum(uv[2 * k] for k in ks) / 3 > STRAP_U:
+                md.polygon([(uv[2 * k] * w, uv[2 * k + 1] * h) for k in ks], fill=255)
+    return tri.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(1.0))
+
+
+def paint_cloth_shorts(gd, cloth, mask=None):
+    """The shorts' picture in plain khaki or denim (CLOTHS): the cloth's own light and folds kept, a twill's diagonal over."""
+    return _cloth_over(gd, SHORTS['picture'], cloth, mask if mask is not None else plain_shorts_mask(gd))
+
+
+def _cloth_over(gd, picture, cloth, mask):
+    rgb, weave = CLOTHS[cloth]
+    base = _picture(gd, SHORTS['textures'] + picture)
+    mask = mask.resize(base.size)
+    L = np.asarray(base.convert('L'), dtype=np.float32)
+    inside = np.asarray(mask) > 128
+    Lm = L / max(1.0, float(np.median(L[inside])))
+    h, w = L.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    tw = 1.0 + weave * np.sign(np.sin((xx + yy) * 0.9))
+    col = np.clip(np.array(rgb, np.float32)[None, None] * np.clip(Lm * tw, 0.3, 1.6)[..., None], 0, 255).astype(np.uint8)
+    return Image.composite(Image.fromarray(col, 'RGB'), base, mask)
+
+
+FLAP_PICTURE = 'powdergang01.dds'          # (the belt, the boots and the ragged flap under the belt share this one)
+FLAP = (40.0, JOIN_UNDER)                     # (the flap: its triangles' middles between these heights; the boots are lower)
+
+
+def flap_mask(gd):
+    """0-255: the ragged flap under the belt on its picture (the belt is the shirt's in the joined outfit)."""
+    orig = _picture(gd, SHORTS['textures'] + FLAP_PICTURE)
+    w, h = orig.size
+    tri = Image.new('L', (w, h), 0)
+    md = ImageDraw.Draw(tri)
+    tex = (SHORTS['textures'] + FLAP_PICTURE).lower()
+    for s in nif.mesh_from_nif(gd.read_file(SHORTS['folder'] + SHORTS['meshes']['m']), placed=False):
+        if s['tex'].lower() != tex:
+            continue
+        uv, idx, P = s['uv'], s['i'], s['p']
+        for t in range(0, len(idx), 3):
+            ks = [idx[t + k] for k in range(3)]
+            if FLAP[0] < sum(P[3 * k + 2] for k in ks) / 3 < FLAP[1]:
+                md.polygon([(uv[2 * k] * w, uv[2 * k + 1] * h) for k in ks], fill=255)
+    return tri.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(1.0))
+
+
+def paint_cloth_flap(gd, cloth, mask=None):
+    """The belt's picture with the flap in the shorts' cloth (the user: colour it in), as bright as the shorts."""
+    return _cloth_over(gd, FLAP_PICTURE, cloth, mask if mask is not None else flap_mask(gd))
+
+
+def shirt_and_shorts(gd):
+    """The worn model of the Hawaiian shirt over the Powder Gang's shorts, barefoot (outfitjoin twice), in the game's own
+    pictures: the caller retextures it."""
+    import outfitjoin
+    top = gd.read_file(FOLDER + GARMENTS['m'][0])
+    out = outfitjoin.join(top, gd.read_file(SHORTS['folder'] + SHORTS['meshes']['m']), JOIN_CUT, JOIN_TAKE,
+                          top_keep=['UpperBody'], bottom_cut=JOIN_UNDER)
+    return outfitjoin.join(out, gd.read_file(FEET_FROM), FEET_CUT, ['Arms:0'], top_keep=['Arms:0', 'objdefault01:0', 'objdefault01:1'],
+                           bottom_cut=FEET_UNDER)
+
+
 def dds_of(im):
     """A picture as the game's texture: DXT1 with its smaller copies."""
     rgba = im.convert('RGBA')

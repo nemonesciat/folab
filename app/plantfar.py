@@ -254,10 +254,10 @@ def _rough(k, j, i):
 BOUGHS = 5                      # (branches seen between the masses: from the crown's foot out to the lowest few)
 
 
-def _boughs(piece, crown_foot, tex, normal):
+def _boughs(piece, crown_foot, tex, normal, lumps=None):
     """A few branches from where the trunk meets the crown out and up into its lowest masses: thin dark tubes, what
     shows between the leaves of a real tree far off and keeps a crown from reading as one ball on a stick."""
-    lumps = sorted(_lumps.get(piece) or (), key=lambda g: g[2])[:BOUGHS]
+    lumps = sorted((lumps if lumps is not None else _lumps.get(piece)) or (), key=lambda g: g[2])[:BOUGHS]
     P, N, UV, I = [], [], [], []
     fx, fy, fz = crown_foot
     SIDES = 4
@@ -290,12 +290,13 @@ def _boughs(piece, crown_foot, tex, normal):
     return {'p': P, 'n': N, 'uv': UV, 'i': I, 'tex': tex, 'normal': normal, 'gloss': 10.0, 'alpha': False, 'glow': '', 'glow_mult': 1.0}
 
 
-def _smooth_crown(piece, tex, normal):
+def _smooth_crown(piece, tex, normal, lumps=None, ring=None, round_=None):
     """The crown's lumps as one shape: each a bumpy ball, its corners shared (the distant blocks work out normals from
     the triangles round each corner: shared, it shades soft; the modelmake ball's faces each had their own and every
     face showed flat, the user, 20 Nov 2026: "they still look too blocky"), its underside drawn in."""
     P, N, UV, I = [], [], [], []
-    for k, (gx, gy, gz, sx, sy, sz) in enumerate(_lumps.get(piece) or ()):
+    RING, ROUND = ring or globals()['RING'], round_ or globals()['ROUND']
+    for k, (gx, gy, gz, sx, sy, sz) in enumerate((lumps if lumps is not None else _lumps.get(piece)) or ()):
         base = len(P) // 3
         for j in range(RING + 1):
             lat = math.pi * j / RING
@@ -372,8 +373,13 @@ def build(piece):
         name = 'jungle/canopy_far_' + piece
         tex, nor = ms.tex_path(name), ms.tex_path(name, True)
         crown = _palm_fronds(piece, tex, nor) if piece in PALMS else _smooth_crown(piece, tex, nor)
+        vine = None
+        if piece not in PALMS and _lumps.get(piece):
+            import farplants
+            # (hanging vines, the user 21 Nov 2026: a shape of their own, their own picture, so the crown measures as before)
+            vine = farplants._vines(_lumps[piece], ms.tex_path(farplants.VINE), ms.tex_path(farplants.VINE, True), len(piece))
         rest = [s for s in made['far']['shapes'] if s.get('tex', '').lower() != tex.lower()]
-        shapes = rest + [crown]
+        shapes = rest + [crown] + ([vine] if vine else [])
         bark = next((s for s in rest if 'bark' in (s.get('tex') or '').lower()), None)
         if piece not in PALMS and bark and _lumps.get(piece):
             foot = _crown_foot.get(piece)
@@ -386,6 +392,8 @@ def build(piece):
         made['far']['shapes'] = shapes
         made['files'][made['mesh'][:-4] + '_lod.nif'] = data
         made['files'][tex], made['files'][nor] = ms.texture_files(name)
+        if vine:
+            made['files'][ms.tex_path(farplants.VINE)], made['files'][ms.tex_path(farplants.VINE, True)] = ms.texture_files(farplants.VINE)
     return made
 
 
