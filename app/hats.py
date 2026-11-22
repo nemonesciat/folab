@@ -6,10 +6,10 @@
              rough where the plaits end, a band of darker plait
 
 How the game's own hats are made (the Pre-War Hat, suithat.nif, and the cowboy hats; read 20 Nov 2026):
-  - worn: rigid, not skinned. A NiNode, one shape, no 'Prn' (as the cowboy hats): the game hangs it on HeadAnims, square
-    to the world. The Pre-War Hat's 'Prn' = 'Bip01 Head' puts it on that bone, which the skeleton turns a quarter (its z is
-    the head's left): FOLab's boater, built so, sat on its edge on the side of the head in game (21 Nov 2026).
-    One model for men and women: the ARMO has only MODL and MOD2.
+  - worn: the gambler fedora and tuxedo hat are one shape skinned wholly to 'Bip01 Head', in the body's space, the file
+    holding its own Bip01 Head node; FOLab's are made so (nifmake.build_worn). The cowboy hats are rigid, but the exe hangs a
+    rigid hat on Bip01 Head itself, whose own x is the body's up: FOLab's boater, rigid and z-up, lay on its side in game
+    (21 Nov 2026, with Prn and without). One model for men and women: the ARMO has only MODL and MOD2.
   - the frame: offsets from the head bone along the world's own axes (z up, +y the way the face looks, x across), not the
     bone's turned axes. Measured so, the head's top is 15.1 over the bone, the forehead at z 9-10 reaches y 7.5 and the head
     there is 5.4 to each side; the Pre-War Hat's crown meets its brim at z ~9, the brim lower in front than behind (6 deg).

@@ -6,6 +6,12 @@ at the start of any Waikiki work, and before saying anything is ready.
 
 ## Open
 
+- **Boater still on the side of the head** (21 Nov 2026 ~17:50, nv-rs-pad main-d9243748, third person by a stream:
+  "boater still on side of head???"; screenshot `docs/waikiki-report-boater-side-2.webp`): after the 17:07 install with
+  the "no Prn" fix the player's boater still hangs against the left of the head, brim vertical. Checked: the new
+  boater.nif (16:56, 681d3e2e…) is the one in nv-rs, nv-rs-pad (mods and modgame\Data) and the build, so the fix
+  itself doesn't work. Passed to the people session.
+
 - **Distant trees too sparse** (21 Nov 2026, afternoon, 52 fps, looking NE at a green hill from a jungle rise; screenshot
   `docs/waikiki-report-far-foliage-sparse.webp`): "the distant foliage is a reallygood idea. its starting to look good. it
   should be a little denser though, maybe offer a few more sized to break monotony and big open stretches on distant
@@ -118,7 +124,11 @@ at the start of any Waikiki work, and before saying anything is ready.
   'Bip01 Head' as their parent ('Prn'), as the Pre-War Hat does; that bone is turned a quarter in the game's skeleton
   (its z is the head's left), so a hat made along the world's axes lies on its side. The game's cowboy hats name no bone
   and hang on HeadAnims, square to the world. Fixed in code (`nifmake.build_worn`: no Prn); the three hats' files
-  go into Waikiki with the shirts and shorts (`dressup.py`). Not yet seen in game.
+  go into Waikiki with the shirts and shorts (`dressup.py`). That was wrong: "boater still on side of head???" (21 Nov
+  ~17:50, nv-rs-pad). The real cause, from the exe: every hat slot's rigid model hangs on Bip01 Head itself, whose own x is
+  the body's up. Now the hats are skinned to that bone in the body's space, as the game's gambler fedora is (checked against
+  its skin numbers; `docs/waikiki-hats-on-head.png`, its "before" the user's screenshot). The user: "get it in asap";
+  `hatfix.py` through the story session. Not yet seen in game.
 - **A glitched water tile up the shore** (20 Nov 2026, in nv-rs by the ruined freeway: "glitched water tile up shore"): a cell's own river level laid flat over a bank lower than it. 13 cells of 51 with their own water had such banks; the low pockets inside each cell raised 12 over the water (294 points, 50 things raised with them), one cell whose level was wrong written dry; none left inside a cell (pockets on a cell's edge, shared with its neighbour, left). In every nv-rs ~12:05. The user's look: "Better".
 - **The city feels like the Mojave: "WHERE ARE THE PLANTS"** (20 Nov 2026, in nv-rs over the city, 21-27 fps: "this shit feels so unrealistic"; "i dont want a barren desert, but i dont want 10 fps. is this impossible?"). The grass grows on most wild ground (the census: about half the dry land by grassrule, more counting the mod's own twins it can't read; the rest roads and pavement) but thin. Made thick (`plantgrass.KINDS`: grasses 36-60, ferns 16-30, shrubs 12) and taro, heliconia and ti grown by the ground too; the far ground painted with what grows (`farfoliage.py`, through lodgen) next. Then the user's look at a lush stretch ("this has fewer trees and looks good too ... the answer isnt just more trees"): its ground is covered. Grass now right up to buildings (`plantgrass.BUILT_PTS`) and 384 from roads, not 512 (`CLEAR_PTS`). In every nv-rs ~12:05 with the thick grass. The user's look: "Better". Far ground green running.
 - **Water banding at the start's bay** (20 Nov 2026, in nv-rs, looking over Hanauma's bay: "what causes this water banding?"): a straight-edged lighter band across the water. Ruled out: no cell there is dry (one in the whole map, (21, -7)), all the bay's cells the same water (XCWT FalloutNV 030009), the world's far water (NAM4) is 0 in the mod. Likely, not proven: the far ground under the sea (distant land, coarser) standing shallower than the near sea bed, so the water past the loaded cells is drawn as shallow water.

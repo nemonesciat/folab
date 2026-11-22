@@ -345,13 +345,78 @@ def build_dropped(name, shapes, mass=0.5, material='cloth'):
     return _loose(name, shapes, mass, material, 4, [])
 
 
-def build_worn(name, shapes, bone=None):
-    """The bytes of a rigid thing worn on the head (a hat), as the game's cowboy hats: a NiNode, no collision, no 'Prn'.
-    The game hangs it on the head slot's own node (HeadAnims, square to the world: z up, +y the face), so its shapes are
-    laid out along the world's axes. A 'Prn' of 'Bip01 Head' hangs it on that bone instead, which the skeleton turns a
-    quarter (its z is the head's left): the boater sat on its edge on the side of the head (the user, 21 Nov 2026).
-    `bone` names a Prn for a model made in that bone's own frame."""
-    return _relay(build(name, shapes), root='NiNode', extras=[('Prn', bone)] if bone else [])
+# Where the skeleton's head bone stands at rest, in the body's space (the game's 'Bip01 Head' node as its own hats carry it:
+# the gambler fedora, the tuxedo hat; read 21 Nov 2026). Its turn is a quarter: the bone's x is the body's up.
+HEAD_AT = (4.957261808158364e-06, 0.24345922470092773, 112.8534927368164)
+HEAD_TURN = ((2.468686410850296e-08, 1.3266219411889324e-06, -1.0),
+             (0.002846590941771865, 0.9999959468841553, 1.3117851267452352e-06),
+             (0.9999959468841553, -0.0028465765062719584, 2.0910340126079063e-08))
+HEAD_PART = (257, 1)        # (the fedora's one dismember partition: flags, body part)
+
+
+def build_worn(name, shapes):
+    """The bytes of a hat worn as the game's own are (the gambler fedora, the tuxedo hat, the Boomers' hats): every
+    shape skinned wholly to 'Bip01 Head', its corners in the body's space at rest (the shapes are given in the head's
+    frame: offsets from the head bone along the body's axes, z up, +y the face; HEAD_AT is added), the file holding its
+    own 'Bip01 Head' node, no collision. Not rigid on the bone: a rigid model hangs in the bone's own turned frame (its
+    x is up), so the boater, built rigid in the body's axes, sat on its edge on the side of the head (21 Nov 2026)."""
+    import outfitjoin
+    moved = []
+    for sh in shapes:
+        sh = dict(sh)
+        P = list(sh['p'])
+        for k in range(0, len(P), 3):
+            for a in range(3):
+                P[k + a] += HEAD_AT[a]
+        sh['p'] = P
+        moved.append(sh)
+    data = build(name, moved)
+    n = nif.Nif(data)
+    blocks = [data[n.offsets[i]:n.offsets[i] + n.sizes[i]] for i in range(len(n.types))]
+    types = list(n.types)
+    strings = list(n.strings)
+    types[0] = 'NiNode'
+    if 'Bip01 Head' not in strings:
+        strings.append('Bip01 Head')
+    bone = len(blocks)
+    blocks.append(struct.pack('<iIiI', strings.index('Bip01 Head'), 0, -1, 0x8000E) + struct.pack('<3f', *HEAD_AT)
+                  + struct.pack('<9f', *[v for row in HEAD_TURN for v in row]) + struct.pack('<fIiII', 1.0, 0, -1, 0, 0))
+    types.append('NiNode')
+    R = tuple(tuple(HEAD_TURN[c][r] for c in range(3)) for r in range(3))         # (body to bone: the turn undone)
+    T = tuple(-sum(R[r][c] * HEAD_AT[c] for c in range(3)) for r in range(3))
+    for i, t in enumerate(n.types):
+        if t != 'NiTriStrips':
+            continue
+        b = n.block(i)
+        dat = n.block(b['data'])
+        V, tris = dat['verts'], dat['tris']
+        nv = len(V) // 3
+        in_bone = [tuple(sum(R[r][c] * V[3 * k + c] for c in range(3)) + T[r] for r in range(3)) for k in range(nv)]
+        mid = tuple(sum(q[a] for q in in_bone) / nv for a in range(3))
+        radius = max(sum((q[a] - mid[a]) ** 2 for a in range(3)) ** 0.5 for q in in_bone)
+        skin, sd, part = len(blocks), len(blocks) + 1, len(blocks) + 2
+        blocks.append(struct.pack('<iiiIiI', sd, part, 0, 1, bone, 1) + struct.pack('<HH', *HEAD_PART))
+        types.append('BSDismemberSkinInstance')
+        blocks.append(struct.pack('<13f', 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1) + struct.pack('<IB', 1, 1)
+                      + struct.pack('<9f', *[v for row in R for v in row]) + struct.pack('<3ff', *T, 1.0)
+                      + struct.pack('<4f', *mid, radius) + struct.pack('<H', nv)
+                      + b''.join(struct.pack('<Hf', k, 1.0) for k in range(nv)))
+        types.append('NiSkinData')
+        blocks.append(struct.pack('<I', 1) + struct.pack('<5H', nv, len(tris) // 3, 4, 0, 4) + struct.pack('<4H', 0, 0, 0, 0)
+                      + b'\x01' + struct.pack('<%dH' % nv, *range(nv))
+                      + b'\x01' + struct.pack('<4f', 1, 0, 0, 0) * nv
+                      + b'\x01' + struct.pack('<%dH' % len(tris), *tris)
+                      + b'\x01' + b'\x00' * (4 * nv))
+        types.append('NiSkinPartition')
+        blk = bytearray(blocks[i])
+        _s, refs = outfitjoin.links(n, i)
+        struct.pack_into('<i', blk, refs[-1] - n.offsets[i], skin)               # (the shape's skin instance)
+        blocks[i] = bytes(blk)
+    root = n.block(0)
+    _x, (kids_at, kids) = outfitjoin.links_node(n)
+    top = blocks[0]
+    blocks[0] = top[:kids_at] + struct.pack('<I%di' % (len(kids) + 1), len(kids) + 1, *kids, bone) + top[kids_at + 4 + 4 * len(kids):]
+    return outfitjoin._write(n, types, blocks, strings)
 
 
 # ---------- the file ----------

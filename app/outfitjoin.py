@@ -22,7 +22,7 @@ import struct
 
 import nif
 
-GEOM = ('NiTriShape',)
+GEOM = ('NiTriShape', 'NiTriStrips')
 SKIN = ('BSDismemberSkinInstance', 'NiSkinInstance')
 
 

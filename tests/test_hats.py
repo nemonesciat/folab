@@ -1,5 +1,5 @@
-"""FOLab's straw hats (hats.py): each worn model is laid out as the game's cowboy hats (a NiNode, no 'Prn', no
-collision; a Prn on Bip01 Head turned the boater on its side) and reads back as built; each dropped one has a box on the clutter layer; the game's head fits inside both
+"""FOLab's straw hats (hats.py): each worn model is laid out as the game's gambler fedora (skinned wholly to
+Bip01 Head, in the body's space; rigid on that quarter-turned bone the boater lay on its side) and reads back as built; each dropped one has a box on the clutter layer; the game's head fits inside both
 crowns; the ops make two ARMO of the mod's own after the Rattan Cowboy Hat and put them in the surfers' head list in its
 place, which the written plugin shows."""
 import os
@@ -28,12 +28,30 @@ head = hats.head_points(gd)
 check('the game\'s head measured from its bone: its top 15 over it', 14.5 < max(p[2] for p in head) < 15.5, max(p[2] for p in head))
 for name in hats.HATS:
     m = hats.build(name)
-    check('%s: the worn model reads back as built' % name, nifmake.check(m['worn'], m['shapes']) == [])
+    body = [dict(sh, p=[v + nifmake.HEAD_AT[k % 3] for k, v in enumerate(sh['p'])]) for sh in m['shapes']]
+    check('%s: the worn model reads back as built, in the body\'s space at the head' % name, nifmake.check(m['worn'], body) == [])
     n = nif.Nif(m['worn'])
     root = n.block(0)
     extras = [(n.string(struct.unpack_from('<i', m['worn'], n.offsets[e])[0]), n.string(struct.unpack_from('<i', m['worn'], n.offsets[e] + 4)[0])) for e in root['extra']]
-    check('%s: worn as the game\'s cowboy hats are (a NiNode, no Prn: never on the quarter-turned Bip01 Head, no collision)' % name,
-          n.types[0] == 'NiNode' and extras == [] and root['collision'] == -1 and 'bhkRigidBody' not in n.types, (n.types[0], extras))
+    check('%s: worn as the game\'s gambler fedora is (a NiNode, no Prn, no collision, a Bip01 Head node of its own)' % name,
+          n.types[0] == 'NiNode' and extras == [] and root['collision'] == -1 and 'bhkRigidBody' not in n.types
+          and any(t == 'NiNode' and n.block(i)['name'] == 'Bip01 Head' for i, t in enumerate(n.types)), (n.types[0], extras))
+    shapes_ = [i for i, t in enumerate(n.types) if t == 'NiTriStrips']
+    skins = [n.block(i)['skin'] for i in shapes_]
+    fed = gd.read_file('meshes\\armor\\headgear\\gambler\\gambler_fedora_01.nif')
+    fn = nif.Nif(fed)
+    fbone = struct.unpack_from('<12f', fed, fn.offsets[fn.types.index('NiSkinData')] + 57)
+    same = True
+    for sk in skins:
+        o = n.offsets[sk]
+        sd, part, rt, nb = struct.unpack_from('<iiiI', m['worn'], o)
+        bone = struct.unpack_from('<i', m['worn'], o + 16)[0]
+        mine = struct.unpack_from('<12f', m['worn'], n.offsets[sd] + 57)
+        same &= nb == 1 and n.block(bone)['name'] == 'Bip01 Head' and all(abs(a - b) < 0.01 for a, b in zip(mine, fbone))
+    check('%s: every shape skinned wholly to Bip01 Head with the fedora\'s bind (never rigid on the quarter-turned bone)' % name,
+          skins and all(k >= 0 for k in skins) and same)
+    import outfitjoin
+    check('%s: every triangle drawn from its partition' % name, all(k > 0 for _nm, k in outfitjoin.drawn(m['worn'])))
     got = hkshape.collision_shapes(m['go'])
     check('%s: the dropped model reads back, a box on the clutter layer' % name,
           nifmake.check(m['go'], m['go_shapes'])[1:] == [] and len(got) == 1 and got[0]['layer'] == 4, [g['layer'] for g in got])

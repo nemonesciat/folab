@@ -138,9 +138,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   the mod's own (the hotels' floors) are left. garmentprint needs numpy/PIL/scipy (not in FOLab.exe's Python): a build step
   run from the developer's Python. `apply_clear` takes the Mojave's gangs (`MOJAVE_SIDES`, by faction) out of places of the
   mod's own (the hotels' floors: 138 out, 20 Nov 2026). Straw hats (`hats.py`, `tests/test_hats.py`): FOLab's boater and
-  lauhala sun hat, lathed profiles; worn = a NiNode with NO 'Prn' (`nifmake.build_worn`, as the cowboy hats: the game hangs
-  it on HeadAnims, square to the world; a Prn of 'Bip01 Head', the Pre-War Hat's, puts it on that bone, which the skeleton
-  turns a quarter, and the boater sat on its edge on the side of the head in game, 21 Nov 2026), dropped = `build_dropped`
+  lauhala sun hat, lathed profiles; worn = skinned wholly to 'Bip01 Head' in the body's space, as the game's gambler fedora
+  and tuxedo hat (`nifmake.build_worn`, `HEAD_AT`/`HEAD_TURN` the bone at rest). Never rigid: the exe hangs every hat slot's
+  rigid model on Bip01 Head (its slot-to-bone table), whose own x is the body's up, so the boater, rigid and z-up, lay on
+  its side in game twice on 21 Nov 2026 (Prn or not); `docs/waikiki-hats-on-head.png`. dropped = `build_dropped`
   (clutter layer). A hat's frame is offsets from the head along the WORLD's axes (z up, +y the face); `clearance` checks
   the game's head inside the crown. `hats.ops` puts them in the surfers' head list in the Rattan Cowboy Hat's place.
   Shirt and shorts (`outfitjoin.py`; the user, 21 Nov 2026: "hawaiian shirt+shorts (like khaki or jean)"; picture
