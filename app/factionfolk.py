@@ -156,7 +156,9 @@ def _faction(gd, edid, name):
 
 def _ammo_of(gd, pr, weap_key):
     rec = pr.records.get(weap_key) if weap_key.startswith('+') else recordio.load(gd, gd.from_key(weap_key))
-    return recordio.field(rec, 'NAM0') if rec else None
+    import guns
+    # (the weapon's NAM0 is most often a form list: an inventory takes the rounds themselves, guns.ammo_item)
+    return guns.ammo_item(gd, recordio.field(rec, 'NAM0'), pr) if rec else None
 
 
 def person(gd, pr, face, edid, name, g, items, arms, faction):

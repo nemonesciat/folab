@@ -31,6 +31,7 @@ KINDS = {
     'broken': (ERROR, 'Damaged records', 'Records FOLab can\'t read. The game may not be able to either.'),
     'master': (ERROR, 'Missing masters', 'Files this plugin needs that aren\'t in the game\'s Data folder. The game won\'t start with it switched on.'),
     'link': (ERROR, 'Links to things that don\'t exist', 'Something points at a record that isn\'t there. Usually harmless until the game reaches for it, then a crash or something missing.'),
+    'not_an_item': (ERROR, 'Inventories holding what isn\'t an item', 'A container, an actor or a levelled list holds a record that isn\'t an item (most often a gun\'s ammo LIST, AmmoList9mm, where the rounds themselves belong). The game handles it as an item and can crash in its inventory code.'),
     'deleted_ref': (ERROR, 'Deleted things', 'Things of the game\'s that were deleted outright. A save that knew them, or another mod using them, can crash the game. The safe way is to disable them and sink them out of sight.'),
     'deleted_record': (WARN, 'Deleted records', 'Records of the game\'s that were deleted. Anything else using them will break.'),
     'no_compile': (ERROR, 'Scripts with no compiled code', 'Scripts with text but nothing the game can run. They do nothing in game.'),
@@ -275,6 +276,7 @@ class Scan:
             for t, d in subs:
                 f.setdefault(t, d)
             self.check_links(rec, path, subs, used)
+            self.check_items(rec, path, subs)
             if rec.flags & tes4.DELETED:
                 self.check_deleted(rec, path)
             if v >> 24 < self.own:
@@ -366,6 +368,29 @@ class Scan:
                 elif (n, o) in known and not bad and rec.tag != 'CELL':
                     fix = {'action': 'clear_link', 'key': k, 'target': self.key(v), 'label': 'Clear the link'}
             self.add('link', text, self.where(rec, path), fix)
+
+    ITEMS = {'ARMO', 'WEAP', 'AMMO', 'ALCH', 'MISC', 'BOOK', 'KEYM', 'NOTE', 'LVLI', 'IMOD', 'CCRD', 'CHIP', 'CMNY', 'LIGH', 'CDCK'}
+    HOLDS = {'CONT': ITEMS, 'NPC_': ITEMS, 'CREA': ITEMS, 'LVLI': ITEMS, 'LVLN': {'NPC_', 'LVLN'}, 'LVLC': {'CREA', 'LVLC'}}
+
+    def check_items(self, rec, path, subs):
+        """What an inventory or levelled list holds is a record of a kind it can hold (CNTO item, LVLO reference)."""
+        want = self.HOLDS.get(rec.tag)
+        if not want:
+            return
+        import struct
+        for t, d in subs:
+            if t == 'CNTO' and len(d) >= 4:
+                v = struct.unpack_from('<I', d, 0)[0]
+            elif t == 'LVLO' and len(d) >= 8:
+                v = struct.unpack_from('<I', d, 4)[0]
+            else:
+                continue
+            if not self.exists(v):
+                continue                    # (told as a link to nothing)
+            tag = self.tag_of(v)
+            if tag and tag not in want:
+                self.add('not_an_item', '%s holds %s, a %s, not an item.' % (self.what(rec), self.edid(v) or self.key(v), self.word(tag) if hasattr(self, 'word') else tag),
+                         self.where(rec, path))
 
     def check_deleted(self, rec, path):
         v = rec.formid

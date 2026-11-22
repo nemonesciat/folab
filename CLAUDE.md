@@ -148,7 +148,8 @@ the model for style, UI and approach. Python, standard library first, code in `a
   `docs/waikiki-shirt-shorts-mock.png`): no game outfit is one, so `outfitjoin.join` makes one model of two worn outfits
   (the top of one over the bottom of another, overlapping a little; triangles left out of a shape's data as three of one
   corner and out of its NiSkinPartition, rewritten as triangle lists; the other's skinned blocks added, linked to the top's
-  bones by name). `garmentprint.shirt_and_shorts`: the Pre-War Spring shirt over the Powder Gang's shorts (its boots are on
+  bones by name; a piece or shape left with no triangle is left out, as the game stops drawing an empty one: `empty_parts`).
+  `garmentprint.shirt_and_shorts`: the Pre-War Spring shirt over the Powder Gang's shorts (its boots are on
   the shorts' shape), barefoot from White Legs (the game has no sandals; FOLab's own flip-flops later), shorts in plain
   khaki or denim (`CLOTHS`). `peopledress.combo_ops`: 6 ARMO, the surfers' body list a third each shirt and trousers,
   board shorts, shirt and shorts ("variety is good"); women keep the printed dress.

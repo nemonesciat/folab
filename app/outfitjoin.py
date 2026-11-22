@@ -59,6 +59,59 @@ def _av(d, p, strs, refs):
     return p + 4
 
 
+def _extra_at(d, o):
+    """Where an NiGeometryData's 'additional data' link is (the same for shape and strips data)."""
+    p = o + 4
+    n = struct.unpack_from('<H', d, p)[0]
+    p += 2 + 2
+    if d[p]:
+        p += 12 * n
+    p += 1
+    vflags = struct.unpack_from('<H', d, p)[0]; p += 2
+    if d[p]:
+        p += 12 * n
+        if vflags & 0x1000:
+            p += 24 * n
+    p += 1 + 16
+    if d[p]:
+        p += 16 * n
+    p += 1
+    p += 8 * n * (vflags & 1)
+    return p + 2
+
+
+def compact(data):
+    """The file with only the blocks its root reaches, numbered afresh in the same order, every link put right. A block
+    nothing holds is freed by the game as the file loads; a shape's left like that (the belt-and-boots shape taken out of
+    the root) crashed nv-rs when the outfit was put on ("read of unmapped memory" in the renderer's geometry groups,
+    21 Nov 2026). The game's own outfits have none."""
+    n = nif.Nif(data)
+    seen, todo = set(), [0]
+    while todo:
+        i = todo.pop()
+        if i < 0 or i in seen:
+            continue
+        seen.add(i)
+        todo += [_i(data, q) for q in links(n, i)[1]]
+    keep = sorted(seen)
+    if len(keep) == len(n.types):
+        return data
+    num = {old: k for k, old in enumerate(keep)}
+    blocks, types = [], []
+    for old in keep:
+        o = n.offsets[old]
+        blk = bytearray(data[o:o + n.sizes[old]])
+        for q in links(n, old)[1]:
+            r = _i(data, q)
+            if r >= 0:
+                if r not in num:
+                    raise JoinError('block %d links to %d, which is not kept' % (old, r))
+                struct.pack_into('<i', blk, q - o, num[r])
+        blocks.append(bytes(blk))
+        types.append(n.types[old])
+    return _write(n, types, blocks, list(n.strings))
+
+
 def _data_spots(d, o):
     """(where the triangle count is, where the triangles start, where 'additional data' is) of an NiTriShapeData."""
     p = o + 4
@@ -106,8 +159,15 @@ def links(n, i):
     elif t == 'BSShaderPPLightingProperty':
         p = _net(d, o, strs, refs)
         refs.append(p + 2 + 4 + 4 + 4 + 4 + 4)  # flags, type, flags, flags 2, environment scale, clamp: the texture set
-    elif t == 'NiTriShapeData':
-        refs.append(_data_spots(d, o)[2])
+    elif t in ('NiTriShapeData', 'NiTriStripsData'):
+        refs.append(_extra_at(d, o))
+    elif t in ('NiNode', 'BSFadeNode'):
+        p = _av(d, o, strs, refs)
+        k = _u(d, p)
+        refs += [p + 4 + 4 * j for j in range(k)]           # children
+        p += 4 + 4 * k
+        k = _u(d, p)
+        refs += [p + 4 + 4 * j for j in range(k)]           # effects
     elif t in SKIN:
         refs += [o, o + 4, o + 8]           # skin data, partition, skeleton root
         nb = _u(d, o + 12)
@@ -170,7 +230,10 @@ def _pieces_bytes(pieces):
 
 def _hide(buf, n, shape, keep, parts):
     """Turns each triangle of the shape whose middle (bind pose) keep(z) refuses into three of one corner in its data, and
-    leaves it out of its partition (rewritten as plain triangles into parts[block]). Returns how many went."""
+    leaves it out of its partition (rewritten as plain triangles into parts[block]). A piece of the partition left with no
+    triangle goes, and its entry in the dismember list with it (parts[skin instance]): the game draws every piece, and
+    one with nothing to draw stopped it (nv-rs: "DrawIndexedPrimitive without an index buffer", 21 Nov 2026, the first
+    shirt and shorts). Returns how many triangles the shape still draws."""
     b = n.block(shape)
     V0 = n.block(b['data'])['verts']
     R, t0, sc = b['R'], b['t'], b['s']          # (the shape's own place under the root: its corners are kept round it)
@@ -196,8 +259,19 @@ def _hide(buf, n, shape, keep, parts):
         for pc in pieces:
             vm = pc['vmap']
             pc['tris'] = [t for t in pc['tris'] if tuple(sorted(vm[c] for c in t) if vm else sorted(t)) not in gone]
-        parts[part] = _pieces_bytes(pieces)
-    return len(gone)
+        kept = [k for k, pc in enumerate(pieces) if pc['tris']]
+        parts[part] = _pieces_bytes([pieces[k] for k in kept])
+        if n.types[skin] == 'BSDismemberSkinInstance':
+            o = n.offsets[skin]
+            nb = _u(d, o + 12)
+            at = o + 16 + 4 * nb
+            count = _u(d, at)
+            if count != len(pieces):
+                raise JoinError('a dismember list of %d for %d pieces' % (count, len(pieces)))
+            entries = [d[at + 4 + 4 * k:at + 8 + 4 * k] for k in range(count)]
+            parts[skin] = d[o:at] + struct.pack('<I', len(kept)) + b''.join(entries[k] for k in kept)
+        return sum(len(pieces[k]['tris']) for k in kept)
+    return nt - len(gone)
 
 
 def _reach(n, start):
@@ -223,17 +297,21 @@ def join(top, bottom, cut, take, top_keep=None, bottom_keep=(), bottom_cut=None)
         raise JoinError('the two outfits are not of one format')
     A = bytearray(top)
     pa, pb = {}, {}
+    empty = set()                                   # (shapes left with nothing to draw: out of the root's children)
     for i, t in enumerate(a.types):
         if t in GEOM and (top_keep is None or a.block(i)['name'] in top_keep):
-            _hide(A, a, i, lambda z: z >= cut, pa)
+            if not _hide(A, a, i, lambda z: z >= cut, pa):
+                empty.add(i)
     B = bytearray(bottom)
     shapes = {b.block(i)['name']: i for i, t in enumerate(b.types) if t in GEOM}
     missing = [s for s in take if s not in shapes]
     if missing:
         raise JoinError('the bottom outfit has no %s' % ', '.join(missing))
-    for name in take:
+    take = list(take)
+    for name in list(take):
         if name not in bottom_keep:
-            _hide(B, b, shapes[name], lambda z: z < (cut if bottom_cut is None else bottom_cut), pb)
+            if not _hide(B, b, shapes[name], lambda z: z < (cut if bottom_cut is None else bottom_cut), pb):
+                take.remove(name)
     blocks = [pa.get(i) or bytes(A[a.offsets[i]:a.offsets[i] + a.sizes[i]]) for i in range(len(a.types))]
     types = list(a.types)
     strings = list(a.strings)
@@ -241,14 +319,19 @@ def join(top, bottom, cut, take, top_keep=None, bottom_keep=(), bottom_cut=None)
     adding = sorted(set(k for name in take for k in _reach(b, shapes[name])))
     new = {old: len(blocks) + k for k, old in enumerate(adding)}
     b_root = 0
+    names = {a.block(i)['name'] for i, t in enumerate(a.types) if t in GEOM}
     for old in adding:
         o = b.offsets[old]
-        blk = bytearray(B[o:o + b.sizes[old]])
+        blk = bytearray(pb.get(old) or B[o:o + b.sizes[old]])     # (a rewritten partition or dismember list: links first)
         strs, refs = links(b, old)
         for p in strs:
             s = _i(B, p)
             if s >= 0:
                 text = b.string(s)
+                if b.types[old] in GEOM and p == o:             # (every shape its own name, as in the game's outfits)
+                    while text in names:
+                        text += '+'
+                    names.add(text)
                 if text not in strings:
                     strings.append(text)
                 struct.pack_into('<i', blk, p - o, strings.index(text))
@@ -269,14 +352,16 @@ def join(top, bottom, cut, take, top_keep=None, bottom_keep=(), bottom_cut=None)
             else:
                 raise JoinError('block %d links to %d (%s), not joined' % (old, r, b.types[r]))
             struct.pack_into('<i', blk, p - o, v)
-        blocks.append(pb.get(old) or bytes(blk))
+        blocks.append(bytes(blk))
         types.append(b.types[old])
     root = blocks[0]
     strs, refs = links_node(a)
     kids_at, kids = refs
+    tail = root[kids_at + 4 + 4 * len(kids):]
+    kids = [k for k in kids if k not in empty]
     blocks[0] = root[:kids_at] + struct.pack('<I', len(kids) + len(take)) + b''.join(struct.pack('<i', k) for k in kids) + \
-        b''.join(struct.pack('<i', new[shapes[name]]) for name in take) + root[kids_at + 4 + 4 * len(kids):]
-    return _write(a, types, blocks, strings)
+        b''.join(struct.pack('<i', new[shapes[name]]) for name in take) + tail
+    return compact(_write(a, types, blocks, strings))
 
 
 def links_node(n):
@@ -313,6 +398,46 @@ def _write(a, types, blocks, strings):
     # (the footer: the roots, as the top had them)
     tail = d[a.offsets[-1] + a.sizes[-1]:]
     return head + b''.join(blocks) + tail
+
+
+def empty_parts(data):
+    """[(shape name, what)]: every shape the root holds whose data or skin pieces have nothing to draw (the game stops on
+    one), every dismember list not as long as its partition, every block nothing holds (the game frees it as it loads:
+    a crash on putting the outfit on: shapes, their data and skin; the game's 498 worn models have none). [] is good."""
+    n = nif.Nif(data)
+    bad = []
+    seen, todo = set(), [0]
+    while todo:
+        i = todo.pop()
+        if i < 0 or i in seen:
+            continue
+        seen.add(i)
+        try:
+            todo += [_i(data, q) for q in links(n, i)[1]]
+        except JoinError:
+            pass
+    for i, t in enumerate(n.types):                     # (the game's own worn models never leave one of these unheld)
+        if i not in seen and t in GEOM + SKIN + ('NiTriShapeData', 'NiTriStripsData', 'NiSkinData', 'NiSkinPartition'):
+            bad.append(('block %d' % i, '%s nothing holds' % t))
+    kids = set(n.block(0)['children'])
+    for i, t in enumerate(n.types):
+        if t not in GEOM or i not in kids:
+            continue
+        b = n.block(i)
+        tris = n.block(b['data'])['tris']
+        if not any(not (tris[k] == tris[k + 1] == tris[k + 2]) for k in range(0, len(tris), 3)):
+            bad.append((b['name'], 'no triangle in its data'))
+        if b['skin'] >= 0:
+            o = n.offsets[b['skin']]
+            part = _i(n.data, o + 4)
+            pieces, _size = _pieces(n.data, n.offsets[part])
+            if not pieces or any(not pc['tris'] for pc in pieces):
+                bad.append((b['name'], 'a skin piece with no triangle'))
+            if n.types[b['skin']] == 'BSDismemberSkinInstance':
+                nb = _u(n.data, o + 12)
+                if _u(n.data, o + 16 + 4 * nb) != len(pieces):
+                    bad.append((b['name'], 'dismember list not as long as its pieces'))
+    return bad
 
 
 def drawn(data):

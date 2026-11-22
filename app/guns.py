@@ -543,9 +543,30 @@ def weapon(gd, name, made, fp_key):
 
 
 def rounds_of(gd, edid):
-    """The ammunition (a key) a game gun fires."""
+    """The ammunition (a key) a game gun fires: as its NAM0 names it, most often a form list of the kinds it takes
+    (AmmoList9mm: plain, +P, hollow point, hand load). Right for a weapon's NAM0; never put it in an inventory (ammo_item)."""
     import recordio
     return next(s['value'] for s in recordio.load(gd, _game(gd, edid, 'WEAP'))['subs'] if s['tag'] == 'NAM0')
+
+
+def ammo_item(gd, key, pr=None):
+    """What goes in a crate, an actor's inventory or a levelled list for ammo `key`: the AMMO itself, or a form list's first
+    kind (its plain rounds). A list put in an inventory is a record of the wrong kind where the game wants an item: Waikiki
+    had 18 such (crates, the Huang's guards and loot list), and nv-rs crashed in inventory code, 21 Nov 2026."""
+    import recordio
+    if not key:
+        return key
+    if isinstance(key, str) and key.startswith('+'):
+        rec = pr.records.get(key) if pr else None
+    else:
+        f = gd.from_key(key) if isinstance(key, str) else key
+        if gd.forms[f][1].tag != 'FLST':
+            return key
+        rec = recordio.load(gd, f)
+    if not rec or rec.get('type') not in (None, 'FLST'):
+        return key
+    first = next((s['value'] for s in rec['subs'] if s['tag'] == 'LNAM'), None)
+    return first or key
 
 
 CRATE = 'VLootGunsFootlocker01Gen05'      # (a footlocker: no script, doesn't refill)
@@ -562,7 +583,7 @@ def test_crate(gd, edid, things):
     for s in rec['subs']:
         if s['tag'] in ('MODT', 'CNTO', 'COED'):
             if s['tag'] == 'CNTO' and not put:
-                subs += [dict(one, fields=[dict(f, value=k if f.get('name') == 'Item' else n if f.get('name') == 'Count' else f.get('value'))
+                subs += [dict(one, fields=[dict(f, value=ammo_item(gd, k) if f.get('name') == 'Item' else n if f.get('name') == 'Count' else f.get('value'))
                                            for f in one['fields']]) for k, n in things]
                 put = True
             continue
@@ -635,7 +656,7 @@ def huang_ops(pr, gd, names=HUANG_GUNS):
         n += 2
     rounds = {}
     for name in names:
-        r = rounds_of(gd, OVERRIDES.get(name, {}).get('ammo', GUNS[name][2]))
+        r = ammo_item(gd, rounds_of(gd, OVERRIDES.get(name, {}).get('ammo', GUNS[name][2])))
         rounds[r] = max(rounds.get(r, 0), AMMO[name])
     guns_list, ammo_list = '+%06X' % n, '+%06X' % (n + 1)
     ops += [{'op': 'record_new', 'record': _lvli('FOLabGunsHuang', HUANG_NONE, [(keys[x], 1) for x in names])},

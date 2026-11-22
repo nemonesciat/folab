@@ -117,8 +117,12 @@ at the start of any Waikiki work, and before saying anything is ready.
   coloured in (it was the shirt outfit's own trousers: cut at the belt now), surfers an even mix (shirt and trousers,
   board shorts, shirt and shorts: "variety is good. some surfers having just shorts too"), and "maybe the shorts variant
   should be wearing sandals?": the game has none, so barefoot now (White Legs' feet), FOLab's own flip-flops later.
-  Built (`outfitjoin.py`, `peopledress.combo_ops`, tests pass); into Waikiki through the story session (`dressup.py`).
-  Not yet in the mod or seen in game.
+  Built (`outfitjoin.py`, `peopledress.combo_ops`, tests pass); into Waikiki through the story session (`dressup.py`, in
+  17:07). Crashed when put on (21 Nov ~18:56, nv-rs-pad: "it was running great and then crashed when i equipped shorts and
+  shirt"; "DrawIndexedPrimitive without an index buffer"): the joined model kept a shape with no triangles (the Powder
+  Gang's belt and boots, all cut) and skin pieces with none. Fixed in outfitjoin (empty pieces and shapes left out,
+  `empty_parts` checks); the six models again in `shortsfix.py`, waiting for the user's next build. Until then the six
+  files in nv-rs-pad are a stopgap (the shirt-and-trousers model, 19:09).
 - **The boater sits on the side of the head** (21 Nov 2026, in game, the player from behind: "boater also is on side of
   head"; the hat on its edge against the left of the head). Found: FOLab's worn hats (boater, lauhala, mahiole) named
   'Bip01 Head' as their parent ('Prn'), as the Pre-War Hat does; that bone is turned a quarter in the game's skeleton
@@ -228,3 +232,20 @@ at the start of any Waikiki work, and before saying anything is ready.
 - Barren ground east of Makai Tower and on the new land (18 Nov 2026): new land planted, bare ground filled (79,104).
 - Freeway pillars on cars, buildings and on other sections (18 Nov 2026): "it look spretty good besides those two
   spots", then the two overlaps taken out.
+
+- **nv-rs-pad crash logs, 21 Nov 2026** (the user asked the Workshop to check them; read by the story session ~19:30).
+  Waikiki's data had 18 inventory or list entries holding a FORM LIST where an item belongs: AmmoList9mm,
+  AmmoList556mm and AmmoList25mmGrenade, the gun's NAM0 copied into inventories. They were in the QLZ-87 test crate, the
+  start footlocker, the Huang's 10 guards and 3 elders, and the Huang's ammo list.
+  Fixed in code: `guns.ammo_item`, `factionfolk._ammo_of`, and a health check `not_an_item`, which finds all 18 in the
+  installed plugin. The data fix is `fixammo_run.py`, queued for the next build the user asks for.
+  Most of the day's stops go through ref clean-up in a cell, `00867f90` < `CellX::ProcessCellRefs`:
+  - 08:08: inventory list read at 0x3a;
+  - 09:14 and 17:45: a call through a bad pointer;
+  - 08:37: a form lookup.
+  The other two 00483714 stops (15:14, 17:27) are in marking a form deleted for the save. These fit a ref whose inventory
+  holds a wrong-kind entry being cleaned up, but that is not proven. The 00483714 reads are of the game's own code
+  address: a bad pointer chased. The game itself would read garbage there; nv-rs stops.
+  Not Waikiki's: the frame-0 stops of the new nv-rs builds, "DrawIndexedPrimitive without an index buffer", and the
+  heap free at frame 530 (a run on the Steam exe).
+

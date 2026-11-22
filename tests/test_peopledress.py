@@ -241,6 +241,8 @@ bottom = gd.read_file(gp.SHORTS['folder'] + gp.SHORTS['meshes']['m'])
 joined = outfitjoin.join(top, bottom, gp.JOIN_CUT, gp.JOIN_TAKE, top_keep=['UpperBody'], bottom_cut=gp.JOIN_UNDER)
 barefoot = gp.shirt_and_shorts(gd)
 bare = outfitjoin.drawn(barefoot)
+check('joined: no shape or skin piece with nothing to draw (one stopped nv-rs: "DrawIndexedPrimitive without an index buffer")',
+      outfitjoin.empty_parts(barefoot) == [] and outfitjoin.empty_parts(joined) == [], outfitjoin.empty_parts(barefoot))
 lows = {}
 for sh_ in nif.mesh_from_nif(barefoot, placed=False):
     for k in range(0, len(sh_['i']), 3):
@@ -287,7 +289,9 @@ try:
 except ValueError:
     check('shirt and shorts: a second time refused', True)
 for e, o in rep['outfits'].items():
-    pics = {t['path'].lower() for t in nifwrite.textures_in(open(os.path.join(root, o['files']['m']), 'rb').read())}
+    worn_ = open(os.path.join(root, o['files']['m']), 'rb').read()
+    check('%s: the written model has nothing empty for the game to draw' % e, outfitjoin.empty_parts(worn_) == [], outfitjoin.empty_parts(worn_))
+    pics = {t['path'].lower() for t in nifwrite.textures_in(worn_)}
     check('%s: the man\'s model wears the printed shirt and the plain shorts, the woman\'s her dress' % e,
           any('_m.dds' in p and '\\folab\\' in p for p in pics) and any('shorts_' in p for p in pics) and o['files']['f'].endswith('_f.nif')
           and not any(p.endswith('outfitm.dds') or p.endswith('powdergang02.dds') for p in pics), sorted(pics))

@@ -52,6 +52,7 @@ for name in hats.HATS:
           skins and all(k >= 0 for k in skins) and same)
     import outfitjoin
     check('%s: every triangle drawn from its partition' % name, all(k > 0 for _nm, k in outfitjoin.drawn(m['worn'])))
+    check('%s: nothing empty for the game to draw' % name, outfitjoin.empty_parts(m['worn']) == [])
     got = hkshape.collision_shapes(m['go'])
     check('%s: the dropped model reads back, a box on the clutter layer' % name,
           nifmake.check(m['go'], m['go_shapes'])[1:] == [] and len(got) == 1 and got[0]['layer'] == 4, [g['layer'] for g in got])
