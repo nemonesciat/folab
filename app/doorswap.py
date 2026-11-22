@@ -1,0 +1,517 @@
+"""The game's doors on Waikiki's buildings swapped for FOLab's own (doorset), and the hotels' lift doors; one Undo.
+
+`ops(gd, pr)`: each door piece's files among the mod's own and its DOOR record (`door_record`: a copy of the game door
+it replaces, its sounds kept, this model, no script), then for every door the mod stands at one of a building's
+doorways (doorset.DOORWAYS, within doorset.NEAR of it in the building's frame) a 'swap' of its base and a 'move' to the
+doorway as the building stands (its place, turn and scale). The same ref: where it leads (XTEL), what leads to it, its
+lock, owner and name stay as they were. The Kilauea's way in goes onto its drum's glass (doorset.KILAUEA). Lift doors
+(doorset.LIFTS) in every cell, the hotels' floors and small worlds too: a 'swap' only (same frame); the static copies
+the game's lift door has get a static of the same model.
+
+Every world of the mod is looked at: the hotels' small worlds stand copies of the city's buildings and the open hotels.
+
+`check(gd, pr)`: every FOLab door the mod stands, how far from its doorway (should be 0), and the lift doors left.
+`apply(gd, pr)`: the ops as one Undo; navmeshes current before stay current (a door is where a door was, its box
+closing the same doorway). `py -3 app/doorswap.py` with FOLAB_HOME set says what it would do to the open Waikiki."""
+import math
+
+import doorset
+import library
+import modelsets
+import recordio
+
+KEEP = ('EDID', 'OBND', 'FULL', 'MODL', 'SNAM', 'ANAM', 'FNAM')
+
+
+def _turn(lx, ly, rz):
+    c, s = math.cos(rz), math.sin(rz)
+    return lx * c + ly * s, -lx * s + ly * c
+
+
+def _local(x, y, bp, s):
+    c, sn = math.cos(bp[5]), math.sin(bp[5])
+    dx, dy = x - bp[0], y - bp[1]
+    return (dx * c - dy * sn) / s, (dx * sn + dy * c) / s
+
+
+def spot(bp, s, lx, ly, lz, out_deg):
+    """The world's [x y z rx ry rz] of a doorway in a building standing at bp scaled s: a door's -y out of it."""
+    tx, ty = _turn(lx * s, ly * s, bp[5])
+    return [round(bp[0] + tx, 2), round(bp[1] + ty, 2), round(bp[2] + lz * s, 2), 0.0, 0.0,
+            round((bp[5] + math.radians(out_deg + 180.0)) % math.tau, 5)]
+
+
+class Names:
+    """Editor IDs and types of bases, the game's and the mod's, looked up once."""
+
+    def __init__(self, gd, pr):
+        self.gd, self.pr, self.cache = gd, pr, {}
+
+    def __call__(self, key):
+        if key not in self.cache:
+            try:
+                if key.startswith('+'):
+                    rec = self.pr.records[key]
+                    self.cache[key] = (recordio.field(rec, 'EDID'), rec.get('type'))
+                else:
+                    f = self.gd.from_key(key)
+                    self.cache[key] = (self.gd.edid(f), self.gd.forms[f][1].tag)
+            except (KeyError, ValueError, IndexError):
+                self.cache[key] = (None, None)
+        return self.cache[key]
+
+
+def door_record(gd, game_edid, piece, made):
+    """A DOOR of the mod's own: the game's door `game_edid` (its sounds, flags, name) with the piece's model."""
+    fid = next(f for f, (_i, r) in gd.forms.items() if r.tag == 'DOOR' and gd.edid(f) == game_edid)
+    rec = recordio.load(gd, fid)
+    rec['subs'] = [s for s in rec['subs'] if s['tag'] in KEEP]
+    recordio.set_field(rec, 'EDID', doorset.PIECES[piece]['edid'], label='Editor ID')
+    recordio.set_field(rec, 'MODL', made['mesh'][7:], label='Model')
+    for s in rec['subs']:
+        if s['tag'] == 'OBND':
+            for f, v in zip([f for f in s['fields'] if 'name' in f], made['box']):
+                f['value'] = int(v)
+    rec.pop('copied_from', None)
+    return rec
+
+
+def _files(pr, piece, write=True):
+    """The piece's mesh and pictures among the mod's own files (write=False: only made); what modelsets.build made,
+    with 'changed': the files that are new or differ."""
+    import os
+    made = modelsets.build(piece)
+    root = library.assets_dir(pr)
+    made['changed'] = [rel for rel, data in made['files'].items()
+                       if not os.path.isfile(os.path.join(root, rel)) or open(os.path.join(root, rel), 'rb').read() != data]
+    for rel, data in made['files'].items() if write else ():
+        full = os.path.join(root, rel)
+        if not os.path.isfile(full) or open(full, 'rb').read() != data:
+            library._put(root, rel, data)
+    return made
+
+
+def records_of(pr):
+    """{(piece, 'DOOR' or 'STAT'): record key} of the door pieces the mod has."""
+    want = {v['edid']: k for k, v in doorset.PIECES.items()}
+    out = {}
+    for k, rec in pr.records.items():
+        if k.startswith('+') and rec.get('type') in ('DOOR', 'STAT'):
+            e = recordio.field(rec, 'EDID')
+            piece = want.get(e) or want.get(e[:-6] if e.endswith('Static') else None)
+            if piece:
+                out[(piece, rec['type'])] = k
+    return out
+
+
+def _world_of(gd):
+    """world(cell key): the world an outside cell is in, or the cell itself (a place inside is a world of its own). The
+    hotels' small worlds stand copies of the city at the same spots, so doorways match doors of their own world only."""
+    cache = {}
+
+    def world(ck):
+        if ck not in cache:
+            try:
+                w = gd.ext_cells.get(gd.from_key(ck))
+            except (KeyError, ValueError, IndexError):
+                w = None
+            cache[ck] = w if w is not None else ck
+        return cache[ck]
+    return world
+
+
+def find(gd, pr):
+    """[(cell, ref key, ref, piece, new p or None, new s or None, kind)] of every door the swap takes."""
+    name = Names(gd, pr)
+    world = _world_of(gd)
+    by_cell = {}
+    for ck, c in pr.cells.items():
+        for rk, r in (c.get('refs') or {}).items():
+            if r.get('base') and r.get('p') and not r.get('removed') and r['p'][2] > -20000:
+                by_cell.setdefault(ck, []).append((rk, r))
+    # the buildings with doorways, by where they stand (world spots), in every cell
+    spots = []
+    kil = []
+    for ck, refs in by_cell.items():
+        for rk, r in refs:
+            e, t = name(r['base'])
+            if e in doorset.DOORWAYS or (e and e.endswith('Open') and e[:-4] in doorset.DOORWAYS):
+                s = float(r.get('s') or 1.0)
+                for piece, lx, ly, lz, out, game in doorset.DOORWAYS[e if e in doorset.DOORWAYS else e[:-4]]:
+                    spots.append((spot(r['p'], s, lx, ly, lz, out), s, piece, game, world(ck)))
+            if e in ('FOLabLandmarkKilauea', 'FOLabLandmarkKilaueaOpen'):
+                piece, rad, bearing, z, game = doorset.KILAUEA
+                b = math.radians(bearing)
+                out = (90.0 - bearing) % 360.0                 # (a face looking out along the bearing: 0 +y, 90 +x)
+                s = float(r.get('s') or 1.0)
+                spots.append((spot(r['p'], s, rad * math.cos(b), rad * math.sin(b), z, out), s, piece, game, world(ck)))
+    grid = {}
+    for k, sp in enumerate(spots):
+        grid.setdefault((sp[4], int(sp[0][0] // 4096), int(sp[0][1] // 4096)), []).append(k)
+    found, taken = [], set()
+    for ck, refs in by_cell.items():
+        for rk, r in refs:
+            e, t = name(r['base'])
+            if e in doorset.LIFTS:
+                found.append((ck, rk, r, doorset.LIFTS[e], None, None, 'lift' if t == 'DOOR' else 'lift static'))
+                continue
+            if t != 'DOOR':
+                continue
+            x, y = r['p'][0], r['p'][1]
+            best = None
+            for gx in (-1, 0, 1):
+                for gy in (-1, 0, 1):
+                    for k in grid.get((world(ck), int(x // 4096) + gx, int(y // 4096) + gy), ()):
+                        p, s, piece, game, _w = spots[k]
+                        if e not in game:
+                            continue
+                        d = math.hypot(p[0] - x, p[1] - y)
+                        near = doorset.NEAR * s + (1000 * s if piece == 'door_kilauea' else 0)
+                        if d < near and abs(p[2] - r['p'][2]) < 260 * s and (best is None or d < best[0]):
+                            best = (d, k)
+            if best is None or best[1] in taken:
+                continue
+            taken.add(best[1])
+            p, s, piece, game, _w = spots[best[1]]
+            found.append((ck, rk, r, piece, p, s, 'door'))
+    return found
+
+
+def ops(gd, pr, write=True):
+    """(ops, report). report: {'swapped': {piece: n}, 'moved_most', 'lifts', 'arrivals', 'cells', 'pieces': {piece:
+    triangles}, 'files': the door files new or changed}. write=False: the files aren't written (a dry run)."""
+    modelsets._all_sets()
+    name = Names(gd, pr)
+    found = find(gd, pr)
+    have = records_of(pr)
+    out, rep = [], {'swapped': {}, 'moved_most': 0.0, 'lifts': 0, 'cells': set(), 'pieces': {}, 'files': []}
+    key_of = {}
+    leads_to = {}                                   # door ref -> [(cell, ref)] whose link arrives in front of it
+    for ock, c in pr.cells.items():
+        for ork, orr in (c.get('refs') or {}).items():
+            t = orr.get('tel')
+            if t and t.get('door') and t.get('p') and not orr.get('removed'):
+                leads_to.setdefault(t['door'], []).append((ock, ork, orr))
+    rep['arrivals'] = 0
+    for ck, rk, r, piece, p, s, kind in found:
+        want = 'STAT' if kind == 'lift static' else 'DOOR'
+        if (piece, want) not in key_of:
+            made = _files(pr, piece, write)
+            rep['pieces'][piece] = made['triangles']
+            rep['files'] += [f for f in made['changed'] if f not in rep['files']]
+            k = have.get((piece, want))
+            if not k:
+                if want == 'DOOR':
+                    game = name(r['base'])[0]
+                    rec = door_record(gd, game, piece, made)
+                else:
+                    rec = modelsets._static(doorset.PIECES[piece]['edid'] + 'Static', made['mesh'][7:], made['box'])
+                tag = 'door_%s_%s' % (piece, want)
+                out.append({'op': 'record_new', 'record': rec, 'name': tag})
+                k = '$' + tag
+            key_of[(piece, want)] = k
+        out.append({'op': 'swap', 'cell': ck, 'ref': rk, 'base': key_of[(piece, want)]})
+        rep['swapped'][piece] = rep['swapped'].get(piece, 0) + 1
+        rep['cells'].add(ck)
+        if kind.startswith('lift'):
+            rep['lifts'] += 1
+            continue
+        moved = max(abs(a - b) for a, b in zip(r['p'][:3], p[:3]))
+        rep['moved_most'] = max(rep['moved_most'], round(moved, 1))
+        out.append({'op': 'move', 'cell': ck, 'ref': rk, 'p': p, 's': s})
+        # (a door that moved with its building, say reseated up a slope since: whoever arrives by it arrives in front
+        # of where it is now. Only the place moves by the door's own shift; doors' origins differ, so only past ARRIVE)
+        dz = p[2] - r['p'][2] - doorset.ORIGIN_RISE.get(name(r['base'])[0], 0.0) * (s or 1.0)
+        dx, dy = p[0] - r['p'][0], p[1] - r['p'][1]
+        if piece == 'door_kilauea':
+            # (whoever arrives by this door arrives on ITS side: in front of the city's door on the plinth, facing out;
+            # inside the glass in front of the lobby's, facing in. The lobby's door stands at the same spot in the
+            # hotel's small world, so a link to it is told by the door's world, never by where it stands: both ways
+            # arrived outside on 22 Nov 2026, and going in put you in the small world outside the glass)
+            ar = kilauea_arrival(gd, ck, p, s)
+            for ock, ork, orr in leads_to.get(rk, ()):
+                out.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': dict(orr['tel'], p=ar)})
+                rep['arrivals'] += 1
+        elif piece not in doorset.HOTELS and max(abs(dx), abs(dy), abs(dz)) > doorset.ARRIVE:
+            for ock, ork, orr in leads_to.get(rk, ()):
+                t = orr['tel']
+                q = list(t['p'])
+                q[0], q[1], q[2] = round(q[0] + dx, 2), round(q[1] + dy, 2), round(q[2] + dz, 2)
+                out.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': dict(t, p=q)})
+                rep['arrivals'] += 1
+    rep['cells'] = sorted(rep['cells'])
+    return out, rep
+
+
+def check(gd, pr):
+    """{'doors': n FOLab doors, 'off_most': the farthest any stands from its doorway, 'game_lifts': lift doors of the
+    game's left, 'unlinked': FOLab doors that lead nowhere and aren't locked}."""
+    modelsets._all_sets()
+    mine = {k: piece for (piece, t), k in records_of(pr).items()}
+    left = sum(1 for ck, rk, r, piece, p, s, kind in find(gd, pr) if kind.startswith('lift') and r['base'] not in mine)
+    off, n, unlinked = 0.0, 0, 0
+    for ck, rk, r, piece, p, s, kind in _found_mine(gd, pr, mine):
+        n += 1
+        if p is not None:
+            off = max(off, max(abs(a - b) for a, b in zip(r['p'][:3], p[:3])))
+        lock = (r.get('props') or {}).get('lock') or ((r.get('extra') or {}).get('props') or {}).get('lock')
+        if kind == 'door' and not r.get('tel') and not lock:
+            unlinked += 1
+    return {'doors': n, 'off_most': round(off, 1), 'game_lifts': left, 'unlinked': unlinked}
+
+
+def _found_mine(gd, pr, mine):
+    """The FOLab doors the mod stands, with where their doorway is now (the building may have moved since)."""
+    name = Names(gd, pr)
+    back = mine
+    out, spots = [], []
+    for ck, c in pr.cells.items():
+        for rk, r in (c.get('refs') or {}).items():
+            if r.get('removed') or not r.get('p'):
+                continue
+            e, t = name(r.get('base') or '')
+            if e in doorset.DOORWAYS or (e and e.endswith('Open') and e[:-4] in doorset.DOORWAYS):
+                s = float(r.get('s') or 1.0)
+                for piece, lx, ly, lz, o, _g in doorset.DOORWAYS[e if e in doorset.DOORWAYS else e[:-4]]:
+                    spots.append((piece, spot(r['p'], s, lx, ly, lz, o)))
+            if e in ('FOLabLandmarkKilauea', 'FOLabLandmarkKilaueaOpen'):
+                piece, rad, bearing, z, _g = doorset.KILAUEA
+                b = math.radians(bearing)
+                s = float(r.get('s') or 1.0)
+                spots.append((piece, spot(r['p'], s, rad * math.cos(b), rad * math.sin(b), z, (90.0 - bearing) % 360.0)))
+    for ck, c in pr.cells.items():
+        for rk, r in (c.get('refs') or {}).items():
+            piece = back.get(r.get('base'))
+            if not piece or r.get('removed') or not r.get('p'):
+                continue
+            if piece.startswith('lift'):
+                out.append((ck, rk, r, piece, None, None, 'lift'))
+                continue
+            near = [p for pc, p in spots if pc == piece and math.hypot(p[0] - r['p'][0], p[1] - r['p'][1]) < 600]
+            p = min(near, key=lambda p: math.hypot(p[0] - r['p'][0], p[1] - r['p'][1])) if near else None
+            out.append((ck, rk, r, piece, p, None, 'door'))
+    return out
+
+
+def sig_of(gd, pr, ck):
+    import onepiece
+    return onepiece.sig_of(gd, pr, ck)
+
+
+def apply(gd, pr, label='FOLab doors for the hotels, homes and lifts'):
+    """The ops applied as one Undo; navmeshes that were current before stay marked current. Returns the report."""
+    o, rep = ops(gd, pr)
+    cells = set(rep['cells'])
+    current = {k: m for k, m in pr.navmesh.items() if k in cells and m.get('sig') == sig_of(gd, pr, k)}
+    pr.apply(label, o)
+    nav = [{'op': 'navmesh', 'cell': k, 'mesh': dict(m, sig=sig_of(gd, pr, k))} for k, m in current.items()]
+    if nav:
+        pr.apply(label, nav, merge=True)
+    rep['navmeshes_kept_current'] = len(nav)
+    return rep
+
+
+def missing_lifts(gd, pr, parent_edid='FOLabWaikiki', reach=40.0):
+    """(ops, report): a FOLab lift door, locked, wherever a hotel's open lobby has a lift frame (hotelinside.VIEWS'
+    doors of a lift kind) and its small world has no lift door there. The Royal Hawaiian's lobby got a second lift in
+    its model on 17 Nov 2026 ('lift2'), but relay_ops only moves doors already placed, so its frame stood empty (the
+    user, 22 Nov). Run after the swap (it needs the FOLab lift records)."""
+    import hotelinside
+    modelsets._all_sets()
+    have = records_of(pr)
+    worlds = {gd.edid(w): w for w in gd.worlds()}
+    parent = worlds.get(parent_edid)
+    if parent is None:
+        raise ValueError('no world ' + parent_edid)
+    game = {gd.edid(f): gd.key(f) for f, (_i, r) in gd.forms.items() if r.tag == 'DOOR' and gd.edid(f) in doorset.LIFTS}
+    out, rep = [], {'added': [], 'there': 0}
+    for hotel, v in hotelinside.VIEWS.items():
+        child = worlds.get(v['world'])
+        if child is None:
+            continue
+        _wck, _wr, at = hotelinside._frame(gd, pr, hotel, parent)
+        grid = gd.grid(child)
+        cells = {gd.key(c) for c in grid.values()}
+        lifts = [r['p'] for ck, c in pr.cells.items() if ck in cells for r in (c.get('refs') or {}).values()
+                 if r.get('p') and not r.get('removed') and (r.get('base') in game.values()
+                                                             or (r.get('base') and r['base'] in {k for (pc, t), k in have.items() if pc.startswith('lift')}))]
+        for name, e, lx, ly, lz, face in v['doors']:
+            if e not in doorset.LIFTS or e not in game:
+                continue
+            p = at(lx, ly, lz, face + hotelinside.leaf_turn(gd, game[e]), hotelinside.door_rise(gd, game[e]))
+            if any(math.hypot(q[0] - p[0], q[1] - p[1]) < reach and abs(q[2] - p[2]) < reach for q in lifts):
+                rep['there'] += 1
+                continue
+            base = have.get((doorset.LIFTS[e], 'DOOR'))
+            if not base:
+                raise ValueError('no FOLab lift door record: run the swap first')
+            ck = gd.key(grid[(int(p[0] // 4096), int(p[1] // 4096))])
+            out.append({'op': 'add', 'cell': ck, 'base': base, 'p': p, 's': 1,
+                        'extra': {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}})
+            rep['added'].append({'hotel': hotel, 'door': name, 'cell': ck, 'p': [round(x, 1) for x in p[:3]]})
+    rep['cells'] = sorted({o['cell'] for o in out})
+    return out, rep
+
+
+def kilauea_arrival(gd, ck, p, s):
+    """Where one arrives by a Kilauea door at p (scale s) in cell ck: on its own side (see ops)."""
+    w = _world_of(gd)(ck)
+    city = not isinstance(w, str) and gd.edid(w) == doorset.CITY
+    ox, oy = -math.sin(p[5]), -math.cos(p[5])
+    k = (doorset.KILAUEA_ARRIVE if city else -doorset.KILAUEA_INSIDE) * (s or 1.0)
+    face = (p[5] + math.pi) % math.tau if city else p[5] % math.tau
+    return [round(p[0] + ox * k, 2), round(p[1] + oy * k, 2), round(p[2] + 8 * (s or 1.0), 2), 0.0, 0.0, round(face, 5)]
+
+
+def arrival_ops(gd, pr):
+    """(ops, report): every link to a FOLab Kilauea door arriving on that door's own side (the swap of 22 Nov 04:44 put
+    the way in outside the glass too)."""
+    mine = {k for (piece, t), k in records_of(pr).items() if piece == 'door_kilauea'}
+    doors = {rk: (ck, r) for ck, c in pr.cells.items() for rk, r in (c.get('refs') or {}).items()
+             if r.get('base') in mine and r.get('p') and not r.get('removed')}
+    out, rep = [], {'changed': []}
+    for ock, c in pr.cells.items():
+        for ork, orr in (c.get('refs') or {}).items():
+            t = orr.get('tel')
+            if not t or orr.get('removed') or t.get('door') not in doors:
+                continue
+            ck, r = doors[t['door']]
+            ar = kilauea_arrival(gd, ck, r['p'], float(r.get('s') or 1.0))
+            if not t.get('p') or max(abs(a - b) for a, b in zip(t['p'][:3], ar[:3])) > 0.5:
+                out.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': dict(t, p=ar)})
+                rep['changed'].append({'ref': ork, 'to': t['door'], 'was': [round(v, 1) for v in (t.get('p') or [])[:3]], 'now': ar[:3]})
+    return out, rep
+
+
+def same_arrivals(pr, near=8.0):
+    """Linked pairs whose two links arrive at one spot (one of them on the wrong side): [(ref, ref, p)]."""
+    tel = {rk: r['tel'] for c in pr.cells.values() for rk, r in (c.get('refs') or {}).items()
+           if r.get('tel') and r['tel'].get('door') and r['tel'].get('p') and not r.get('removed')}
+    out = []
+    for a, t in tel.items():
+        b = t['door']
+        u = tel.get(b)
+        if a < b and u and u.get('door') == a and max(abs(x - y) for x, y in zip(t['p'][:3], u['p'][:3])) < near:
+            out.append((a, b, [round(v, 1) for v in t['p'][:3]]))
+    return out
+
+
+def view_copies_ops(gd, pr, near=2.0):
+    """(ops, report): the city's doors copied into the hotels' small worlds (hotelinside.VIEWS) back to how
+    viewworld.stage_ops makes them, locked and leading nowhere; and every link that led to such a copy (a house's way
+    out, set after the copy was made) pointed at the city's own door at the same spot, which leads back in if it led
+    nowhere. On Waikiki of 21-22 Nov 305 copies led into places and 74 places' ways out led into a hotel's small world:
+    leaving them put you outside a hotel's glass (the user, 22 Nov 2026). The hotels' own doors are left."""
+    import hotelinside
+    worlds = {gd.edid(w): w for w in gd.worlds()}
+    name = Names(gd, pr)
+    city_cells = {gd.key(c) for c in gd.grid(worlds[doorset.CITY]).values()}
+    where = {rk: ck for ck, c in pr.cells.items() for rk in (c.get('refs') or {})}
+    by_spot = {}
+    for ck in city_cells:
+        for rk, r in ((pr.cells.get(ck) or {}).get('refs') or {}).items():
+            if r.get('base') and r.get('p') and not r.get('removed'):
+                by_spot.setdefault((r['base'], int(r['p'][0] // 64), int(r['p'][1] // 64)), []).append((ck, rk, r))
+
+    def original(r):
+        for gx in (-1, 0, 1):
+            for gy in (-1, 0, 1):
+                for ck, rk, o in by_spot.get((r['base'], int(r['p'][0] // 64) + gx, int(r['p'][1] // 64) + gy), ()):
+                    if max(abs(a - b) for a, b in zip(o['p'][:3], r['p'][:3])) < near:
+                        return ck, rk, o
+        return None
+    copies = {}
+    for hotel, v in hotelinside.VIEWS.items():
+        w = worlds.get(v['world'])
+        if w is None:
+            continue
+        for ck in {gd.key(c) for c in gd.grid(w).values()}:
+            for rk, r in ((pr.cells.get(ck) or {}).get('refs') or {}).items():
+                if r.get('removed') or not r.get('p') or name(r.get('base') or '')[1] != 'DOOR':
+                    continue
+                if (r.get('tel') or {}).get('door') and where.get(r['tel']['door']) in city_cells:
+                    continue                     # (the hotel's own way out to the city: the Kilauea's stands where the city's does)
+                o = original(r)
+                if o is None:
+                    continue                     # (the hotel's own doors, and anything that's no copy of the city's)
+                copies[rk] = (ck, r, o)
+    out = []
+    rep = {'copies_unlinked': 0, 'copies_locked': 0, 'ways_out_repointed': 0, 'city_doors_linked': 0, 'no_original': 0}
+    linked_now = {}
+    for ock, c in pr.cells.items():
+        for ork, orr in (c.get('refs') or {}).items():
+            t = orr.get('tel')
+            if not t or orr.get('removed') or t.get('door') not in copies or ork in copies:
+                continue
+            _cck, _cr, (oc, okey, o) = copies[t['door']]
+            out.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': dict(t, door=okey)})
+            rep['ways_out_repointed'] += 1
+            if not o.get('tel') and okey not in linked_now:
+                ct = copies[t['door']][1].get('tel') or {}
+                if ct.get('door') == ork and ct.get('p'):
+                    linked_now[okey] = True
+                    out.append({'op': 'tel', 'cell': oc, 'ref': okey, 'tel': {'door': ork, 'p': ct['p']}})
+                    rep['city_doors_linked'] += 1
+    for rk, (ck, r, _o) in copies.items():
+        if r.get('tel'):
+            out.append({'op': 'tel', 'cell': ck, 'ref': rk, 'tel': None})
+            rep['copies_unlinked'] += 1
+        if not ((r.get('props') or {}).get('lock') or {}).get('level'):
+            out.append({'op': 'props', 'cell': ck, 'ref': rk, 'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}})
+            rep['copies_locked'] += 1
+    rep['copies'] = len(copies)
+    return out, rep
+
+
+def refit_ops(gd, pr, write=True):
+    """(ops, files changed): the mod's door pieces' files made again (a piece changed since the swap: the lobby lift door
+    made to fill its frame, 22 Nov 2026) and each record's OBND set to the new model's box where it differs."""
+    modelsets._all_sets()
+    out, files = [], []
+    for (piece, t), k in sorted(records_of(pr).items()):
+        made = _files(pr, piece, write)
+        files += [f for f in made['changed'] if f not in files]
+        rec = pr.records[k]
+        for s in rec.get('subs', []):
+            if s['tag'] == 'OBND':
+                named = [f for f in s['fields'] if 'name' in f]
+                if [int(f['value']) for f in named] != [int(v) for v in made['box']]:
+                    import copy
+                    new = copy.deepcopy(rec)
+                    for f, v in zip([f for f in next(x for x in new['subs'] if x['tag'] == 'OBND')['fields'] if 'name' in f], made['box']):
+                        f['value'] = int(v)
+                    out.append({'op': 'record', 'key': k, 'record': new})
+    return out, files
+
+
+def apply_missing_lifts(gd, pr, label='FOLab lift doors where a hotel lobby lacked one'):
+    """missing_lifts and refit_ops as one Undo; navmeshes that were current stay marked current. Returns the report."""
+    o, rep = missing_lifts(gd, pr)
+    r_ops, rep['files'] = refit_ops(gd, pr, write=True)
+    rep['records_refit'] = len(r_ops)
+    o = r_ops + o
+    if not o:
+        return rep
+    cells = set(rep['cells'])
+    current = {k: m for k, m in pr.navmesh.items() if k in cells and m.get('sig') == sig_of(gd, pr, k)}
+    pr.apply(label, o)
+    nav = [{'op': 'navmesh', 'cell': k, 'mesh': dict(m, sig=sig_of(gd, pr, k))} for k, m in current.items()]
+    if nav:
+        pr.apply(label, nav, merge=True)
+    rep['navmeshes_kept_current'] = len(nav)
+    return rep
+
+
+if __name__ == '__main__':
+    import json
+    import gamedata
+    import project
+    import server
+    server.not_while_playing = lambda: None
+    server.GD = gamedata.GameData()
+    server.BR = None
+    p = project.Project.open('Waikiki')
+    server.load_game(p)
+    o, r = ops(server.GD, p, write=False)
+    print(len(o), 'ops')
+    print(json.dumps(r, indent=1, default=list))
