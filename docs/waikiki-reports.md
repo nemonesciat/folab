@@ -11,7 +11,9 @@ at the start of any Waikiki work, and before saying anything is ready.
   "by start, that seems to be on a palm tree or something". On the ridge a few hundred units off: a grey blocky far
   model and a round green far-tree lump drawn among the real trees, i.e. far (LOD) copies not hidden though their
   cell is loaded. Likely from the far plants put in at 16:56 (farplants.py, 44,208 far things) or a far building block.
-  Passed to the story session.
+  Passed to the story session. Cause: the game's own far palms and Zion trees are crossed see-through cards, drawn
+  solid in far blocks (7,274 of them). Fixed 20:46 (FOLab far models for them, density kept). **Seen fixed by the user
+  21 Nov ~21:00: "wow. good job"** (`docs/waikiki-far-plants-fixed.webp`).
 
 - **Boater still on the side of the head** (21 Nov 2026 ~17:50, nv-rs-pad main-d9243748, third person by a stream:
   "boater still on side of head???"; screenshot `docs/waikiki-report-boater-side-2.webp`): after the 17:07 install with
