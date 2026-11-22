@@ -49,5 +49,6 @@ Waikiki of 22 Nov 06:20. Picture: `docs/waikiki-rh-lift2.jpg`. relay_ops matches
 swap it no longer finds the lifts: a relay of the lobbies would leave them where they are.
 The north door also fell short of its frame (the user's picture from nv-rs): `lift_frame`'s opening is LIFT_H + 16 over the
 floor, the game's lift door 174 tall. The lobby lift door is 190 now; `doorswap.refit_ops` writes the mod's door pieces'
-files again and sets their records' OBND. The Kilauea's lifts take the same piece and have no lift_frame round them: not
-looked at.
+files again and sets their records' OBND. The Kilauea's two lifts take the same piece: towerset stands
+lift_frame (k 1/0.8, back 60) on its core at both the casino floor and the deck, so their openings are 216 x 190 in the world
+too, and the 190 door fills them (`docs/waikiki-kilauea-lifts.jpg`). The Kilauea stands turned 180: its lifts face world +y.
