@@ -322,10 +322,11 @@ def _size(shapes):
     return _sizes[k]
 
 
-def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=False):
+def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=False, leave=None):
     """Write a world's distant buildings into a folder laid out as Data is. Returns a report. trees: far plants too (the
     game shows its own trees another way; as plain models they cost a lot for what they add). like: another world whose
-    things this one shows far off (as lodgen's like), named for this one."""
+    things this one shows far off (as lodgen's like), named for this one. leave: fn(base, x, y, z) true for a thing to
+    leave out (viewworld.far_view: what the small world stands something else in place of)."""
     edid = gd.edid(world)
     if like is not None:
         world = like
@@ -343,7 +344,11 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
         import farplants
         trees = True
         things = farplants.pick(gd, things, lambda b: (stand.of(b), stand.models.get(b))[1], lambda b: farplants._name(gd, pr, b))
+    left_out = 0
     for base, x, y, z, rz, s in things:
+        if leave is not None and leave(base, x, y, z):
+            left_out += 1
+            continue
         shapes = stand.of(base)
         if not shapes:
             skipped += 1
@@ -410,7 +415,7 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
         tangents = b''.join(struct.pack('<3f', 1.0, 0.0, 0.0) for _ in verts) + b''.join(struct.pack('<3f', 0.0, 1.0, 0.0) for _ in verts)
         put(os.path.join('meshes', 'landscape', 'lod', edid, 'blocks', '%s.level4.x%d.y%d.nif' % (edid, bx, by)),
             block_nif(edid, bx, by, verts, normals, tangents, uvs, segments))
-    return {'blocks': len(blocks), 'things': shown, 'skipped': skipped, 'dropped': dropped, 'kinds': len(kinds), 'textures': len(sheet.repeat),
+    return {'blocks': len(blocks), 'things': shown, 'skipped': skipped, 'left_out': left_out, 'dropped': dropped, 'kinds': len(kinds), 'textures': len(sheet.repeat),
             'sheet': size, 'files': len(files), 'folder': out}
 
 
