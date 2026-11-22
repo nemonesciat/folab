@@ -238,11 +238,20 @@
       "port": 8797
     },
     {
+      "name": "folab-vault2",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_HOME=D:\\FOLab-vault2\\home&& set FOLAB_NV_INI=D:\\FOLab-vault2\\ini&& set FOLAB_NO_GAME_WRITES=1&& py -3 app/server.py 8798 --no-browser"
+      ],
+      "port": 8798
+    },
+    {
       "name": "folab-flotilla",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [
         "/c",
-        "set FOLAB_HOME=D:\\FOLab-flotilla\\home&& set FOLAB_NV_INI=D:\\FOLab-flotilla\\ini&& set FOLAB_NO_GAME_WRITES=1&& py -3 app/server.py 8793 --no-browser"
+        "set FOLAB_HOME=D:\\FOLab-flotilla\\crew&& set FOLAB_NV_INI=D:\\FOLab-flotilla\\ini&& set FOLAB_NO_GAME_WRITES=1&& py -3 app/server.py 8793 --no-browser"
       ],
       "port": 8793
     }

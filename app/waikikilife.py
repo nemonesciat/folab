@@ -220,7 +220,8 @@ def clear(gd, pr, road, mid):
 # ---------- spots ----------
 
 class Spots:
-    """Open standing ground: dry, not under a roof or inside anything, not too near another spot taken."""
+    """Open standing ground: dry, not in a building's footprint (indoors), not under a roof or inside anything, not too near
+    another spot taken."""
 
     def __init__(self, gd, pr, world):
         import lootplace
@@ -228,10 +229,21 @@ class Spots:
         self.S = lootplace.Seat(gd, pr, world)
         self.G = roadgen.Ground(gd, pr, world)
         self.taken = []
+        self._args, self._B = (gd, pr, world), None
+
+    @property
+    def B(self):
+        """The closed buildings round (indoors): nobody stands inside one, whatever its collision says."""
+        if self._B is None:
+            import indoors
+            self._B = indoors.Buildings(*self._args)
+        return self._B
 
     def stand(self, x, y, box=(-30, -30, 0, 30, 30, 120), apart=220.0):
         g = self.G.at(x, y)
         if g is None or g < 8:
+            return None
+        if self.B.inside(x, y, g):
             return None
         if any(math.hypot(x - a, y - b) < apart for a, b in self.taken):
             return None

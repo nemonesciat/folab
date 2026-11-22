@@ -35,8 +35,11 @@ check('every scene a room names exists', all(n in L.SCENES for k, v in KV.STORY.
 check('its story is never drawn for an ordinary vault', all(L.STORIES[KV.STORY_KEY].get(k) for k in ('given', 'kept')))
 prog = KV.program(4, random.Random(1))
 names = [s.name for s in prog]
-check('only decided rooms unless asked: no cold store, reclamation or holding rooms', not {'the cold store', 'the reclamation plant', 'the holding rooms'} & set(names))
-check('… asked, they come in', {'the cold store', 'the reclamation plant', 'the holding rooms'} <= {s.name for s in KV.program(4, random.Random(1), proposed=True)})
+check('only decided rooms unless asked: no reclamation plant or holding rooms', not {'the reclamation plant', 'the holding rooms'} & set(names))
+check('… asked, they come in', {'the reclamation plant', 'the holding rooms'} <= {s.name for s in KV.program(4, random.Random(1), proposed=True)})
+check('the user\'s answers (22 Nov): the council chamber, kitchens and cold store, servants\' quarters, a back door room',
+      {'the council chamber', 'the kitchens', 'the cold store', "the servants' quarters", 'the back door'} <= set(names) and sum(s.back for s in prog) == 1)
+check('… no back door unless wanted', not any(s.back for s in KV.program(4, random.Random(1), back=False)))
 check('the reactor is laid last, at the end of the power wing', prog[-1].purpose == 'reactor' and prog[-1].wing == 'power')
 
 # ---------- a layout ----------
@@ -55,14 +58,22 @@ for seed in (1, 2):
           rooms["a founders' suite"] >= KV.SUITES and all(rooms[n] for n in ('the feast hall', 'the Pip-Boy workshop', 'the cell charging room', 'the clinic', 'the armoury')))
     scenes = collections.Counter(s for o in plan.rooms() for s in o.get('scenes', []))
     check('seed %d: dressed as the Vault, not as a vault people left' % seed, scenes['suite'] and scenes['banquet'] and not (scenes['last stand'] or scenes['lay down']))
-    check('seed %d: the council needs a key, left in another room' % seed, plan.locks['key'] and plan.locks['rooms'] >= 2)
+    check('seed %d: the council needs a key, left in another room' % seed, plan.locks['key'] and plan.locks['rooms'] >= 2 and plan.locks.get('office') == 'The council chamber')
+    backs = [it for it in g['items'] if it.what == 'exit']
+    check('seed %d: two ways out, the gear door\'s and a back door (in its own room)' % seed, plan.back and len(backs) == 2 and sum(1 for it in backs if it.link == 'back') == 1
+          and plan.owners[plan.cells[plan.back[0]]].get('name') == 'the back door')
+    check('seed %d: lit and clean: no rubble, nothing dirty or broken, no failing lights' % seed, not [it for it in g['items'] if D.dirty(sv[VAULT], it)])
+    meat = G.key(told.keys['HumanFlesh'][0])
+    check('seed %d: the eating shown plainly: meat in the kitchens and on the feast hall\'s plates' % seed,
+          scenes['butchery'] and scenes['banquet'] and sum(1 for it in g['items'] if it.key == meat) >= 4)
     check('seed %d: no gap to fall down, furnished or not' % seed, not g['walk']['edges'] and not P.walk_check(G, P.tiles_for(G, kits, VAULT, store, sv), plan, g['made'], {})['edges'])
     pic = planpic.svg(plan, g['items'], 'test')
     check('seed %d: its picture names its rooms and shows every level' % seed, pic.startswith('<svg') and 'the feast hall' in pic and
           all('Level %d<' % lv in pic for lv in {c[2] for c in plan.squares()}))
 out = KV.ops(G, kits, 3, 1, [0, 0, 0], store, {}, sv)
-check('as changes for a mod: the key\'s record first, the rest after', out.get('ops') and out['ops'][0]['op'] == 'record_new' and
-      any(o.get('base') == '$made' for o in out['ops']))
+check('as changes for a mod: the key\'s record first (the Council Key), the rest after', out.get('ops') and out['ops'][0]['op'] == 'record_new' and
+      any(o.get('base') == '$made' for o in out['ops']) and any(sb.get('value') == KV.KEY_NAME for sb in out['ops'][0]['record']['subs']))
+check('… the back door\'s door is marked for linking', sum(1 for o in out['ops'] if o.get('exit') == 'back') == 1 and sum(1 for o in out['ops'] if o.get('exit') is True) == 1)
 
 # ---------- a generated place as a drawing ----------
 g = P.vault_place(G, kits, 3, 5, store, {}, None)
@@ -103,3 +114,19 @@ try:
     check('a plan needs a name', False)
 except ValueError:
     check('a plan needs a name', True)
+
+# ---------- its number on the gear door (vaultnumber.py): Vault 50 ----------
+import dds  # noqa: E402
+import vaultnumber as VN  # noqa: E402
+check('its name is Vault 50', KV.NAME == 'Vault 50')
+w, h, px = dds.decode(G.read_file(VN.SHEET), VN.SIZE)[:3]
+figs = VN.figures(bytearray(px))
+check('the game\'s stencil figures read off the hatch strips: 0 to 5, 7, 8, 9', set('0123457 89'.replace(' ', '')) <= set(figs), str(sorted(figs)))
+data, drawn = VN.sheet(G, '50')
+w2, h2, px2 = dds.decode(data, VN.SIZE)[:3]
+x0, y0, x1, y1 = VN.PLATE
+changed = sum(1 for y in range(y0, y1) for x in range(x0, x1) if px[(y * VN.SIZE + x) * 4:(y * VN.SIZE + x) * 4 + 3] != px2[(y * VN.SIZE + x) * 4:(y * VN.SIZE + x) * 4 + 3])
+outside = sum(1 for y in range(0, 700, 7) for x in range(0, VN.SIZE, 7) if px[(y * VN.SIZE + x) * 4:(y * VN.SIZE + x) * 4 + 3] != px2[(y * VN.SIZE + x) * 4:(y * VN.SIZE + x) * 4 + 3])
+check('the gear door\'s plate shows 50: figures drawn on it, the rest of the sheet as it was', drawn > 1000 and changed > 1000 and outside == 0, str((drawn, changed, outside)))
+old_doors = {G.key(f) for f, (_i, r) in G.forms.items() if r.tag == 'DOOR' and G.edid(f) in KV.CLEAN_DOORS}
+check('no door showing another vault\'s number (the ruined sliding door swapped for the plain one)', not any(o.get('base') in old_doors for o in KV.ops(G, kits, 3, 1, [0, 0, 0], store, {}, sv)['ops']))

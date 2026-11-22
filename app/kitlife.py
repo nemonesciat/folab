@@ -228,7 +228,8 @@ def live(game, ts, plan, made, items, rng, only=None):
         squares = sum(1 for c in o['cells'] if c not in plan.air)
         # (a room's own name first, then what it's furnished as: a place with a story of its own names its rooms)
         names = list(story.get(o.get('name')) or story.get(purpose, ()))
-        rng.shuffle(names)
+        if not (story.get('given') and story.get(o.get('name'))):
+            rng.shuffle(names)          # (a place's own story names its rooms' scenes in the order they matter)
         if o.get('wrecked'):
             names = ['last stand'] if rng.random() < 0.5 else ['lay down']
         o['scenes'] = []
@@ -379,7 +380,10 @@ def secure(game, ts, plan, made, items, rng):
     finds = [it for it in getattr(plan, 'finds', []) if id(it) in present and it.owner in rooms]
     if office is not None:
         # (the key is on a find in a room left open, the deepest there is: the office is worth going down for)
-        open_finds = [it for it in finds if it.owner != office and it.owner not in shut]
+        # (never by a way in: a back door's room would hand the key to whoever came in by it)
+        doors_out = {plan.cells.get(c) for c, _d in (plan.exits() if hasattr(plan, 'exits') else ())}
+        open_finds = [it for it in finds if it.owner != office and it.owner not in shut and it.owner not in doors_out] or \
+            [it for it in finds if it.owner != office and it.owner not in shut]
         things.keys.setdefault(KEY_FROM, (_key_fid(game), 'misc'))
         key_size = things.size(KEY_FROM)
         if open_finds and key_size:

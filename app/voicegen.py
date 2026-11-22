@@ -381,7 +381,10 @@ def write_line(base, text, voice='am_michael', speed=1.0, pitch=0.0, lively=1.0,
         audio, timed = speak(text, voice, speed, pitch, lively)
     audio = voicefx.master(audio, is_female(voice))
     os.makedirs(os.path.dirname(base), exist_ok=True)
-    soundfile.write(base + '.ogg', audio, RATE, format='OGG', subtype='VORBIS')
+    # (a second at a time: one call with a clip of ~25 s took Python down with it, 22 Nov 2026; 20 s was fine)
+    with soundfile.SoundFile(base + '.ogg', 'w', RATE, 1, format='OGG', subtype='VORBIS') as f:
+        for k in range(0, len(audio), RATE):
+            f.write(audio[k:k + RATE])
     seconds = len(audio) / RATE
     with open(base + '.lip', 'wb') as f:
         f.write(lipwrite.write(lipwrite.from_timeline(timed, seconds=seconds)))

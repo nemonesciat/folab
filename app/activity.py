@@ -186,7 +186,7 @@ class Ctx:
         if not tops:
             return None
         z = max(tops)
-        if any(math.hypot(x - a, y - b) < 160 for a, b in self.sp.taken):
+        if any(math.hypot(x - a, y - b) < 160 for a, b in self.sp.taken) or self.sp.B.inside(x, y, z):
             return None
         if not ff._on_mesh(self.sp, x, y, z):
             return None

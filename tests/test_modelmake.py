@@ -252,7 +252,8 @@ check('the beach set is a different planting', {o['base'] for o in jadds}.isdisj
 
 # --- hotels: towers with a far model each, for the skyline ---
 import lodobj  # noqa: E402
-hotels = [k for k, v in modelsets.PIECES.items() if v['set'] == 'hotel']
+# modelsets' own four towers; coastset's hotels (Kahala Reef is long and low by design) are checked in their own part
+hotels = [k for k, v in modelsets.PIECES.items() if v['set'] == 'hotel' and v['describe'].__module__ == 'modelsets']
 bad = []
 for piece in hotels:
     m = made[piece] = modelsets.build(piece)

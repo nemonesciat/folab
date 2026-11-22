@@ -87,7 +87,77 @@ Tests: `tests/test_radiotalk.py` (29 checks) covers:
 
 `tests/test_radio.py` still passes unchanged.
 
-## Draft bulletins (for the user's yes)
+## The first drafts, set aside (22 Nov 2026)
+
+The user's verdict on the first drafts: the lines were "blunt and generic", and short clips between songs would break
+immersion. Radio Atoll's voice sounded "like a generic female assistant at a kiosk", and Haixin Dongtai's "way too
+artificial and clean". Mr. New Vegas works because:
+- he is a character;
+- a break is a short segment (an opening, a story told with colour, back to the music), not a line;
+- there is a lot of it, so it rarely repeats.
+
+So the stations get hosts and whole breaks.
+
+## Radio Atoll's host
+
+The user, 22 Nov 2026: "an eternally tipsy male, middle aged, he's got the sound of sea salt and cigar smoke in his
+lungs. his idea of heaven is playing the same radio songs all day for a sleepy beach. voice is smooth and sultry like a
+bourbon."
+
+He has no name yet. That is the user's to give, so the drafts never name him.
+
+**A break** is three parts, chained as Radio New Vegas chains its own:
+- an opening (always one can be said);
+- news, if there is any the player has earned;
+- back to the records.
+
+Each part is picked at random from its own list, so breaks rarely come out the same. In the game this is a line in
+RadioHello whose choices lead to a news topic of the station's own and then a closing topic. The game takes the first
+of a line's choices that has a line that holds, as Radio New Vegas's stories choose a transition or a sign-off.
+
+All drafts below wait for the user's yes. The facts are the quests' own; the colour round them is his manner, not new
+lore.
+
+**Openings** (any time):
+- "Mm. Still here, still pouring. This is Radio Atoll, and if you can hear me, the beach hasn't swallowed either of us yet."
+- "Evening, sleepyheads. Same songs as yesterday, same as tomorrow. That's not a complaint. That's a promise."
+- "Radio Atoll. The tide's out, the glass is full, and I'm in no hurry. Neither should you be."
+- "You know what I love about this island? Nothing changes. Sun comes up, sun goes down, and I play the same records in between."
+
+**News** (each waits for what the player has done; each aired a few times, then dropped):
+- *What the Sea Brought In, stage 20:* "Word from down the coast. Seems the sea coughed somebody up the other night.
+  Half drowned, the way I hear it. The beachcomber pulled them out of the surf like a lost bottle, and kept them. The
+  sea always gives something back, friends. Usually it's just my empties."
+- *Stage 30:* "That stranger the tide brought in? I hear they've taken the coast road, out toward Kuliouou. Brave, or
+  foolish. Out here it's usually both. Keep your head down, stranger. And keep the radio on."
+- *The Doctor's Stock done:* "Good news, for once. The doctor's supplies made it back off the coast road. Somebody
+  carried them the whole way. Now that's a person I'd pour a drink for. Not from the good bottle. But a drink."
+- *Through Makapu'u Gate done:* "Somebody walked the settlers' road the whole way out. Gate after gate, all the way to
+  that ship and back. On foot. Sober, I'd wager. Can't say I understand it. But I admire it."
+- *Kuliouou found:* "Fires burning at Kuliouou again tonight. Could be cooking. Could be something else. I don't go and
+  look, and I'd recommend the same."
+
+**Back to the records:**
+- "Alright. Enough of me. Here's one you've heard before, and you'll hear again."
+- "Pour yourself something. This next one's slow."
+- "Back to the records. Same as always. Wouldn't have it any other way."
+- "Now hush. Here comes the good part."
+
+**His voice:** three versions are on `D:\FOLab-radio-chatter\listen3.html`, each reading the same break:
+- deep and dark;
+- deep, a little British;
+- rough and low.
+
+Each is played twice, as made and on the radio (`radiofx.air`: an old valve set's band, hiss and crackle). They are
+made with Chatterbox at a relaxed setting, copying a slow, low reading of a few sentences in his manner.
+
+## Haixin Dongtai
+
+Who speaks for the Huáng on air, and how, is the user's to say. Their breaks will be written in English first for the
+user's yes, then put into Mandarin. The old Mandarin drafts below only show that Mandarin works; their words are set
+aside with the rest. Voices to choose from, on the radio, are on the same page.
+
+### The first drafts (set aside)
 
 They use only what the quests themselves say, with no new names or history. Each "waits for" item is a condition the
 game can check.
@@ -130,7 +200,7 @@ Still open:
 1. **The words.** Yes to these drafts, or changes?
 2. **Whose voice on each?** The rehearsal used a Kokoro Chinese woman's voice (zf_xiaoxiao) for Haixin Dongtai and a
    woman's blend through Chatterbox for Radio Atoll. Any voice can be chosen, and it is kept per station.
-3. **How often?** Three songs between talk, the same as Radio New Vegas's three tracks.
+3. ~~How often?~~ Settled 22 Nov 2026: talk every 3 songs.
 
 ## Rehearsal on a copy
 
@@ -149,7 +219,8 @@ Second rehearsal (`rehearse2.py`, `rehearse2.log`):
 - Haixin Dongtai now has the six Mandarin drafts, voiced by Kokoro's zf_xiaoxiao: 8 files, 2.8 to 5.7 seconds, in 33
   seconds.
 - Radio Atoll has the six English drafts, voiced by Chatterbox with af_heart*0.6+bf_emma*0.4, in 12.5 minutes.
-- Neither station gave a warning. The files are in the same folder as the first rehearsal's. Nobody has listened to
+- Neither station gave a warning. The files are in the same folder as the first rehearsal's. To hear all twelve:
+  `D:\FOLab-radio-chatter\listen.html` (opens in Edge; each line with what it waits for). Nobody has listened to
   them yet.
 
 The user's Waikiki, its stations and its voices were not touched.

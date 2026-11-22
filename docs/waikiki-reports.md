@@ -314,3 +314,7 @@ at the start of any Waikiki work, and before saying anything is ready.
   "this fire... is it supposed to be animated? it looks like a glitchy lava lamp. and the three bars on the top show me its
   one of those drawing issues again". The flame is a still glowing shape with bars along its top edge (a cut-out card's
   edge). Sent to the night-lights session: flames to be the game's own animated fire.
+- **Known fault in the 10:13 install** (found by the sessions, 22 Nov ~10:30, not yet reported by the user): the
+  ways-in step linked 16 places using an early version that took the navmesh as "outside", but the city navmesh also
+  covers floors inside hollow buildings. Going out of one of those 16 may put you inside a building. The doors session's
+  fixed steps (17 ways in + 34 cut doorways) replace them at the next install, on the user's word.

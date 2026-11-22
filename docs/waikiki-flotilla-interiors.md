@@ -190,3 +190,33 @@ hatches forward, a ramp from her bow to the sand. Two places, with nothing said 
 ## In Waikiki
 
 In Waikiki since 22 Nov 2026 05:25 (the story session ran `D:/FOLab-flotilla/flotilla_into_waikiki.py real`; one Undo, "Inside the ships"; installed to nv-rs-pad). `check_doors.py` on the real mod: 22 doors, 0 not linked both ways, navmeshes on 8 of 8 places. Not yet seen in game.
+
+## Aboard (the user's answers, 22 Nov 2026 ~09:00; `app/shipcrew.py`, `tests/test_shipcrew.py`)
+
+Rehearsed on a copy (`D:/FOLab-flotilla/crew_into_waikiki.py rehearse`); not in Waikiki, not seen in game. One Undo,
+"Aboard the ships". Pictures: `waikiki-flotilla-crew-1-pens.png`, `-2-store.png`, `-3-captain.png`,
+`waikiki-freighter-crew-1-elders.png`.
+
+The Flotilla, hostile ground:
+- 17 of the mod's pirates by room (house 4, below decks 6, hold 3, pens 1, boats 2 and 1), stood on the navmeshes.
+- The quartermaster's store is locked (needs its key): its door off the passage and the ladderway between it and the
+  house, both ends. The key is on the Quartermaster, in the house's card room. So the house no longer leads below
+  without the key: below decks is reached through the hold's or the pens' hatch.
+- The pens' after end is three cells of the game's jail bars, a barred door each (lock 50), their key on the pens'
+  guard. Five captives inside, dressed as the island's people, in the game's FiendFriendFaction so the pirates leave
+  them be. Eight of the old show cages and kennels came out to make room.
+- Captain Iolana "Io" Kanahele (the user's name) in the captain's cabin: the mod's woman pirate in the Officer's Coat
+  with a Pip-Boy, level 16 at least.
+- Loot by depth as lootplace does it: house and boats easy, below decks middling, hold, pens and store hard. Two empty
+  containers filled, the captain's safe locked, 11 finds (five in the store: guns, ammunition, medicine; four in the
+  hold with a safe).
+
+The Huang's freighter, open to a stranger:
+- The three Zhanglao are off her deck and in her house (two in the mess, one in the master's cabin).
+- Her hold needs its key (Freighter Hold Key): the house's ladderway and the deck hatch, both sides. The key is on the
+  elder in the master's cabin, to be taken from the body or picked from the pocket (the user, 22 Nov).
+- Both her places are owned by the Huang, so taking things is stealing. (Mine to make "touch nothing" mean something;
+  say if it should go.)
+
+The user's answers since (22 Nov): captives stay wandering for now (they may end up in Waikiki later); the
+Quartermaster and the pens' guard stay unnamed; the freighter stays the Huang's.

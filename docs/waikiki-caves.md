@@ -23,15 +23,16 @@
   with tunnel pieces whose sides all agree, kept only if walking from one end reaches most of it and gets nowhere
   else. Samples: an 8 x 8 area gave 52 pieces, every one reached; 12 x 6 gave 48, 3 squares not reached (left out).
   Pictures: `waikiki-cave-sample-8x8.svg`, `waikiki-cave-sample-12x6.svg`.
-- **Not proven:** FOLab's hole check (a floor edge with no wall and nothing under it) finds 33 to 37 such edges in
-  each sample. Either the samples really open onto the void where the filled area ends, or the check misreads rough
-  rock walls that lean back; not looked into yet. Don't build a cave for Waikiki on these until that's settled.
+- **Settled 22 Nov 2026: those "holes" weren't.** Every one was the same spot inside the same piece (168 in, 104
+  across in the plain dead end, for one): the cave floor runs on under rock too low to stand under (an overhang 113 over
+  the floor), so walking stops there, and the rock was 3 units too high to count as a wall. The check now counts floor
+  running on (within a step) as no hole, and needs something to land on under every column of a gap. Both samples: 0.
 - **Can't yet:** rooms. FOLab plans rooms on one grid, from one-square pieces; on the tunnels' grid the kit closes only
   a 2 x 2 chamber with no way in. The real chambers are the CaveEpic pieces on a grid twice as coarse.
 
 ## What a cave planner needs (in order)
 
-1. Settle the hole check on cave rock (are those 33 edges real?).
+1. ~~Settle the hole check on cave rock~~ (done 22 Nov 2026: they weren't holes).
 2. Caverns as rooms on their own grid: read the CaveEpic pieces as one-square pieces of a 1,024 tileset (the same
    words: corner `..FF`, wall `.FFF`, middle `FFFF`), so a cavern of any size closes.
 3. Joining the two grids: where a tunnel meets a cavern wall, as the game joins them (`kit.seen` has every such join),
@@ -45,3 +46,21 @@ A lava tube is one long tunnel, sometimes widening into a chamber, with skylight
 cave kit: a long run of tunnel pieces (straight and gently turning), a cavern or two where it widens, and
 CaveHallSmallDoorSky pieces where light comes down. Most of that is what the planner already does with corridors;
 the caverns need step 2 above. Where on the island, and what's in it, isn't decided: a question for the user.
+
+## The first cave: in the Ko'olau ridges (22 Nov 2026)
+
+The user: "the first cave goes in the Ko'olau ridges". Made on a copy of Waikiki, not in it (`app/kocave.py`,
+`app/rockdoor.py`, `tests/test_kocave.py`; rehearsed by `D:\FOLab-vault2\vault_cave_into_waikiki.py`).
+
+- **Inside:** tunnels of the cave kit filling an area of 10 x 8 squares (about 73 by 58 m), kept only if walking from the
+  way in reaches nearly all of it and nowhere else, and no hole. Its way out is the kit's cave mouth
+  (`CaveHallAntagonizerEntrance`) where it opens on nothing, with the cave door the game hangs in that piece (CaveDoor01,
+  FalloutNV's own: Honest Hearts hangs an invisible one there). Lights and things from the game's own caves, piece by piece
+  (fungus, cave lights, rocks, some loot); bones and gore left out until the user says what happened there.
+- **Outside:** the mouth is on the Wai'alae Nui ridge (the Radar Dome's ridge: "empty jungle", wild), on a steep slope a
+  short climb above where its trail starts: the game's mine door frame and cave door set into a bank cut in the slope,
+  Zion's canyon rocks round it, plants cleared off the pad, a path up from the trail's signpost. Which ridge was FOLab's
+  pick: easy to move.
+- **Not decided (the user's):** what the cave is (a lava tube? a hideout? whose?), its name (it's "Cave" for now), what
+  lives in it, whether it has a map marker (none yet).
+- Caverns (the 1,024 CaveEpic chambers) are still not planned: this cave is tunnels only.

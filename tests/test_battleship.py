@@ -26,8 +26,12 @@ m_desc = battleship.missouri()
 wrong = nifmake.check(m['nif'], m['shapes'], m['solids'])
 check('she builds, mesh and collision checked', not wrong, wrong[:3])
 b = m['box']
-# (her hull: 270 m by 33 m; her fallen mainmast hangs out past her starboard side, so the box is wider that way)
-check('270 m long, 33 m in the beam (70 units a metre)', 18800 < b[4] - b[1] < 19000 and 1160 < b[3] < 1200 and -2300 < b[0] < -1160, b)
+# (her hull: 270 m by 33 m; her fallen mainmast hangs out past her starboard side, and turret Two, trained hard to
+# port, reaches its muzzles ~1,000 out past her port side, so the box is wider than her hull both ways)
+beam = max(battleship.half_beam(-battleship.HALF + s * battleship.LONG / 200) for s in range(201))
+check('270 m long, 33 m in the beam (70 units a metre)', 18800 < b[4] - b[1] < 19000 and 1160 < beam < 1200 and -2300 < b[0] < -1160, (b, beam))
+reach = 520 + battleship.GUN_LONG * math.sin(math.radians(85))
+check("turret Two's guns out over her port side, as far as they reach", reach < b[3] < reach + 60, (b[3], round(reach)))
 check('her bent foremast still near 57 m over the water, her keel under it', 3700 < b[5] < 4300 and b[2] < -500, b)
 check('she has a far model', bool(m.get('far')) and m['far']['triangles'] < m['triangles'])
 hull = [s for s in m['solids'] if len(s['points']) == 8]

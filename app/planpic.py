@@ -9,6 +9,8 @@ plan and its items (kitdress.Item: what, owner, link, extra; p in game units).""
 import collections
 import html
 
+from kitindex import DX
+
 CELL = 16               # (pixels a square)
 COLUMNS = 3             # (levels a row)
 GAP = 40                # (between levels)
@@ -41,7 +43,7 @@ def svg(plan, items=(), title='', step=None):
     w, h = (x1 - x0 + 1) * CELL, (y1 - y0 + 1) * CELL
     cols = min(COLUMNS, len(levels))
     rows = (len(levels) + cols - 1) // cols
-    width = PAD * 2 + cols * w + (cols - 1) * GAP
+    width = max(PAD * 2 + cols * w + (cols - 1) * GAP, PAD * 2 + 7 * len(title or ""), 640)    # (the title and the key below fit)
     height = PAD * 2 + rows * (h + 24 + GAP) + 30
 
     def corner(k):
@@ -58,7 +60,7 @@ def svg(plan, items=(), title='', step=None):
         out.append('<text x="%d" y="%d" font-size="15" fill="#222">%s</text>' % (PAD, 18, html.escape(title)))
     door_at = collections.defaultdict(list)
     for it in items:
-        if getattr(it, 'what', None) in ('door', 'exit') and getattr(it, 'link', None) is not None:
+        if getattr(it, 'what', None) in ('door', 'exit') and isinstance(getattr(it, 'link', None), (frozenset, tuple, set)):
             door_at[it.link].append(it)
     for k, lv in enumerate(levels):
         ox, oy = corner(k)
@@ -111,6 +113,19 @@ def svg(plan, items=(), title='', step=None):
                 out.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="4"/>' % (mx - CELL * 0.4, my, mx + CELL * 0.4, my, colour))
             if lock and not lock.get('key'):
                 out.append('<text x="%d" y="%d" font-size="8" fill="#c33">%d</text>' % (mx + 3, my - 3, lock['level']))
+        # ways out of the place: the way in, and a back door
+        exits = plan.exits() if hasattr(plan, 'exits') else ([plan.exit] if plan.exit else [])
+        for e, (c, d) in enumerate(exits):
+            if c[2] != lv:
+                continue
+            x, y = at(c, k)
+            dx, dy = DX[d]
+            mx, my = x + CELL / 2 + dx * CELL / 2, y + CELL / 2 - dy * CELL / 2
+            if dx:
+                out.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#2e9d48" stroke-width="5"/>' % (mx, my - CELL * 0.4, mx, my + CELL * 0.4))
+            else:
+                out.append('<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#2e9d48" stroke-width="5"/>' % (mx - CELL * 0.4, my, mx + CELL * 0.4, my))
+            out.append('<text x="%d" y="%d" font-size="9" fill="#2e9d48">%s</text>' % (mx + 4, my + 12, 'way in' if e == 0 else 'back door'))
         # names in rooms, on the level they're mostly on
         for o in plan.rooms():
             mine = [c for c in o['cells'] if c[2] == lv and c not in plan.air]

@@ -180,8 +180,9 @@ def prove(data, changes=None):
         ma = None                       # (a mesh nif.py can't draw: the checks above still hold)
     if ma is not None:
         mb = nif.mesh_from_nif(new)
-        # (as text: a few of the game's meshes hold not-a-number corners, which never equal themselves as numbers)
-        same = lambda s: repr({k: v for k, v in s.items() if k != 'tex'})
+        # (as text: a few of the game's meshes hold not-a-number corners, which never equal themselves as numbers;
+        # 'tex' and 'glow' are texture paths, checked against the changes above)
+        same = lambda s: repr({k: v for k, v in s.items() if k not in ('tex', 'glow')})
         if [same(s) for s in ma] != [same(s) for s in mb]:
             wrong.append('the shapes changed')
         tex = {key(k): v for k, v in wanted.items()}

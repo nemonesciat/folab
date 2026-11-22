@@ -54,6 +54,7 @@ VAULT_DEEP = 3          # (a vault of this many storeys or fewer gets another tr
 GAP_FALLS = 48          # (a gap this wide between a floor's edge and the wall, with nothing under it, is one a player falls down)
 EDGE_REACH = 6          # (how far past where an actor's middle goes a hole is looked for, in 16-unit steps)
 DROP_SAFE = 400        # (something this far under a gap catches whoever slips into it)
+FLOOR_ON = 32           # (floor this near the height you stand at, going on past where walking stops, is no hole: a low roof over it)
 COMPACT_TRIES = 6       # (how many of the best ways a room is tried in, before settling for the best regardless)
 ROOM, HALL, VOID = 'room', 'hall', 'void'
 
@@ -892,6 +893,7 @@ class Plan:
         self.flights = []       # {'stair', 'turn', 'cells': squares it stands on, 'level', 'ports': [(square outside, way to the flight, slot, square inside)]}
         self.rise = 256
         self.exit = None        # (square, way): the door out of the place
+        self.back = None        # (square, way): a second door out, a back way in
         self.ports = []         # (square, way to a piece already built, its slot): what a new wing meets
         self.air = set()        # squares in a tall room with nothing to stand on
         self.opens = {}         # (square, way): the slot of a tall piece that this room stands open against
@@ -904,6 +906,17 @@ class Plan:
         self.add_void([n], 'outside')
         self.link(c, n)
         self.exit = (c, d)
+
+    def add_back(self, c, d):
+        """A second doorway out of the place (a back door): as add_exit."""
+        n = (c[0] + DX[d][0], c[1] + DX[d][1], c[2])
+        self.add_void([n], 'outside')
+        self.link(c, n)
+        self.back = (c, d)
+
+    def exits(self):
+        """Every way out: [(square, way)], the main one first."""
+        return [e for e in (self.exit, getattr(self, 'back', None)) if e]
 
     def free(self, cells):
         return not any(c in self.cells for c in cells)
@@ -1066,8 +1079,7 @@ def fill(ts, plan, seed=0, budget=SOLVE_BUDGET, big=True):
             boundary[outside] &= ts.port_mask(slot, way)
     for outside, way, slot in plan.ports:
         boundary[outside] &= ts.port_mask(slot, way)
-    if plan.exit and ts.exit_widths:
-        c, d = plan.exit
+    for c, d in (plan.exits() if ts.exit_widths else ()):
         boundary[c] &= ts.width_mask(d, ts.exit_widths)
     solved = {}
     for _level, cells in sorted(levels.items()):
@@ -1296,7 +1308,8 @@ def _outline_agrees(ts, plan, solved, piece, t, cells):
 class Spec:
     """A room wanted: what it's for, its size range in squares, whether it's on the main route."""
 
-    def __init__(self, purpose, w, h, main=False, fam=None, shape=None, wing=None, stairs=False, tall=None, whole=None, down=False, name=None):
+    def __init__(self, purpose, w, h, main=False, fam=None, shape=None, wing=None, stairs=False, tall=None, whole=None, down=False, name=None, back=False):
+        self.back = back                        # (this room has a second way out of the place: a back door)
         self.name = name                        # (what the room is called, when that isn't what it's furnished as: a place's own names)
         self.down = down                        # (any stairs on the way here go down: what's dug into the ground goes deeper)
         self.whole = whole                      # (a word in a set piece's name: a room made in one piece, if there is one and it fits)
@@ -1430,6 +1443,20 @@ class Planner:
         w, h = self.rng.randint(*spec.w), self.rng.randint(*spec.h)
         cells = [(at[0] + i, at[1] + j, self.level) for i, j in sorted(_shape(spec, w, h, self.rng, False))]
         return self.plan.add_room(spec.purpose, self.room_family(spec), cells, spec.main, spec.name)
+
+    def back_door(self, spec, room=3):
+        """A second way out of the room laid for spec (by its name, else its purpose), where nothing is built for `room`
+        squares beyond. False if there's nowhere."""
+        mine = [o['n'] for o in self.plan.owners if o['kind'] == ROOM and (o.get('name') == spec.name if spec.name else o['purpose'] == spec.purpose)]
+        for n in mine:
+            spots = self.spots(n)
+            self.rng.shuffle(spots)
+            for c, d in spots:
+                if self.clear([(c[0] + DX[d][0] * k, c[1] + DX[d][1] * k, c[2]) for k in range(1, room + 1)]):
+                    self.plan.add_back(c, d)
+                    self.plan.owners[n]['back'] = True
+                    return True
+        return False
 
     def spots(self, n):
         """Where something could leave an owner: (square, way out). Something placed whole has no doors but those it was given:
@@ -2224,6 +2251,8 @@ def make_plan(ts, program, seed=0, bounds=None, plan=None, start=None, level=0, 
             near.sort(key=lambda n: owners_of[n]['kind'] != ROOM)       # (stairs start from a room's door, never a corridor's side)
         if not pl.attach_best(s, (near or owners)[:COMPACT_PARENTS], fresh):
             any(pl.attach(s, n, fresh) for n in owners)
+    for s in [s for s in program if getattr(s, 'back', False)]:
+        pl.back_door(s)
     if loops is None:
         loops = 0 if plan is not None else 1 + len(pl.plan.rooms()) // 6
     pl.plan.loops = pl.add_loops(loops) if loops else 0
@@ -2299,10 +2328,11 @@ class Walk:
             # piece whose floor stops short)
             k = next((k for k in range(1, 7) if any(s[0] <= z + 110 and s[1] >= z + 12 for s in cols.get((q[0] + k * dy, q[1] + k * dx), ()))), None)
             if k is None:
-                return False
+                # (floor going on under rock too low to stand under, as a cave's overhangs: nothing to fall through)
+                return all(any(z - FLOOR_ON <= s[1] <= z + 12 for s in cols.get((q[0] + j * dy, q[1] + j * dx), ())) for j in range(1, 4))
             if (k - 1) * self.voxel < GAP_FALLS:
                 return True
-            return any(z - DROP_SAFE <= s[1] <= z for j in range(1, k) for s in cols.get((q[0] + j * dy, q[1] + j * dx), ()))
+            return all(any(z - DROP_SAFE <= s[1] <= z + 12 for s in cols.get((q[0] + j * dy, q[1] + j * dx), ())) for j in range(1, k))
         for i in here:
             q = g.p[i]
             z = q[2]
@@ -2367,9 +2397,8 @@ def walk_check(game, ts, plan, made, cache=None, extra=(), start=None, offset=(0
     missing = [c for c in plan.squares() if covered[c] < need]
     # (a player squeezes further than an actor's middle goes: past a desk into a room's corner)
     edges = w.open_edges(reach=EDGE_REACH)
-    if plan.exit:
-        # (the way out has its door stood in it later on)
-        c, d = plan.exit
+    for c, d in plan.exits():
+        # (a way out has its door stood in it later on)
         ex, ey = (c[0] + DX[d][0] * 0.5) * step + ox, (c[1] + DX[d][1] * 0.5) * step + oy
         edges = [e for e in edges if abs(e[0] - ex) > step * 0.6 or abs(e[1] - ey) > step * 0.6]
     return {'missing': missing, 'escaped': escaped, 'squares': len(plan.squares()), 'reached': len(w.reached), 'edges': edges}
@@ -2641,8 +2670,9 @@ def reroll_room(ts, plan, made, n, seed):
     for c, mask in plan.forced.items():
         if plan.cells.get(c) == n:
             boundary[c] &= mask
-    if plan.exit and plan.exit[0] in mine and ts.exit_widths:
-        boundary[plan.exit[0]] &= ts.width_mask(plan.exit[1], ts.exit_widths)
+    for c, d in (plan.exits() if ts.exit_widths else ()):
+        if c in mine:
+            boundary[c] &= ts.width_mask(d, ts.exit_widths)
     cells = mine + [q for q in near if boundary[q] != -1]
     # (a piece bigger than a square that's only partly this room's would be left with a hole: that's not a room to re-roll)
     if any(len(by[c].cells) > 1 and any(plan.cells.get(q) != n for q in by[c].cells) for c in mine if c in by):
