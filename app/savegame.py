@@ -135,13 +135,34 @@ class Save:
                 'parts': [self.key(x) for x in parts]}
 
 
-def apply_face(rec, face):
+def head_parts(gd, rec, face):
+    """The head parts the character should have: the save's (beard, moustache…), and eyebrows. The face menu has no
+    eyebrows to pick, so a save lists only what was picked; the game's own characters carry an eyebrow part beside their
+    beard (188 of them do). So: the record's eyebrows are kept when the save names none, and a character with none at
+    all gets the plain ones for their sex."""
+    import api_characters as ac
+    edid = lambda k: gd.edid(gd.from_key(k)) if k and gd.from_key(k) in gd.forms else ''
+    brow = lambda k: edid(k).lower().startswith('eyebrow')
+    parts = list(face['parts'])
+    if not any(brow(k) for k in parts):
+        have = [s['value'] for s in ac.subs_of(rec, 'PNAM') if brow(s['value'])]
+        if not have:
+            want = 'EyebrowF' if ac.num(rec, 'ACBS', 'Flags') & 1 else 'EyebrowM'
+            f = next((f for f, (_i, r) in gd.forms.items() if r.tag == 'HDPT' and gd.edid(f) == want), None)
+            have = [gd.key(f)] if f is not None else []
+        parts = have + parts
+    return parts
+
+
+def apply_face(rec, face, gd=None):
     """A character record (recordio's form) with the face put in: the FaceGen numbers, hair, eyes, hair length and
-    colour, head parts (all replaced, as the save has them). The order of its subrecords is kept."""
+    colour, and head parts (the save's, with eyebrows kept or given: head_parts; given gd). The order of its
+    subrecords is kept."""
     import api_characters as ac
     pack = lambda fl: struct.pack('<%df' % len(fl), *fl).hex()
+    parts = head_parts(gd, rec, face) if gd is not None else face['parts']
     rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('PNAM', 'HNAM', 'ENAM', 'LNAM', 'HCLR', 'FGGS', 'FGGA', 'FGTS')]
-    for k in face['parts']:
+    for k in parts:
         ac.insert(rec, {'tag': 'PNAM', 'label': 'Head part', 'kind': 'F', 'value': k})
     if face['hair']:
         ac.insert(rec, {'tag': 'HNAM', 'label': 'Hair', 'kind': 'F', 'value': face['hair']})
