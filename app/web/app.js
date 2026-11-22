@@ -30,8 +30,27 @@ function setState(s){
   $('#b-undo').disabled = !(p && p.undo); $('#b-undo').title = p && p.undo ? `Undo ${p.undo} (Ctrl+Z)` : 'Nothing to undo';
   $('#b-redo').disabled = !(p && p.redo); $('#b-redo').title = p && p.redo ? `Redo ${p.redo} (Ctrl+Y)` : 'Nothing to redo';
   $('#b-save').disabled = $('#b-install').disabled = !p;
+  saveBar(s);
   const g = $('#gamepill'), i = s.installed;
+  const chosen = p && i && (s.play_in || []).length ? (i.places || []).filter(r => r.chosen) : null;
   if (!p || !i){ g.style.display = 'none'; }
+  else if (chosen){
+    // (places chosen in Where your mod goes: the pill says how each of those stands, nothing else)
+    g.style.display = '';
+    const names = s.play_in.map(k => k === 'main' ? (s.loadout ? 'MO2' : 'the game') : k.split(/[\\/]/).pop());
+    const bad = chosen.filter(r => r.state !== 'current');
+    g.title = 'Where your mod goes (click to choose):\n' + (chosen.length ? chosen.map(r => `${r.name}: ${PLACE_WORDS[r.state] || r.state}${r.note ? ' (' + r.note + ')' : ''}`).join('\n') : names.map(n => n + ': not in yet').join('\n'));
+    if (!chosen.length){ g.className = 'pill'; g.textContent = 'Not in game yet'; }
+    else if (bad.length){
+      const none = bad.filter(r => r.state === 'missing').map(r => r.name), older = bad.filter(r => r.state !== 'missing').map(r => r.name);
+      g.className = 'pill warn';
+      g.textContent = '● ' + [none.length ? 'Not yet in ' + andList(none).replace(' and ', ' or ') : '', older.length ? andList(older) + (older.length > 1 ? ' have' : ' has') + ' an older save' : ''].filter(Boolean).join('; ');
+    }
+    else if (p.saved){ g.className = 'pill ok'; g.textContent = '✓ In ' + andList(names); }
+    else { g.className = 'pill warn'; g.textContent = '● ' + andList(names) + ': your last save'; g.title += '\n\nYour newest edits are not saved yet: Put in game saves them and puts them in.'; }
+    $('#b-install').textContent = 'Put in game';
+    $('#b-install').title = 'Save, then put your mod in ' + andList(names) + ' (click the box at the top that says where it is, to choose)';
+  }
   else {
     g.style.display = '';
     const where = s.loadout ? 'MO2' : 'game';
@@ -47,6 +66,33 @@ function setState(s){
 
 async function refreshState(){ setState(await api('/api/state')); }
 
+const PLACE_WORDS = {current: 'has your last save', old: 'has an older save', off: 'has it, switched off', missing: 'hasn\'t got it yet'};
+function andList(a){ return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
+function clock(t){
+  const d = new Date(t * 1000), now = new Date(), hm = d.toTimeString().slice(0, 5);
+  return d.toDateString() === now.toDateString() ? hm : d.toLocaleDateString(undefined, {day: 'numeric', month: 'short'}) + ' ' + hm;
+}
+
+// Saved or not, in plain words. Each edit is written to the mod as it's made (it's there when FOLab opens again);
+// Save writes the plugin the game loads, and that's what "Saved" means here.
+function saveBar(s){
+  const sp = $('#savepill'), p = s.project;
+  if (!sp) return;
+  if (!p){ sp.style.display = 'none'; return; }
+  sp.style.display = '';
+  const safe = p.held ? `\n\nWhile FOLab is open, nothing else can change ${p.name} (other tools and Claude's scripts are told to wait), so your edits are safe.`
+    : p.other_holder ? `\n\nCareful: another FOLab has ${p.name} open too. Close one of them.` : '';
+  if (p.saved){ sp.className = 'pill ok'; sp.textContent = '✓ Saved ' + clock(p.saved_at); sp.title = `Everything you've done is saved into ${p.plugin}.` + safe; }
+  else {
+    sp.className = 'pill warn'; sp.textContent = '● Not saved yet';
+    sp.title = `You've made edits since ${p.saved_at ? 'you last saved (' + clock(p.saved_at) + ')' : 'the mod was started'}. FOLab keeps them as you go, but the game only sees them after Save (Ctrl+S). Click to save now.` + safe;
+  }
+}
+addEventListener('beforeunload', e => {
+  const p = A.state && A.state.project;
+  if (p && !p.saved){ e.preventDefault(); e.returnValue = 'Your edits are not saved into ' + p.plugin + ' yet.'; return e.returnValue; }
+});
+
 async function newMod(name){
   if (!name.trim()) return toast('Give your mod a name first.', true);
   try { setState(await post('/api/project/new', {name})); await loadPlaces(); if (A.cellId) openPlace(A.cellId); toast('Started ' + A.state.project.plugin); }
@@ -58,12 +104,63 @@ async function openMod(name){
 }
 
 async function save(){
+  const b = $('#b-save'), sp = $('#savepill');
+  if (b.disabled) return;
+  b.disabled = true; b.textContent = 'Saving…';
+  if (sp){ sp.className = 'pill'; sp.textContent = 'Saving…'; }
   try { const d = await post('/api/save'); setState(d.state); toast(`Saved ${d.path.split(/[\\/]/).pop()} (${(d.bytes / 1024).toFixed(1)} KB)`); }
-  catch (e){ fail(e); }
+  catch (e){ fail(e); refreshState().catch(() => {}); }
+  finally { b.textContent = 'Save'; b.disabled = !(A.state && A.state.project); }
+}
+
+// Where your mod goes: the places Put in game puts it, ticked (the game or MO2, each copy of nv-rs on this PC), with
+// how each stands now.
+function whereWindow(){
+  const s = A.state; if (!s || !s.project) return;
+  const old = $('#wherewin'); if (old) old.remove();
+  const rows = (s.installed || {}).places || [], picked = new Set(s.play_in || []);
+  const opts = [{key: 'main', name: s.loadout ? 'MO2 (profile ' + s.loadout + ')' : "The game's own Data folder"}]
+    .concat((s.nvrs_all || []).map(f => ({key: f, name: f.split(/[\\/]/).pop(), path: f})));
+  const stateOf = o => {
+    const r = rows.find(r => o.key === 'main' ? r.kind === 'main' : r.kind === 'nv-rs' && r.folder.toLowerCase() === o.key.toLowerCase());
+    return r ? PLACE_WORDS[r.state] || r.state : 'nothing saved yet';
+  };
+  const ticked = o => picked.size ? picked.has(o.key) : o.key === 'main';
+  const box = document.createElement('div');
+  box.id = 'wherewin'; box.className = 'owin'; box.style.cssText = 'left:50%;top:14%;transform:translateX(-50%);width:500px;max-width:94vw';
+  box.innerHTML = `<div class="owtitle"><b>Where your mod goes</b><button class="owx">✕</button></div>
+    <div style="padding:10px 14px">
+      <p class="note" style="padding:0 0 8px">Tick the games you play. <b>Put in game</b> saves your mod and puts it in every one ticked; the box at the top then says whether each has your last save.</p>
+      ${opts.map((o, n) => `<label style="display:flex;gap:8px;align-items:baseline;padding:4px 0"><input type="checkbox" data-n="${n}" ${ticked(o) ? 'checked' : ''}>
+        <span><b>${esc(o.name)}</b>${o.path ? ` <small class="muted">${esc(o.path)}</small>` : ''}<br><small>${esc(stateOf(o))}</small></span></label>`).join('')}
+    </div>
+    <div class="owfoot"><button class="btn primary" id="wh-go">Keep these, and put it in now</button><button class="btn" id="wh-keep">Keep these</button><button class="btn" id="wh-cancel">Cancel</button></div>`;
+  document.body.appendChild(box);
+  const close = () => box.remove();
+  box.querySelector('.owx').onclick = close; box.querySelector('#wh-cancel').onclick = close;
+  const keep = async () => {
+    const places = [...box.querySelectorAll('input[data-n]')].filter(c => c.checked).map(c => opts[+c.dataset.n].key);
+    if (!places.length){ toast('Tick at least one.', true); return false; }
+    setState(await post('/api/install/where', {places})); close(); return true;
+  };
+  box.querySelector('#wh-keep').onclick = () => keep().catch(fail);
+  box.querySelector('#wh-go').onclick = async () => { try { if (await keep()) await install(); } catch (e){ fail(e); } };
 }
 async function install(){
   try {
-    const d = await post('/api/install'); setState(d.state);
+    const b = $('#b-install'), was = b.textContent;
+    b.disabled = true; b.textContent = 'Putting in…';
+    let d;
+    try { d = await post('/api/install'); } finally { b.disabled = false; b.textContent = was; }
+    setState(d.state);
+    if (d.done || d.failed){
+      // (places chosen: each said by name, and each checked again by the state that came back)
+      const rows = ((d.state.installed || {}).places || []).filter(r => r.chosen);
+      const ok = rows.filter(r => r.state === 'current').map(r => r.name), bad = rows.filter(r => r.state !== 'current');
+      if (d.failed.length) return toast('Not put in ' + d.failed.map(f => `${f.where}: ${f.why}`).join('; '), true);
+      if (bad.length) return toast(`Saved, but ${andList(bad.map(r => r.name))} still ${bad.length === 1 ? 'has' : 'have'} another copy. Click the box at the top that says where your mod is.`, true);
+      return toast(`Saved and in ${andList(ok)}. Start the game there and load a save.`);
+    }
     const old = (d.state.installed || {}).stale || [];
     if (old.length) return toast(`Not ready yet: ${old.map(c => c.far ? c.where : 'an older copy is in ' + c.where).join('; ')}. My mod shows what to do.`, true);
     if (d.install.switch_on) return toast(`Saved into MO2 as "${d.install.mod}". Close FOLab, then in MO2 press Refresh and tick it in both panes.`);
@@ -72,8 +169,12 @@ async function install(){
   } catch (e){ fail(e); }
 }
 async function undoRedo(which){
+  const word = which === 'undo' ? 'Undo' : 'Redo';
+  busyStart(word === 'Undo' ? 'Undoing' : 'Redoing');
   try {
-    const d = await post('/api/' + which);
+    let d;
+    try { d = await post('/api/' + which); busyEnd(word + (d.label ? ': ' + d.label : ''), true); }
+    catch (e){ busyEnd(word, false); throw e; }
     setState(d.state);
     if (d.label) toast((which === 'undo' ? 'Undid ' : 'Redid ') + d.label);
     // (a place of your own may have come or gone with that step)
@@ -324,10 +425,34 @@ W.onSelect = list => {
 };
 
 // ---------- edits ----------
+// What FOLab is doing, at once and until the mod has it: "⏳ Removing MilkCrate01…", then "✓ Removed MilkCrate01".
+// (22 Nov 2026, the user: "I have NO idea when my actions do anything")
+const BUSY = {n: 0, timer: null};
+const DOING = {Remove: 'Removing', Move: 'Moving', Turn: 'Turning', Scale: 'Sizing', Nudge: 'Moving', 'Drop down': 'Setting down',
+               Duplicate: 'Copying', Paste: 'Pasting', Place: 'Placing', 'Put back': 'Putting back'};
+const DONE = {Remove: 'Removed', Move: 'Moved', Turn: 'Turned', Scale: 'Sized', Nudge: 'Moved', 'Drop down': 'Set down',
+              Duplicate: 'Copied', Paste: 'Pasted', Place: 'Placed', 'Put back': 'Put back'};
+function doing(label){ const w = Object.keys(DOING).find(k => label.startsWith(k)); return w ? DOING[w] + label.slice(w.length) : label; }
+function did(label){ const w = Object.keys(DONE).find(k => label.startsWith(k)); return w ? DONE[w] + label.slice(w.length) : label; }
+function actShow(text, cls){
+  const a = $('#actpill'); if (!a) return;
+  clearTimeout(BUSY.timer);
+  a.style.display = ''; a.className = 'pill ' + (cls || ''); a.textContent = text;
+  if (cls === 'ok') BUSY.timer = setTimeout(() => { if (!BUSY.n) a.style.display = 'none'; }, 6000);
+}
+function busyStart(label){ BUSY.n++; actShow('⏳ ' + doing(label) + '…', 'warn'); }
+function busyEnd(label, ok){
+  BUSY.n = Math.max(0, BUSY.n - 1);
+  if (ok) actShow('✓ ' + did(label) + (label.startsWith('Remove') ? ' · Ctrl+Z puts it back' : ''), 'ok');
+  else actShow('✕ ' + label + ': didn’t happen', 'warn');
+}
+
 async function edit(label, ops, selectNew){
   if (!A.state.project) return toast('Start a mod first.', true);
+  busyStart(label);
   try {
     const d = await post('/api/edit', {label, ops});
+    busyEnd(label, true);
     setState(d.state);
     for (const t of d.things || []){
       const i = (A.things || []).findIndex(x => x.key === t.key);
@@ -342,7 +467,7 @@ async function edit(label, ops, selectNew){
     if (selectNew && d.made.length) select(d.made);
     else drawSelected(selThings());
     return d;
-  } catch (e){ fail(e); resync(); }
+  } catch (e){ busyEnd(label, false); fail(e); resync(); }
 }
 
 // moves: [[thing, p, scale?]]: one undo step
@@ -382,10 +507,20 @@ function dupSel(){
   const r = v => Math.round(v * 100) / 100;
   edit('Duplicate', selThings().map(t => { const p = t.p.slice(); p[0] = r(p[0] + d.x); p[1] = r(p[1] + d.y); p[2] = r(p[2] + d.z); return {op: 'add', cell: A.cellId, base: t.bkey, p, s: t.s || 1}; }), true);
 }
-function delSel(){
-  if (!needSel()) return;
-  const keys = A.sel.slice(); select([]);
-  edit(keys.length > 1 ? `Remove ${keys.length}` : 'Remove', keys.map(k => ({op: 'remove', cell: A.cellId, ref: k})));
+const REMOVING = new Set();          // (keys on their way out: a second Delete never removes more than was selected)
+async function delSel(){
+  const keys = A.sel.filter(k => !REMOVING.has(k));
+  if (!keys.length){ if (REMOVING.size) return toast('Still removing what you picked: one moment.'); return needSel(); }
+  const things = selThings().filter(t => keys.includes(t.key));
+  const label = keys.length > 1 ? `Remove ${keys.length} things` : 'Remove ' + ((things[0] || {}).base || 'it');
+  // (gone from view at once; the edit then makes it so, or puts it back if it fails)
+  const gone = W.sel.filter(g => keys.includes(g.userData.thing.key));
+  for (const g of gone) g.visible = false;
+  keys.forEach(k => REMOVING.add(k));
+  select([]);
+  toast(doing(label) + '…');
+  try { const d = await edit(label, keys.map(k => ({op: 'remove', cell: A.cellId, ref: k}))); if (d) toast(did(label) + '. Ctrl+Z puts it back.'); else for (const g of gone) g.visible = true; }
+  finally { keys.forEach(k => REMOVING.delete(k)); }
 }
 function revertSel(){
   const keys = selThings().filter(t => t.state === 'moved' || t.state === 'removed').map(t => t.key);
@@ -515,11 +650,11 @@ W.onDropItem = async (key, e) => {
 function setTool(m){ setMode(m); $('#t-move').classList.toggle('on', m === 'translate'); $('#t-turn').classList.toggle('on', m === 'rotate'); }
 $('#t-move').onclick = () => setTool('translate');
 $('#t-turn').onclick = () => setTool('rotate');
-function snapNow(){ setSnap(+$('#t-grid').value, +$('#t-angle').value); try { localStorage.setItem('folab-snap', $('#t-grid').value + ',' + $('#t-angle').value); } catch (e) {} }
+function snapNow(){ setSnap(+$('#t-grid').value, +$('#t-angle').value); try { localStorage.setItem('folab-steps', $('#t-grid').value + ',' + $('#t-angle').value); } catch (e) {} }
 $('#t-grid').onchange = $('#t-angle').onchange = snapNow;
 $('#t-drop').onclick = dropSel; $('#t-dup').onclick = dupSel; $('#t-del').onclick = delSel;
 $('#t-markers').onchange = e => { setShow('markers', e.target.checked); drawObjects(); };
-$('#t-snap').onchange = e => { W.snapPieces = e.target.checked; try { localStorage.setItem('folab-snappieces', e.target.checked ? '1' : '0'); } catch (err) {} };
+$('#t-snap').onchange = e => { W.snapPieces = e.target.checked; try { localStorage.setItem('folab-lineup', e.target.checked ? '1' : '0'); } catch (err) {} };
 $('#t-land').onchange = e => { W.landAfter = e.target.checked; try { localStorage.setItem('folab-land', e.target.checked ? '1' : '0'); } catch (err) {} };
 try { $('#t-land').checked = W.landAfter = localStorage.getItem('folab-land') === '1'; } catch (err) {}
 $('#t-removed').onchange = e => { setShow('removed', e.target.checked); drawObjects(); };
@@ -591,8 +726,18 @@ $('#t-ground').onclick = () => groundToggle();
 $('#w-new').onclick = () => newMod($('#w-name').value);
 $('#w-name').addEventListener('keydown', e => { if (e.key === 'Enter') newMod(e.target.value); });
 
+// a key that went into a text box rather than the 3D view: said once while that box has the keys
+let typedHintFor = null;
+function typedHint(e){
+  const t = e.target;
+  if (e.key === 'Escape'){ t.blur(); return; }                 // (Esc leaves the box: the keys go back to the view)
+  if (!W.sel.length || typedHintFor === t || !['Delete', 'End', 'PageUp', 'PageDown'].includes(e.key)) return;
+  if ($('#page-world').style.display === 'none') return;
+  typedHintFor = t; t.addEventListener('blur', () => { if (typedHintFor === t) typedHintFor = null; }, {once: true});
+  toast('You’re typing in a box, so keys go to it. Click the 3D view (or press Esc) to use them on what’s selected.');
+}
 addEventListener('keydown', e => {
-  if (typing(e)) return;
+  if (typing(e)) return typedHint(e);
   const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey, world = $('#page-world').style.display !== 'none';
   if (ctrl && k === 'z'){ e.preventDefault(); undoRedo('undo'); }
   else if (ctrl && (k === 'y' || (e.shiftKey && k === 'z'))){ e.preventDefault(); undoRedo('redo'); }
@@ -641,6 +786,8 @@ function page(name){
 }
 for (const p of PAGES) $('#nav-' + p).onclick = () => page(p);
 $('#modpill').onclick = () => page('mod');
+$('#gamepill').onclick = () => whereWindow();
+$('#savepill').onclick = () => { if (A.state && A.state.project && !A.state.project.saved) save(); };
 
 function nvseCard(s){
   const n = s.nvse || {}, via = s.launch_via;
@@ -785,9 +932,10 @@ function drawModPage(){
 // ---------- start ----------
 async function start(){
   worldInit($('#view'));
-  try { const [g, a] = (localStorage.getItem('folab-snap') || '128,15').split(','); $('#t-grid').value = g; $('#t-angle').value = a; } catch (e) {}
+  // (new names since 22 Nov 2026, so an old saved 128 doesn't come back: the user couldn't find what made things jump)
+  try { const [g, a] = (localStorage.getItem('folab-steps') || '0,0').split(','); $('#t-grid').value = g; $('#t-angle').value = a; } catch (e) {}
   snapNow();
-  try { W.snapPieces = localStorage.getItem('folab-snappieces') !== '0'; $('#t-snap').checked = W.snapPieces; } catch (e) { W.snapPieces = true; }
+  try { W.snapPieces = localStorage.getItem('folab-lineup') === '1'; $('#t-snap').checked = W.snapPieces; } catch (e) { W.snapPieces = false; }
   try { if (localStorage.getItem('folab-light') === '0'){ $('#t-light').checked = false; setGameLight(false); } } catch (e) {}
   await refreshState();
   for (const [k, v] of Object.entries(A.state.kinds)) $('#f-kind').insertAdjacentHTML('beforeend', `<option value="${k}">${esc(v)}</option>`);

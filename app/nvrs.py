@@ -27,6 +27,17 @@ import playtest
 
 MANIFEST = 'folab.json'
 DEFAULT_PLACES = [r'C:\Games\nv-rs', os.path.join(os.path.expanduser('~'), 'Games', 'nv-rs')]
+if os.environ.get('FOLAB_NVRS_PLACES'):        # (a test FOLab: pretend copies of nv-rs instead of the real ones)
+    DEFAULT_PLACES = [p for p in os.environ['FOLAB_NVRS_PLACES'].split(';') if p]
+
+
+def _pretend(folder):
+    """A pretend nv-rs a test made (under FOLAB_FAKE_GAMES): a scratch FOLab may write there, never in a real one."""
+    root = os.environ.get('FOLAB_FAKE_GAMES')
+    if not root:
+        return False
+    a, b = os.path.normcase(os.path.abspath(folder)), os.path.normcase(os.path.abspath(root))
+    return a.startswith(b.rstrip('\\/') + os.sep)
 
 
 def is_nvrs(folder):
@@ -298,7 +309,7 @@ def put_in(folder, built_plugins, setup=None):
     """The setup's folders, then these saved plugins (in load order: the mod, then FOLab Test.esp) with their own files,
     into nv-rs's mods folder, and what FOLab put there before and doesn't now taken out. With plugins on in the
     setup, a plugins.txt there says what loads. {'folder', 'plugins', 'files', 'linked', 'copied', 'backups', 'nvse'}"""
-    if os.environ.get('FOLAB_NO_GAME_WRITES'):      # (a scratch FOLab: nv-rs is a real game too)
+    if os.environ.get('FOLAB_NO_GAME_WRITES') and not _pretend(folder):      # (a scratch FOLab: nv-rs is a real game too)
         raise ValueError('Putting the mod in nv-rs would change a real game, and this FOLab is a scratch copy for looking at '
                          'experiments: it may not. Use your own FOLab for that.')
     setup = clean_setup(setup)

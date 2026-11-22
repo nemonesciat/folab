@@ -17,7 +17,11 @@ changed, found by comparing each entry with what was last written: cells, record
 save() writes the .json whole and starts the lines afresh, as does a .changes grown past JOURNAL_MOST. A copy of a mod is
 both files, or compact() first and the .json alone.
 
-Undo keeps, a step, what the step changed as it was before (cells and records as pickled bytes)."""
+Undo keeps, a step, what the step changed as it was before (cells and records as pickled bytes).
+
+While FOLab's server has a mod open it holds <name>.inuse beside it (hold/release): any other process that tries to write
+that mod (a script's save, apply, sync) gets InUse instead, so a script can't overwrite the user's edits, nor FOLab a
+script's. Reading is always allowed. A lock left by a FOLab that died counts for nothing."""
 import hashlib
 import io
 import json
@@ -74,6 +78,94 @@ def _mark(path):
         return [st.st_size, st.st_mtime_ns]
     except OSError:
         return None
+
+
+class InUse(ValueError):
+    """The mod is open in a running FOLab, and this is another program trying to change it."""
+
+
+def lock_path(path):
+    return os.path.splitext(path)[0] + '.inuse'
+
+
+def _alive(pid):
+    """Is that process still running, and a Python (FOLab's server)? (A dead FOLab's lock is no lock.)"""
+    if pid == os.getpid():
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k = ctypes.windll.kernel32
+    except (ImportError, AttributeError):
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    h = k.OpenProcess(0x1000, False, int(pid))         # (PROCESS_QUERY_LIMITED_INFORMATION)
+    if not h:
+        return False
+    try:
+        code = wintypes.DWORD()
+        if not k.GetExitCodeProcess(h, ctypes.byref(code)) or code.value != 259:      # (STILL_ACTIVE)
+            return False
+        buf, n = ctypes.create_unicode_buffer(1024), wintypes.DWORD(1024)
+        if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)):
+            return 'python' in os.path.basename(buf.value).lower()     # (a pid used again by another program)
+        return True
+    finally:
+        k.CloseHandle(h)
+
+
+def holder(path):
+    """Who holds the mod at path open, if it's another running process: {'pid', 'by', 'since'}; else None."""
+    try:
+        with open(lock_path(path), encoding='utf-8') as f:
+            d = json.load(f)
+        pid = int(d['pid'])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if pid == os.getpid() or not _alive(pid):
+        return None
+    return d
+
+
+def hold(path, by='FOLab'):
+    """This process has the mod open for editing: no other may write it until release (FOLab's server does this for
+    the mod it has open). Raises InUse if another running process holds it already."""
+    h = holder(path)
+    if h:
+        raise InUse(_in_use_words(path, h))
+    with open(lock_path(path), 'w', encoding='utf-8') as f:
+        json.dump({'pid': os.getpid(), 'by': by, 'since': time.time()}, f)
+
+
+def release(path):
+    """Let go of the mod if this process holds it."""
+    p = lock_path(path)
+    try:
+        with open(p, encoding='utf-8') as f:
+            mine = int(json.load(f).get('pid', -1)) == os.getpid()
+    except (OSError, ValueError, TypeError):
+        return
+    if mine:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+
+def _in_use_words(path, h):
+    name = os.path.splitext(os.path.basename(path))[0]
+    return ('%s is open in %s (since %s). Close FOLab first: while it has the mod open, nothing else may change it, '
+            'so nobody\'s edits are lost.' % (name, h.get('by') or 'FOLab', time.strftime('%H:%M', time.localtime(h.get('since') or 0))))
+
+
+def check_free(path):
+    """Raise InUse if a running FOLab other than this process has the mod open. Every write of a mod's files asks."""
+    h = holder(path)
+    if h:
+        raise InUse(_in_use_words(path, h))
 
 
 def pickled(v):
@@ -185,6 +277,7 @@ class Project:
         ground and the navmeshes are kept as the text last written for each cell and written again only when that cell's
         entry is another one: a change there always puts a whole new entry in (nothing edits one in place). afresh: don't
         trust that, and write everything out anew."""
+        check_free(self.path)
         d = self.to_dict()
         kept = {} if afresh else getattr(self, '_written', {})
         now = {}
@@ -262,6 +355,7 @@ class Project:
         head = json.dumps(self._head(), sort_keys=True)
         if not ch and head == self._saved_head:
             return ch
+        check_free(self.path)
         if self._base is None or _mark(self.path) != self._base:
             self.save()                         # (the .json was written by something else since: the mod written whole)
             return ch

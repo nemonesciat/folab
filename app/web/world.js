@@ -252,8 +252,15 @@ function controls(el){
   el.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
   // (the right button while a handle is dragged puts it back; a second button pressed sends no pointerdown, so: mousedown)
   addEventListener('mousedown', e => { if (e.button === 2 && W.dragging && !W.grabbing){ cancelDrag(); e.preventDefault(); } }, true);
+  // (a canvas takes no focus without a tabindex: el.focus() did nothing, so a Position box or search box clicked
+  // earlier kept the keys, and Delete edited that box instead of removing the thing: 22 Nov 2026, "pressed delete 10
+  // times and it did nothing")
+  if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  el.style.outline = 'none';
   el.addEventListener('pointerdown', e => {
-    el.focus();
+    const a = document.activeElement;
+    if (a && a !== el && a !== document.body && a.blur) a.blur();
+    el.focus({preventScroll: true});
     if (e.button === 1) e.preventDefault();
     if (e.button === 0 && (W.dragging || W.gizmo.axis)) return;           // using the handles
     if (e.button === 0 && !e.altKey && W.tool && W.tool.down(e)){          // a tool working on the ground (the Ground brush)
@@ -714,6 +721,13 @@ function snapApply(){
   target.position.add(d);
   if (W.sel.length > 1){ W.pivot.updateMatrixWorld(true); }
   W.snapped = true;
+  // (say so: a jump nobody explains is a jump nobody can turn off)
+  const h = document.getElementById('hint');
+  if (h && !W.placing){
+    h.textContent = 'Lined up with a piece beside it. Untick "Line up with pieces" in the toolbar to move freely.';
+    h.style.display = 'block'; clearTimeout(W.snapHintTimer);
+    W.snapHintTimer = setTimeout(() => { if (!W.placing) h.style.display = 'none'; }, 2500);
+  }
 }
 
 // several selected: each follows the handles, turning round their middle

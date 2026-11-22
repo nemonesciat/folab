@@ -77,6 +77,41 @@ def game_running():
     return 'falloutnv.exe' in out.lower()
 
 
+def running_games():
+    """Where each running FalloutNV.exe was started from (its full path; None where Windows won't say). The original
+    game's and every nv-rs's (its app\\FalloutNV.exe) alike."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
+    except (ImportError, AttributeError):
+        return [None] if game_running() else []
+    ids = (wintypes.DWORD * 4096)()
+    got = wintypes.DWORD()
+    if not psapi.EnumProcesses(ids, ctypes.sizeof(ids), ctypes.byref(got)):
+        return [None] if game_running() else []
+    out = []
+    for pid in ids[:got.value // ctypes.sizeof(wintypes.DWORD)]:
+        h = k.OpenProcess(0x1000, False, pid)
+        if not h:
+            continue
+        try:
+            buf, n = ctypes.create_unicode_buffer(1024), wintypes.DWORD(1024)
+            if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)) and os.path.basename(buf.value).lower() == 'falloutnv.exe':
+                out.append(buf.value)
+        finally:
+            k.CloseHandle(h)
+    if not out and game_running():
+        out.append(None)                # (one Windows wouldn't let us look at: counts as running everywhere)
+    return out
+
+
+def running_in(folder):
+    """Is a game running from inside this folder (an nv-rs), or one FOLab can't place?"""
+    top = os.path.normcase(os.path.abspath(folder)).rstrip('\\/') + os.sep
+    return any(p is None or os.path.normcase(os.path.abspath(p)).startswith(top) for p in running_games())
+
+
 def launch(data_dir, via='nvse'):
     """Start the game: through xNVSE's nvse_loader.exe when it's there (no launcher window; how xNVSE says to start
     it), else the way Steam's Play button does (the game's launcher opens first). Never FalloutNV.exe directly: the
