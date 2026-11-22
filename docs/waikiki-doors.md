@@ -96,6 +96,5 @@ small worlds: their copies stand at the same spots); a door counts when every ra
 and doorway steps linked: 23 before. In the way: what had shut the doorway (DoorBarricade, a broken door), rubble, fruit
 crates, and the building's own collision over the doorway (row houses, shacks, the Wrangler, the corner shops: the game's
 shut doorways are closed in collision too). `tools/door_reach_into_waikiki.py`: loose things in front taken away (11),
-then the door stood out from the wall 2 at a time until every ray meets it (19 doors, most 2-18; one, House863's on a
-RowHouse02NV back wall, 54: that house's collision is a face ~50 in front of its drawn wall, so the door stands clear of the
-wall there). 51 of 51 after, checked again from the saved mod; 21 cells' navmeshes made again. Not yet seen in game.
+then the door stood out from the wall 2 at a time until every ray meets it (18 doors, 2-18). A door that would stand more than 24 off its wall is hung on another wall of its building instead
+(House863's: its RowHouse02NV back wall's collision is a face ~50 in front of the drawn wall). 51 of 51 after, checked again from the saved mod; 21 cells' navmeshes made again. Not yet seen in game.
