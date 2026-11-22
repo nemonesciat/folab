@@ -34,4 +34,8 @@ cottage door in a casing. Lifts: bronze doors drawn both sides with a frame and 
 
 Rehearsed on a copy (D:\FOLabScratch\doors, Waikiki.json of 21 Nov 21:26): 429 doors, 24 lifts, 40 arrivals moved, 933 ops,
 one Undo, 281 navmeshes kept current, the plugin builds (105 MB), health the same as the untouched copy (0 errors), a
-second run refuses. Not yet seen in game.
+second run refuses.
+
+In Waikiki and nv-rs-pad since 22 Nov 2026 05:25 (the story session's install, after the hotels' new floors): checks all
+good, 460 doors, 31 lifts (6 lobby, 25 on the new floors, caught by `doorset.LIFTS` as it was), none unlinked, no game
+lift door left. Not yet seen in game.
