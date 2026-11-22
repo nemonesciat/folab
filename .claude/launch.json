@@ -175,6 +175,15 @@
       "port": 8791
     },
     {
+      "name": "folab-waysin",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\waysin2&& set FOLAB_NV_INI=D:\\FOLabScratch\\doors\\ini&& py -3 app/server.py 8844 --no-browser"
+      ],
+      "port": 8844
+    },
+    {
       "name": "folab-rhlift3",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [
