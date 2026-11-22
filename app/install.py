@@ -41,18 +41,43 @@ def _hash(path):
 _kept = {}
 
 
-def _hash_kept(path):
-    """A file's hash, read again only when it has changed (the page asks after every edit)."""
-    try:
-        st = os.stat(path)
-    except OSError:
-        return None
-    k = (path, st.st_size, st.st_mtime_ns)
+def _hash_kept(path, mark=None):
+    """A file's hash, read again only when it has changed (the page asks after every edit). mark: its (size, date in ns)
+    if known already (scan)."""
+    if mark is None:
+        try:
+            st = os.stat(path)
+        except OSError:
+            return None
+        mark = (st.st_size, st.st_mtime_ns)
+    k = (path,) + tuple(mark)
     if k not in _kept:
-        if len(_kept) > 5000:
+        if len(_kept) > 50000:
             _kept.clear()
         _kept[k] = _hash(path)
     return _kept[k]
+
+
+def scan(root):
+    """Every file under root: {path under it as spelt: (size, modified in ns)}, from the folders' listings alone (on
+    Windows no file is opened: a mod's 19,000 files in a second). A hard link's listing may lag what was written through
+    another of its names: use it to tell what's unchanged, never what something is."""
+    out, todo = {}, ['']
+    while todo:
+        rel = todo.pop()
+        try:
+            it = os.scandir(os.path.join(root, rel) if rel else root)
+        except OSError:
+            continue
+        with it:
+            for e in it:
+                r = os.path.join(rel, e.name) if rel else e.name
+                if e.is_dir(follow_symlinks=False):
+                    todo.append(r)
+                elif e.is_file(follow_symlinks=False):
+                    st = e.stat(follow_symlinks=False)
+                    out[r] = (st.st_size, st.st_mtime_ns)
+    return out
 
 
 def _backup(path):
@@ -129,10 +154,11 @@ def status(data_dir, plugin):
     dest = os.path.join(data_dir, plugin)
     built = os.path.join(project.BUILD_DIR, plugin)
     there = os.path.isfile(dest)
-    files = [os.path.relpath(os.path.join(d, fn), _assets_folder(built)) for d, _s, fs in os.walk(_assets_folder(built)) for fn in fs]
+    folder = _assets_folder(built)
+    files = scan(folder)
     listed = _read_files_list(built)
     return {'installed': there, 'active': any(l.strip().lower() == plugin.lower() for l in _lines()),
-            'current': there and _hash(dest) == _hash(built) and all(listed.get(r.lower()) and listed[r.lower()] == _hash_kept(os.path.join(_assets_folder(built), r)) for r in files),
+            'current': there and _hash_kept(dest) == _hash_kept(built) and all(listed.get(r.lower()) and listed[r.lower()] == _hash_kept(os.path.join(folder, r), m) for r, m in files.items()),
             'plugins_txt': plugins_txt()}
 
 

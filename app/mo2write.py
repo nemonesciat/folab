@@ -431,5 +431,5 @@ def status(lo, built, mod_name):
         return {'installed': False, 'active': False, 'current': False, 'mo2': True}
     there = os.path.join(folder, plugin)
     on = any(m['on'] and m['name'].lower() == os.path.basename(folder).lower() for m in lo.modlist) and any(n.lower() == plugin.lower() for n in lo.active_list)
-    return {'installed': os.path.isfile(there), 'active': on, 'current': os.path.isfile(there) and _hash(there) == _hash(built), 'mo2': True, 'plugins_txt': os.path.join(lo.folder, 'plugins.txt')}
+    return {'installed': os.path.isfile(there), 'active': on, 'current': os.path.isfile(there) and install._hash_kept(there) == install._hash_kept(built), 'mo2': True, 'plugins_txt': os.path.join(lo.folder, 'plugins.txt')}
 

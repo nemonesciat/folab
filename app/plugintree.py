@@ -27,6 +27,11 @@ class Rec:
         """A new record stored compressed (its size, then zlib), as the game's files keep all their land."""
         return cls.new(tag, flags | tes4.COMPRESSED, formid, pack(data), version)
 
+    def set_raw(self, raw, flags):
+        """New contents as stored (compressed already when flags say so)."""
+        self.flags = flags
+        self.raw = raw
+
     def set_packed(self, data, flags=None):
         """New contents, stored compressed."""
         self.flags = (self.flags if flags is None else flags) | tes4.COMPRESSED
@@ -56,12 +61,40 @@ class Group:
         self.label, self.gtype, self.tail, self.kids = label, gtype, tail, kids if kids is not None else []
 
     def bytes(self):
-        body = b''.join(k.bytes() for k in self.kids)
-        return struct.pack('<4sIIi', b'GRUP', 24 + len(body), self.label, self.gtype) + self.tail + body
+        out = []
+        _chunks([self], out)
+        return b''.join(out)
 
     def count(self):
         """records and groups inside, this one included (the header's count)"""
-        return 1 + sum(k.count() if isinstance(k, Group) else 1 for k in self.kids)
+        n, todo = 0, [self]
+        while todo:
+            g = todo.pop()
+            n += 1
+            for k in g.kids:
+                if k.__class__ is Group:
+                    todo.append(k)
+                else:
+                    n += 1
+        return n
+
+
+def _chunks(kids, out):
+    """kids' bytes as pieces appended to out (a record's contents never copied); returns how many bytes they make."""
+    total = 0
+    pack = struct.pack
+    for k in kids:
+        if k.__class__ is Group:
+            at = len(out)
+            out.append(None)
+            size = 24 + _chunks(k.kids, out)
+            out[at] = pack('<4sIIi', b'GRUP', size, k.label, k.gtype) + k.tail
+            total += size
+        else:
+            out.append(k.head[:4] + pack('<III', len(k.raw), k.flags, k.formid) + k.head[16:])
+            out.append(k.raw)
+            total += 24 + len(k.raw)
+    return total
 
 
 def type_label(tag):
@@ -116,17 +149,47 @@ class Plugin:
         return g
 
     def records(self):
-        """(record, parent group, path of groups) for every record"""
-        def walk(kids, path):
+        """(record, parent group, path of groups) for every record, as the tree is now"""
+        out = []
+
+        def walk(kids, path, parent):
             for k in kids:
-                if isinstance(k, Group):
-                    yield from walk(k.kids, path + (k,))
+                if k.__class__ is Group:
+                    walk(k.kids, path + (k,), k)
                 else:
-                    yield k, path[-1] if path else None, path
-        yield from walk(self.tops, ())
+                    out.append((k, parent, path))
+        walk(self.tops, (), None)
+        return out
+
+    def groups(self):
+        """Every group, outer ones before those inside them."""
+        out, n = list(self.tops), 0
+        while n < len(out):
+            out.extend(k for k in out[n].kids if k.__class__ is Group)
+            n += 1
+        return out
+
+    def by_form(self):
+        """{form ID: (record, its group)}, records() without the paths (a form ID twice: the later one)."""
+        out = {}
+
+        def walk(kids, parent):
+            for k in kids:
+                if k.__class__ is Group:
+                    walk(k.kids, k)
+                else:
+                    out[k.formid] = (k, parent)
+        walk(self.tops, None)
+        return out
 
     def count(self):
         return sum(g.count() for g in self.tops)
 
+    def chunks(self):
+        """The plugin's bytes as pieces, in order (b''.join is bytes(); a file can take them as they are)."""
+        out = [self.header.bytes()]
+        _chunks(self.tops, out)
+        return out
+
     def bytes(self):
-        return self.header.bytes() + b''.join(g.bytes() for g in self.tops)
+        return b''.join(self.chunks())

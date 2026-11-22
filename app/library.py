@@ -278,26 +278,28 @@ def bring(gd, pr, files):
 
 
 def publish(pr):
-    """What a save does: the mod's files, as they are now, beside the plugin."""
+    """What a save does: the mod's files, as they are now, beside the plugin (only those changed copied; both folders
+    read from their listings, so a big mod's files are looked over in a second or two)."""
+    import install
     dest = built_dir(pr)
-    want = own_files(pr)
-    if not want:
+    root = assets_dir(pr)
+    have = {bsa.norm(rel): mark for rel, mark in install.scan(root).items()}
+    if not have:
         if os.path.isdir(dest):
             shutil.rmtree(dest)
         return 0
-    root = assets_dir(pr)
-    for rel in want:
-        src, out = os.path.join(root, rel), os.path.join(dest, rel)
-        if not os.path.isfile(out) or os.path.getsize(out) != os.path.getsize(src) or os.path.getmtime(out) < os.path.getmtime(src):
+    there = install.scan(dest)
+    now = {bsa.norm(rel): mark for rel, mark in there.items()}
+    for rel, (size, when) in have.items():
+        o = now.get(rel)
+        if o is None or o[0] != size or o[1] < when:
+            out = os.path.join(dest, rel)
             os.makedirs(os.path.dirname(out), exist_ok=True)
-            shutil.copy2(src, out)
-    keep = set(want)
-    for d, _dirs, files in os.walk(dest):
-        for fn in files:
-            full = os.path.join(d, fn)
-            if bsa.norm(os.path.relpath(full, dest)) not in keep:
-                os.remove(full)
-    return len(want)
+            shutil.copy2(os.path.join(root, rel), out)
+    for rel in there:
+        if bsa.norm(rel) not in have:
+            os.remove(os.path.join(dest, rel))
+    return len(have)
 
 
 def uses_of_own(pr, rel):
