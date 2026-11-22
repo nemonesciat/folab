@@ -219,8 +219,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   Not tried in the game. `make(..., concept=)` plans a hotel its own way (`docs/waikiki-hotel-interiors.md`): `hotelcourt.py`
   the Royal Hawaiian as the Kahuna's court (a fortress: guard posts with locked far doors, `holds` checks each is the only way
   on but for a locked servants' way, one level a floor, the throne), `hotelmaze.py` the Kilauea as a labyrinth (ways round,
-  stairs within a floor, the high-end kit as the Lucky 38's reads no corridors); `tests/test_hotelplans.py`. Neither is in
-  Waikiki yet: the default `make` builds the floors as before. After the city changes round a hotel, `viewworld.restage` brings its world in line: the city's land on
+  stairs within a floor, the high-end kit as the Lucky 38's reads no corridors); `tests/test_hotelplans.py`. Both in Waikiki
+  since 22 Nov 2026 05:25 (nv-rs-pad), with the lobbies remade (`hotelinside.restyle_ops`: desks 78 over the floor, things
+  seated by `seat`, each lobby its own look); nobody placed in the floors yet; not yet seen in game. The default `make`
+  builds the floors as before. After the city changes round a hotel, `viewworld.restage` brings its world in line: the city's land on
   each of its cells, each copy moved to where its original stands now (same base within `MATCH`), what the city gained copied in;
   the hotel's own rooms and the closed hotel (`skip`) left.
 - The USS Missouri (`battleship.py`, `shipinside.py`, `shipplace.py`, `tests/test_battleship.py`): FOLab's own battleship in place of
