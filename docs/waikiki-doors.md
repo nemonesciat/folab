@@ -88,3 +88,14 @@ to make things", then "New doorways nearby"). Rehearsed together on a copy of Wa
 - In Waikiki, nv-rs-pad and nv-rs-next since 22 Nov 2026 11:02 (the story session): ways_in 10:06 (16 linked, 4 arrivals
   facing in), fix_ways_in 10:57 (those 4 moved outside), cut_doorways 11:01 (35 places, 18 cells' navmeshes). Health's
   places nothing leads to 63, 0 errors. Not yet seen in game.
+
+## Doors one can reach (22 Nov 2026, after the user: a door hung on a plastered wall caught the crosshair only at its rim)
+`tools/doorray.py`: from 80 in front of a door at eye height, 25 rays at a grid over its face (from the middle of its bounds:
+NVCraftsmanHomeDoor is made round its hinge edge) against the collision of everything near in the city (not the hotels'
+small worlds: their copies stand at the same spots); a door counts when every ray meets it first. Of the 51 doors the ways-in
+and doorway steps linked: 23 before. In the way: what had shut the doorway (DoorBarricade, a broken door), rubble, fruit
+crates, and the building's own collision over the doorway (row houses, shacks, the Wrangler, the corner shops: the game's
+shut doorways are closed in collision too). `tools/door_reach_into_waikiki.py`: loose things in front taken away (11),
+then the door stood out from the wall 2 at a time until every ray meets it (19 doors, most 2-18; one, House863's on a
+RowHouse02NV back wall, 54: that house's collision is a face ~50 in front of its drawn wall, so the door stands clear of the
+wall there). 51 of 51 after, checked again from the saved mod; 21 cells' navmeshes made again. Not yet seen in game.
