@@ -314,7 +314,9 @@ _P = {
     # the bungalow's wall has no hole: its door hangs on it, a cottage door in a casing
     'door_bungalow': ('Door: bungalow', 'FOLabDoorBungalow', lambda: unit('FOLabDoorBungalow', 112, 170, 'doors/home_coral', 'doors/trim_white', flush=True, casing=12)),
     # the hotels' lifts
-    'lift_lobby': ('Lift doors, lobby', 'FOLabLiftLobby', lambda: lift_door('FOLabLiftLobby', 216, 174, 80, frame=0)),
+    # (190 tall: hotelinside.lift_frame's opening is LIFT_H + 16 over the floor; at the game door's 174 a strip of wall
+    # showed under the head, seen in nv-rs 22 Nov 2026)
+    'lift_lobby': ('Lift doors, lobby', 'FOLabLiftLobby', lambda: lift_door('FOLabLiftLobby', 216, 190, 80, frame=0)),
     'lift_floor': ('Lift doors', 'FOLabLiftFloor', lambda: lift_door('FOLabLiftFloor', 130, 177, 80)),
 }
 PIECES = {k: {'label': lab, 'edid': e, 'set': SET, 'file': k, 'describe': fn} for k, (lab, e, fn) in _P.items()}

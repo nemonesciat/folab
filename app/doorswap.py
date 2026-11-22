@@ -352,9 +352,33 @@ def missing_lifts(gd, pr, parent_edid='FOLabWaikiki', reach=40.0):
     return out, rep
 
 
+def refit_ops(gd, pr, write=True):
+    """(ops, files changed): the mod's door pieces' files made again (a piece changed since the swap: the lobby lift door
+    made to fill its frame, 22 Nov 2026) and each record's OBND set to the new model's box where it differs."""
+    modelsets._all_sets()
+    out, files = [], []
+    for (piece, t), k in sorted(records_of(pr).items()):
+        made = _files(pr, piece, write)
+        files += [f for f in made['changed'] if f not in files]
+        rec = pr.records[k]
+        for s in rec.get('subs', []):
+            if s['tag'] == 'OBND':
+                named = [f for f in s['fields'] if 'name' in f]
+                if [int(f['value']) for f in named] != [int(v) for v in made['box']]:
+                    import copy
+                    new = copy.deepcopy(rec)
+                    for f, v in zip([f for f in next(x for x in new['subs'] if x['tag'] == 'OBND')['fields'] if 'name' in f], made['box']):
+                        f['value'] = int(v)
+                    out.append({'op': 'record', 'key': k, 'record': new})
+    return out, files
+
+
 def apply_missing_lifts(gd, pr, label='FOLab lift doors where a hotel lobby lacked one'):
-    """missing_lifts as one Undo; navmeshes that were current stay marked current. Returns the report."""
+    """missing_lifts and refit_ops as one Undo; navmeshes that were current stay marked current. Returns the report."""
     o, rep = missing_lifts(gd, pr)
+    r_ops, rep['files'] = refit_ops(gd, pr, write=True)
+    rep['records_refit'] = len(r_ops)
+    o = r_ops + o
     if not o:
         return rep
     cells = set(rep['cells'])

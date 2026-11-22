@@ -47,3 +47,7 @@ north one (`lift`) ever had a door. `lift2` came into the lobby's model on 17 No
 `doorswap.missing_lifts` adds a FOLab lift door, locked, wherever a lobby's lift frame (hotelinside.VIEWS) has none: one on
 Waikiki of 22 Nov 06:20. Picture: `docs/waikiki-rh-lift2.jpg`. relay_ops matches doors by the game's base, so since the
 swap it no longer finds the lifts: a relay of the lobbies would leave them where they are.
+The north door also fell short of its frame (the user's picture from nv-rs): `lift_frame`'s opening is LIFT_H + 16 over the
+floor, the game's lift door 174 tall. The lobby lift door is 190 now; `doorswap.refit_ops` writes the mod's door pieces'
+files again and sets their records' OBND. The Kilauea's lifts take the same piece and have no lift_frame round them: not
+looked at.
