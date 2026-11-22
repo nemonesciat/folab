@@ -345,6 +345,8 @@ DOORWAYS = {
 # now, in front of the door.
 KILAUEA = ('door_kilauea', 2912.0, 240.0, 140.0, ('DoorStorefrontDbl01',))
 KILAUEA_ARRIVE = 240.0      # (out from the door's face, in the hotel's units, on the plinth)
+KILAUEA_INSIDE = 412.0      # (in from the door, the hotel's units: r 2500, where hotelinside.VIEWS has you arrive inside)
+CITY = 'FOLabWaikiki'       # (the city's world: a link to a hotel's door here arrives outside, in its small world inside)
 # Lift doors: the game's base -> piece (same frame: a swap of base only)
 LIFTS = {'HotelElevatorDoor01': 'lift_lobby', 'HotelElevatorDoor02': 'lift_floor', 'HotelElevatorDoor02Static': 'lift_floor'}
 NEAR = 64.0        # a door this near a doorway (in the building's units) is that doorway's

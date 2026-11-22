@@ -224,10 +224,11 @@ def ops(gd, pr, write=True):
         dz = p[2] - r['p'][2] - doorset.ORIGIN_RISE.get(name(r['base'])[0], 0.0) * (s or 1.0)
         dx, dy = p[0] - r['p'][0], p[1] - r['p'][1]
         if piece == 'door_kilauea':
-            # (the way out arrives in front of the door on the plinth, facing out, not where the old one put you)
-            ox, oy = -math.sin(p[5]), -math.cos(p[5])
-            k = doorset.KILAUEA_ARRIVE * (s or 1.0)
-            ar = [round(p[0] + ox * k, 2), round(p[1] + oy * k, 2), round(p[2] + 8 * (s or 1.0), 2), 0.0, 0.0, round((p[5] + math.pi) % math.tau, 5)]
+            # (whoever arrives by this door arrives on ITS side: in front of the city's door on the plinth, facing out;
+            # inside the glass in front of the lobby's, facing in. The lobby's door stands at the same spot in the
+            # hotel's small world, so a link to it is told by the door's world, never by where it stands: both ways
+            # arrived outside on 22 Nov 2026, and going in put you in the small world outside the glass)
+            ar = kilauea_arrival(gd, ck, p, s)
             for ock, ork, orr in leads_to.get(rk, ()):
                 out.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': dict(orr['tel'], p=ar)})
                 rep['arrivals'] += 1
@@ -350,6 +351,49 @@ def missing_lifts(gd, pr, parent_edid='FOLabWaikiki', reach=40.0):
             rep['added'].append({'hotel': hotel, 'door': name, 'cell': ck, 'p': [round(x, 1) for x in p[:3]]})
     rep['cells'] = sorted({o['cell'] for o in out})
     return out, rep
+
+
+def kilauea_arrival(gd, ck, p, s):
+    """Where one arrives by a Kilauea door at p (scale s) in cell ck: on its own side (see ops)."""
+    w = _world_of(gd)(ck)
+    city = not isinstance(w, str) and gd.edid(w) == doorset.CITY
+    ox, oy = -math.sin(p[5]), -math.cos(p[5])
+    k = (doorset.KILAUEA_ARRIVE if city else -doorset.KILAUEA_INSIDE) * (s or 1.0)
+    face = (p[5] + math.pi) % math.tau if city else p[5] % math.tau
+    return [round(p[0] + ox * k, 2), round(p[1] + oy * k, 2), round(p[2] + 8 * (s or 1.0), 2), 0.0, 0.0, round(face, 5)]
+
+
+def arrival_ops(gd, pr):
+    """(ops, report): every link to a FOLab Kilauea door arriving on that door's own side (the swap of 22 Nov 04:44 put
+    the way in outside the glass too)."""
+    mine = {k for (piece, t), k in records_of(pr).items() if piece == 'door_kilauea'}
+    doors = {rk: (ck, r) for ck, c in pr.cells.items() for rk, r in (c.get('refs') or {}).items()
+             if r.get('base') in mine and r.get('p') and not r.get('removed')}
+    out, rep = [], {'changed': []}
+    for ock, c in pr.cells.items():
+        for ork, orr in (c.get('refs') or {}).items():
+            t = orr.get('tel')
+            if not t or orr.get('removed') or t.get('door') not in doors:
+                continue
+            ck, r = doors[t['door']]
+            ar = kilauea_arrival(gd, ck, r['p'], float(r.get('s') or 1.0))
+            if not t.get('p') or max(abs(a - b) for a, b in zip(t['p'][:3], ar[:3])) > 0.5:
+                out.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': dict(t, p=ar)})
+                rep['changed'].append({'ref': ork, 'to': t['door'], 'was': [round(v, 1) for v in (t.get('p') or [])[:3]], 'now': ar[:3]})
+    return out, rep
+
+
+def same_arrivals(pr, near=8.0):
+    """Linked pairs whose two links arrive at one spot (one of them on the wrong side): [(ref, ref, p)]."""
+    tel = {rk: r['tel'] for c in pr.cells.values() for rk, r in (c.get('refs') or {}).items()
+           if r.get('tel') and r['tel'].get('door') and r['tel'].get('p') and not r.get('removed')}
+    out = []
+    for a, t in tel.items():
+        b = t['door']
+        u = tel.get(b)
+        if a < b and u and u.get('door') == a and max(abs(x - y) for x, y in zip(t['p'][:3], u['p'][:3])) < near:
+            out.append((a, b, [round(v, 1) for v in t['p'][:3]]))
+    return out
 
 
 def refit_ops(gd, pr, write=True):

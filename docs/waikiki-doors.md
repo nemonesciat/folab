@@ -52,3 +52,11 @@ floor, the game's lift door 174 tall. The lobby lift door is 190 now; `doorswap.
 files again and sets their records' OBND. The Kilauea's two lifts take the same piece: towerset stands
 lift_frame (k 1/0.8, back 60) on its core at both the casino floor and the deck, so their openings are 216 x 190 in the world
 too, and the 190 door fills them (`docs/waikiki-kilauea-lifts.jpg`). The Kilauea stands turned 180: its lifts face world +y.
+
+## The Kilauea's way in (22 Nov 2026)
+The user, nv-rs-next ~07:40: going into the Kilauea "just takes you outside but its a different space". The swap set the
+arrival of every link to a Kilauea door to the outside point, and the lobby's door stands at the same spot as the city's
+in the hotel's small world, so the way in arrived outside the glass in that world. Now an arrival is on its door's own side,
+told by the door's world (`doorset.CITY`): outside `KILAUEA_ARRIVE`, inside `KILAUEA_INSIDE` (r 2500, as hotelinside's
+arrive_in). `arrival_ops` sets the links again, `same_arrivals` lists linked pairs whose two links arrive at one spot (only
+this pair, of every link in Waikiki). The lobby has no navmesh near the door; it hadn't before the swap either.
