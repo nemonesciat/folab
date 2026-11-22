@@ -39,3 +39,11 @@ second run refuses.
 In Waikiki and nv-rs-pad since 22 Nov 2026 05:25 (the story session's install, after the hotels' new floors): checks all
 good, 460 doors, 31 lifts (6 lobby, 25 on the new floors, caught by `doorset.LIFTS` as it was), none unlinked, no game
 lift door left. Not yet seen in game.
+
+## The Royal Hawaiian's second lift (22 Nov 2026)
+The user, in the 05:25 build: the Royal Hawaiian lobby has no lift doors. Its lift bank (east end) has two frames; only the
+north one (`lift`) ever had a door. `lift2` came into the lobby's model on 17 Nov, when the lobby was laid out again, and
+`hotelinside.relay_ops` only moves doors already placed, so its frame stood empty (the other hotels' lifts were all there).
+`doorswap.missing_lifts` adds a FOLab lift door, locked, wherever a lobby's lift frame (hotelinside.VIEWS) has none: one on
+Waikiki of 22 Nov 06:20. Picture: `docs/waikiki-rh-lift2.jpg`. relay_ops matches doors by the game's base, so since the
+swap it no longer finds the lifts: a relay of the lobbies would leave them where they are.

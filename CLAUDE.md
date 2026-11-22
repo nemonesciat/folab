@@ -274,6 +274,7 @@ the model for style, UI and approach. Python, standard library first, code in `a
   links and locks stay; arrivals follow a door that moved (`ORIGIN_RISE`, `ARRIVE`). Lift doors (`LIFTS`) keep the game's
   frame: a swap of base only. DOOR records copy the replaced game door's sounds. Run once (`records_of`).
   In Waikiki (nv-rs-pad) since 22 Nov 2026 05:25, after the hotels' new floors: 460 doors, 31 lifts; not yet seen in game.
+  `missing_lifts` adds a locked lift door where a hotel lobby's lift frame has none (the Royal Hawaiian's lift2, 22 Nov).
 - Doors you can walk out of (`doorclear.py`, `tests/test_doorclear.py`; the user, 21 Nov 2026: "exiting a house placed me inside
   the building shell"): the game stands its DoorBarricade ~90-120 out in front of a door it bars, past `townbuild.SHUT_SAME`, so
   townbuild stood it in front of doors given a place too and you came out between wall and boards (274 of Waikiki's 1,732 ways

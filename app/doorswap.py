@@ -310,6 +310,63 @@ def apply(gd, pr, label='FOLab doors for the hotels, homes and lifts'):
     return rep
 
 
+def missing_lifts(gd, pr, parent_edid='FOLabWaikiki', reach=40.0):
+    """(ops, report): a FOLab lift door, locked, wherever a hotel's open lobby has a lift frame (hotelinside.VIEWS'
+    doors of a lift kind) and its small world has no lift door there. The Royal Hawaiian's lobby got a second lift in
+    its model on 17 Nov 2026 ('lift2'), but relay_ops only moves doors already placed, so its frame stood empty (the
+    user, 22 Nov). Run after the swap (it needs the FOLab lift records)."""
+    import hotelinside
+    modelsets._all_sets()
+    have = records_of(pr)
+    worlds = {gd.edid(w): w for w in gd.worlds()}
+    parent = worlds.get(parent_edid)
+    if parent is None:
+        raise ValueError('no world ' + parent_edid)
+    game = {gd.edid(f): gd.key(f) for f, (_i, r) in gd.forms.items() if r.tag == 'DOOR' and gd.edid(f) in doorset.LIFTS}
+    out, rep = [], {'added': [], 'there': 0}
+    for hotel, v in hotelinside.VIEWS.items():
+        child = worlds.get(v['world'])
+        if child is None:
+            continue
+        _wck, _wr, at = hotelinside._frame(gd, pr, hotel, parent)
+        grid = gd.grid(child)
+        cells = {gd.key(c) for c in grid.values()}
+        lifts = [r['p'] for ck, c in pr.cells.items() if ck in cells for r in (c.get('refs') or {}).values()
+                 if r.get('p') and not r.get('removed') and (r.get('base') in game.values()
+                                                             or (r.get('base') and r['base'] in {k for (pc, t), k in have.items() if pc.startswith('lift')}))]
+        for name, e, lx, ly, lz, face in v['doors']:
+            if e not in doorset.LIFTS or e not in game:
+                continue
+            p = at(lx, ly, lz, face + hotelinside.leaf_turn(gd, game[e]), hotelinside.door_rise(gd, game[e]))
+            if any(math.hypot(q[0] - p[0], q[1] - p[1]) < reach and abs(q[2] - p[2]) < reach for q in lifts):
+                rep['there'] += 1
+                continue
+            base = have.get((doorset.LIFTS[e], 'DOOR'))
+            if not base:
+                raise ValueError('no FOLab lift door record: run the swap first')
+            ck = gd.key(grid[(int(p[0] // 4096), int(p[1] // 4096))])
+            out.append({'op': 'add', 'cell': ck, 'base': base, 'p': p, 's': 1,
+                        'extra': {'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}}})
+            rep['added'].append({'hotel': hotel, 'door': name, 'cell': ck, 'p': [round(x, 1) for x in p[:3]]})
+    rep['cells'] = sorted({o['cell'] for o in out})
+    return out, rep
+
+
+def apply_missing_lifts(gd, pr, label='FOLab lift doors where a hotel lobby lacked one'):
+    """missing_lifts as one Undo; navmeshes that were current stay marked current. Returns the report."""
+    o, rep = missing_lifts(gd, pr)
+    if not o:
+        return rep
+    cells = set(rep['cells'])
+    current = {k: m for k, m in pr.navmesh.items() if k in cells and m.get('sig') == sig_of(gd, pr, k)}
+    pr.apply(label, o)
+    nav = [{'op': 'navmesh', 'cell': k, 'mesh': dict(m, sig=sig_of(gd, pr, k))} for k, m in current.items()]
+    if nav:
+        pr.apply(label, nav, merge=True)
+    rep['navmeshes_kept_current'] = len(nav)
+    return rep
+
+
 if __name__ == '__main__':
     import json
     import gamedata
