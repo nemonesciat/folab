@@ -17,6 +17,7 @@ door, trash), in the building's frame: x along it, y to the town side, z over it
 +x). `RH_DOORS` are the doors, named for linking: the way in, the lift to the guest floors, the lookout's stair head.
 Frame and units as historicset (front to -y the sea, 70 units a metre)."""
 import math
+import os
 import random
 
 import historicset as hs
@@ -796,8 +797,20 @@ def restyle_ops(gd, pr, hotel, parent, child, old_things, near=60.0):
     seated; what's no longer listed taken out; what's new added. The city's own copies round it and the doors are left.
     Returns (ops, report)."""
     v = VIEWS[hotel]
-    _model_ops, info = modelsets.put(pr, v['open'])
-    _wck, wr, at = _frame(gd, pr, hotel, parent)
+    _wck, wr, at = _frame(gd, pr, hotel, parent)          # (first: it brings in every set, the signs' glow pictures among them)
+    # (the model written again, and any picture the mod lacks; the pictures it has are left as they are: a newer FOLab may
+    # have written them better than this one would)
+    import library
+    made = modelsets.build(v['open'])
+    root = library.assets_dir(pr)
+    written = []
+    for rel, data in made['files'].items():
+        full = os.path.join(root, rel)
+        if rel == made['mesh'] or not os.path.isfile(full):
+            if not os.path.isfile(full) or open(full, 'rb').read() != data:
+                library._put(root, rel, data)
+                written.append(rel)
+    info = {'mesh': made['mesh'], 'written': written}
     grid = gd.grid(child)
     cells = {gd.key(c) for c in grid.values()}
     cell_of = lambda wx, wy: gd.key(grid[(int(wx // 4096), int(wy // 4096))])
@@ -838,7 +851,7 @@ def restyle_ops(gd, pr, hotel, parent, child, old_things, near=60.0):
     for e, ck, rk, _r in left:
         ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
         gone += 1
-    return ops, {'hotel': hotel, 'model': info.get('mesh'), 'found': len(ours), 'of': sum(1 for t in old_things if t[0] in keys),
+    return ops, {'hotel': hotel, 'model': info.get('mesh'), 'written': info['written'], 'found': len(ours), 'of': sum(1 for t in old_things if t[0] in keys),
                  'moved': moved, 'added': added, 'removed': gone, 'missing': sorted({t[0] for t in v['things']} - set(keys))}
 
 
