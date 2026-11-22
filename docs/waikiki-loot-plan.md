@@ -200,3 +200,38 @@ Waimanalo) and carried by Huang people, who carry only their own weapons but in 
 naginata, yari) belong to nobody for now and turn up in loot. The museum: "not sure about museum yet, it was just mentioned
 in passing": nothing built for it. Each blade FOLab's own model on a game weapon's swings: dao machete, jian Machete Gladius,
 katana Blade of the East, wakizashi machete, naginata fire axe, yari Dead Money's knife spear.
+
+## Wrecks to dive to and lookouts to climb (21 Nov 2026, rehearsed, not saved)
+
+The user said "yes, all those please" (through the Workshop session) to wrecks near the shore with loot worth the swim,
+harder further out, the odd sea creature in deep water, and lookouts with a reason to climb. `app/seafinds.py` and
+`app/lookouts.py` (tests `tests/test_seafinds.py`, 29 of 29; picture `docs/waikiki-wrecks-lookouts.png`). One Undo,
+"Wrecks and lookouts". Only the game's own wrecks, containers and creatures. Rehearsed on Waikiki in memory:
+- **The audit:** every container and bedroll is seated within 12 units of what is under it.
+- **Health:** 0 errors. The only new warnings are 23 more "navmesh out of date" (cells that gained a find), against today's baseline.
+
+- **Sea (8 wrecks, 15 finds, 9 locked):** three bands by depth under the water. The game's big hulls stand about 930
+  tall, and Lake Mead's own B-29 lies about 1,300 down, so the bands are:
+  - Easy, 220–450 deep: small boats (Boat02), one find.
+  - Middling, 880–1,060 deep: Boat01, the wrecked boat, two finds and two lakelurks.
+  - Hard, 1,060–1,350 deep: the sunken B-29 and the Ozymandias barge, three finds (a locked safe among them) and three lakelurks.
+
+  Each wreck lies along the floor with a list, as the game's do, bedded 15% into the floor and its top at least 80 under
+  the water. Each site keeps 1,800 clear of anything else in the sea and 7,000 from the next, and stays out of the
+  start's reach. Four more lakelurks wander alone in water over 1,200 deep.
+- **Tops (28 finds, 16 locked):** each find is a band up from where it stands, sitting on the deck's floor, its back to
+  the rail.
+  - Guard and bamboo towers (8): a stash on each deck. The three standing highest also get a sniper nest (a bedroll and
+    a gun find); that includes Diamond Head's.
+  - The court's city lookouts: one in three gets a find in its hut. All three heights were walked to the hut floor.
+  - Lifeguard towers (3): a first aid kit on the chair's platform.
+  - Diamond Head's rim: a sniper nest on its highest open ground. Three sandbags face the sea, with a bedroll, a gun
+    find and an ammo find.
+  - The Kilauea's observation deck, in its small world: a locked safe and a military footlocker.
+  - Markers: two towers had no map marker near them and get one at the foot, named for the nearest place: "Pacific
+    Heights Lookout" and "Royal Hawaiian Lookout". These are plain names, easy to change.
+
+Not yet seen in the game. Three things are unknown:
+- How long the player can hold their breath: the game's breath settings aren't in its files.
+- Whether lakelurks move about with no navmesh under the sea.
+- How the B-29 reads at 1,232 deep.

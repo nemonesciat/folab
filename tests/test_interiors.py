@@ -231,7 +231,8 @@ if got.get('ops'):
     check('… every square walked', clean(P.walk_check(G, vt, plan, store['last']['made'])))
 check('what can\'t be drawn says why: overlapping', 'overlap' in P.drawn(G, kits, VAULT, [rooms[0], rooms[0]], [], 2, [0, 0, 0], store, {}, sv).get('note', ''))
 check('… too narrow', 'narrow' in P.drawn(G, kits, VAULT, [{'x': 0, 'y': 0, 'w': 1, 'h': 5}], [], 2, [0, 0, 0], store, {}, sv).get('note', ''))
-check('… not joined', 'joins room 2' in P.drawn(G, kits, VAULT, rooms[:3], [[0, 2]], 2, [0, 0, 0], store, {}, sv).get('note', ''))
+lone = P.drawn(G, kits, VAULT, rooms[:3], [[0, 2]], 2, [0, 0, 0], store, {}, sv)
+check('… a room nobody linked is joined to the nearest room, and it says so', 'joined to room' in (lone.get('said') or lone.get('note', '')), lone.get('note', ''))
 
 
 # ---------- furnishing ----------

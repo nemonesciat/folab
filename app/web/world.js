@@ -30,8 +30,8 @@ function texture(path){
   return W.tex[path];
 }
 
-function material(tex, alpha, double, shaded){
-  const k = tex + '|' + alpha + '|' + double + (shaded ? '|c' : '');
+function material(tex, alpha, double, shaded, glow){
+  const k = tex + '|' + alpha + '|' + double + (shaded ? '|c' : '') + (glow ? '|g' + glow : '');
   if (!tex && alpha === 'skin') return W.mats[k] = W.mats[k] || new T.MeshLambertMaterial({color: 0xc8a888});
   if (W.mats[k]) return W.mats[k];
   // plain sand colour until the texture arrives (and for the few shapes that have none)
@@ -40,6 +40,10 @@ function material(tex, alpha, double, shaded){
   if (alpha === 'test') m.alphaTest = 0.5;
   if (alpha === 'blend'){ m.transparent = true; m.depthWrite = false; if (!tex) m.opacity = 0.25; }
   if (tex) texture(tex).then(t => { if (t){ m.map = t; m.color.set(0xffffff); m.needsUpdate = true; } });
+  if (glow){                                  // (lit by its glow picture as the game lights it: brighter at night, nightview.js)
+    m.emissiveIntensity = W.glowLevel || 0.35; (W.glowMats = W.glowMats || []).push(m);
+    texture(glow).then(t => { if (t){ m.emissiveMap = t; m.emissive.set(0xffffff); m.needsUpdate = true; } });
+  }
   return W.mats[k] = m;
 }
 
@@ -67,7 +71,7 @@ function model(path, tex){
       g.setIndex(s.i);
       g.computeVertexNormals();
       g.computeBoundingBox();
-      parts.push([g, material(s.tex, s.alpha, s.double, shaded), s.alpha === 'blend']);
+      parts.push([g, material(s.tex, s.alpha, s.double, shaded, s.glow), s.alpha === 'blend']);
     }
     return parts;
   }).catch(() => { delete W.models[key]; return []; });

@@ -611,6 +611,12 @@ def wreck_some(plan, rng):
     rooms = [o for o in plan.owners if o['kind'] == ROOM_KIND]
     if any('wrecked' in o for o in rooms):
         return
+    import kitlife
+    if kitlife.STORIES.get(getattr(plan, 'story', None), {}).get('kept'):
+        # (a place whose story says it's kept up: nothing left wrecked)
+        for o in rooms:
+            o['wrecked'] = False
+        return
     # (of what the place has several of: its one rec room is what makes it a place people lived)
     kinds = collections.Counter(o['purpose'] for o in rooms)
     can = [o for o in rooms if not o.get('main') and not o.get('tall') and not o.get('whole') and not o.get('part_of') and kinds[o['purpose']] > 1]

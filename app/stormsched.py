@@ -74,8 +74,20 @@ def _f(v):
     return ('%.5f' % v).rstrip('0').rstrip('.') or '0'
 
 
-def script_source(L=REAL, name='FOLabStormScript', world=WORLD, views=VIEW_WORLDS, view_parent='FOLabStormViewRain'):
-    """The quest script, as text (CRLF lines). Only plain commands: nv-rs runs no extender."""
+# what a big storm leaves and who hides from it (stormafter.py): the shelter flag is up from the building step to the last
+# storm step; the wrack is laid when the storm's second half starts (the peak's rain hides it coming) and taken up
+# WRACK_STAY days later, when you are not out on the island (or WRACK_LATE days after that whatever)
+SHELTER_STEPS = (4, 5, 6, 7)
+WRACK_STEP = 7
+WRACK_STAY = (14 / 24.0 + 1.0, 1.0)     # (days from that step's start: the storm's rest, then 1 to 2 days)
+WRACK_LATE = 1.0
+
+
+def script_source(L=REAL, name='FOLabStormScript', world=WORLD, views=VIEW_WORLDS, view_parent='FOLabStormViewRain',
+                  wrack=None, shelter=None):
+    """The quest script, as text (CRLF lines). Only plain commands: nv-rs runs no extender. wrack: the editor ID of the
+    persistent parent of the beach's wrack (switched on after a big storm); shelter: a global's editor ID, 1 while
+    people should be indoors. Their variables are declared last, so a save made before them keeps its values."""
     h = lambda hours: _f(hours / 24.0)
     T = []
     a = T.append
@@ -89,6 +101,9 @@ def script_source(L=REAL, name='FOLabStormScript', world=WORLD, views=VIEW_WORLD
         a('short %s' % v)
     for v in ('now', 'next', 'check', 'bigdue', 'squalldue', 'len', 'ang'):
         a('float %s' % v)
+    if wrack:
+        a('short wrack')
+        a('float wrackgone')
     a('')
     a('begin GameMode')
     a('')
@@ -150,6 +165,10 @@ def script_source(L=REAL, name='FOLabStormScript', world=WORLD, views=VIEW_WORLD
         a('\t\t\t\tset sky to %d' % sky)
         a('\t\t\t\tset rain to %d' % rain)
         a('\t\t\t\tset len to %s' % h(hours))
+        if wrack and k == WRACK_STEP:
+            a('\t\t\t\tset wrack to 1')
+            a('\t\t\t\tset wrackgone to next + %s + %s * GetRandomPercent / 100' % (_f(WRACK_STAY[0]), _f(WRACK_STAY[1])))
+            a('\t\t\t\t%s.Enable' % wrack)
     a('\t\t\tendif')
     a('\t\tendif')
     a('\t\tif len >= 0')
@@ -172,6 +191,15 @@ def script_source(L=REAL, name='FOLabStormScript', world=WORLD, views=VIEW_WORLD
     a('\tif mode > 0 && now >= next')
     a('\t\tset live to 0')
     a('\tendif')
+    if shelter:
+        a('\t; people indoors from the building step to the storm\'s end')
+        a('\tif live')
+        a('\t\tif mode == 2 && step >= %d && step <= %d' % (SHELTER_STEPS[0], SHELTER_STEPS[-1]))
+        a('\t\t\tset %s to 1' % shelter)
+        a('\t\telse')
+        a('\t\t\tset %s to 0' % shelter)
+        a('\t\tendif')
+        a('\tendif')
     a('')
     a('\t; where you are: 1 the island, 2 a hotel\'s small world, 3 indoors, 0 another world')
     a('\tset here to 0')
@@ -248,6 +276,15 @@ def script_source(L=REAL, name='FOLabStormScript', world=WORLD, views=VIEW_WORLD
         a('\t\t%s.Disable' % view_parent)
         a('\t\tset lit to 0')
         a('\tendif')
+    if wrack:
+        a('')
+        a('\t; the wrack taken up a day or two after the storm, when you are not out on the island to see it go')
+        a('\tif wrack == 1 && now >= wrackgone')
+        a('\t\tif here != 1 || now >= wrackgone + %s' % _f(WRACK_LATE))
+        a('\t\t\t%s.Disable' % wrack)
+        a('\t\t\tset wrack to 0')
+        a('\t\tendif')
+        a('\tendif')
     a('')
     a('end')
     a('')
@@ -268,6 +305,7 @@ class Game:
         self.current = 'fair'
         self.on = {}
         self.log = []
+        self.flags = []                 # (day, the shelter flag, the wrack on) once a game minute
 
     def call(self, name, args, ref):
         n = name.lower()
@@ -469,6 +507,7 @@ def run(L=REAL, days=30.0, timescale=30.0, fps=4.0, seed=1, events=(), text=None
         if minute != last:
             last = minute
             samples.append((g.days, int(s.vars['mode']), int(s.vars['sky']), int(s.vars['rain']), g.where))
+            g.flags.append((g.days, int(s.vars.get('folabstormshelter', 0)), 1 if g.on.get('FOLabStormWrack') else 0))
         g.days += step
     return g, s, samples
 

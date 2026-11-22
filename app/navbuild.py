@@ -180,7 +180,7 @@ def _ref_position(gd, key):
     return struct.unpack_from('<3f', d) if d and len(d) >= 12 else None
 
 
-def _make_one(gd, project, ckey, meshes_now):
+def _make_one(gd, project, ckey, meshes_now, beyond=False):
     """A new mesh from what a place holds: (project form of it without the form filled in unless it has one, report).
     meshes_now: the place's meshes as they are now, project form (their doors must be told)."""
     outside = is_outside(gd, ckey)
@@ -202,7 +202,7 @@ def _make_one(gd, project, ckey, meshes_now):
             h = project.water[ckey]
             w = gd.fields(gd.ext_cells[cell]).get('DNAM')
             water = h if h is not None else (struct.unpack_from('<f', w, 4)[0] if w and len(w) >= 8 else None)
-        m, report = navgen.generate(gd, cell, refs_of=refs_of, land_of=land_of, water=water)
+        m, report = navgen.generate(gd, cell, refs_of=refs_of, land_of=land_of, water=water, beyond=beyond)
     else:
         if not ckey.startswith('+'):
             cell = gd.from_key(ckey)
@@ -408,7 +408,7 @@ class Area:
         return ops
 
 
-def generate_area(gd, project, ckeys, progress=None):
+def generate_area(gd, project, ckeys, progress=None, beyond=False):
     """New meshes for outside cells, joined to each other and their neighbours. Returns (ops for project.apply, report):
     one op for each cell made and each neighbour whose mesh had to change. A cell with no ground to walk on keeps
     nothing: its game meshes, if it has any, become stubs."""
@@ -422,7 +422,7 @@ def generate_area(gd, project, ckeys, progress=None):
             raise NavError('%s isn\'t a cell outside.' % ck)
         row = A.meshes(ck)
         far[ck] = {x[1] for e in row for x in e['m']['ext']}
-        m, rep, refs = _make_one(gd, project, ck, [e['data'] for e in row])
+        m, rep, refs = _make_one(gd, project, ck, [e['data'] for e in row], beyond=beyond)
         report['seconds'] += rep.get('seconds') or 0
         cell = gd.from_key(ck)
         x, y = gd.cell_grid(cell)

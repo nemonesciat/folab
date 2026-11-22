@@ -329,3 +329,25 @@ It would go into nv-rs's mods only on your go, and come out again the same sitti
   (about a day's work).
 
 Later, only if you want them: the gameplay pieces, one at a time, and the hurricane season.
+
+## What a storm leaves (built 21 Nov 2026, evening; the user: "yes, all those please")
+
+- **Wrack on the beaches.** After a big storm, debris lies along the wet sand all round the island: driftwood logs,
+  branch piles, beams, planks, pallets, tyres, barrels, broken crates. Now and then a small boat lies thrown up. The
+  rehearsal placed 650 pieces in 383 clusters.
+- **Finds.** There are 61 washed-up finds: duffle bags, suitcases and damaged shipping crates. They refill when their
+  cell resets, so a later storm can bring new loot.
+- **When it comes and goes.** All of it appears when the storm's second half begins, so the peak's rain hides it
+  arriving. It's taken away 1 to 2 days after the storm, when you aren't out on the island, or a day after that at the
+  latest.
+- **People shelter.** Surfers, locals, the Huáng's farmers and three storekeepers go indoors from the hour the storm
+  builds until it ends. Each goes to the nearest unlocked place with a way in, up to about 100 m away, 14 to a place.
+  In the rehearsal 133 of the 212 found shelter in 48 places. The rest are out on far beaches and stay out.
+- **Who stays out.** Guards, fighters, pirates and the quests' people keep their posts.
+
+Pictures: `waikiki-storm-aftermath-timeline.png` (the script run offline), `-map.png` and `-map-close.png` (where it
+all lands), `-find.png`, `-boat.jpg`, `-logs.jpg` (the 3D view of the rehearsal copy).
+
+Still to check in the game: whether nv-rs honours the package condition (a global) and the enable parent switching
+650 things at once. The original game does both. Health will list about 200 navmeshes as out of date (the beach cells
+and the 48 shelters). Leave them: the wrack comes and goes, and markers don't block.

@@ -175,6 +175,15 @@
       "port": 8791
     },
     {
+      "name": "folab-valley",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLab-valley\\home&& set FOLAB_NV_INI=D:\\FOLab-valley\\home\\ini&& py -3 app/server.py 8793 --no-browser"
+      ],
+      "port": 8793
+    },
+    {
       "name": "folab-voice",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [
@@ -182,6 +191,33 @@
         "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLab-voice\\ui&& set FOLAB_NV_INI=D:\\FOLab-voice\\ui\\ini&& set FOLAB_CHATTERBOX=D:\\FOLab-voice\\chatterbox&& py -3 app/server.py 8792 --no-browser"
       ],
       "port": 8792
+    },
+    {
+      "name": "folab-storm",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLab-weather12\\home&& set FOLAB_NV_INI=D:\\FOLab-weather12\\ini&& py -3 app/server.py 8794 --no-browser"
+      ],
+      "port": 8794
+    },
+    {
+      "name": "folab-lights",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_HOME=D:\\FOLab-lights\\home&& set FOLAB_NV_INI=D:\\FOLab-lights\\ini&& set FOLAB_NO_GAME_WRITES=1&& py -3 app/server.py 8797 --no-browser"
+      ],
+      "port": 8797
+    },
+    {
+      "name": "folab-flotilla",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_HOME=D:\\FOLab-flotilla\\home&& set FOLAB_NV_INI=D:\\FOLab-flotilla\\ini&& set FOLAB_NO_GAME_WRITES=1&& py -3 app/server.py 8793 --no-browser"
+      ],
+      "port": 8793
     }
   ]
 }

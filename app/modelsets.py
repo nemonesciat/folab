@@ -159,12 +159,10 @@ def kiosk():
         # the pylon, leaning out, with its board
         {'shape': 'box', 'size': [7, 7, 262], 'at': [-131, -90, 0], 'turn': [0, -5, 0], 'look': 'pylon'},
         {'shape': 'box', 'size': [56, 4, 28], 'at': [-150, -90, 236], 'look': 'white', 'faces': {'front': 'aloha', 'back': 'aloha'}, 'solid': False},
-        # boards: a flat round stretched long, stood nearly on end against the wall
-        {'shape': 'cylinder', 'r': 1, 'h': 1, 'sides': 16, 'scale': [11, 82, 2.6], 'turn': [80, 0, 90], 'at': [131, 22, 88],
-         'look': 'white', 'cap_look': 'board_a'},
-        {'shape': 'cylinder', 'r': 1, 'h': 1, 'sides': 16, 'scale': [10, 74, 2.6], 'turn': [77, 0, 90], 'at': [134, -24, 80],
-         'look': 'white', 'cap_look': 'board_b'},
     ]
+    # boards stood nearly on end against the wall
+    parts += surfboard([131, 22, 88], [80, 0, 90], 'board_a', long=164, wide=32, fin='white')
+    parts += surfboard([134, -24, 80], [77, 0, 90], 'board_b', long=148, wide=30, fin='white')
     return {'name': 'FOLabBeachKiosk', 'looks': looks, 'parts': parts}
 
 
@@ -260,6 +258,26 @@ def limb(a, b, r0, r1, look, sides=7, solid=False, caps=False):
     ln = math.sqrt(sum(v * v for v in d)) or 1.0
     return {'shape': 'cylinder', 'r': r0, 'r2': r1, 'h': ln, 'sides': sides, 'at': [round(v, 1) for v in a], 'look': look, 'caps': caps, 'solid': solid,
             'turn': [0, math.degrees(math.acos(max(-1.0, min(1.0, d[2] / ln)))), math.degrees(math.atan2(d[1], d[0]))]}
+
+
+def surfboard(at, turn, look, long=164.0, wide=36.0, fin='pole'):
+    """A surfboard as parts (the user, 21 Nov 2026: the first boards, flat discs, looked dated): along y in its own frame,
+    deck up z, laid where the old disc boards were (`at`, `turn` as theirs): a pointed nose at +y, a squarish tail, the
+    rocker lifting both ends, a crowned deck, the board's picture once over it (stripe down the middle), a fin under the tail."""
+    rows = []
+    n = 16
+    for j in range(n + 1):
+        t = j / float(n)                                    # (0 the tail, 1 the nose)
+        half = wide / 2 * (math.sin(math.pi * (0.08 + 0.92 * t)) ** 0.55) * (1.0 if t < 0.8 else 1 - 0.75 * ((t - 0.8) / 0.2) ** 1.6)
+        half = max(half, 0.6)
+        y = -long / 2 + long * t
+        lift = 2.5 * ((2 * t - 1) ** 4) + 4.0 * ((t - 0.75) / 0.25) ** 2 * (t > 0.75)
+        rows.append([(half * c, y, 1.6 + lift + 0.8 * (1 - c * c)) for c in (-1.0, -0.55, 0.0, 0.55, 1.0)])
+    parts = [{'shape': 'sheet', 'rows': rows, 'look': look, 'thick': 2.6, 'at': list(at), 'turn': list(turn), 'solid': False}]
+    y0 = -long / 2
+    parts.append({'shape': 'sheet', 'rows': [[(0, y0 + 6, 1.0), (0, y0 + 22, 0.6)], [(0, y0 + 7, -11.0), (0, y0 + 13, -11.0)]],
+                  'look': fin, 'thick': 0.8, 'at': list(at), 'turn': list(turn), 'solid': False})
+    return parts
 
 
 def twig(a, b, r0, r1, look):
@@ -1301,13 +1319,52 @@ def texture_files(name):
     return _drawn[name]
 
 
+# A flame is never drawn: a flat card of a flame picture reads in game as a still, glowing shape with bars along its top
+# (the user, 22 Nov 2026, of a fire pit: "it looks like a glitchy lava lamp ... the three bars on the top"). `build`
+# takes any card of a see-through flame look out of a piece, and the game's own animated fire stands at its spot as a
+# thing of its own (nightlights.flame_fix): GAME_FIRE, its flames FIRE_WIDE across at scale 1.
+GAME_FIRE = 'FXFireSmall01'
+FIRE_WIDE = 75.0
+
+
+def _is_flame(lk):
+    return bool(lk and lk.get('alpha') and 'flame' in (lk.get('tex') or '').lower())
+
+
+def drawn_fires(desc):
+    """(desc without its drawn flames, [(x, y, z, scale)] in its frame where the game's fire burns in their place: the
+    foot of each card, a crossed pair once)."""
+    looks = desc.get('looks') or {}
+    spots, parts = [], []
+    for p in desc.get('parts') or []:
+        if p.get('shape') == 'card' and _is_flame(looks.get(p.get('look'))):
+            x, y, z = (float(v) for v in p.get('at', (0, 0, 0)))
+            spot = (round(x, 1), round(y, 1), round(z - 2, 1), round(max(0.3, float(p['size'][0]) / FIRE_WIDE), 2))
+            if spot not in spots:
+                spots.append(spot)
+            continue
+        parts.append(p)
+    if not spots:
+        return desc, []
+    used = {p.get('look') for p in parts} | {v for p in parts for v in (p.get('faces') or {}).values()}
+    return dict(desc, parts=parts, looks={k: v for k, v in looks.items() if k in used or not _is_flame(v)}), spots
+
+
+def fires_of(piece):
+    """Where the game's fire burns on a piece (`drawn_fires`), in its frame."""
+    _all_sets()
+    return drawn_fires(PIECES[piece]['describe']())[1]
+
+
 def build(piece):
-    """A piece made: `modelmake.make`'s answer with 'mesh' (its path under Data) and 'files' {path: bytes}, the mesh
+    """A piece made:`modelmake.make`'s answer with 'mesh' (its path under Data) and 'files' {path: bytes}, the mesh
     and every texture it names."""
+    _all_sets()                                 # (the signs' own pictures and glows, signsheets, are put in by it)
     what = PIECES[piece]
-    desc = what['describe']()
+    desc, made_fires = drawn_fires(what['describe']())
     made = modelmake.make(desc)
-    made['mesh'] = 'meshes\\folab\\%s\\%s.nif' % (what['set'], what['file'])
+    made['fires'] = made_fires
+    made['mesh'] ='meshes\\folab\\%s\\%s.nif' % (what['set'], what['file'])
     files = {made['mesh']: made['nif']}
     far = far_of(desc)
     if far:                                     # (beside the model, as the game keeps its own: lodobj looks for it there)
@@ -1442,8 +1499,11 @@ def _all_sets():
     import restyleset  # noqa: F401
     import guardtower  # noqa: F401
     import bambooset  # noqa: F401
+    import treevillage  # noqa: F401
     import rubbleset  # noqa: F401
-    import signsheets                   # (last: Waikiki's sign pictures redrawn, in place of the sets' own)
+    import islandset  # noqa: F401
+    import nightlights  # noqa: F401
+    import signsheets                 # (last: Waikiki's sign pictures redrawn, in place of the sets' own)
     signsheets.install()
 
 

@@ -6,6 +6,11 @@ at the start of any Waikiki work, and before saying anything is ready.
 
 ## Open
 
+- **The first beach models look dated** (21 Nov 2026, night, in chat): "should mention that the beach chairs have always
+  needed fixing. a few of the first models we made are a bit dated. surfboards, etc". The first waikikiset pieces (the
+  loungers, surfboards, board racks, and with them likely the umbrella, cabanas and kiosk). Taken up by the island-things
+  session (redo after the island set).
+
 - **Distant copies showing up close, by the start** (21 Nov 2026 ~20:20, nv-rs-pad, from the rise above Hanauma Bay
   looking SE; screenshots `docs/waikiki-report-far-double-1.webp`, `-2.webp`): "are these distant plants or what?",
   "by start, that seems to be on a palm tree or something". On the ridge a few hundred units off: a grey blocky far
@@ -272,3 +277,40 @@ at the start of any Waikiki work, and before saying anything is ready.
   Not Waikiki's: the frame-0 stops of the new nv-rs builds, "DrawIndexedPrimitive without an index buffer", and the
   heap free at frame 530 (a run on the Steam exe).
 
+- **Hotel lobbies** (21 Nov 2026 ~22:15, the user): "a couple of the lobbies have counters that are too tall, and some of the
+  objects on them float, generally the lobbies need to be made better looking for their uniqueness". Not yet known which
+  lobbies (the open hotels' lobbies in their view worlds, hotelinside.VIEWS, or the lent places' lobbies). Sent to the
+  hotel interiors session (local_c4483eaf).
+  Also (~22:20): "also missing elevator doors. add those to the door task please": the hotels' lifts have no doors. Sent to
+  the doors session (local_5afdf3a5).
+
+
+- **Royal Hawaiian lobby windows and lift doors** (22 Nov 2026 ~06:30, the user, in the 05:25 build; picture
+  `docs/waikiki-report-rh-lobby-windows-1122.webp`): "cant see thru windows of Royal Hawaiian lobby, from inside or
+  outside. And the elevator doors are missing here". In the picture the arched openings along the lobby's sea side are
+  filled with flat, solid tan panels, and tall solid slabs stand in front of the arches, with only slivers of sky at their
+  edges. A tiki torch also stands on the lobby carpet. Sent to the hotel interiors session (local_c4483eaf) for the
+  windows and to the doors session (local_5afdf3a5) for the lift doors.
+  Same in nv-rs-pad (~07:00, the user, picture `docs/waikiki-report-rh-lobby-windows-pad-1122.webp`): "this is in pad,
+  it's not the runtime, it's something YOU did to break it". So the 05:25 build broke it, not the new nv-rs.
+  Cause and fix (07:04): the glass picture (hotelinside.glass, alpha 0.2-0.85) was drawn with the leaves' alpha TEST
+  at 64 and no blending (0x12EC), so most of each pane drew solid and only the clean spots showed through. The glass
+  shape's NiAlphaProperty was set to 0x12ED with threshold 0 in royal_hawaiian_open, moana_open and kilauea_open.
+  SEEN FIXED by the user (~07:10, "they work"). Still to do: nifmake gives material='glass' this blend, so a rebuild keeps it.
+  Outside still broken (~07:08, the user): the city's closed hotels (royal_hawaiian.nif, moana.nif, kilauea.nif) carry the
+  same rhl_glass shape with the cut-out. Same fix put in at 07:09 (backup D:\FOLab-backups\glass-outside-before-1122-0709).
+  A scan of every meshes\folab model (scratchpad halfglass.py) then finds no glass drawn as a cut-out. Not yet seen outside.
+  Outside SEEN FIXED by the user (~07:20, nv-rs-next, "they work, good job").
+- **People inside the Royal Hawaiian seen from the street** (22 Nov 2026 ~07:20, the user, picture in chat): through the
+  street-side glass a man in a Hawaiian shirt stands in the lobby of the city's closed hotel. "are people supposed to spawn
+  inside the building from the outside?" Not by design: the lobby you walk in is the hotel's own small world; the city's copy
+  is only to look at. Sent to the hotel interiors session to find who is there (a local sandboxing, navmesh inside the shell?).
+- **A lobby's door leads to a different outside** (22 Nov 2026 ~07:40, the user, nv-rs-next, three pictures
+  docs/waikiki-report-lobby-door-*.webp): "something wrong with this lobby... using the door just takes you outside but its
+  a different space". At night: a glass shop-front door named "Door to Waikiki", lava-rock planters, terrazzo walk (the
+  Kilauea, by the look). Sent to the hotel interiors and doors sessions.
+  The user (~07:45): it is the Kilauea. Also: "the kilauea needs stairs leading up its platform by the door, too".
+- **Night-light fire pit flame** (22 Nov 2026 ~07:55, the user, nv-rs-next, picture `docs/waikiki-report-firepit-1122.webp`):
+  "this fire... is it supposed to be animated? it looks like a glitchy lava lamp. and the three bars on the top show me its
+  one of those drawing issues again". The flame is a still glowing shape with bars along its top edge (a cut-out card's
+  edge). Sent to the night-lights session: flames to be the game's own animated fire.

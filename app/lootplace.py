@@ -300,6 +300,7 @@ class Seat:
         self.edids = {}
         self.feet = None                                # (Anchors' footprints, to keep off: set by ops())
         self.taken = collections.defaultdict(list)      # ((x, y, r) of finds already put)
+        self.wet = False                                # (True: under water will do, on the sea's floor)
 
     def load(self, x, y):
         k = (int(x // 4096), int(y // 4096))
@@ -353,7 +354,7 @@ class Seat:
                 under.add(ref)
             sup.append(best)
             on_land.append(land)
-        if outside and self.G:
+        if outside and self.G and not getattr(self, 'wet', False):
             w = self.G.water(x, y)
             if (w is not None and max(sup) < w + 4) or min(sup) < 4:
                 return None

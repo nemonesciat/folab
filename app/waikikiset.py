@@ -138,25 +138,44 @@ def outrigger(rack=False):
 
 
 def board_rack(seed=1):
-    """A rack of surfboards for hire: two posts and rails, five boards leaning on it, nose up."""
+    """A rack of surfboards for hire: two posts and two rails, five boards stood on their tails leaning on the top rail,
+    nose up, each a little turned (the user, 21 Nov 2026: the first boards looked dated)."""
     rnd = random.Random(seed)
     looks = dict(_base_looks(), red=look('surf_red'), teal_board=look('surf_teal'))
     parts = [{'shape': 'box', 'size': [10, 10, 180], 'at': [x, 30, 0], 'look': 'wood'} for x in (-200, 200)]
     parts += [{'shape': 'box', 'size': [420, 8, 10], 'at': [0, 30, z], 'look': 'wood'} for z in (90, 165)]
+    parts.append({'shape': 'box', 'size': [420, 30, 4], 'at': [0, -12, 0], 'look': 'wood', 'solid': False})     # (a board to stand them on)
     for k in range(5):
-        x = -160 + 80 * k + rnd.uniform(-10, 10)
-        parts.append({'shape': 'cylinder', 'r': 1, 'h': 1, 'sides': 14, 'scale': [11, 82, 2.6], 'turn': [74 + rnd.uniform(-4, 4), 0, 0],
-                      'at': [x, -10, 84], 'look': 'pole', 'cap_look': 'red' if k % 2 else 'teal_board', 'solid': False})
+        x = -160 + 80 * k + rnd.uniform(-8, 8)
+        lean = 74 + rnd.uniform(-3, 3)
+        long = 190 + rnd.uniform(-14, 14)
+        # (tail on the board at y -12, leaning back onto the top rail; the deck faces out, -y)
+        a = math.radians(lean)
+        mid_y, mid_z = -12 + math.cos(a) * long / 2 - 6, 4 + math.sin(a) * long / 2
+        parts += modelsets.surfboard([x, mid_y, mid_z], [lean, 0, 0], 'red' if k % 2 else 'teal_board', long=long, wide=38 + rnd.uniform(-2, 2), fin='pole')
     return {'name': 'FOLabWaikikiBoardRack%d' % seed, 'looks': looks, 'parts': parts}
 
 
 def lounger(stripes='waikiki/canvas_blue', seed=1):
-    """A slatted wooden beach lounger, its back up, a striped pad on it."""
-    looks = dict(_base_looks(), pad=look(stripes, tile=120))
-    parts = [{'shape': 'box', 'size': [6, 6, 32], 'at': [x, y, 0], 'look': 'wood', 'solid': False} for x in (-30, 30) for y in (-80, 80)]
-    parts.append({'shape': 'slab', 'size': [70, 120, 6], 'at': [0, 30, 32], 'look': 'wood', 'faces': {'top': 'pad'}, 'material': 'wood'})
-    parts.append({'shape': 'slab', 'size': [70, 80, 6], 'at': [0, -52, 32], 'turn': [-38, 0, 0], 'look': 'wood', 'faces': {'top': 'pad'}, 'material': 'wood'})
-    return {'name': 'FOLabWaikikiLounger%d' % seed, 'looks': looks, 'parts': parts}
+    """A slatted wooden beach lounger (along y, 190 long), its back propped up at the -y end, a striped pad over seat and
+    back (the user, 21 Nov 2026: "the beach chairs have always needed fixing")."""
+    looks = dict(_base_looks(), pad=look(stripes, tile=None), pad2=look(stripes, tile=None))
+    P = []
+    H = 30.0                                                   # (the seat's top)
+    for x in (-31, 31):
+        P.append({'shape': 'box', 'size': [5, 190, 7], 'at': [x, 0, H - 9], 'look': 'wood', 'solid': False})       # (side rails)
+        for y in (-82, 82):
+            P.append({'shape': 'box', 'size': [6, 6, H - 2], 'at': [x, y, 0], 'look': 'wood', 'solid': False})     # (legs)
+    for k in range(11):                                        # (slats of the seat, -10 to 95)
+        P.append({'shape': 'box', 'size': [66, 8, 3], 'at': [0, -6 + k * 9.5, H - 3], 'look': 'wood', 'solid': False})
+    P.append({'shape': 'slab', 'size': [62, 104, 5], 'at': [0, 43, H], 'look': 'wood', 'faces': {'top': 'pad'}, 'material': 'wood'})
+    # the back: hinged at y -12, raised 42 degrees, its pad on it, a prop under it
+    a = math.radians(42)
+    L = 80.0
+    P.append({'shape': 'slab', 'size': [62, L, 5], 'at': [0, -12 - math.cos(a) * L / 2, H + math.sin(a) * L / 2 - 2], 'turn': [-42, 0, 0],
+              'look': 'wood', 'faces': {'top': 'pad2'}, 'material': 'wood'})
+    P.append({'shape': 'box', 'size': [56, 5, 34], 'at': [0, -46, H - 12], 'turn': [-20, 0, 0], 'look': 'wood', 'solid': False})    # (the prop under it)
+    return {'name': 'FOLabWaikikiLounger%d' % seed, 'looks': looks, 'parts': P}
 
 
 def cabana(stripes='waikiki/canvas_blue'):

@@ -1624,6 +1624,49 @@ def kit_drawn(body):
     return kitplan.drawn(GD, kits, body['kit'], body['rooms'], body.get('links', []), int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits))
 
 
+def kit_drawing(body):
+    """The last place made, as a drawing for the Kit tab's floor plan: kitplan.drawing_of, with the kit it was made from."""
+    last = _kits['tilesets'].get('last')
+    if not last:
+        return {'note': 'Make a place first: its plan comes over to the drawing.'}
+    out = kitplan.drawing_of(last['plan'])
+    out['kit'] = last['name']
+    return out
+
+
+def kit_picture(body):
+    """The last place made, every level from above, as an SVG's text (planpic)."""
+    import planpic
+    last = _kits['tilesets'].get('last')
+    if not last:
+        return {'note': 'Make a place first.'}
+    return {'svg': planpic.svg(last['plan'], last['items'])}
+
+
+def kit_drawcheck(body):
+    """A drawing checked while it's drawn: kitdrawings.check, planned as Build would without its pieces."""
+    import kitdrawings
+    kits = kits_state()
+    if not kits or body.get('kit') not in kits:
+        return {'ok': False, 'problems': [], 'notes': ['The kits are still being read: a moment.'], 'waiting': True}
+    ts = kitplan.tiles_for(GD, kits, body['kit'], _kits['tilesets'], kit_survey(kits))
+    return kitdrawings.check(ts, body.get('rooms', []), body.get('links', []))
+
+
+def kit_plans(path, body):
+    """Drawn plans kept by name: list, save, load, delete."""
+    import kitdrawings
+    if path == '/api/kit/plans':
+        return {'plans': kitdrawings.names()}
+    if path == '/api/kit/plan/save':
+        return {'plans': kitdrawings.save(body['name'], body['drawing'])}
+    if path == '/api/kit/plan/load':
+        return {'drawing': kitdrawings.load(body['name'])}
+    if path == '/api/kit/plan/delete':
+        return {'plans': kitdrawings.remove(body['name'])}
+    raise KeyError(path)
+
+
 def kit_click(body):
     kits = kits_state()
     if not kits:
@@ -2373,6 +2416,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(kit_themes(body))
                 if u.path == '/api/kit/drawn':
                     return self.send(kit_drawn(body))
+                if u.path == '/api/kit/drawcheck':
+                    return self.send(kit_drawcheck(body))
+                if u.path in ('/api/kit/plans', '/api/kit/plan/save', '/api/kit/plan/load', '/api/kit/plan/delete'):
+                    return self.send(kit_plans(u.path, body))
+                if u.path == '/api/kit/drawing':
+                    return self.send(kit_drawing(body))
+                if u.path == '/api/kit/picture':
+                    return self.send(kit_picture(body))
                 if u.path == '/api/kit/click':
                     return self.send(kit_click(body))
                 if u.path == '/api/kit/oneclicks':

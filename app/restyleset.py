@@ -356,8 +356,7 @@ def beach_bar():
     _fringe(P, (1240, -525, 238), (1240, 535, 238), drop=50)
     P.append({'shape': 'cylinder', 'r': 70, 'h': 200, 'sides': 10, 'at': [1260, 380, GROUND], 'look': 'rust', 'material': 'metal'})     # (rain off the roof)
     for k, (by, lk) in enumerate(((-210.0, 'board_a'), (-120.0, 'board_b'))):
-        P.append({'shape': 'cylinder', 'r': 1, 'h': 1, 'sides': 16, 'scale': [11, 82, 2.6], 'turn': [80 - 3 * k, 0, 90], 'at': [1209, by, 72 + GROUND],
-                  'look': 'white', 'cap_look': lk, 'solid': False})
+        P += modelsets.surfboard([1209, by, 72 + GROUND], [80 - 3 * k, 0, 90], lk, long=164, wide=32, fin='white')
     # the lanai: a deck a step up, steps along its open sides, tiki posts at its outer corners, lights strung, torches
     lx0, ly0, lx1, ly1 = LANAI
     _box(P, lx0, ly0, GROUND - 20, lx1, ly1, FLOOR, 'deck', far=True)
