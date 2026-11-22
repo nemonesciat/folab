@@ -6,11 +6,21 @@ at the start of any Waikiki work, and before saying anything is ready.
 
 ## Open
 
+- **Distant copies showing up close, by the start** (21 Nov 2026 ~20:20, nv-rs-pad, from the rise above Hanauma Bay
+  looking SE; screenshots `docs/waikiki-report-far-double-1.webp`, `-2.webp`): "are these distant plants or what?",
+  "by start, that seems to be on a palm tree or something". On the ridge a few hundred units off: a grey blocky far
+  model and a round green far-tree lump drawn among the real trees, i.e. far (LOD) copies not hidden though their
+  cell is loaded. Likely from the far plants put in at 16:56 (farplants.py, 44,208 far things) or a far building block.
+  Passed to the story session.
+
 - **Boater still on the side of the head** (21 Nov 2026 ~17:50, nv-rs-pad main-d9243748, third person by a stream:
   "boater still on side of head???"; screenshot `docs/waikiki-report-boater-side-2.webp`): after the 17:07 install with
   the "no Prn" fix the player's boater still hangs against the left of the head, brim vertical. Checked: the new
   boater.nif (16:56, 681d3e2e…) is the one in nv-rs, nv-rs-pad (mods and modgame\Data) and the build, so the fix
-  itself doesn't work. Passed to the people session.
+  itself doesn't work. Passed to the people session. Then (18:03 hatfix) all three hats were invisible: skinned shapes
+  without the shader's skinned flag (0x2), and strips where the game's skinned shapes are triangle lists. Fixed ~20:10
+  (files only, D:\FOLab-safe-outfits\hats). **Seen fixed by the user 21 Nov ~20:15: "good job, you did it"** (the boater
+  upright on the head, `docs/waikiki-boater-on-head.webp`). Lauhala and mahiole not yet looked at.
 
 - **Distant trees too sparse** (21 Nov 2026, afternoon, 52 fps, looking NE at a green hill from a jungle rise; screenshot
   `docs/waikiki-report-far-foliage-sparse.webp`): "the distant foliage is a reallygood idea. its starting to look good. it
@@ -122,7 +132,11 @@ at the start of any Waikiki work, and before saying anything is ready.
   shirt"; "DrawIndexedPrimitive without an index buffer"): the joined model kept a shape with no triangles (the Powder
   Gang's belt and boots, all cut) and skin pieces with none. Fixed in outfitjoin (empty pieces and shapes left out,
   `empty_parts` checks); the six models again in `shortsfix.py`, waiting for the user's next build. Until then the six
-  files in nv-rs-pad are a stopgap (the shirt-and-trousers model, 19:09).
+  files in nv-rs-pad are a stopgap (the shirt-and-trousers model, 19:09). The fixed six crashed too (~19:24, "read of
+  unmapped memory" freeing geometry on equip): the emptied shape was taken out of the root but its 7 blocks stayed in the
+  file, held by nothing, which the game frees as it loads; none of the game's 498 worn models has such a block. Now
+  `outfitjoin.compact` keeps only what the root reaches, and `empty_parts` flags unheld shapes (0 of the game's 498, both
+  crashed versions 6 of 6). Proven on a copy; waits for the user's go. Equip one once after that build.
 - **The boater sits on the side of the head** (21 Nov 2026, in game, the player from behind: "boater also is on side of
   head"; the hat on its edge against the left of the head). Found: FOLab's worn hats (boater, lauhala, mahiole) named
   'Bip01 Head' as their parent ('Prn'), as the Pre-War Hat does; that bone is turned a quarter in the game's skeleton
@@ -132,7 +146,14 @@ at the start of any Waikiki work, and before saying anything is ready.
   ~17:50, nv-rs-pad). The real cause, from the exe: every hat slot's rigid model hangs on Bip01 Head itself, whose own x is
   the body's up. Now the hats are skinned to that bone in the body's space, as the game's gambler fedora is (checked against
   its skin numbers; `docs/waikiki-hats-on-head.png`, its "before" the user's screenshot). The user: "get it in asap";
-  `hatfix.py` through the story session. Not yet seen in game.
+  `hatfix.py` through the story session. Then the hats drew nothing at all ("hat doesnt appear now at all", "straw
+  boater invisible too", 21 Nov evening): their lighting shader lacked the skinned flag (the fedora's is 0x82000003,
+  ours 0x82000001), and they were strips where every skinned shape of the game is a triangle list. Fixed in
+  `nifmake.build_worn`; `outfitjoin.empty_parts` flags a skinned shape whose shader isn't (0 of the game's 498). Files in
+  D:\FOLab-safe-outfits\hats for the top session to copy on the user's word. Not yet seen in game.
+- **Shirt and shorts: the safe way** (the user: "then do it the safe way for now", then "Shirt with trousers"): the six
+  items' models are the shirt-and-trousers mesh with the trousers khaki or denim, texture only (D:\FOLab-safe-outfits\B).
+  The board shorts' print now reaches the waistband ("these shorts are also colored imperfectly"; D:\FOLab-safe-outfits\boardshorts). Waiting for the user's word.
 - **A glitched water tile up the shore** (20 Nov 2026, in nv-rs by the ruined freeway: "glitched water tile up shore"): a cell's own river level laid flat over a bank lower than it. 13 cells of 51 with their own water had such banks; the low pockets inside each cell raised 12 over the water (294 points, 50 things raised with them), one cell whose level was wrong written dry; none left inside a cell (pockets on a cell's edge, shared with its neighbour, left). In every nv-rs ~12:05. The user's look: "Better".
 - **The city feels like the Mojave: "WHERE ARE THE PLANTS"** (20 Nov 2026, in nv-rs over the city, 21-27 fps: "this shit feels so unrealistic"; "i dont want a barren desert, but i dont want 10 fps. is this impossible?"). The grass grows on most wild ground (the census: about half the dry land by grassrule, more counting the mod's own twins it can't read; the rest roads and pavement) but thin. Made thick (`plantgrass.KINDS`: grasses 36-60, ferns 16-30, shrubs 12) and taro, heliconia and ti grown by the ground too; the far ground painted with what grows (`farfoliage.py`, through lodgen) next. Then the user's look at a lush stretch ("this has fewer trees and looks good too ... the answer isnt just more trees"): its ground is covered. Grass now right up to buildings (`plantgrass.BUILT_PTS`) and 384 from roads, not 512 (`CLEAR_PTS`). In every nv-rs ~12:05 with the thick grass. The user's look: "Better". Far ground green running.
 - **Water banding at the start's bay** (20 Nov 2026, in nv-rs, looking over Hanauma's bay: "what causes this water banding?"): a straight-edged lighter band across the water. Ruled out: no cell there is dry (one in the whole map, (21, -7)), all the bay's cells the same water (XCWT FalloutNV 030009), the world's far water (NAM4) is 0 in the mod. Likely, not proven: the far ground under the sea (distant land, coarser) standing shallower than the near sea bed, so the water past the loaded cells is drawn as shallow water.

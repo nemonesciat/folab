@@ -352,6 +352,7 @@ HEAD_TURN = ((2.468686410850296e-08, 1.3266219411889324e-06, -1.0),
              (0.002846590941771865, 0.9999959468841553, 1.3117851267452352e-06),
              (0.9999959468841553, -0.0028465765062719584, 2.0910340126079063e-08))
 HEAD_PART = (257, 1)        # (the fedora's one dismember partition: flags, body part)
+SKINNED = 0x2               # (a lighting shader's flag for a skinned shape: the fedora's shader flags are 0x82000003)
 
 
 def build_worn(name, shapes):
@@ -385,11 +386,23 @@ def build_worn(name, shapes):
     R = tuple(tuple(HEAD_TURN[c][r] for c in range(3)) for r in range(3))         # (body to bone: the turn undone)
     T = tuple(-sum(R[r][c] * HEAD_AT[c] for c in range(3)) for r in range(3))
     for i, t in enumerate(n.types):
+        if t == 'BSShaderPPLightingProperty':          # (the skinned bit, as the fedora's 0x82000003: without it the game
+            blk = bytearray(blocks[i])                  # draws the shape with the still shader and the hat isn't seen,
+            sf = struct.unpack_from('<I', blk, 18)[0]   # 21 Nov 2026)
+            struct.pack_into('<I', blk, 18, sf | SKINNED)
+            blocks[i] = bytes(blk)
+    for i, t in enumerate(n.types):
         if t != 'NiTriStrips':
             continue
         b = n.block(i)
         dat = n.block(b['data'])
         V, tris = dat['verts'], dat['tris']
+        # (as a triangle list, as every skinned shape of the game is: 1,874 in its worn models, none strips)
+        types[i] = 'NiTriShape'
+        do = n.offsets[b['data']]
+        head = data[do:outfitjoin._extra_at(data, do) + 4]
+        blocks[b['data']] = head + struct.pack('<HIB', len(tris) // 3, len(tris), 1) + struct.pack('<%dH' % len(tris), *tris) + struct.pack('<H', 0)
+        types[b['data']] = 'NiTriShapeData'
         nv = len(V) // 3
         in_bone = [tuple(sum(R[r][c] * V[3 * k + c] for c in range(3)) + T[r] for r in range(3)) for k in range(nv)]
         mid = tuple(sum(q[a] for q in in_bone) / nv for a in range(3))

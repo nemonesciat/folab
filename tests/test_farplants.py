@@ -48,5 +48,14 @@ check('flat patch: one plant, the tallest (the tree, not the banana)', sum(1 for
 check('steep patch: two', sum(1 for it in got if it[1] > P * 3) == 2)
 check('what is not a plant always kept', any(it[0] == 3 for it in got))
 
+# the game's far palm is crossed see-through cards: never usable in a block (each card drew as a solid tan rectangle)
+palm = B.join(['landscape', 'trees', 'NVQueenPalm01.NIF'])
+game_far = nif.mesh_from_nif(gd.read_file('meshes' + B + palm[:-4] + '_lod.nif'))
+check("the game's far queen palm is see-through cards, so not usable", not farplants.usable(game_far))
+got = farplants.far_model(gd, palm)
+mine = nif.mesh_from_nif(got[0])
+check('FOLab makes a palm of its own: nothing see-through, lean (under 200 corners)',
+      farplants.usable(mine) and sum(len(s['p']) // 3 for s in mine) < 200, [(s['tex'], s.get('alpha'), len(s['p']) // 3) for s in mine])
+
 print('%d of %d' % (sum(OK), len(OK)))
 sys.exit(0 if all(OK) else 1)

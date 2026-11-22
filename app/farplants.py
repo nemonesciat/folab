@@ -186,6 +186,8 @@ def far_model(gd, model):
     if tall < 20:
         return None
     is_tree = bool(wood) and tall >= TREE
+    if 'palm' in model.lower() and wood:
+        return _far_palm(gd, model, leaf, wood, pts, tall)
     span = max(max(q[0] for q in pts) - min(q[0] for q in pts), max(q[1] for q in pts) - min(q[1] for q in pts))
     k = max(2, min(4, int(span / 220) + 2)) if is_tree else max(1, min(2, int(span / 160) + 1))
     groups = pf._clusters(list(pts), k) or [pts]
@@ -253,6 +255,60 @@ def _register():
 _register()
 
 
+FRONDS = 7                      # (a far palm: 7 fronds of 3 segments, 3 sides: ~110 corners; plantfar's 11 x 6 x 4 was ~400,
+#                                 and 6,000 game palms in the far view left 8,533 smaller things out of full blocks)
+
+
+def _fronds(cx, cy, cz, reach, tex, normal):
+    """A palm's crown far off: fronds from the crown out and drooping, flattened tubes tapering to the tip."""
+    P, N, UV, I = [], [], [], []
+    SEG, SIDES = 3, 3
+    for k in range(FRONDS):
+        a = math.radians(k * 360 / FRONDS + 11 * (k % 2))
+        up, drop = (0.3, 0.55) if k % 2 else (0.1, 0.8)
+        base = len(P) // 3
+        for j in range(SEG + 1):
+            t = j / SEG
+            h = reach * (up * math.sin(t * math.pi) - drop * t * t)
+            px, py, pz = cx + math.cos(a) * reach * t, cy + math.sin(a) * reach * t, cz + h
+            r = 28 * (1 - t) + 5
+            for i in range(SIDES + 1):
+                q = 2 * math.pi * i / SIDES
+                ox, oy, oz = -math.sin(a) * math.cos(q) * r * 1.7, math.cos(a) * math.cos(q) * r * 1.7, math.sin(q) * r * 0.5
+                P += [px + ox, py + oy, pz + oz]
+                L = math.sqrt(ox * ox + oy * oy + oz * oz) or 1.0
+                N += [ox / L, oy / L, oz / L]
+                UV += [i / SIDES, t]
+        for j in range(SEG):
+            for i in range(SIDES):
+                v = base + j * (SIDES + 1) + i
+                I += [v, v + SIDES + 1, v + 1, v + 1, v + SIDES + 1, v + SIDES + 2]
+    return {'p': P, 'n': N, 'uv': UV, 'i': I, 'tex': tex, 'normal': normal, 'gloss': 10.0, 'alpha': False, 'glow': '', 'glow_mult': 1.0}
+
+
+def _far_palm(gd, model, leaf, wood, pts, tall):
+    """A palm's far version: its trunk from the foot to the crown, and fronds drooping from the crown (plantfar's)."""
+    slug = _slug(model)
+    top = sorted(pts, key=lambda q: -q[2])[:max(10, len(pts) // 5)]
+    cx, cy, cz = (sum(q[d] for q in top) / len(top) for d in range(3))
+    reach = max(30.0, max(math.hypot(q[0] - cx, q[1] - cy) for q in pts))
+    colour = _leaf_colour(gd, leaf)
+    tone = tuple(int(v // 12) * 12 + 6 for v in colour)
+    tname = 'canopy_%02x%02x%02x' % tone
+    tex, nor = TEX % tname, TEX % (tname + '_n')
+    fronds = _fronds(cx, cy, cz, reach, tex, nor)
+    foot = [(s['p'][k], s['p'][k + 1]) for s in wood for k in range(0, len(s['p']), 3) if s['p'][k + 2] < 60] or [(cx, cy)]
+    fx, fy = sum(p[0] for p in foot) / len(foot), sum(p[1] for p in foot) / len(foot)
+    r0 = max(8.0, min(30.0, max(math.hypot(p[0] - fx, p[1] - fy) for p in foot) * 0.8))
+    trunk = _tube((fx, fy, -pf.DOWN), (cx, cy, cz), r0, r0 * 0.7, BARK, '')
+    if tname not in _pics:
+        _pics[tname] = _small_canopy(tone).files(game=True, shine=8)
+    col, nmap = _pics[tname]
+    files = {tex: col, nor: nmap}
+    files.update(_bark_files())
+    return nifmake.build('FOLabFar' + slug[-24:], [fronds, trunk]), files, 'tree'
+
+
 # ---------- which plants show far off ----------
 
 def height_of(gd, model, _seen={}):
@@ -302,6 +358,14 @@ def pick(gd, items, model_of, edid_of, ground=None):
     return keep
 
 
+def usable(shapes):
+    """A far model the distant blocks can draw: there, and nothing of it see-through. The game's far palms and Zion trees are
+    see-through cards (NVQueenPalmLOD.dds, alpha test), made for the game's own far view; a block has no see-through, so each
+    card showed as a solid grey upright rectangle (the user, 21 Nov 2026: 4,049 queen palms round Hanauma Bay). Those plants
+    get FOLab's own far model at that path; the game reads the _lod files only when far views are made, never in play."""
+    return bool(shapes) and not any(q.get('alpha') for q in shapes)
+
+
 def files(gd, pr, world, put, progress=None, mine=None):
     """Every far model the world's picked plants need that neither the game nor the mod has, made and handed to
     put(path, bytes) (the mod's own files). mine(path): True for a far model farplants made before (made again). Returns {'made': n, 'trees': n, 'shrubs': n, 'none': [models]}."""
@@ -317,7 +381,7 @@ def files(gd, pr, world, put, progress=None, mine=None):
     want = {}
     for it in pick(gd, items, models.get, lambda b: _name(gd, pr, b)):
         m = (models.get(it[0]) or '').lower().replace('/', '\\')
-        if m.endswith('.nif') and is_plant(_name(gd, pr, it[0]), m) and (not stand.of_model(m) or (mine and mine('meshes\\' + m[:-4] + '_lod.nif'))):
+        if m.endswith('.nif') and is_plant(_name(gd, pr, it[0]), m) and (not usable(stand.of_model(m)) or (mine and mine('meshes\\' + m[:-4] + '_lod.nif'))):
             want[m] = want.get(m, 0) + 1
     rep = {'made': 0, 'tree': 0, 'shrub': 0, 'none': []}
     for n, m in enumerate(sorted(want)):

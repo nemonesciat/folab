@@ -141,14 +141,17 @@ the model for style, UI and approach. Python, standard library first, code in `a
   lauhala sun hat, lathed profiles; worn = skinned wholly to 'Bip01 Head' in the body's space, as the game's gambler fedora
   and tuxedo hat (`nifmake.build_worn`, `HEAD_AT`/`HEAD_TURN` the bone at rest). Never rigid: the exe hangs every hat slot's
   rigid model on Bip01 Head (its slot-to-bone table), whose own x is the body's up, so the boater, rigid and z-up, lay on
-  its side in game twice on 21 Nov 2026 (Prn or not); `docs/waikiki-hats-on-head.png`. dropped = `build_dropped`
+  its side in game twice on 21 Nov 2026 (Prn or not); `docs/waikiki-hats-on-head.png`. Skinned means the lighting shader's
+  skinned flag (`SKINNED`; without it the hats weren't drawn at all) and triangle lists (no skinned shape of the game is
+  strips). dropped = `build_dropped`
   (clutter layer). A hat's frame is offsets from the head along the WORLD's axes (z up, +y the face); `clearance` checks
   the game's head inside the crown. `hats.ops` puts them in the surfers' head list in the Rattan Cowboy Hat's place.
   Shirt and shorts (`outfitjoin.py`; the user, 21 Nov 2026: "hawaiian shirt+shorts (like khaki or jean)"; picture
   `docs/waikiki-shirt-shorts-mock.png`): no game outfit is one, so `outfitjoin.join` makes one model of two worn outfits
   (the top of one over the bottom of another, overlapping a little; triangles left out of a shape's data as three of one
   corner and out of its NiSkinPartition, rewritten as triangle lists; the other's skinned blocks added, linked to the top's
-  bones by name; a piece or shape left with no triangle is left out, as the game stops drawing an empty one: `empty_parts`).
+  bones by name; a piece or shape left with no triangle is left out, as the game stops drawing an empty one; `compact` keeps only blocks the root
+  reaches: one held by nothing crashed nv-rs on equip; `empty_parts` checks both, clean over the game's 498 worn models).
   `garmentprint.shirt_and_shorts`: the Pre-War Spring shirt over the Powder Gang's shorts (its boots are on
   the shorts' shape), barefoot from White Legs (the game has no sandals; FOLab's own flip-flops later), shorts in plain
   khaki or denim (`CLOTHS`). `peopledress.combo_ops`: 6 ARMO, the surfers' body list a third each shirt and trousers,

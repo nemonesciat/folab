@@ -36,7 +36,8 @@ for name in hats.HATS:
     check('%s: worn as the game\'s gambler fedora is (a NiNode, no Prn, no collision, a Bip01 Head node of its own)' % name,
           n.types[0] == 'NiNode' and extras == [] and root['collision'] == -1 and 'bhkRigidBody' not in n.types
           and any(t == 'NiNode' and n.block(i)['name'] == 'Bip01 Head' for i, t in enumerate(n.types)), (n.types[0], extras))
-    shapes_ = [i for i, t in enumerate(n.types) if t == 'NiTriStrips']
+    shapes_ = [i for i, t in enumerate(n.types) if t == 'NiTriShape']
+    check('%s: triangle lists, as every skinned shape of the game; the shaders say skinned (else not drawn)' % name, shapes_ and 'NiTriStrips' not in n.types and all(n.block(n.block(i)['props'][-1])['shader_flags'] & 2 for i in shapes_))
     skins = [n.block(i)['skin'] for i in shapes_]
     fed = gd.read_file('meshes\\armor\\headgear\\gambler\\gambler_fedora_01.nif')
     fn = nif.Nif(fed)

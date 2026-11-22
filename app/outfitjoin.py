@@ -403,7 +403,8 @@ def _write(a, types, blocks, strings):
 def empty_parts(data):
     """[(shape name, what)]: every shape the root holds whose data or skin pieces have nothing to draw (the game stops on
     one), every dismember list not as long as its partition, every block nothing holds (the game frees it as it loads:
-    a crash on putting the outfit on: shapes, their data and skin; the game's 498 worn models have none). [] is good."""
+    a crash on putting the outfit on: shapes, their data and skin; the game's 498 worn models have none), and a skinned
+    shape whose lighting shader lacks the skinned flag (the game doesn't draw it: FOLab's hats, 21 Nov 2026). [] is good."""
     n = nif.Nif(data)
     bad = []
     seen, todo = set(), [0]
@@ -428,6 +429,9 @@ def empty_parts(data):
         if not any(not (tris[k] == tris[k + 1] == tris[k + 2]) for k in range(0, len(tris), 3)):
             bad.append((b['name'], 'no triangle in its data'))
         if b['skin'] >= 0:
+            for q in b['props']:                        # (a skinned shape's lighting shader says so, or isn't drawn)
+                if q >= 0 and n.types[q] in ('BSShaderPPLightingProperty', 'Lighting30ShaderProperty')                         and not n.block(q)['shader_flags'] & 2:
+                    bad.append((b['name'], 'skinned, its shader not'))
             o = n.offsets[b['skin']]
             part = _i(n.data, o + 4)
             pieces, _size = _pieces(n.data, n.offsets[part])

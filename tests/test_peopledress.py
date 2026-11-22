@@ -251,7 +251,7 @@ for sh_ in nif.mesh_from_nif(barefoot, placed=False):
             lows[sh_['tex'].lower().rsplit('\\', 1)[-1]] = lows.get(sh_['tex'].lower().rsplit('\\', 1)[-1], 0) + 1
 check('barefoot: nothing but skin (and caps) at the feet, the boots gone', lows and all(t.startswith('upperbody') or 'gore' in t for t in lows), lows)
 check('barefoot: two bodies\' skin, the Powder Gang\'s to the socks and White Legs\' below',
-      sum(1 for nm, k in bare if nm == 'Arms:0' and k > 0) == 2, bare)
+      sum(1 for nm, k in bare if nm.startswith('Arms:0') and k > 0) == 2, bare)
 drawn = dict(outfitjoin.drawn(joined))
 was_top, was_bottom = dict(outfitjoin.drawn(top)), dict(outfitjoin.drawn(bottom))
 check('joined: the top\'s shapes all there, its shirt cut to its top part', all(k in drawn for k in was_top) and 0 < drawn['UpperBody'] < was_top['UpperBody'], drawn['UpperBody'])

@@ -351,6 +351,9 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
         if not trees and not isinstance(base, str) and any(w in gd.edid(base).lower() for w in TREE_WORDS):
             skipped += 1
             continue
+        if plants and any(q.get('alpha') for q in shapes) and farplants.is_plant(farplants._name(gd, pr, base), stand.models.get(base) or ''):
+            skipped += 1                # (a see-through card: a block draws it as a solid rectangle, farplants.usable)
+            continue
         cx, cy = int(math.floor(x / CELL)), int(math.floor(y / CELL))
         bx, by = sw_x + ((cx - sw_x) // BLOCK) * BLOCK, sw_y + ((cy - sw_y) // BLOCK) * BLOCK
         blocks.setdefault((bx, by), []).append((shapes, x, y, z, rz, s, (cx - bx) * BLOCK + (cy - by)))
