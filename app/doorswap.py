@@ -396,6 +396,73 @@ def same_arrivals(pr, near=8.0):
     return out
 
 
+def view_copies_ops(gd, pr, near=2.0):
+    """(ops, report): the city's doors copied into the hotels' small worlds (hotelinside.VIEWS) back to how
+    viewworld.stage_ops makes them, locked and leading nowhere; and every link that led to such a copy (a house's way
+    out, set after the copy was made) pointed at the city's own door at the same spot, which leads back in if it led
+    nowhere. On Waikiki of 21-22 Nov 305 copies led into places and 74 places' ways out led into a hotel's small world:
+    leaving them put you outside a hotel's glass (the user, 22 Nov 2026). The hotels' own doors are left."""
+    import hotelinside
+    worlds = {gd.edid(w): w for w in gd.worlds()}
+    name = Names(gd, pr)
+    city_cells = {gd.key(c) for c in gd.grid(worlds[doorset.CITY]).values()}
+    where = {rk: ck for ck, c in pr.cells.items() for rk in (c.get('refs') or {})}
+    by_spot = {}
+    for ck in city_cells:
+        for rk, r in ((pr.cells.get(ck) or {}).get('refs') or {}).items():
+            if r.get('base') and r.get('p') and not r.get('removed'):
+                by_spot.setdefault((r['base'], int(r['p'][0] // 64), int(r['p'][1] // 64)), []).append((ck, rk, r))
+
+    def original(r):
+        for gx in (-1, 0, 1):
+            for gy in (-1, 0, 1):
+                for ck, rk, o in by_spot.get((r['base'], int(r['p'][0] // 64) + gx, int(r['p'][1] // 64) + gy), ()):
+                    if max(abs(a - b) for a, b in zip(o['p'][:3], r['p'][:3])) < near:
+                        return ck, rk, o
+        return None
+    copies = {}
+    for hotel, v in hotelinside.VIEWS.items():
+        w = worlds.get(v['world'])
+        if w is None:
+            continue
+        for ck in {gd.key(c) for c in gd.grid(w).values()}:
+            for rk, r in ((pr.cells.get(ck) or {}).get('refs') or {}).items():
+                if r.get('removed') or not r.get('p') or name(r.get('base') or '')[1] != 'DOOR':
+                    continue
+                if (r.get('tel') or {}).get('door') and where.get(r['tel']['door']) in city_cells:
+                    continue                     # (the hotel's own way out to the city: the Kilauea's stands where the city's does)
+                o = original(r)
+                if o is None:
+                    continue                     # (the hotel's own doors, and anything that's no copy of the city's)
+                copies[rk] = (ck, r, o)
+    out = []
+    rep = {'copies_unlinked': 0, 'copies_locked': 0, 'ways_out_repointed': 0, 'city_doors_linked': 0, 'no_original': 0}
+    linked_now = {}
+    for ock, c in pr.cells.items():
+        for ork, orr in (c.get('refs') or {}).items():
+            t = orr.get('tel')
+            if not t or orr.get('removed') or t.get('door') not in copies or ork in copies:
+                continue
+            _cck, _cr, (oc, okey, o) = copies[t['door']]
+            out.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': dict(t, door=okey)})
+            rep['ways_out_repointed'] += 1
+            if not o.get('tel') and okey not in linked_now:
+                ct = copies[t['door']][1].get('tel') or {}
+                if ct.get('door') == ork and ct.get('p'):
+                    linked_now[okey] = True
+                    out.append({'op': 'tel', 'cell': oc, 'ref': okey, 'tel': {'door': ork, 'p': ct['p']}})
+                    rep['city_doors_linked'] += 1
+    for rk, (ck, r, _o) in copies.items():
+        if r.get('tel'):
+            out.append({'op': 'tel', 'cell': ck, 'ref': rk, 'tel': None})
+            rep['copies_unlinked'] += 1
+        if not ((r.get('props') or {}).get('lock') or {}).get('level'):
+            out.append({'op': 'props', 'cell': ck, 'ref': rk, 'props': {'lock': {'level': 255, 'key': '', 'leveled': False}}})
+            rep['copies_locked'] += 1
+    rep['copies'] = len(copies)
+    return out, rep
+
+
 def refit_ops(gd, pr, write=True):
     """(ops, files changed): the mod's door pieces' files made again (a piece changed since the swap: the lobby lift door
     made to fill its frame, 22 Nov 2026) and each record's OBND set to the new model's box where it differs."""

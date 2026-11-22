@@ -60,3 +60,11 @@ in the hotel's small world, so the way in arrived outside the glass in that worl
 told by the door's world (`doorset.CITY`): outside `KILAUEA_ARRIVE`, inside `KILAUEA_INSIDE` (r 2500, as hotelinside's
 arrive_in). `arrival_ops` sets the links again, `same_arrivals` lists linked pairs whose two links arrive at one spot (only
 this pair, of every link in Waikiki). The lobby has no navmesh near the door; it hadn't before the swap either.
+
+## The hotels' small worlds' door copies (22 Nov 2026)
+viewworld.stage_ops copies the city round a hotel into its small world, doors locked and leading nowhere. By 21 Nov 21:26
+(before the swap) 305 of those copies led into places and 74 places' ways out led into a small world, so leaving them put
+you outside a hotel's glass. Neither the swap nor doorclear did it (they change no lock or link of a copy).
+`doorswap.view_copies_ops`: copies of a city door still standing at their spot (same base within 2) locked, links taken off,
+ways out pointed at the city's door: 265 copies, 61 ways out on Waikiki of 07:22. Left: the hotels' own doors and lifts, and
+30 copies whose city door no longer stands there (13 places' ways out still lead to one of those).
