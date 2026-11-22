@@ -546,26 +546,29 @@ def _arrive(ts, plan, c, d):
 
 # ---------- the hotel ----------
 
-def make(gd, pr, hotel, seed=1):
-    """A hotel's floors as ops: see the module's docstring."""
+def make(gd, pr, hotel, seed=1, concept=None):
+    """A hotel's floors as ops: see the module's docstring. concept: a module that plans the hotel its own way (hotelcourt:
+    the Royal Hawaiian as the Kahuna's court), with its KINDS of floor, FLOORS table and build_floor."""
     H = HOTELS[hotel]
+    table = concept.FLOORS if concept else FLOORS
+    build = concept.build_floor if concept else build_floor
     if any(k.startswith('+') and r.get('type') == 'CELL' and (recordio.field(r, 'EDID') or '').startswith('FOLab%sFloor' % H['tag'])
            for k, r in pr.records.items()):
         raise ValueError('%s already has its floors.' % H['label'])
-    kinds = H['floors']
+    kinds = concept.KINDS if concept else H['floors']
     built = []
     for n, kind in enumerate(kinds):
-        built.append(build_floor(gd, hotel, kind, n, seed, last=n == len(kinds) - 1))
+        built.append(build(gd, hotel, kind, n, seed, last=n == len(kinds) - 1))
     ops = [{'op': 'record_new', 'record': key_record(gd, H['tag'], H['label']), 'name': 'hf_%s_key' % hotel}]
     places, people, report = [], {}, []
-    guest_no = 0
+    seen_kind = collections.Counter()
     for n, (kind, F) in enumerate(zip(kinds, built)):
-        label = FLOORS[kind]['label']
-        if kind == 'guest':
-            guest_no += 1
-            label = 'Guest Floor %d' % guest_no if kinds.count('guest') > 1 else label
+        label = table[kind]['label']
+        if kinds.count(kind) > 1:
+            seen_kind[kind] += 1
+            label = ('Guest Floor %d' % seen_kind[kind]) if kind == 'guest' else '%s %d' % (label, seen_kind[kind])
         full = '%s: %s' % (H['label'], label)
-        like = FLOORS[kind].get('like') or H['like']
+        like = table[kind].get('like') or H['like']
         cell = next((c for c in gd.interiors if (gd.edid(c) or '').lower() == like.lower()), None)
         if cell is None:
             raise ValueError('These game files lack %s, whose light the %s copies.' % (like, full))
@@ -592,8 +595,8 @@ def make(gd, pr, hotel, seed=1):
                 o['base'] = '$hf_%s_key' % hotel
             ops.append(o)
         places.append({'name': name, 'label': full, 'kind': kind, 'arrive_in': _arrive(F.ts, F.plan, *F.plan.exit), 'arrive_up': _arrive(F.ts, F.plan, F.lift[1], F.lift[2])})
-        who = dict(FLOORS[kind]['people'])
-        if kind in ('guest', 'top'):
+        who = dict(table[kind]['people'])
+        if not concept and kind in ('guest', 'top'):
             who.update(like=H['gang']['like'], said=H['gang']['said'])
         people[name] = who
         report.append(dict(F.report, place=full))
