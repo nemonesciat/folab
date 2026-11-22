@@ -175,6 +175,15 @@
       "port": 8791
     },
     {
+      "name": "folab-doors",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\doors&& set FOLAB_NV_INI=D:\\FOLabScratch\\doors\\ini&& py -3 app/server.py 8841 --no-browser"
+      ],
+      "port": 8841
+    },
+    {
       "name": "folab-voice",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [

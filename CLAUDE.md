@@ -255,6 +255,13 @@ the model for style, UI and approach. Python, standard library first, code in `a
   `W.grabbing` keeps world.js's own Esc and right-button cancel off it. `web/placefold.js`: Place panel's Prefabs,
   Recently used and Suggested fold away (remembered), Suggested and Recently used by themselves while a search is typed.
   FOLab.exe waits as long as the server runs (it gave up after 180 s: through MO2 a big load order took longer).
+- FOLab's own doors (`doorset.py`, `doorswap.py`, `tests/test_doorset.py`; survey and pictures `docs/waikiki-doors.md`, `.jpg`):
+  a door is a unit made to its building's doorway (origin at the opening's foot on the wall's outer face, -y out; liners,
+  leaves, transom or fanlight, one solid box); `DOORWAYS` {building editor ID: doorways in its frame} (an `...Open` hotel
+  piece uses its closed one's), `KILAUEA` on the drum at bearing 240. `doorswap.ops` swaps each matching game door (same
+  world only: the hotels' small worlds repeat the city) and moves it to its doorway as the building stands; same ref, so
+  links and locks stay; arrivals follow a door that moved (`ORIGIN_RISE`, `ARRIVE`). Lift doors (`LIFTS`) keep the game's
+  frame: a swap of base only. DOOR records copy the replaced game door's sounds. Run once (`records_of`).
 - Doors you can walk out of (`doorclear.py`, `tests/test_doorclear.py`; the user, 21 Nov 2026: "exiting a house placed me inside
   the building shell"): the game stands its DoorBarricade ~90-120 out in front of a door it bars, past `townbuild.SHUT_SAME`, so
   townbuild stood it in front of doors given a place too and you came out between wall and boards (274 of Waikiki's 1,732 ways

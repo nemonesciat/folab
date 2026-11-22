@@ -1443,6 +1443,7 @@ def _all_sets():
     import guardtower  # noqa: F401
     import bambooset  # noqa: F401
     import rubbleset  # noqa: F401
+    import doorset  # noqa: F401
     import signsheets                   # (last: Waikiki's sign pictures redrawn, in place of the sets' own)
     signsheets.install()
 
