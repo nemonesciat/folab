@@ -66,7 +66,7 @@ def save_info(S, body):
     if 'author' in body or 'description' in body:
         pr.author = str(body.get('author', pr.author))[:511]
         pr.description = str(body.get('description', pr.description))[:511]
-        pr.save()
+        pr.sync()
     return info(S)
 
 

@@ -6,9 +6,12 @@ adds; the cells it touches (each with the game's CELL record, as every plugin th
 it moved, turned, rescaled or swapped (a copy of the record with new DATA/XSCL/NAME); every game ref it removed (kept,
 but disabled and sunk out of sight: deleting a game ref crashes saves that knew it); its new refs. Form IDs in records
 copied from the game are re-pointed from their file's own master list to this plugin's."""
+import bisect
 import os
+import pickle
 import struct
 
+import espreuse
 import formlinks
 import gamedata
 import land as landmod
@@ -53,6 +56,8 @@ class Writer:
         self.source = project.source_path()
         self.own_name = project.plugin.lower()
         self.masters = []
+        self.reuse_path = None                  # (where what this build makes is kept for the next: write() sets it)
+        self.reuse = None
 
     # --- form IDs ---
 
@@ -114,24 +119,13 @@ class Writer:
             official = {n.lower() for n in gamedata.OFFICIAL}
             used |= {i for i, n in enumerate(gd.names) if n in official}
         for ckey, c in self.pr.cells.items():
-            cell = None if ckey.startswith('+') else gd.from_key(ckey)
-            if cell is not None:
-                used.add(gd.source(cell)[0])
-                if cell in gd.ext_cells:
-                    used.add(gd.source(gd.ext_cells[cell])[0])
-            for rkey, r in c['refs'].items():
-                if r.get('tel') and not r['tel']['door'].startswith('+'):
-                    used.add(gd.from_key(r['tel']['door']) >> 24)
-                if not rkey.startswith('+'):
-                    fid = gd.from_key(rkey)
-                    used.add(fid >> 24)
-                    used.add(gd.cell_refs[gd.ref_cell.get(fid, cell)][fid][0])
-                    used.add(gd.source(gd.ref_cell.get(fid, cell))[0])
-                if r.get('base') and not r['base'].startswith('+'):
-                    used.add(gd.from_key(r['base']) >> 24)
-                for k in list(refprops.links(r.get('props') or {})) + worldrec.ref_extra_keys(r):
-                    if not k.startswith('+'):
-                        used.add(gd.from_key(k) >> 24)
+            dig = self.reuse and self.pr.digest('cells', ckey)
+            had = self.reuse.get('plan.cell', ckey, dig) if dig else None
+            if had is None:
+                had = self._cell_uses(ckey, c)
+                if dig:
+                    self.reuse.put('plan.cell', ckey, dig, had)
+            used |= had
         for ckey in getattr(self.pr, 'water', {}):
             cell = gd.from_key(ckey)
             used.add(gd.source(cell)[0])
@@ -190,7 +184,11 @@ class Writer:
             self.source_masters = kept
             if getattr(self.pr, 'trim_masters', False):
                 # (a plugin FOLab made, a new world saved naming every game file: those nothing in it or in the mod's changes uses go)
-                inside = masterlist.used_by_file(self.source)
+                inside = self.reuse.get('plan.file', 'used', espreuse.digest(espreuse.mark(self.source))) if self.reuse else None
+                if inside is None:
+                    inside = masterlist.used_by_file(self.source)
+                    if self.reuse:
+                        self.reuse.put('plan.file', 'used', espreuse.digest(espreuse.mark(self.source)), inside)
                 if inside is not None:
                     want = {gd.names[i] for i in used}
                     kept = [m for n, m in enumerate(kept) if n == 0 or inside.get(m.lower()) or m.lower() in want]
@@ -200,6 +198,75 @@ class Writer:
             return
         self.masters = [file_name(i) for i in order]
         self.mindex = {gd.names[i]: k for k, i in enumerate(order)}
+
+    def _cell_uses(self, ckey, c):
+        """The game files a place's changes need."""
+        gd, used = self.gd, set()
+        cell = None if ckey.startswith('+') else gd.from_key(ckey)
+        if cell is not None:
+            used.add(gd.source(cell)[0])
+            if cell in gd.ext_cells:
+                used.add(gd.source(gd.ext_cells[cell])[0])
+        for rkey, r in c['refs'].items():
+            if r.get('tel') and not r['tel']['door'].startswith('+'):
+                used.add(gd.from_key(r['tel']['door']) >> 24)
+            if not rkey.startswith('+'):
+                fid = gd.from_key(rkey)
+                used.add(fid >> 24)
+                used.add(gd.cell_refs[gd.ref_cell.get(fid, cell)][fid][0])
+                used.add(gd.source(gd.ref_cell.get(fid, cell))[0])
+            if r.get('base') and not r['base'].startswith('+'):
+                used.add(gd.from_key(r['base']) >> 24)
+            for k in list(refprops.links(r.get('props') or {})) + worldrec.ref_extra_keys(r):
+                if not k.startswith('+'):
+                    used.add(gd.from_key(k) >> 24)
+        return frozenset(used)
+
+    # --- what the last build made, taken again where its inputs are the same (espreuse.py) ---
+
+    def _start_reuse(self, sync=True):
+        if not self.reuse_path or not hasattr(self.pr, 'digest'):
+            return
+        if sync:
+            self.pr.sync()                  # (digests are of what was last written: anything changed by hand, written)
+        gd = self.gd
+        context = espreuse.digest(espreuse.VERSION, FORM_VERSION, self.own_name, self.source and os.path.normcase(self.source),
+                                  [(os.path.normcase(p.path), espreuse.mark(p.path)) for p in gd.plugins],
+                                  self.source and espreuse.mark(self.source), bool(getattr(self.pr, 'esm', False)),
+                                  bool(getattr(self.pr, 'trim_masters', False)), bool(getattr(self, 'force_all', False)))
+        self.reuse = espreuse.Reuse(self.reuse_path, context)
+
+    def _linked(self, *parts):
+        """A digest of parts and the masters (which every link written goes through)."""
+        return espreuse.digest(self._masters_digest, *parts)
+
+    def _record_bytes(self, key, rec):
+        """A record of the mod's as its subrecords' bytes."""
+        dig = self.reuse and self._linked(self.pr.digest('records', key))
+        if dig:
+            had = self.reuse.get('rec', key, dig)
+            if had is not None:
+                return had
+        data = join(self.record_subs(rec))
+        return self.reuse.put('rec', key, dig, data) if dig else data
+
+    def _new_refs(self, ckey, refs):
+        """A place's new things as records: {ref key: (tag, flags, form ID, header, data)}. What each is placed as (REFR,
+        ACHR, ACRE) follows its base's type, so the types of the mod's own bases are in the digest."""
+        dig = None
+        if self.reuse:
+            mine = sorted({(r['base'], (self.pr.records.get(r['base']) or {}).get('type'))
+                           for k, r in refs.items() if k.startswith('+') and r['base'].startswith('+')})
+            dig = self._linked(self.pr.digest('cells', ckey), mine)
+            had = self.reuse.get('refs', ckey, dig)
+            if had is not None:
+                return had
+        out = {}
+        for rkey, r in refs.items():
+            if rkey.startswith('+'):
+                n = self.new_ref(rkey, r)
+                out[rkey] = (n.tag, n.flags, n.formid, n.head, n.raw)
+        return self.reuse.put('refs', ckey, dig, out) if dig else out
 
     # --- records ---
 
@@ -271,13 +338,20 @@ class Writer:
     # --- the plugin ---
 
     def build(self):
+        """The plugin's bytes."""
+        return b''.join(self.build_chunks())
+
+    def build_chunks(self):
+        """The plugin's bytes as pieces, in order."""
+        self._start_reuse()
         self.plan()
+        self._masters_digest = espreuse.digest(self.masters, getattr(self, 'source_masters', None), getattr(self, 'trimmed', False))
         gd = self.gd
         tree = plugintree.Plugin.read(self.source) if self.source else plugintree.Plugin.empty(b'')
         if self.source and self.masters != self.source_masters:
             masterlist.grow(tree, self.pr.plugin, self.masters, dropped=getattr(self, 'trimmed', False))
         order = gd.plugins[0].top_groups()
-        found = {r.formid: (r, parent) for r, parent, _path in tree.records()}
+        found = tree.by_form()
         had = set(found)                    # (what the opened plugin held before this save)
 
         # records the mod changes or adds (a place's record goes with the place, below)
@@ -285,7 +359,7 @@ class Writer:
             if rec['type'] in ('CELL', 'INFO'):     # (these go with their place and their topic)
                 continue
             fid = self.link(key)
-            data = join(self.record_subs(rec))
+            data = self._record_bytes(key, rec)
             if fid in found:
                 found[fid][0].set_data(data, rec['flags'])
             else:
@@ -320,22 +394,39 @@ class Writer:
                 node, kids = self._cell_node(tree, found, cell, lid, order, mine)
                 nodes[cell] = (node, kids)
                 if mine:
-                    node.set_data(join(self.record_subs(mine)), mine['flags'])
+                    node.set_data(self._record_bytes(ckey, mine), mine['flags'])
             # outside, what stays loaded (persistent) lives in the world's persistent cell
             keep = gd.world_persistent.get(gd.ext_cells[cell]) if outside else None
 
             def home(fid, persistent):
                 c = gd.ref_cell.get(fid, cell) if fid is not None else cell
                 return keep if outside and persistent and keep is not None else c
-            for rkey, r in sorted((self.pr.cells.get(ckey) or {'refs': {}})['refs'].items()):
-                if rkey.startswith('+'):
-                    hc = home(None, bool(r.get('persistent')))
+            refs = (self.pr.cells.get(ckey) or {'refs': {}})['refs']
+            made = self._new_refs(ckey, refs)
+
+            def put_new(run):
+                # (the mod's new things, a group at a time: persistent ones and the rest, each in key order, the group
+                # first wanted first, as one at a time would have them)
+                split = {True: [], False: []}
+                for rkey in run:
+                    split[bool(refs[rkey].get('persistent'))].append(rkey)
+                for persistent in (bool(refs[run[0]].get('persistent')), not refs[run[0]].get('persistent')):
+                    if not split[persistent]:
+                        continue
+                    hc = home(None, persistent)
                     kids = cell_kids(hc) if outside else nodes[cell][1]
-                    group = self._ref_group(kids, self.local(hc) if outside else lid, bool(r.get('persistent')))
-                    ref = self.new_ref(rkey, r)
-                    group.kids.append(ref)
-                    found[ref.formid] = (ref, group)
+                    group = self._ref_group(kids, self.local(hc) if outside else lid, persistent)
+                    recs = [plugintree.Rec(*made[rkey]) for rkey in split[persistent]]
+                    group.kids.extend(recs)
+                    found.update((r.formid, (r, group)) for r in recs)
+            keys = sorted(refs)
+            a, b = bisect.bisect_left(keys, '+'), bisect.bisect_left(keys, ',')    # (the new ones: every key starting '+')
+            for rkey in keys[:a] + [None] + keys[b:]:
+                if rkey is None:
+                    if b > a:
+                        put_new(keys[a:b])
                     continue
+                r = refs[rkey]
                 fid = gd.from_key(rkey)
                 rlid = self.local(fid)
                 have = found.get(rlid)
@@ -379,8 +470,8 @@ class Writer:
             lid = self.link(ckey)
             outside = cell in gd.ext_cells
             kids = cell_kids(cell) if outside else self._cell_node(tree, found, cell, lid, order, self.pr.records.get(ckey))[1]
-            for mesh in [nav] + nav.get('others', []):
-                self._write_navmesh(found, cell, kids, lid, mesh, nav_info, nav_links, cell_kids)
+            for n, mesh in enumerate([nav] + nav.get('others', [])):
+                self._write_navmesh(found, cell, kids, lid, mesh, nav_info, nav_links, cell_kids, (ckey, n))
         if nav_info:
             self._write_navi(tree, found, order, nav_info, nav_links)
 
@@ -391,15 +482,14 @@ class Writer:
                 continue                                    # (land borrowed from a parent world isn't the cell's own)
             i, rec = gd.land[cell]
             llid = self.local(gd.to_global(i, rec.formid))
-            original = list(tes4.iter_subrecords(gd.plugins[i].data(rec)))
-            subs = landmod.encode(L, original, self.link, self._beyond(cell))
+            raw = self._land_raw(ckey, cell, L, i, rec)
             have = found.get(llid)
             if have:
-                have[0].set_packed(join(subs), rec.flags)
+                have[0].set_raw(raw, rec.flags | tes4.COMPRESSED)
                 continue
             kids = cell_kids(cell)
             group = self._ref_group(kids, self.local(cell), False)
-            node = plugintree.Rec.packed('LAND', rec.flags, llid, join(subs), FORM_VERSION)     # (compressed, as all the game's land is)
+            node = plugintree.Rec.new('LAND', rec.flags | tes4.COMPRESSED, llid, raw, FORM_VERSION)     # (compressed, as all the game's land is)
             group.kids.insert(0, node)                      # (the land first, as the game's cells have it)
             found[llid] = (node, group)
 
@@ -430,8 +520,9 @@ class Writer:
         as_the_game_files(tree, len(self.masters) if self.source and getattr(self.pr, 'trim_masters', False) else None)
 
         # the header: an opened plugin's own, with its count and next ID brought up to date
-        own_ids = [r.formid & 0xFFFFFF for r, _p, _path in tree.records() if r.formid >> 24 == len(self.masters)]
-        next_id = self.own(max([self.pr.next_id] + [x + 1 for x in own_ids]))
+        own = len(self.masters)
+        top_id = max((k.formid & 0xFFFFFF for g in tree.groups() for k in g.kids if k.__class__ is not plugintree.Group and k.formid >> 24 == own), default=-1)
+        next_id = self.own(max(self.pr.next_id, top_id + 1))
         if self.source:
             subs = list(tes4.iter_subrecords(tree.header.raw))
             old = next((d for t, d in subs if t == 'HEDR'), None)
@@ -454,7 +545,7 @@ class Writer:
         new_head = join(subs)
         if new_head != tree.header.raw or flags != tree.header.flags:
             tree.header.set_data(new_head, flags)
-        return tree.bytes()
+        return tree.chunks()
 
     def _restored_ref(self, fid, rlid):
         """A placed thing's subrecords as its own file has them, numbered as we write."""
@@ -473,13 +564,12 @@ class Writer:
         in (a tester's San Francisco, 16 Nov 2026); the game's own files never hold one. A master's thing deleted that way
         is left as it is: Dead Money deletes 51 of FalloutNV.esm's so, and the GECK loads it."""
         gone = False
-        for r, parent, _path in list(tree.records()):
-            if r.tag not in REF_KINDS or not r.flags & tes4.DELETED or r.raw or parent is None:
-                continue
-            if r.formid >> 24 >= len(self.masters):
-                parent.kids.remove(r)
-                found.pop(r.formid, None)
-                gone = True
+        for parent in tree.groups():
+            for r in [k for k in parent.kids if k.__class__ is plugintree.Rec and k.flags & tes4.DELETED and not k.raw]:
+                if r.tag in REF_KINDS and r.formid >> 24 >= len(self.masters):
+                    parent.kids.remove(r)
+                    found.pop(r.formid, None)
+                    gone = True
         if gone:
             def prune(kids):
                 keep = []
@@ -513,7 +603,7 @@ class Writer:
                 return keep
             tree.tops = prune(tree.tops)
 
-    def _write_navmesh(self, found, cell, kids, lid, nav, info, links, cell_kids):
+    def _write_navmesh(self, found, cell, kids, lid, nav, info, links, cell_kids, which=None):
         """A place's NAVM, first in its temporary group as the game has it, and its doors told which triangle they stand by
         (a mesh only copied to change its links keeps its triangles, so its doors are right as they are)."""
         fid = self.link(nav['form'])
@@ -526,8 +616,22 @@ class Writer:
         if gone:
             nav = dict(nav, doors=[dt for dt in nav['doors'] if dt[0] not in gone],
                        no_door=[d for d in nav.get('no_door', []) if d not in gone])
-        m = navbuild.to_record(nav, lid, self.link)
-        data = navmesh.write_navm(m)
+        world = self.gd.ext_cells.get(cell)
+        dig = self._linked(self.pr.digest('navmesh', which[0]), which[1], sorted(gone), lid, world, cell) if self.reuse and which else None
+        had = self.reuse.get('nav', which, dig) if dig else None
+        if had is not None:
+            data, (e, mlinks) = had[0], pickle.loads(had[1])
+        else:
+            m = navbuild.to_record(nav, lid, self.link)
+            data = navmesh.write_navm(m)
+            e = navmesh.info_for(m, fid, self.local(world) if world is not None else lid,
+                                 navmesh.grid_place(*self.gd.cell_grid(cell)) if world is not None else 0)
+            if nav.get('outline'):
+                e['flags'] |= navmesh.INFO_OUTLINE
+                e['outline'] = navbuild.outline_record(nav['outline'])
+            mlinks = navmesh.links_for(m, fid)
+            if dig:
+                self.reuse.put('nav', which, dig, (data, pickle.dumps((e, mlinks), pickle.HIGHEST_PROTOCOL)))
         have = found.get(fid)
         if have:
             have[0].set_data(data, 0)
@@ -536,14 +640,8 @@ class Writer:
             node = plugintree.Rec.new('NAVM', 0, fid, data, FORM_VERSION)
             group.kids.insert(0, node)
             found[fid] = (node, group)
-        world = self.gd.ext_cells.get(cell)
-        e = navmesh.info_for(m, fid, self.local(world) if world is not None else lid,
-                             navmesh.grid_place(*self.gd.cell_grid(cell)) if world is not None else 0)
-        if nav.get('outline'):
-            e['flags'] |= navmesh.INFO_OUTLINE
-            e['outline'] = navbuild.outline_record(nav['outline'])
         info.append(e)
-        links.append(navmesh.links_for(m, fid))
+        links.append(mlinks)
         if nav.get('copy'):
             return
         for door, tri in nav['doors']:
@@ -623,6 +721,24 @@ class Writer:
         subblock.kids += [node, kids]
         found[lid] = (node, subblock)
         return node, kids
+
+    def _land_raw(self, ckey, cell, L, i, rec):
+        """A changed cell's LAND as stored (compressed). Its normals look at the heights next door, so the digest has
+        the neighbours' ground in it too."""
+        dig = None
+        if self.reuse:
+            gd = self.gd
+            world, (x, y) = gd.ext_cells[cell], gd.cell_grid(cell)
+            grid = gd.grid(world)
+            near = [self.pr.digest('land', gd.key(grid[(x + dx, y + dy)])) if (x + dx, y + dy) in grid else None
+                    for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+            dig = self._linked(near, i, rec.formid, rec.flags)
+            had = self.reuse.get('land', ckey, dig)
+            if had is not None:
+                return had
+        original = list(tes4.iter_subrecords(self.gd.plugins[i].data(rec)))
+        raw = plugintree.pack(join(landmod.encode(L, original, self.link, self._beyond(cell))))
+        return self.reuse.put('land', ckey, dig, raw) if dig else raw
 
     def _beyond(self, cell):
         """Heights just past a cell's edges, from the cells next door (as the mod has them), for its normals."""
@@ -827,10 +943,16 @@ def _set_text(subs, tag, text):
     return subs[:at] + [(tag, data)] + subs[at:]
 
 
-def write(gd, project, path):
-    data = Writer(gd, project).build()
+def write(gd, project, path, reuse=True):
+    """The mod built into path. reuse: the parts whose inputs haven't changed since the last build are taken from it
+    (espreuse.py), kept beside it as <plugin>.reuse."""
+    w = Writer(gd, project)
+    w.reuse_path = path + '.reuse' if reuse else None
+    data = w.build_chunks()
     tmp = path + '.tmp'
     with open(tmp, 'wb') as f:
-        f.write(data)
+        f.writelines(data)
     os.replace(tmp, path)
-    return len(data)
+    if w.reuse:
+        w.reuse.save()
+    return sum(map(len, data))

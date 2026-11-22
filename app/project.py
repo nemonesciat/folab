@@ -9,8 +9,17 @@
               {'p': [...], 's': scale, 'base': key} for a changed game ref (each part optional: moved, rescaled,
               swapped for another thing); {'removed': True} for a removed one
 
-Undo keeps whole copies of the changes: small for now, and impossible to get subtly wrong."""
-import copy
+Kept as <name>.json, the mod as it was when last written whole, and <name>.changes beside it: a line of JSON a save, the
+entries that save changed ('set', 'del', 'head'), the first line naming the .json they go on (its size and date: a .json
+written since by anything else makes the lines stale, and they're put aside as .changes.stale). A save writes only what
+changed, found by comparing each entry with what was last written: cells, records, cellinfo and water by their contents
+(so a change made by hand is found too), land and navmesh by identity (an entry there is only ever replaced whole).
+save() writes the .json whole and starts the lines afresh, as does a .changes grown past JOURNAL_MOST. A copy of a mod is
+both files, or compact() first and the .json alone.
+
+Undo keeps, a step, what the step changed as it was before (cells and records as pickled bytes)."""
+import hashlib
+import io
 import json
 import os
 import pickle
@@ -35,8 +44,85 @@ def list_projects():
     for fn in os.listdir(PROJECTS_DIR):
         if fn.endswith('.json'):
             p = os.path.join(PROJECTS_DIR, fn)
-            out.append({'name': fn[:-5], 'modified': os.path.getmtime(p)})
+            out.append({'name': fn[:-5], 'modified': modified(p)})
     return sorted(out, key=lambda x: -x['modified'])
+
+
+DIFFED = ('cells', 'records', 'cellinfo', 'water')     # told changed by their contents
+WHOLE = ('land', 'navmesh')                            # by identity: an entry there is only ever replaced whole
+HEAD = ('name', 'plugin', 'author', 'description', 'drop', 'source', 'esm', 'trim_masters', 'newgame', 'next_id')
+UNDONE = ('next_id', 'drop', 'newgame')                # what of the head Undo puts back
+JOURNAL_MOST = 64 << 20                                # lines longer than this (or half the .json) are folded into the .json
+
+
+def journal_path(path):
+    return os.path.splitext(path)[0] + '.changes'
+
+
+def modified(path):
+    """When a mod was last changed: its .json or its lines, whichever is later."""
+    t = os.path.getmtime(path)
+    try:
+        return max(t, os.path.getmtime(journal_path(path)))
+    except OSError:
+        return t
+
+
+def _mark(path):
+    try:
+        st = os.stat(path)
+        return [st.st_size, st.st_mtime_ns]
+    except OSError:
+        return None
+
+
+def pickled(v):
+    """An entry's contents as bytes: the same for the same contents, however its parts are shared."""
+    f = io.BytesIO()
+    p = pickle.Pickler(f, pickle.HIGHEST_PROTOCOL)
+    p.fast = True                       # (no memo: a string used twice is written twice, so sharing doesn't show)
+    p.dump(v)
+    return f.getvalue()
+
+
+def read_journal(path, d):
+    """A mod's .changes laid over its .json's contents d. False if there were none (none, or stale: put aside). A last
+    line cut short (a save broken off) is cut off the file."""
+    jp = journal_path(path)
+    try:
+        f = open(jp, 'rb')
+    except OSError:
+        return False
+    with f:
+        first = f.readline()
+        try:
+            head = json.loads(first)
+        except ValueError:
+            head = None
+        stale = not isinstance(head, dict) or head.get('base') != _mark(path)
+        good, cut = len(first), False
+        for line in ([] if stale else f):
+            try:
+                if not line.endswith(b'\n'):
+                    raise ValueError('cut short')
+                e = json.loads(line)
+            except ValueError:
+                cut = True
+                break
+            for part, ents in (e.get('set') or {}).items():
+                d.setdefault(part, {}).update(ents)
+            for part, keys in (e.get('del') or {}).items():
+                for k in keys:
+                    (d.get(part) or {}).pop(k, None)
+            d.update(e.get('head') or {})
+            good += len(line)
+    if stale:
+        os.replace(jp, jp + '.stale')
+        return False
+    if cut:
+        with open(jp, 'r+b') as f:
+            f.truncate(good)
+    return True
 
 
 class Project:
@@ -44,6 +130,7 @@ class Project:
         self.path = path
         with open(path, encoding='utf-8') as f:
             d = json.load(f)
+        had = read_journal(path, d)
         self.name = d['name']
         self.plugin = d['plugin']
         self.author = d.get('author', '')
@@ -61,6 +148,16 @@ class Project:
         self.newgame = d.get('newgame')         # the mod's own new game (newgame.py): its settings and what FOLab made for it
         self.next_id = d.get('next_id', FIRST_ID)
         self.undo_stack, self.redo_stack = [], []
+        self._base = _mark(path)               # the .json the lines go on
+        self._journal = os.path.getsize(self.journal_path) if had else 0
+        self._resync()
+
+    @property
+    def journal_path(self):
+        return journal_path(self.path)
+
+    def modified(self):
+        return modified(self.path)
 
     @classmethod
     def create(cls, name, author='', description=''):
@@ -83,20 +180,19 @@ class Project:
                 'source': self.source, 'esm': self.esm, 'trim_masters': self.trim_masters, 'newgame': self.newgame}
 
     def save(self, afresh=False):
-        """Write the mod's file. Every edit does this, so it has to be quick however big the mod is: a world made from a map
-        holds millions of numbers of ground, and writing them all out again took seconds an edit (placing a thing lagged, and
-        clicks piled up behind it). The ground and the navmeshes are kept as the text last written for each cell and written
-        again only when that cell's entry is another one: a change there always puts a whole new entry in (nothing edits
-        one in place). afresh: don't trust that, and write everything out anew (Save does, to be sure)."""
+        """Write the mod's .json whole and start its .changes afresh. An edit writes only what it changed (_commit): this is
+        for a mod wanted as one file (a copy of it, the lines grown long) and for code that changed the mod by hand. The
+        ground and the navmeshes are kept as the text last written for each cell and written again only when that cell's
+        entry is another one: a change there always puts a whole new entry in (nothing edits one in place). afresh: don't
+        trust that, and write everything out anew."""
         d = self.to_dict()
         kept = {} if afresh else getattr(self, '_written', {})
         now = {}
         parts = []
-        for part in ('land', 'navmesh'):
+        for part in WHOLE:
             rows = []
             for k, v in d.pop(part).items():
-                had = kept.get((part, k))
-                text = had[1] if had is not None and had[0] is v else json.dumps(v, separators=(',', ':'))
+                text = self._text(part, k, v, kept)
                 now[(part, k)] = (v, text)           # (the entry itself is held, so no other can turn up at its address)
                 rows.append(json.dumps(k) + ':' + text)
             parts.append(json.dumps(part) + ':{' + ','.join(rows) + '}')
@@ -106,6 +202,129 @@ class Project:
         with open(tmp, 'w', encoding='utf-8') as f:
             f.write(head[:-1] + ',' + ','.join(parts) + '}')
         os.replace(tmp, self.path)
+        self._base = _mark(self.path)
+        self._start_journal()
+        self._resync()
+
+    def compact(self):
+        """The mod as its .json alone (before copying it as a file), unless that's what it is already."""
+        if self._journal or self._diff() or json.dumps(self._head(), sort_keys=True) != self._saved_head:
+            self.save()
+
+    @staticmethod
+    def _text(part, k, v, kept):
+        had = kept.get((part, k))
+        return had[1] if had is not None and had[0] is v else json.dumps(v, separators=(',', ':'))
+
+    def _start_journal(self):
+        """Lines for the .json as it is now, none in them yet (left out where there'd be none: a new mod has one file)."""
+        jp = self.journal_path
+        if os.path.exists(jp):
+            os.remove(jp)
+        self._journal = 0
+
+    def _head(self):
+        return {k: getattr(self, k) for k in HEAD}
+
+    def _resync(self):
+        """What was written is what the mod is now (after reading it or writing it whole)."""
+        self._saved = {p: {k: pickled(v) for k, v in getattr(self, p).items()} for p in DIFFED}
+        self._saved.update({p: dict(getattr(self, p)) for p in WHOLE})
+        self._saved_head = json.dumps(self._head(), sort_keys=True)
+        self._digests = {}
+
+    def _diff(self):
+        """What differs from what was last written: {part: {key: (as written or None, as now or None)}}, cells and
+        records as pickled bytes, land and navmesh entries themselves."""
+        out = {}
+        for part in DIFFED:
+            live, saved, ch = getattr(self, part), self._saved[part], {}
+            for k, v in live.items():
+                b = pickled(v)
+                old = saved.get(k)
+                if old != b:
+                    ch[k] = (old, b)
+            for k in saved.keys() - live.keys():
+                ch[k] = (saved[k], None)
+            if ch:
+                out[part] = ch
+        for part in WHOLE:
+            live, saved = getattr(self, part), self._saved[part]
+            ch = {k: (saved.get(k), v) for k, v in live.items() if saved.get(k) is not v}
+            ch.update({k: (saved[k], None) for k in saved.keys() - live.keys()})
+            if ch:
+                out[part] = ch
+        return out
+
+    def _commit(self):
+        """What changed since the last write, written as one line of the .changes. Returns _diff()'s."""
+        ch = self._diff()
+        head = json.dumps(self._head(), sort_keys=True)
+        if not ch and head == self._saved_head:
+            return ch
+        if self._base is None or _mark(self.path) != self._base:
+            self.save()                         # (the .json was written by something else since: the mod written whole)
+            return ch
+        written = getattr(self, '_written', {})
+        sets, dels = [], {}
+        for part, ents in ch.items():
+            rows = []
+            for k, (_old, new) in ents.items():
+                if new is None:
+                    dels.setdefault(part, []).append(k)
+                    continue
+                v = getattr(self, part)[k]
+                if part in WHOLE:
+                    text = self._text(part, k, v, written)
+                    written[(part, k)] = (v, text)
+                else:
+                    text = json.dumps(v, separators=(',', ':'))
+                rows.append(json.dumps(k) + ':' + text)
+            if rows:
+                sets.append(json.dumps(part) + ':{' + ','.join(rows) + '}')
+        bits = ['"t":%.3f' % time.time()]
+        if sets:
+            bits.append('"set":{' + ','.join(sets) + '}')
+        if dels:
+            bits.append('"del":' + json.dumps(dels))
+        if head != self._saved_head:
+            bits.append('"head":' + json.dumps(self._head(), separators=(',', ':')))
+        line = ('{' + ','.join(bits) + '}\n').encode('utf-8')
+        if not self._journal:
+            line = (json.dumps({'base': self._base, 'folab': 1}) + '\n').encode() + line
+        with open(self.journal_path, 'ab' if self._journal else 'wb') as f:
+            f.write(line)
+            f.flush()
+            os.fsync(f.fileno())
+        self._journal += len(line)
+        for part, ents in ch.items():
+            saved = self._saved[part]
+            for k, (_old, new) in ents.items():
+                if new is None:
+                    saved.pop(k, None)
+                else:
+                    saved[k] = new
+        self._saved_head = head
+        if self._journal > max(JOURNAL_MOST, self._base[0] // 2):
+            self.save()                         # (folded in: the lines would take longer to read than the .json)
+        return ch
+
+    def sync(self):
+        """Anything changed by hand since the last write, written now (not an Undo step)."""
+        self._commit()
+
+    def digest(self, part, key):
+        """A short digest of an entry as last written (None: there's none), for telling what a build can reuse. sync()
+        first, so that's how it is now."""
+        v = self._saved.get(part, {}).get(key)
+        if v is None:
+            return None
+        had = self._digests.get((part, key))
+        if had is not None and had[0] is v:
+            return had[1]
+        h = hashlib.blake2b(v if part in DIFFED else pickled(v), digest_size=16).digest()
+        self._digests[(part, key)] = (v, h)
+        return h
 
     def source_path(self):
         return os.path.join(PROJECTS_DIR, self.source) if self.source else None
@@ -119,21 +338,37 @@ class Project:
 
     # --- edits: each one a single undo step ---
 
-    def _snap(self):
-        # (cells and records are plain data: through pickle is the same copy as deepcopy, many times quicker on a big mod)
-        cells, records = pickle.loads(pickle.dumps((self.cells, self.records), pickle.HIGHEST_PROTOCOL))
-        return (cells, records, self.next_id, dict(self.land), dict(self.water), dict(self.navmesh),
-                list(self.drop), dict(self.cellinfo), copy.deepcopy(self.newgame))
+    def _head_copy(self):
+        return pickle.loads(pickle.dumps({k: getattr(self, k) for k in UNDONE}))
 
-    def _put(self, snap):
-        cells, records, nid, land, water, nav, drop, info, newgame = snap
-        self.cells, self.records, self.next_id = cells, records, max(nid, self.next_id)   # (an undone ID is never reused)
-        self.land, self.water, self.navmesh, self.drop, self.cellinfo, self.newgame = land, water, nav, drop, info, newgame
-
-    def _step(self, label):
-        self.undo_stack.append((label,) + self._snap())
+    def _record(self, label, head, merge=False):
+        """After an edit: its changes written, and kept for Undo as they were before (head: the undone part of the head as
+        it was). merge: part of the last step."""
+        ch = self._commit()
+        before = {(part, k): old for part, ents in ch.items() for k, (old, _new) in ents.items()}
+        if merge and self.undo_stack:
+            for pk, old in before.items():
+                self.undo_stack[-1][1].setdefault(pk, old)   # (what the step's first part found is what goes back)
+            return
+        self.undo_stack.append((label, before, head))
         del self.undo_stack[:-200]
         self.redo_stack.clear()
+
+    def _swap(self, back, head):
+        """Entries put back (back: {(part, key): as written, or None for none}), and the undone part of the head; returns
+        both as they were, to go the other way."""
+        now = {}
+        for (part, k), old in back.items():
+            live = getattr(self, part)
+            now[(part, k)] = (pickled(live[k]) if part in DIFFED else live[k]) if k in live else None
+            if old is None:
+                live.pop(k, None)
+            else:
+                live[k] = pickle.loads(old) if part in DIFFED else old
+        was = self._head_copy()
+        self.next_id = max(head['next_id'], self.next_id)       # (an undone ID is never reused)
+        self.drop, self.newgame = head['drop'], head['newgame']
+        return now, was
 
     def _refs(self, cell):
         return self.cells.setdefault(cell, {'refs': {}})['refs']
@@ -144,8 +379,8 @@ class Project:
         A record_new or add with a 'name' can be named later in the same ops as '$name' (a cell, a ref, a door's link, what a
         placed thing is):
         self.names says what each became."""
-        if not merge or not self.undo_stack:
-            self._step(label)
+        self.sync()                 # (anything changed by hand before this edit stays when it's undone, as it always did)
+        head = self._head_copy()
         made, new_record = [], None
         names = self.names = {}
 
@@ -278,25 +513,27 @@ class Project:
                 refs.pop(o['ref'], None)
             if not refs:
                 self.cells.pop(o['cell'], None)
-        self.save()
+        self._record(label, head, merge)
         return made
 
     def undo(self):
         if not self.undo_stack:
             return None
-        label, *snap = self.undo_stack.pop()
-        self.redo_stack.append((label,) + self._snap())
-        self._put(snap)
-        self.save()
+        self.sync()
+        label, back, head = self.undo_stack.pop()
+        now, was = self._swap(back, head)
+        self.redo_stack.append((label, now, was))
+        self._commit()
         return label
 
     def redo(self):
         if not self.redo_stack:
             return None
-        label, *snap = self.redo_stack.pop()
-        self.undo_stack.append((label,) + self._snap())
-        self._put(snap)
-        self.save()
+        self.sync()
+        label, back, head = self.redo_stack.pop()
+        now, was = self._swap(back, head)
+        self.undo_stack.append((label, now, was))
+        self._commit()
         return label
 
     def state(self):

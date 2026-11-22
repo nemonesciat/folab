@@ -1118,7 +1118,7 @@ def state():
         s['installed']['stale'] = stale_copies()
         s['installed']['places'] = install_places(s['installed'])
         built = os.path.join(project.BUILD_DIR, PR.plugin)
-        s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= os.path.getmtime(PR.path)
+        s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= PR.modified()
         s['project']['masters'] = masters()
         s['project']['undo'] = s['project']['undo'] or api_maps.undo_label(PR)
     return s
@@ -1165,8 +1165,20 @@ def mod_needs(pr, paths):
     if not pr:
         return []
     have = {os.path.basename(p).lower() for p in paths} | {pr.plugin.lower()}
-    names = {m.group(1) for m in re.finditer(r'"([^"\\\\:/]+\.es[mp]):[0-9A-Fa-f]{6}"', json.dumps(pr.to_dict()))}
-    return sorted(n for n in names if n.lower() not in have)
+    return sorted(n for n in plugins_named(pr) if n.lower() not in have)
+
+
+def plugins_named(pr):
+    """Every plugin a mod's changes name. The ground and the navmeshes by the keys they hold (land.py's textures,
+    navbuild.keys_used): put through JSON with the rest, a big world's took 10 s of opening it."""
+    d = pr.to_dict()
+    ground, navs = d.pop('land'), d.pop('navmesh')
+    find = r'"([^"\\\\:/]+\.es[mp]):[0-9A-Fa-f]{6}"'
+    names = {m.group(1) for m in re.finditer(find, json.dumps(d))}
+    keys = [k for L in ground.values() for q in L.get('q', []) for k in [q.get('bkey')] + [l.get('key') for l in q.get('layers', [])]]
+    keys += [k for n in navs.values() for k in navbuild.keys_used(n)]
+    names |= {m.group(1) for k in set(keys) if isinstance(k, str) for m in [re.fullmatch(find, json.dumps(k))] if m}
+    return names
 
 
 def use_loadout(folder, profile):
@@ -1434,7 +1446,11 @@ def masters():
     """The open mod's masters, as it would be saved now."""
     try:
         w = espwrite.Writer(GD, PR)
+        w.reuse_path = PR.plugin_path() + '.reuse'
+        w._start_reuse(sync=False)          # (the page asks after every edit: each place's part of the plan as kept)
         w.plan()
+        if w.reuse:
+            w.reuse.remember()
         return w.masters
     except Exception as e:
         return ['(%s)' % e]
@@ -2026,7 +2042,7 @@ def give(body):
 
 def save():
     path = PR.plugin_path()
-    PR.save(afresh=True)                    # (every part of the mod's file written out anew, not from what was kept)
+    PR.sync()                               # (anything changed by hand written too: each edit already wrote its own)
     n = espwrite.write(GD, PR, path)
     library.publish(PR)
     return {'path': path, 'bytes': n, 'state': state()}
@@ -2378,7 +2394,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(edit('Put back ' + body['key'], [{'op': 'record_revert', 'key': body['key']}]))
                 if u.path == '/api/project/esm':
                     PR.esm = bool(body.get('on'))
-                    PR.save()
+                    PR.sync()
                     return self.send(state())
                 if u.path == '/api/save':
                     return self.send(save())
