@@ -85,3 +85,6 @@ to make things", then "New doorways nearby"). Rehearsed together on a copy of Wa
   hollow buildings: 14 of 22 arrivals first pointed in). All 51 checked facing out.
 - Health's places nothing leads to: 110 -> 63. Left: Offices003 and Offices004 (no fitting building within 9,000 with a
   doorway or a wall to take one). Picture: `docs/waikiki-new-doorways.jpg`.
+- In Waikiki, nv-rs-pad and nv-rs-next since 22 Nov 2026 11:02 (the story session): ways_in 10:06 (16 linked, 4 arrivals
+  facing in), fix_ways_in 10:57 (those 4 moved outside), cut_doorways 11:01 (35 places, 18 cells' navmeshes). Health's
+  places nothing leads to 63, 0 errors. Not yet seen in game.
