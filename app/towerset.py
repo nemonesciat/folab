@@ -376,7 +376,7 @@ def kilauea(open_=False):
                       'look': 'flame', 'solid': False, 'far': True})
     parts.append({'shape': 'cylinder', 'r': 46, 'r2': 8, 'h': 1000, 'sides': 6, 'at': [0, 0, z + 900], 'look': 'gold', 'solid': False, 'far': True})
     lk = _looks()
-    lk['kil_clear'] = dict(look('hist/rhl_glass', tile=400), alpha=True)
+    lk['kil_clear'] = dict(look('hist/rhl_glass', tile=400), alpha='blend')      # (blended glass: nifmake.ALPHA_BLEND)
     lk['kil_ceiling'] = look('hist/rhl_ceiling', tile=512)
     lk['lobby_lamp'] = hotelinside._lamp_look()       # (over the lifts)
     if open_:

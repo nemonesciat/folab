@@ -762,7 +762,8 @@ def make(desc):
     shapes = {}
     for name, s in mesh.by_look.items():        # looks over the same pictures are one shape: one thing for the game to draw
         look = looks[name]
-        kind = (look['tex'].lower(), look.get('normal', '').lower(), look.get('gloss', 10.0), bool(look.get('alpha')), look.get('glow', ''), look.get('glow_mult', 1.0))
+        alpha = 'blend' if look.get('alpha') == 'blend' else bool(look.get('alpha'))      # ('blend': glass, nifmake)
+        kind = (look['tex'].lower(), look.get('normal', '').lower(), look.get('gloss', 10.0), alpha, look.get('glow', ''), look.get('glow_mult', 1.0))
         if kind not in shapes:
             shapes[kind] = {'p': [], 'n': [], 'uv': [], 'i': [], 'tex': look['tex'], 'normal': look.get('normal', ''), 'gloss': kind[2], 'alpha': kind[3], 'glow': kind[4], 'glow_mult': kind[5]}
         to = shapes[kind]

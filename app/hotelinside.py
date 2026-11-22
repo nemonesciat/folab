@@ -84,14 +84,17 @@ def koa(size=256, seed=1320):
 
 
 def glass(size=256, seed=1330):
-    """Old window glass: grimy, streaked, a little green, seen through. Its alpha is how much it hides."""
+    """Old window glass: grimy, streaked, a little green, seen through. Its alpha is how much it hides, blended (the shape's
+    look is alpha 'blend'): mostly clear, 0.1 to 0.2, grime and the run of rain streaks to about 0.4, never near-opaque
+    (it was 0.2 to 0.85 under a cut-out at 64, so most of each pane drew solid in game, 22 Nov 2026)."""
     dirt = Field(size, size, seed, 4, 5)
     streak = Field(size, size, seed + 1, 2, 3, stretch=(4, 0.25))
     pic = Picture(size, size, clear=(150, 170, 160), gloss=120)
     for p in range(size * size):
         d, s = dirt.v[p], streak.v[p]
         pic.rgb[p] = grade(mix((150, 170, 160), (120, 108, 86), d))
-        pic.a[p] = min(0.85, 0.2 + 0.4 * d * d + 0.15 * s)
+        pic.a[p] = min(0.4, 0.1 + 0.22 * d * d * d + 0.1 * s * s)
+    pic.plain_halving = True        # (blended, not a cut-out: its smaller copies plain means, texpaint.colour_map)
     return pic
 
 
@@ -178,7 +181,7 @@ def looks():
         'rhl_marble': look('hist/rhl_marble', tile=512),
         'rhl_ceiling': look('hist/rhl_ceiling', tile=512),
         'rhl_koa': look('hist/rhl_koa', tile=256),
-        'rhl_glass': dict(look('hist/rhl_glass', tile=400), alpha=True),
+        'rhl_glass': dict(look('hist/rhl_glass', tile=400), alpha='blend'),        # (blended as the game's window glass: nifmake.ALPHA_BLEND)
         'rhl_keys': look('hist/rhl_keys'),
         'rhl_rug': look('hist/rhl_rug'),
         'rhl_runner': look('hist/rhl_runner'),
