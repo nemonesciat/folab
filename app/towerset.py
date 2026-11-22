@@ -376,7 +376,7 @@ def kilauea(open_=False):
                       'look': 'flame', 'solid': False, 'far': True})
     parts.append({'shape': 'cylinder', 'r': 46, 'r2': 8, 'h': 1000, 'sides': 6, 'at': [0, 0, z + 900], 'look': 'gold', 'solid': False, 'far': True})
     lk = _looks()
-    lk['kil_clear'] = dict(look('hist/rhl_glass', tile=400), alpha=True)
+    lk['kil_clear'] = dict(look('hist/rhl_glass', tile=400), alpha='blend')      # (blended glass: nifmake.ALPHA_BLEND)
     lk['kil_ceiling'] = look('hist/rhl_ceiling', tile=512)
     lk['lobby_lamp'] = hotelinside._lamp_look()       # (over the lifts)
     if open_:
@@ -386,7 +386,26 @@ def kilauea(open_=False):
     return {'name': 'FOLabLandmarkKilauea' + ('Open' if open_ else ''), 'looks': lk, 'parts': parts, 'flame': flame, 'deck': deck}
 
 
-PIECES = {'kilauea': ('The Kilauea', kilauea), 'kilauea_open': ('The Kilauea, open', lambda: kilauea(open_=True))}
+STEPS_N, STEPS_RISE, STEPS_TREAD, STEPS_WIDE, STEPS_INTO = 7, 15.4, 34, 420, 120
+
+
+def kilauea_steps():
+    """Steps from the street up the Kilauea's plinth at its door (the user, 22 Nov 2026: "the kilauea needs stairs leading
+    up its platform by the door"). Its frame: the plinth's face along x at y 0, the steps coming down towards -y (front),
+    z 0 the street; STEPS_N risers of STEPS_RISE (the plinth stands 140 x 0.8 = 112 over its foot, 107 over the street there),
+    each a solid block from a little under the street, the top one reaching STEPS_INTO into the plinth."""
+    parts = []
+    for k in range(STEPS_N):
+        out = (STEPS_N - k) * STEPS_TREAD
+        y0, y1 = -out, STEPS_INTO
+        parts.append({'shape': 'box', 'size': [STEPS_WIDE, y1 - y0, (k + 1) * STEPS_RISE + 16], 'at': [0, (y0 + y1) / 2.0, -16],
+                      'look': 'lava', 'faces': {'top': 'terrazzo'}, 'material': 'stone', 'solid': True})
+    lk = _looks()
+    return {'name': 'FOLabKilaueaSteps', 'looks': {k: lk[k] for k in ('lava', 'terrazzo')}, 'parts': parts}
+
+
+PIECES = {'kilauea': ('The Kilauea', kilauea), 'kilauea_open': ('The Kilauea, open', lambda: kilauea(open_=True)),
+          'kilauea_steps': ('The Kilauea\'s steps', kilauea_steps)}
 _flame = kilauea()['flame']
 waikikiset.LIGHTS.update({
     'kilauea': [('NVLightNeonRed', 0, 0, _flame + 500), ('StripLightKeyNeutral', 0, -3100, PLINTH + 2 * FIN_STEP + 1900),

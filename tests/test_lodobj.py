@@ -114,3 +114,17 @@ check('every thing names one of the tile\'s models', all(0 <= t[0] < len(plain['
 spot = [t for t in mine['things'] if t[1:4] == [100.0, 200.0, 300.0]]
 check('the mod\'s own thing is among them, with the cell it is filed in', len(spot) == 1 and len(mine['things']) == len(plain['things']) + 1, len(spot))
 check('a thing with no far model is not', far.path(without) is None and far.path(with_far).endswith('_lod.nif'), far.path(with_far))
+
+# ---------- a small world's far view leaves out what it stands something else in place of (viewworld.replaced) ----------
+# (22 Nov 2026: the hotels' view worlds' far blocks held the closed hotel's far model, drawn over the open lobby)
+import viewworld  # noqa: E402
+real_things = lodobj.things_of
+lodobj.things_of = lambda gd_, pr_, w: [('+000801', 100.0, 200.0, 26.0, 0.0, 1.0), ('+000900', 5000.0, 0.0, 0.0, 0.0, 1.0)]
+try:
+    leave = viewworld.replaced(gd, None, None)
+    check('the city thing under one of another kind is left out', leave('+000800', 100.5, 199.5, 26.0))
+    check('a copy of the same thing keeps its far copy', not leave('+000900', 5000.0, 0.0, 0.0))
+    check('a thing where the small world has nothing keeps it', not leave('+000800', 3000.0, 200.0, 26.0))
+    check('a different thing a little way off keeps it', not leave('+000800', 120.0, 200.0, 26.0))
+finally:
+    lodobj.things_of = real_things

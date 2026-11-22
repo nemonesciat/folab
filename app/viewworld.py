@@ -274,8 +274,30 @@ def far_view(gd, pr, child, parent, out):
     import lodgen
     import lodobj
     a = lodgen.generate(gd, pr, child, out, beyond=True, like=parent)
-    b = lodobj.generate(gd, pr, child, out, like=parent)
+    b = lodobj.generate(gd, pr, child, out, like=parent, leave=replaced(gd, pr, child))
     return {'ground': a, 'buildings': b}
+
+
+SAME_SPOT = 2.0                 # (a city thing the small world stands something else on, within this: its far copy left out)
+
+
+def replaced(gd, pr, child):
+    """fn(base, x, y, z): true for a city thing whose spot the small world fills with something else (the closed hotel,
+    where the world stands its open one). The far blocks are drawn whatever cells are loaded, and the city's refs aren't
+    the small world's, so nothing hides their far copies: the closed hotel's far model stood over the lobby, its painted
+    windows solid and its walls in front of the arches (the user's look, 22 Nov 2026). A copy of the same thing keeps its
+    far copy (it may stand where the world's cells aren't loaded)."""
+    import lodobj
+    key = lambda b: b if isinstance(b, str) else gd.key(b)
+    spots = {}
+    for base, x, y, z, _rz, _s in lodobj.things_of(gd, pr, child):
+        spots.setdefault((round(x / 64), round(y / 64)), []).append((key(base), x, y, z))
+
+    def leave(base, x, y, z):
+        near = [t for i in (-1, 0, 1) for j in (-1, 0, 1) for t in spots.get((round(x / 64) + i, round(y / 64) + j), ())
+                if abs(t[1] - x) <= SAME_SPOT and abs(t[2] - y) <= SAME_SPOT and abs(t[3] - z) <= SAME_SPOT]
+        return bool(near) and all(t[0] != key(base) for t in near)
+    return leave
 
 
 def turn(lx, ly, rz):
