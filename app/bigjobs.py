@@ -187,6 +187,7 @@ def _backup(pr, title):
         dest = os.path.join(backups.folder(), '%s before %s (%d) %s' % (name, title.lower(), n, time.strftime('%m%d-%H%M')))
         n += 1
     os.makedirs(dest)
+    pr.compact()                            # (the mod as one file: its .changes folded into its .json)
     shutil.copy2(pr.path, os.path.join(dest, os.path.basename(pr.path)))
     return os.path.basename(dest)
 

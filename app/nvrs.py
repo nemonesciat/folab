@@ -318,23 +318,34 @@ def put_in(folder, built_plugins, setup=None):
     old = _read(folder)
     had = old.get('files', {})
     want = layer_files(_on(setup), off)
+    marks = {}                                  # (the mod's own files as their folder lists them)
     for built in built_plugins:
         assets = install._assets_folder(built)
-        for d, _dirs, files in os.walk(assets):
-            for fn in files:
-                src = os.path.join(d, fn)
-                rel = os.path.relpath(src, assets)
-                if rel.lower() != MANIFEST:
-                    want[rel.lower()] = (rel, src)
+        for rel, mark in install.scan(assets).items():
+            if rel.lower() != MANIFEST:
+                src = os.path.join(assets, rel)
+                want[rel.lower()] = (rel, src)
+                marks[src] = list(mark)
     for built in built_plugins:
         want.pop(os.path.basename(built).lower(), None)
+    there = {rel.lower(): list(mark) for rel, mark in install.scan(mods).items()}
     now, backed, linked, copied = {}, [], 0, 0
     nvse = sum(1 for k in want if k.startswith('nvse\\'))
     for low, (rel, src) in want.items():
         if low in (MANIFEST, 'plugins.txt'):
             continue
+        row = had.get(low)
+        if row and len(row) > 3 and row[3] == src and list(row[1:3]) == there.get(low) == marks.get(src):
+            # (put there from this file last time and neither has changed since: left as it is. A big mod's 19,000
+            # files took 6 s to look at one by one, every time)
+            now[low] = row
+            if _drive(src) == here:
+                linked += 1
+            else:
+                copied += 1
+            continue
         dest = os.path.join(mods, rel)
-        backed.append(_place(src, dest, _drive(src) == here, had.get(low)))
+        backed.append(_place(src, dest, _drive(src) == here, row))
         if os.path.samefile(src, dest):
             linked += 1
         else:

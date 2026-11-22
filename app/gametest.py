@@ -1043,7 +1043,7 @@ def post(name, body, S):
         with S._lock:
             plan = make_plan(S.GD, S.PR, body['cell'], run=run)
             plugin = os.path.join(run_dir, S.PR.plugin)
-            espwrite.write(S.GD, S.PR, plugin)
+            espwrite.write(S.GD, S.PR, plugin, reuse=False)
         assets = os.path.join(project.BUILD_DIR, S.PR.plugin + ' assets')
         paths = real_paths(S.GD.data_dir)
         bad = [r['text'] for r in preflight(paths, plan) if not r['ok']]

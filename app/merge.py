@@ -308,6 +308,7 @@ def backup_project(pr, why):
     name = '%s %s %s' % (pr.name, time.strftime('%Y-%m-%d %H%M%S'), why)
     d = os.path.join(root, name)
     os.makedirs(d, exist_ok=True)
+    pr.compact()                            # (the mod as one file: its .changes folded into its .json)
     shutil.copy2(pr.path, d)
     if pr.source and os.path.isfile(pr.source_path()):
         shutil.copy2(pr.source_path(), d)
