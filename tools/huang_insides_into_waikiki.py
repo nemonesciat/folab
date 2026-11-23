@@ -70,7 +70,12 @@ for _m in ('navgen', 'navbuild'):
         _spec.loader.exec_module(sys.modules[_m])
         say('using this checkout\'s', _m)
 import gamedata, project, server, navbuild, recordio  # noqa: E402
-for _m in ('huangset', 'huanginside'):           # (this checkout's, whatever the app has)
+import modelsets  # noqa: E402
+modelsets._all_sets()            # (every set in now, so none of them brings the app's own doorset in later)
+for _m in ('doorset', 'huangset', 'huanginside'):           # (this checkout's, whatever the app has: doorset's doors drawn right)
+    if _m == 'doorset':
+        for _k in [k for k, v in modelsets.PIECES.items() if v.get('set') == 'doors']:
+            del modelsets.PIECES[_k]
     _spec = importlib.util.spec_from_file_location(_m, os.path.join(MINE, _m + '.py'))
     sys.modules[_m] = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(sys.modules[_m])
