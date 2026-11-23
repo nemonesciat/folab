@@ -147,9 +147,23 @@ for ck in inside:
     except navbuild.NavError as e:
         missed.append((ck, str(e)))
 after = unlinked()
+import navmesh as N  # noqa: E402
+
+
+def floor_near(rk, ck):
+    """Is there any of the cell's navmesh within the reach a door links over? (The Kilauea's view world's lift doors
+    stand thousands of units from its mesh: nothing to link to there, a gap in that world's navmesh, not this.)"""
+    p = next(c['refs'][rk]['p'] for c in pr.cells.values() if rk in (c.get('refs') or {}))
+    nm = pr.navmesh.get(ck)
+    metas = ([nm] + nm.get('others', [])) if nm else []
+    return any(N._tri_distance(p[:3], m['verts'][t[0]], m['verts'][t[1]], m['verts'][t[2]]) < N.DOOR_REACH for m in metas for t in m['tris'])
+
+
+far = [(rk, ck) for rk, ck in after if not floor_near(rk, ck)]
 pr.save()
 say('saved')
-json.dump({'before': before, 'after': after, 'cells': todo, 'places': inside, 'missed': missed},
+json.dump({'before': before, 'after': after, 'no_floor_near': far, 'cells': todo, 'places': inside, 'missed': missed},
           open(os.path.join(HOME, 'door_links_report.json'), 'w'), indent=1)
-say('made', made, 'cells; missed', missed[:5], '; doors still without a door triangle', len(after), after[:5])
-say('CHECKS: all good' if not after and not missed else 'CHECKS FAILED', '; one Undo: "%s"' % LABEL)
+say('made', made, 'cells; missed', missed[:5], '; doors still without a door triangle', len(after), after[:5],
+    '; of those with no navmesh within reach (nothing to link to)', len(far))
+say('CHECKS: all good' if len(after) == len(far) and not missed else 'CHECKS FAILED', '; one Undo: "%s"' % LABEL)
