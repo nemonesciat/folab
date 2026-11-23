@@ -36,6 +36,8 @@ KINDS = {
     'deleted_record': (WARN, 'Deleted records', 'Records of the game\'s that were deleted. Anything else using them will break.'),
     'no_compile': (ERROR, 'Scripts with no compiled code', 'Scripts with text but nothing the game can run. They do nothing in game.'),
     'door_gone': (ERROR, 'Doors to removed doors', 'A door leads to a door that has been removed, deep under the floor.'),
+    'arrival_blocked': (ERROR, 'Doors that put you in something', 'Coming out of the door you stand in something solid (a shack, a lean-to, a wall, scaffolding) or under a roof among walls outside (arrivalcheck.py). Move where it puts you: the fix does, out from the door to the first clear spot.'),
+    'arrival_off': (WARN, 'Doors that put you off the navmesh or facing back', 'Where the door puts you is not on the place navmesh, or faces the door you came out of.'),
     'mesh': (ERROR, 'Missing meshes', 'Models no file can be found for, loose or in an archive. The game shows a bright "!" or nothing, or can crash.'),
     'mesh_broken': (ERROR, 'Damaged models', 'Model files that stop short or won\'t read. The game crashes when it loads one: in the place it stands, or as it comes into view.'),
     'mesh_collision': (ERROR, 'Models with collision the game crashes on', 'Models whose collision is a kind New Vegas can\'t handle (an Oblivion convex list shape: none of the game\'s own 20,745 models has one). The game crashes as one loads. Remake its collision in the model, or use another model.'),
@@ -774,6 +776,7 @@ def check_mod(S):
         try:
             check_project_nav(scan, gd, pr)
             check_project_water(scan, gd, pr)
+            check_project_arrivals(scan, gd, pr)
             groups = scan.report()
         finally:
             scan.close()
@@ -792,6 +795,16 @@ def _remove(path):
         os.rmdir(os.path.dirname(path))
     except OSError:
         pass
+
+
+def check_project_arrivals(scan, gd, pr):
+    """Where every door of the mod puts you: in something solid or shut in (an error), off the navmesh or facing back."""
+    import arrivalcheck
+    res = arrivalcheck.check(gd, pr)
+    for row in res['bad']:
+        serious = [w for w in row['why'] if w in ('blocked', 'inside')]
+        text = 'A door puts you %s at %s.' % (' and '.join(row['why']).replace('_', ' '), ', '.join('%.0f' % v for v in row['p'][:3]))
+        scan.add('arrival_blocked' if serious else 'arrival_off', text, {'cell': row['cell'], 'ref': row['ref']})
 
 
 def check_project_nav(scan, gd, pr):
