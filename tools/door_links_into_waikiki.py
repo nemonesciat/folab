@@ -1,4 +1,4 @@
-"""door_links_into_waikiki.py [real] [--home H] [--app A]: doors a navmesh edit left with no triangle linked again (the
+﻿"""door_links_into_waikiki.py [real] [--home H] [--app A]: doors a navmesh edit left with no triangle linked again (the
 Workshop's item 4, 23 Nov 2026: the Royal Hawaiian's city door +047E98 had no navmesh link). shell_navmesh_out took the
 triangle it was linked to (triangle 80 of cell 000DC6's mesh, in the lobby's sealed island); navedit then looks for the
 nearest triangle left, but navbuild._ref_position gave no place for a door the mod added, so the door went into the
@@ -60,7 +60,12 @@ ops, linked, left = [], [], []
 by_mesh = {}
 for ck, mi, d in before:
     by_mesh.setdefault((ck, mi), []).append(d)
-import navedit  # noqa: E402
+import navedit, arrivalcheck  # noqa: E402
+NEAR, GAP, WIDE = 60.0, 48.0, 24.0     # (GAP: 32 stood within a body of the hotel's front)
+FRONT = ['+047E98']                # (the Royal Hawaiian's city door: linked already, 92 from the street's edge)
+FRONT_CELL = 'Waikiki.esp:000DC6'
+Wd = arrivalcheck.World(gd, pr)
+fronts = []
 sess = None
 for (ck, mi), doors in sorted(by_mesh.items()):
     sess = sess or navedit.Session(gd, pr, ck)
@@ -97,15 +102,107 @@ for (ck, mi), doors in sorted(by_mesh.items()):
         p = dict(near)[d]
         t = e['m']['tris'][found[d]]
         c = [sum(V[t[k]][a] for k in range(3)) / 3.0 for a in range(3)]
-        linked.append((ck, d, found[d], round(math.dist(c, p))))
+        linked.append((ck, d, found[d], round(N._tri_distance(p, V[t[0]], V[t[1]], V[t[2]]))))
     nd = [d for d in e['data'].get('no_door', []) if d not in found]
     e['data'] = dict(e['data'], no_door=nd)
     if not nd:
         e['data'].pop('no_door')
-if sess is not None and linked:
+
+def door_half(base):
+    """Half a door's width, from its record's bounds."""
+    try:
+        if base.startswith('+'):
+            b = [int(f['value']) for f in next(x for x in pr.records[base]['subs'] if x['tag'] == 'OBND')['fields'] if 'name' in f]
+        else:
+            import struct
+            b = struct.unpack('<6h', gd.fields(gd.from_key(base))['OBND'][:12])
+        return (b[3] - b[0]) / 2.0
+    except Exception:
+        return 80.0
+
+
+def front(ck, mi, d, p):
+    # a door whose triangle is further than NEAR from it (the Workshop: people walk to the triangle and go through from
+    # there): its triangle's free edge facing the door carried on to GAP in front of the door, two triangles joined to it,
+    # if nothing solid stands there at body height; the door linked to the nearer of them
+    m = sess.entry(ck, mi)['m']               # (read only until the strip is known clear: mine() marks it changed)
+    ti = next(x[1] for x in m['doors'] if x[0] == d)
+    V = m['verts']
+    t = m['tris'][ti]
+    if N._tri_distance(p, V[t[0]], V[t[1]], V[t[2]]) <= NEAR:
+        return
+    best = None
+    for i in range(3):
+        if t[3 + i] != N.NONE or (t[6] >> i & 1):
+            continue
+        a_, b_ = V[t[i]], V[t[(i + 1) % 3]]
+        ex, ey = b_[0] - a_[0], b_[1] - a_[1]
+        ln = math.hypot(ex, ey)
+        nx, ny = ey / ln, -ex / ln                     # (anticlockwise corners: the edge's outside is to its right)
+        dist = (p[0] - a_[0]) * nx + (p[1] - a_[1]) * ny
+        if dist > 0 and (best is None or dist < best[0]):
+            best = (dist, i, nx, ny)
+    if best is None:
+        fronts.append((ck, d, 'no free edge of its triangle faces the door'))
+        return
+    dist, i, nx, ny = best
+    step = dist - GAP
+    ia, ib = t[i], t[(i + 1) % 3]
+    a_, b_ = V[ia], V[ib]
+    # (a trapezoid: the whole edge on the triangle's side, the door's width and WIDE more either side at the door's)
+    ex, ey = b_[0] - a_[0], b_[1] - a_[1]
+    ln = math.hypot(ex, ey)
+    ux, uy = ex / ln, ey / ln
+    sd = (p[0] - a_[0]) * ux + (p[1] - a_[1]) * uy
+    half = door_half(where[d][1]['base']) + WIDE
+    s0, s1 = max(0.0, sd - half), min(ln, sd + half)
+    if s1 - s0 < 2 * WIDE:
+        fronts.append((ck, d, 'the edge facing it does not run across its front'))
+        return
+    na_ = (a_[0] + ux * s0 + nx * step, a_[1] + uy * s0 + ny * step, a_[2])
+    nb_ = (a_[0] + ux * s1 + nx * step, a_[1] + uy * s1 + ny * step, a_[2])
+    spots = [(a_[0] + ux * (s0 + (s1 - s0) * u) + nx * step * w, a_[1] + uy * (s0 + (s1 - s0) * u) + ny * step * w)
+             for u in (0.0, 0.25, 0.5, 0.75, 1.0) for w in (0.3, 0.65, 1.0)]
+    g_ = Wd.group(ck)
+    blocked = [b for b in (Wd.judge(g_, x_, y_, a_[2] + 0.0, Wd.outside(g_))[0] for x_, y_ in spots) if b]
+    if blocked:
+        fronts.append((ck, d, 'something stands in front of it: %s' % sorted(set(blocked))))
+        return
+    m = sess.mine(ck, mi)['m']
+    t1 = sess.add(ck, mi, [ib, ia, list(na_)])
+    nai = len(m['verts']) - 1                   # (the corner add just made)
+    t2 = sess.add(ck, mi, [ib, nai, list(nb_)])
+    # the door to the nearer new triangle, off the old one
+    m['doors'] = [x for x in m['doors'] if x[0] != d]
+    if not any(x[1] == ti for x in m['doors']):
+        m['tris'][ti] = m['tris'][ti][:6] + (m['tris'][ti][6] & ~N.F_DOOR,) + m['tris'][ti][7:]
+    got, _miss = N.link_doors(m, [(d, p)])
+    V = m['verts']
+    nt = m['tris'][got[d]]
+    fronts.append((ck, d, 'linked to new triangle %d, %d from the door (was triangle %d, %d)'
+                   % (got[d], round(N._tri_distance(p, V[nt[0]], V[nt[1]], V[nt[2]])), ti, round(dist))))
+    linked[:] = [x for x in linked if x[1] != d] + [(ck, d, got[d], round(N._tri_distance(p, V[nt[0]], V[nt[1]], V[nt[2]])))]
+
+
+sess = sess or (navedit.Session(gd, pr, FRONT_CELL) if FRONT else None)
+linked_in = {}
+for ck, m0 in pr.navmesh.items():
+    for mi, mm in enumerate([m0] + list(m0.get('others', []))):
+        for x in mm.get('doors', []):
+            linked_in.setdefault(x[0], (ck, mi))
+for ck, d, ti, dist in linked:
+    linked_in[d] = (ck, 0)
+for d in sorted({x[1] for x in linked} | set(FRONT)):
+    if d not in where or d not in linked_in:
+        fronts.append(('?', d, 'not linked to any navmesh, or not in the mod'))
+        continue
+    front(linked_in[d][0], linked_in[d][1], d, tuple(where[d][1]['p'][:3]))
+if sess is not None and (linked or sess.touched):
     ops = sess.finish()          # (each changed mesh checked by navmesh.validate: EditError stops here, nothing written)
 for ck, d, ti, dist in linked:
-    say('  linked %s in %s to triangle %d (its middle %d from the door)' % (d, ck, ti, dist))
+    say('  linked %s in %s to triangle %d (%d from the door)' % (d, ck, ti, dist))
+for ck, d, what in fronts:
+    say('  in front of %s: %s' % (d, what))
 for ck, d, why in left:
     say('  left %s in %s: %s' % (d, ck, why))
 say('doors linked %d, left %d; meshes changed %d' % (len(linked), len(left), len(ops)))
@@ -121,6 +218,7 @@ if ops:
     say('applied and saved')
 else:
     ops = [{'cell': ck} for ck in ('Waikiki.esp:000DC6',)]      # (check only: the cell this step is for)
+ops = ops or [{'cell': 'Waikiki.esp:000DC6'}]
 pr2 = project.Project.open('Waikiki')
 linked_now = {(ck, d[0]) for ck, m in pr2.navmesh.items() for mm in [m] + list(m.get('others', [])) for d in mm['doors']}
 missing = [(ck, d) for ck, d, ti, dist in linked if (ck, d) not in linked_now]
@@ -135,6 +233,22 @@ for ck in sorted({o['cell'] for o in ops}):
 say('from the saved mod: linked doors found %d of %d; still listed with no triangle %d; meshes failing their check %d'
     % (len(linked) - len(missing), len(linked), still, len(faults)))
 rh = any(d == '+047E98' for ck, d in linked_now)
-say('the Royal Hawaiian city door +047E98 linked:', rh)
+rh_dist = None
+for e_ in check.A.meshes('Waikiki.esp:000DC6'):
+    for x in e_['m']['doors']:
+        if x[0] == '+047E98':
+            V_, t_ = e_['m']['verts'], e_['m']['tris'][x[1]]
+            rh_dist = round(N._tri_distance(tuple(where['+047E98'][1]['p'][:3]), V_[t_[0]], V_[t_[1]], V_[t_[2]]), 1)
+            seen_ = {x[1]}
+            todo_ = [x[1]]
+            T_ = e_['m']['tris']
+            while todo_:
+                tt = T_[todo_.pop()]
+                for i in range(3):
+                    if not (tt[6] >> i & 1) and tt[3 + i] != N.NONE and tt[3 + i] not in seen_:
+                        seen_.add(tt[3 + i])
+                        todo_.append(tt[3 + i])
+            say('  its triangle %d: %s from the door; in a piece of %d of the %d triangles of its mesh' % (x[1], rh_dist, len(seen_), len(T_)))
+say('the Royal Hawaiian city door +047E98 linked:', rh, '| its triangle within %d of it:' % NEAR, rh_dist is not None and rh_dist <= NEAR)
 say('faults', faults)
-say('CHECKS: ' + ('all good' if not missing and not faults and rh else 'PROBLEMS'))
+say('CHECKS: ' + ('all good' if not missing and not faults and rh and rh_dist is not None and rh_dist <= NEAR else 'PROBLEMS'))

@@ -18,13 +18,15 @@ import nif, outfitjoin  # noqa: E402
 # in the Mojave, its face on the socket's outer edge: the intact model turned half round and moved (-144.5, -83, 15.5)
 # in the ruined door's frame lands its disc there, within 3 every way. The user, 23 Nov 2026: "the gear door is supposed
 # to sit on the outer edge of the gear socket, not deep within")
-GAME_DOOR, GAME_TURN = (-20.79, 25.4, -4.18), math.radians(-5.0)
-INTACT_IN_RUINED = (-144.5, -83.0, 15.5)
-_c, _s = math.cos(GAME_TURN), math.sin(GAME_TURN)
-AT = (GAME_DOOR[0] + INTACT_IN_RUINED[0] * _c + INTACT_IN_RUINED[1] * _s,
-      GAME_DOOR[1] - INTACT_IN_RUINED[0] * _s + INTACT_IN_RUINED[1] * _c,
-      GAME_DOOR[2] + INTACT_IN_RUINED[2])
-TURN = GAME_TURN + math.pi
+# (in the gear hole, its face flush with the doorway's face, as the game stands every intact gear door in the Mojave:
+# VGearDoorR3/R11/R19/R108 at (64, 192, 0) from their VURmGearExit01 room, no turn. There the hole's ring (VGearDoor02's
+# shape) is x -86..221, y 43..230, z -121..181, 230 the wall's face, and the disc fills that x and z with its face at
+# 226. Vault22Entrance's ring (vgeardoorr02's shape) is the same ring turned half round: x -221..85, y -232..-45, top
+# 195. So the room's frame turned half round, moved (0, -2, 14), is the entrance's at the hole: the door at
+# (-64, -194, 14) turned 180, the disc x -221..86, face at y -228, z -107..195. The user, 23 Nov 2026: "the gear face sits
+# flush with the doorway face")
+AT = (-64.0, -194.0, 14.0)
+TURN = math.pi
 DISC_R, DISC_X, DISC_Z = 151.0, 3.2, 31.5
 ROLL_X = 273.1                       # (VGearDoor01b's key at 20.7 s: rolled aside)
 REST_Y, PULL_Y, THICK = 34.0, -150.0, 64.0
