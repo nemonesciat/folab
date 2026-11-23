@@ -281,6 +281,16 @@
         "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_FAKE_GAMES=D:\\FOLab-editing\\games&& set FOLAB_NVRS_PLACES=D:\\FOLab-editing\\games\\nv-rs-pad&& set FOLAB_HOME=D:\\FOLab-editing\\waikiki&& set FOLAB_NV_INI=D:\\FOLab-editing\\ini&& py -3 app/server.py 8787 --no-browser"
       ],
       "port": 8787
+    },
+    {
+      "name": "folab-v50full",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "D:\\FOLabScratch\\v50full\\serve.cmd"
+      ],
+      "port": 8851,
+      "autoPort": false
     }
   ]
 }
