@@ -172,7 +172,15 @@ def stub_data(form, near):
     return as_data(m, form, outline=_outline_data(N.outline_of(m)), stub=True)
 
 
-def _ref_position(gd, key):
+def _ref_position(gd, key, project=None):
+    """Where a ref stands: as the mod has it (added or moved) when a project is given, else as the game has it. Without
+    the project a door the mod added had no place, so a door whose triangle a navmesh edit took away was never linked
+    again (the Royal Hawaiian's city door, 22 Nov 2026: its triangle was in the lobby's island; the street's was 249 off)."""
+    if project is not None:
+        for c in project.cells.values():
+            r = (c.get('refs') or {}).get(key)
+            if r is not None:
+                return None if r.get('removed') or not r.get('p') else tuple(r['p'][:3])
     if key.startswith('+'):
         return None
     e = gd.forms.get(gd.from_key(key))
@@ -217,7 +225,7 @@ def _make_one(gd, project, ckey, meshes_now, beyond=False):
     for old in meshes_now:
         for d, _t in old['doors']:
             if d not in seen:
-                p = _ref_position(gd, d)
+                p = _ref_position(gd, d, project)
                 if p:
                     doors.append((d, p))
                     seen.add(d)

@@ -234,7 +234,7 @@ class Session:
                 moved.append(d[0])
         m['doors'] = doors
         if moved:
-            spots = [(k, navbuild._ref_position(self.gd, k)) for k in moved]
+            spots = [(k, navbuild._ref_position(self.gd, k, self.pr)) for k in moved]
             found, missed = N.link_doors(m, [(k, p) for k, p in spots if p])
             missed = list(missed) + [k for k, p in spots if not p]
             if missed:
