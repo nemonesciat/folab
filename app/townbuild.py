@@ -41,6 +41,7 @@ import landshape
 import navbuild
 import navmesh
 import nif
+import placewater
 import recordio
 import roadgen
 
@@ -454,6 +455,7 @@ def inside_ops(gd, inside, tag, edid, full):
     cfid = gd.from_key(inside['cell'])
     rec = recordio.load(gd, cfid)
     rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('XOWN', 'XRNK')]
+    placewater.make_dry(rec)                            # (a borrowed place's things stand elsewhere: its pool would drown them)
     recordio.set_field(rec, 'EDID', edid, label='Editor ID')
     recordio.set_field(rec, 'FULL', full, label='Name')
     ops = [{'op': 'record_new', 'record': rec, 'name': tag}]

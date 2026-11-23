@@ -35,6 +35,7 @@ import kitindex
 import kitplan
 import landmarks
 import modelsets
+import placewater
 import recordio
 import roadgen
 import texwear as tw
@@ -939,6 +940,7 @@ def board(gd, pr, world, ship, prefix='FOLab', again=False):
     for key, (edid, full, _fn) in PLACES.items():
         rec = recordio.load(gd, gd.from_key(like['cell']))
         rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('XOWN', 'XRNK')]
+        placewater.make_dry(rec)
         recordio.set_field(rec, 'EDID', prefix + edid, label='Editor ID')
         recordio.set_field(rec, 'FULL', full, label='Name')
         ops.append({'op': 'record_new', 'record': rec, 'name': 'mo_' + key})

@@ -33,6 +33,7 @@ import random
 import kitdress as D
 import kitlife as L
 import kitplan
+import placewater
 import recordio
 from kitplan import Spec
 
@@ -574,6 +575,7 @@ def make(gd, pr, hotel, seed=1, concept=None):
             raise ValueError('These game files lack %s, whose light the %s copies.' % (like, full))
         rec = recordio.load(gd, cell)
         rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('XOWN', 'XRNK', 'XCMO', 'XEZN', 'XCCM', 'XCWT')]
+        placewater.make_dry(rec)                        # (its light, not its pool: the Tops' suite has one)
         recordio.set_field(rec, 'EDID', 'FOLab%sFloor%d' % (H['tag'], n + 1), label='Editor ID')
         recordio.set_field(rec, 'FULL', full, label='Name')
         name = 'hf_%s_%d' % (hotel, n)

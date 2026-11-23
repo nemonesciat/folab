@@ -937,6 +937,9 @@ def new_place(body):
     edid = _free_edid(body['edid'])
     recordio.set_field(rec, 'EDID', edid, label='Editor ID')
     recordio.set_field(rec, 'FULL', body['name'], label='Name')
+    if not body.get('copy'):
+        import placewater
+        placewater.make_dry(rec)                        # (an empty place: the copied place's water would stand over whatever goes in)
     ops = [{'op': 'record_new', 'record': rec}]
     if body.get('copy'):
         for t in cell_things(src):
