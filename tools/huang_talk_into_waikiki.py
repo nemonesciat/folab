@@ -23,11 +23,12 @@ def opt(name, default):
 
 
 REAL_HOME = r'C:\Users\AMD RYZEN\Claude Code Projects\FOLab\packaging\out\FOLab'
-SCRATCH = r'D:\FOLabScratch\huangtalk\home'
+SCRATCH = r'D:\FOLabScratch\huangtalk\home' + ('_barks' if '--barks' in sys.argv[1:] else '')
 APP = opt('--app', r'C:\Users\AMD RYZEN\Claude Code Projects\FOLab\app')
 MINE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'app')
 HOME = opt('--home', REAL_HOME if REAL else SCRATCH)
-LABEL = 'The Huáng\'s own goodbyes and hellos'
+BARKS = '--barks' in ARGS       # (the combat and reaction barks instead: a step of its own, after the talk step)
+LABEL = 'The Huáng\'s own barks' if BARKS else 'The Huáng\'s own goodbyes and hellos'
 t0 = time.time()
 sys.stdout.reconfigure(encoding='utf-8')
 say = lambda *a: print('%5.0fs' % (time.time() - t0), *a, flush=True)
@@ -60,7 +61,7 @@ spec.loader.exec_module(HT)
 mod = os.path.join(project.PROJECTS_DIR, 'Waikiki.json')
 seen = os.path.getmtime(mod)
 if REAL:
-    back = os.path.join(HOME, 'backups', 'Waikiki before huang talk ' + time.strftime('%m%d-%H%M'))
+    back = os.path.join(HOME, 'backups', 'Waikiki before huang %s ' % ('barks' if BARKS else 'talk') + time.strftime('%m%d-%H%M'))
     os.makedirs(back)
     for n in os.listdir(project.PROJECTS_DIR):
         if n.startswith('Waikiki.') and os.path.isfile(os.path.join(project.PROJECTS_DIR, n)):
@@ -77,9 +78,10 @@ server.load_game(pr)
 server.PR = pr
 gd = server.GD
 say('loaded')
-before = {t: len(v) for t, v in HT.leaks(gd, pr).items()}
+TOPS = tuple(HT.BARKS) if BARKS else HT.TOPICS
+before = {t: len(v) for t, v in HT.leaks(gd, pr, TOPS).items()}
 say('Huáng with no line of their own, before', before)
-ops, plan, rep = HT.ops(gd, pr)
+ops, plan, rep = HT.ops(gd, pr, TOPS, HT.ZHAO_BARKS if BARKS else None)
 say('new lines', rep)
 if os.path.getmtime(mod) != seen:
     sys.exit('Waikiki.json changed while loading: nothing written')
@@ -87,7 +89,7 @@ pr.apply(LABEL, ops)
 pr.save()
 v = HL.voice(gd, pr, plan, progress=None)
 say('voiced', v['voiced'], 'problems', v['problems'][:5])
-after = HT.leaks(gd, pr)
+after = HT.leaks(gd, pr, TOPS)
 import api_voices as av, library  # noqa: E402
 root = library.assets_dir(pr)
 miss = []
