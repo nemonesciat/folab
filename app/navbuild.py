@@ -55,6 +55,8 @@ def place_refs(gd, project, ckey):
             model = recordio.field(rec, 'MODL')     # (a model of the mod's own making: its collision read from the mod's files)
             if model:
                 row['model'] = 'meshes\\' + model.replace('/', '\\').lstrip('\\')
+        elif rec and rec.get('type') == 'DOOR':
+            row['door'] = True                      # (a door of the mod's own: its link needs a triangle as a game door's does)
         out.append(row)
     if cell is not None:
         for r in gd.refs(cell):
@@ -186,7 +188,7 @@ def _make_one(gd, project, ckey, meshes_now, beyond=False):
     outside = is_outside(gd, ckey)
     cell = ckey
     refs = place_refs(gd, project, ckey)
-    usable = [dict(r) for r in refs if r['base'] is not None or r['type'] != 'REFR' or r.get('model')]
+    usable = [dict(r) for r in refs if r['base'] is not None or r['type'] != 'REFR' or r.get('model') or r.get('door')]
     if outside:
         cell = gd.from_key(ckey)
 
@@ -196,7 +198,7 @@ def _make_one(gd, project, ckey, meshes_now, beyond=False):
             return mine['h'] if mine else None
 
         def refs_of(c):
-            return [r for r in place_refs(gd, project, gd.key(c)) if r['base'] is not None or r['type'] != 'REFR' or r.get('model')]
+            return [r for r in place_refs(gd, project, gd.key(c)) if r['base'] is not None or r['type'] != 'REFR' or r.get('model') or r.get('door')]
         water = False
         if ckey in project.water:
             h = project.water[ckey]

@@ -663,7 +663,15 @@ def _lay_refs(gd, field, refs, cache, report, any_door=False):
             if r.get('pos'):
                 seeds.append(r['pos'])
             continue
-        if r['type'] != 'REFR' or not _usable(gd, r):
+        if r['type'] != 'REFR':
+            continue
+        if r['base'] is None and r.get('door') and r.get('pos') is not None:     # (a door of the mod's own, navbuild.place_refs)
+            if r.get('leads'):
+                doors.append((r['ref'], r['pos']))
+            if r.get('leads') or any_door:
+                seeds.append(r['pos'])
+            continue
+        if not _usable(gd, r):
             continue
         if r['base'] is None and r.get('model'):            # (one of the mod's own models)
             solid = _solid_of_file(gd, r['model'], cache, report)
