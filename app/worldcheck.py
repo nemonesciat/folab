@@ -9,6 +9,8 @@ changes outside needs, checked, after what Waikiki went without for days:
   ("terrain shearing here", 19 Nov 2026: 25 edges);
 - water by the sea (`water`): a cell given its own water level over a beach draws a sheet of water in the air ("a panel
   of water above the land", 19 Nov 2026: 13 cells);
+- daylight under buildings (`floats`): land falling away from under a wall of a building the mod placed, FOLab's own sets
+  as much as the game's (floatfit.py: "must have missed the memo about floating houses", 22 Nov 2026);
 - draws (`draws`): the heaviest spots round the mod's cells (drawcount.py; Waikiki's start drew 12,693 at 12 fps).
 
 Each finding: {check, level: 'error'|'warn'|'info', text, cells: [(x, y)], fix: a Big job's key or None}. `run` goes
@@ -168,6 +170,22 @@ def check_water(gd, pr, w):
                      'give it the world\'s level (Outside, the cell\'s Water).' % (len(bad), '' if len(bad) == 1 else 's')}]
 
 
+def check_floats(gd, pr, w):
+    """Buildings of the mod's with daylight under a wall (floatfit.measure: the land just outside it more than GAP under its foot)."""
+    import floatfit
+    if not hasattr(gd, 'refs'):
+        return []                   # (game data with no placed things: nothing to stand on anything)
+    rows = [r for r in floatfit.measure(gd, pr, w) if r['gap'] > floatfit.GAP]
+    if not rows:
+        return []
+    cells = sorted({(int(r['b']['p'][0] // 4096), int(r['b']['p'][1] // 4096)) for r in rows})
+    worst = ', '.join('%s (%d)' % (r['name'], r['gap']) for r in rows[:5])
+    return [{'check': 'floats', 'level': 'warn', 'fix': None, 'cells': cells,
+             'text': '%d building%s stand%s over the land with daylight under a wall (more than %d units): %s. Raise the ground to '
+                     'the wall with the Ground brush, or run floatfit (its fix).' % (len(rows), '' if len(rows) == 1 else 's',
+                                                                                 's' if len(rows) == 1 else '', floatfit.GAP, worst)}]
+
+
 def check_draws(gd, pr, w, progress=None):
     spots = drawcount.counter(gd, pr).busiest(w, most=5, progress=progress)
     heavy = [s for s in spots if s['draws'] > drawcount.HEAVY]
@@ -201,6 +219,9 @@ def run(gd, pr, progress=None):
         if said:
             said('Water')
         f += check_water(gd, pr, w)
+        if said:
+            said('Daylight under buildings')
+        f += check_floats(gd, pr, w)
         f += check_draws(gd, pr, w, said)
         out.append({'world': gd.key(w), 'name': name, 'edid': gd.edid(w), 'own': own_world(gd, pr, w), 'cells': len(mine), 'findings': f})
     out.sort(key=lambda r: (not r['own'], -r['cells']))
