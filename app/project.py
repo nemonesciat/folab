@@ -240,6 +240,7 @@ class Project:
         self.newgame = d.get('newgame')         # the mod's own new game (newgame.py): its settings and what FOLab made for it
         self.next_id = d.get('next_id', FIRST_ID)
         self.undo_stack, self.redo_stack = [], []
+        self.dry_run = False                    # (True: nothing is written, whatever is done; see _writing_off)
         self._base = _mark(path)               # the .json the lines go on
         self._journal = os.path.getsize(self.journal_path) if had else 0
         self._resync()
@@ -277,6 +278,8 @@ class Project:
         ground and the navmeshes are kept as the text last written for each cell and written again only when that cell's
         entry is another one: a change there always puts a whole new entry in (nothing edits one in place). afresh: don't
         trust that, and write everything out anew."""
+        if self.dry_run:
+            return
         check_free(self.path)
         d = self.to_dict()
         kept = {} if afresh else getattr(self, '_written', {})
@@ -301,6 +304,8 @@ class Project:
 
     def compact(self):
         """The mod as its .json alone (before copying it as a file), unless that's what it is already."""
+        if self._writing_off():
+            return self._commit()
         if self._journal or self._diff() or json.dumps(self._head(), sort_keys=True) != self._saved_head:
             self.save()
 
@@ -355,6 +360,14 @@ class Project:
         head = json.dumps(self._head(), sort_keys=True)
         if not ch and head == self._saved_head:
             return ch
+        stand_in = self._writing_off()
+        if stand_in:
+            # (a dry run: neither file touched. What changed counts as written in memory only, so Undo and the
+            # build's digests follow the mod as it is here; a save put in place of ours is called, as apply always did)
+            self._take(ch, head)
+            if stand_in is not True:
+                stand_in()
+            return ch
         check_free(self.path)
         if self._base is None or _mark(self.path) != self._base:
             self.save()                         # (the .json was written by something else since: the mod written whole)
@@ -391,6 +404,13 @@ class Project:
             f.flush()
             os.fsync(f.fileno())
         self._journal += len(line)
+        self._take(ch, head)
+        if self._journal > max(JOURNAL_MOST, self._base[0] // 2):
+            self.save()                         # (folded in: the lines would take longer to read than the .json)
+        return ch
+
+    def _take(self, ch, head):
+        """What was written is now this (ch: _diff()'s)."""
         for part, ents in ch.items():
             saved = self._saved[part]
             for k, (_old, new) in ents.items():
@@ -399,9 +419,15 @@ class Project:
                 else:
                     saved[k] = new
         self._saved_head = head
-        if self._journal > max(JOURNAL_MOST, self._base[0] // 2):
-            self.save()                         # (folded in: the lines would take longer to read than the .json)
-        return ch
+
+    def _writing_off(self):
+        """Is saving off? True for a dry run (dry_run); a script's own save put on this mod in place of ours (pr.save =
+        lambda *a, **k: None, the way dry runs were always made) is returned, to be called instead of writing anything:
+        before the .changes, apply wrote only through save(), so such a stand-in kept a dry run off the files (22 Nov
+        2026: one wrote a line into the real Waikiki.changes)."""
+        if self.dry_run:
+            return True
+        return self.__dict__.get('save')
 
     def sync(self):
         """Anything changed by hand since the last write, written now (not an Undo step)."""
