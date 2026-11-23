@@ -255,7 +255,11 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
         _box(P, [W, d + 10, 3], [0, d / 2.0 - 4, 0], 'trim', back=None)          # (the threshold)
         inner = W - 2 * L
         lh = H - L - 3 - top
-        ly = min(6.0, d / 2.0)
+        # (the leaves in front of the wall's outer face, not in the hole: nv-rs picks a door by its drawn triangles and a
+        # building by its collision, the nearer wins, and the game's buildings close their doorways in collision at the
+        # face (NoVacHouse01/02 at y 0, NVGoodSprhome02 at -5.8). In the hole at y 3.5-8.5 only the liners took the
+        # crosshair, 23 Nov 2026. doorpick checks it; a placement whose wall stands further out is moved out by the step)
+        ly = LEAF_Y
         lw = (inner - 2 * side) / leaves
         for k in range(leaves):
             x = -inner / 2.0 + side + lw * (k + 0.5)
@@ -273,8 +277,13 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
             for sx in (-1, 1):
                 _box(P, [c, 5, H + c], [sx * (W / 2.0 + c / 2.0 - 2), -2.0, 0], 'trim', back=None, bottom=None)
             _box(P, [W + 2 * c - 4, 5, c], [0, -2.0, H - 2], 'trim', back=None)
-        _box(P, [W, max(8.0, d), H], [0, max(8.0, d) / 2.0, 0], None, solid=True, **NONE)
+        back = max(8.0, d)
+        front = -(LEAF_Y - 2.5)                     # (the box from the leaves' front to the wall's back)
+        _box(P, [W, back + front, H], [0, (back - front) / 2.0, 0], None, solid=True, **NONE)
     return {'name': name, 'looks': looks, 'parts': P, 'ground': True}
+
+
+LEAF_Y = -3.5           # (a hole door's leaves' middle: 5 thick, so their front 6 in front of the wall's face)
 
 
 def lift_door(name, W, H, low, frame=18.0):
