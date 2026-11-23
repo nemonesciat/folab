@@ -40,6 +40,8 @@ ENTRANCE, GEAR = 'Vault22Entrance', 'VGearDoorR22'
 DOOR_IN_ENTRANCE = (-18.0, 27.0, -4.0)    # (the door in the entrance's frame, as the game has them)
 RAIL = 'GuardRailStraight01'          # (the game's road guardrail: 248 along its own y, its middle at its origin)
 RAIL_LONG, RAIL_STEP, RAIL_OUT, RAIL_UP = 248.0, 237.0, 110.0, 48.0
+TURN_GAP = 420.0      # (each leg's rails stop this far, along the leg, short of a turn-back: the turn left open. One line
+                      # round the whole zig-zag ran its rails on across where the path doubles back, 23 Nov 2026)
 OLD_RAIL = 'JerseyBarricade01'      # (what stood there first, 19 Nov 2026: short blocks, each on its own bit of slope)
 LAMP, LAMP_LIGHT, LAMP_LIGHT_AT = 'NVStreetlight01', 'NellisStreetLight', (-1.0, 127.0, 481.0)
 DOOR_LIGHT = 'VaultExtraWarm256'
@@ -74,13 +76,15 @@ def _tilt_for(ux, uy, uz):
     return best[1], best[2], rz
 
 
-def guardrails(pts, zs, side=-1):
+def guardrails(pts, zs, side=-1, start=0.0, stop=0.0):
     """[(x, y, z, rx, ry, rz)]: guardrail sections end to end along a line (pts, its heights zs), RAIL_OUT to its open
-    side (side -1: the side towards -y, the crater's floor), each tilted to the line's climb; a fresh run after a turn."""
+    side (side -1: the side towards -y, the crater's floor), each tilted to the line's climb; a fresh run after a turn.
+    start / stop: none within that far of the line's first / last point (a leg's ends at its turns)."""
     out = []
     d = [0.0]
     for a, b in zip(pts, pts[1:]):
         d.append(d[-1] + math.dist(a, b))
+    end = d[-1] - stop
 
     def at(t):
         for k in range(1, len(d)):
@@ -89,8 +93,8 @@ def guardrails(pts, zs, side=-1):
                 return (pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * u, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * u,
                         zs[k - 1] + (zs[k] - zs[k - 1]) * u)
         return (pts[-1][0], pts[-1][1], zs[-1])
-    t = 0.0
-    while t + RAIL_LONG < d[-1]:
+    t = start
+    while t + RAIL_LONG < end:
         a, b = at(t), at(t + RAIL_STEP)
         ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
         L = math.hypot(ux, uy) or 1.0
@@ -206,21 +210,28 @@ class Gate:
             x = DOOR_X + ox
             y = (ye - 2 * LANDING[1] + 120.0) if k == 0 else self._on_face(x, z)
             turns.append((x, y, z))
-        pts, zs = [], []
+        pts, zs, legs = [], [], []
         for (xa, ya, za), (xb, yb, zb) in zip(turns, turns[1:]):
             n = max(2, int(math.hypot(xb - xa, yb - ya) / 48.0))
+            first = len(pts)
             for t in range(n):
                 u = t / n
                 x, z = xa + (xb - xa) * u, za + (zb - za) * u
                 y = ya if (u == 0 and pts == []) else self._on_face(x, z)
                 pts.append((x, y))
                 zs.append(z)
+            legs.append((first, len(pts)))
         pts.append(turns[-1][:2])
         zs.append(turns[-1][2])
         self.ledge(pts, zs)
         rails = lamps = 0
-        # guardrail along the open (south) side, end to end at the path's height, tilted to its climb; lamps at the turns
-        for x, y, z, rx, ry, rz in guardrails(pts, zs):
+        # guardrail along the open (south) side, leg by leg at the path's height, tilted to its climb, each leg's run
+        # stopped TURN_GAP short of its turn-backs (the landing and the floor end stay railed); lamps at the turns
+        placed = []
+        for i, (a, b) in enumerate(legs):
+            lp, lz = pts[a:b + 1], zs[a:b + 1]
+            placed += guardrails(lp, lz, start=TURN_GAP if i > 0 else 0.0, stop=TURN_GAP if i < len(legs) - 1 else 0.0)
+        for x, y, z, rx, ry, rz in placed:
             ck = B.w.cell_at(x, y)
             if ck is not None:
                 B.ops.append({'op': 'add', 'cell': ck, 'base': B.key_of[RAIL], 'p': [round(x, 1), round(y, 1), round(z, 1), round(rx, 4), round(ry, 4), round(rz, 4)], 's': 1})

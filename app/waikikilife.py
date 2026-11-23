@@ -411,8 +411,8 @@ def ops(gd, pr, P):
     # the talk
     greeting = gd.key(_game_form(gd, 'GREETING', 'DIAL'))
     lines = []
-    line = lambda topic, who, words, bye=False, script=None: lines.append(dict(aq.new_line_plain(gd, pr, topic, keys['quest'], who, words, goodbye=bye),
-                                                                             begin=script, end=None))
+    line = lambda topic, who, words, bye=False, script=None, after=None: lines.append(dict(aq.new_line_plain(gd, pr, topic, keys['quest'], who, words, goodbye=bye),
+                                                                                         begin=script, end=after))
     for n, (e, _n) in enumerate(LOCALS):
         line(greeting, keys[e], WORDS['local_hello'][n % len(WORDS['local_hello'])])
     for e, _n, _c, words in SHOPS:
@@ -421,8 +421,11 @@ def ops(gd, pr, P):
     for e in [e for e, _n in LOCALS] + [s[0] for s in SHOPS]:
         line(keys['where'], keys[e], WORDS['where'])
         line(keys['who'], keys[e], WORDS['who'])
+    # (barter as 42 of the game's 59 barter lines have it, Chet's among them: no Goodbye, ShowBarterMenu in the END script.
+    # A Goodbye line's begin script runs with the dialogue already closing, so BarterMenu::Create's ServiceStart is skipped
+    # (nv-rs dialogmenu.rs, as the exe): "Let's trade." opened nothing in nv-rs, 23 Nov 2026.)
     for e in chest_refs:
-        line(keys['trade'], keys[e], WORDS['trade'], bye=True, script=barter)
+        line(keys['trade'], keys[e], WORDS['trade'], bye=False, after=barter)
     lines_ops = [{'op': 'record_new', 'record': qr.info_record(l)} for l in lines]
     # the camps along the road
     sp = P['sp']
