@@ -850,6 +850,12 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
         for k, piece in enumerate(pieces):
             if sum(1 for i in piece if g.p[i][5]) >= MIN_REGION:
                 wanted.add(k)
+        # (and whatever a door that leads somewhere stands on, ground or not: a hotel's glazed lobby in its view world
+        # stands on its own model, closed off from the land, and its lift doors had nothing to link to, 22 Nov 2026)
+        for _ref, pos in doors:
+            i = g.nearest(pos, SEED_REACH, keep)
+            if i is not None:
+                wanted.add(label[i])
         if beyond:
             wanted |= _joined_beyond(g, pieces, wanted, crop, lambda: lay(WIDE, collections.Counter())[0], step, headroom, radius)
             report['kept_beyond'] = getattr(_joined_beyond, 'last', 0)
