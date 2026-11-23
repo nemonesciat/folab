@@ -38,10 +38,11 @@ HOME = opt('--home', r'C:\Users\AMD RYZEN\Claude Code Projects\FOLab\packaging\o
 APP = opt('--app', r'C:\Users\AMD RYZEN\Claude Code Projects\FOLab\app')     # (the main checkout: what the installs build with)
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENT, DOOR, DOOR_REC = '+0A1640', '+0A1641', '+0C1DA0'
-AT = (-60.5, -105.0, 20.0)             # (the door's origin in the entrance's frame)
+
 BS = chr(92)
 ENT_MODEL = 'folab' + BS + 'vault50' + BS + 'Vault22EntranceOpen.nif'
 DOOR_MODEL = 'folab' + BS + 'vault50' + BS + 'VGearDoor50.nif'
+PLUG_MODEL = 'folab' + BS + 'vault50' + BS + 'Vault50Plug.nif'
 PLATE = 'textures' + BS + 'folab' + BS + 'vault50' + BS + 'VGearDoor03_50.dds'
 os.environ['FOLAB_HOME'] = HOME
 os.environ['FOLAB_NO_GAME_WRITES'] = '1'
@@ -58,6 +59,7 @@ if REAL and 'FOLabScratch' not in HOME:
         sys.exit('not while these run: ' + ', '.join(busy))
 import gamedata, project, server, recordio, nifwrite, library, navbuild, hkshape, arrivalcheck  # noqa: E402
 import doorpick, entcut, gear50, v50leaves  # noqa: E402
+AT, TURN = v50leaves.AT, v50leaves.TURN    # (the door's origin and turn in the entrance's frame: the game's ruined disc's spot)
 src = os.path.join(project.PROJECTS_DIR, 'Waikiki.json')
 was = project.modified(src)
 say('mod', src, time.strftime('%d %b %H:%M', time.localtime(was)))
@@ -76,7 +78,9 @@ for k in (ENT, DOOR):
     if k not in refs:
         sys.exit('no ' + k + ' in the mod')
 AGAIN = recordio.field(pr.records[DOOR_REC], 'MODL').lower().endswith('vgeardoor50.nif')
-say('the first version is in already: only the clearing' if AGAIN else 'the whole step')
+if AGAIN:
+    sys.exit('Vault 50 has an intact door already (an earlier version of this step): run on a mod without it')
+say('the whole step')
 form = lambda e, tag: next(f for f, (i, r) in gd.forms.items() if r.tag == tag and gd.edid(f) == e)
 ent_f, gear_f, r108_f = form('Vault22Entrance', 'STAT'), form('VGearDoor01', 'ACTI'), form('VGearDoorR108', 'DOOR')
 ent_raw = gd.read_file(gd.model_path('STAT', gd.describe(ent_f)[3]))
@@ -88,7 +92,20 @@ old_plate = [t['path'] for t in nifwrite.textures_in(gear_raw) if t['path'].lowe
 gear_nif = nifwrite.retexture(gear_raw, {p: PLATE for p in old_plate})
 plate, _im = gear50.picture(gd)
 plate_n = gd.read_file(chr(92).join(['textures', 'dungeons', 'vault', 'VGearDoor03_n.dds']))
-files = {'meshes' + BS + ENT_MODEL: ent_cut, 'meshes' + BS + DOOR_MODEL: gear_nif, PLATE: plate, PLATE[:-4] + '_n.dds': plate_n}
+# the game's invisible slab over the doorway (entcut.PLUG, y -139 to -99) stood in front of the disc where the game stands
+# it, so it is cut; a plug of FOLab's own as wide and high, just behind the disc's face, keeps the rest of the doorway
+# shut (the disc stands 100 to one side of the hole's middle, as the game's does: a strip 85 wide beside it)
+PLUG_BOX = (-207.8, -80.0, -89.2, 79.2, -64.0, 240.0)        # (x, y, z from and to, in the entrance's frame)
+import nifmake  # noqa: E402
+x0, y0, z0, x1, y1, z1 = PLUG_BOX
+corners = [(x, y, z) for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)]
+faces = [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]]
+hidden = {'p': [-100.0, -72.0, 50.0, -99.9, -72.0, 50.0, -100.0, -72.0, 50.1], 'n': [0.0, -1.0, 0.0] * 3,
+          'uv': [0.0, 0.0, 0.01, 0.0, 0.0, 0.01], 'i': [0, 1, 2],
+          'tex': chr(92).join(['textures', 'dungeons', 'vault', 'VGearDoor01.dds'])}    # (one speck inside the disc: a model needs a shape)
+plug_nif = nifmake.build('FOLabVault50Plug', [hidden], [{'points': corners, 'faces': faces, 'material': 'metal'}])
+files = {'meshes' + BS + ENT_MODEL: ent_cut, 'meshes' + BS + DOOR_MODEL: gear_nif, PLATE: plate, PLATE[:-4] + '_n.dds': plate_n,
+         'meshes' + BS + PLUG_MODEL: plug_nif}
 say('entrance: %d triangles of its collision collapsed (the slab) | the door model on %s | files %d' % (len(gone), old_plate, len(files)))
 say('entrance drawn: foliage and drill triangles in the swept space %d; taken out (out, kept) %s' % (leaves_before, leaf_counts))
 # records
@@ -107,26 +124,39 @@ for s in door_rec['subs']:
         for f, v in zip([f for f in s['fields'] if 'name' in f], gb):
             f['value'] = int(v)
 door_rec.pop('copied_from', None)
+plug_rec = recordio.load(gd, form('BlackPlane01', 'STAT'))
+plug_rec['subs'] = [s_ for s_ in plug_rec['subs'] if s_['tag'] not in ('MODT',)]
+recordio.set_field(plug_rec, 'EDID', 'FOLabVault50Plug', label='Editor ID')
+recordio.set_field(plug_rec, 'MODL', PLUG_MODEL, label='Model')
+for s_ in plug_rec['subs']:
+    if s_['tag'] == 'OBND':
+        for f, v in zip([f for f in s_['fields'] if 'name' in f], (x0, y0, z0, x1, y1, z1)):
+            f['value'] = int(round(v))
+plug_rec.pop('copied_from', None)
 # places
 eck, er = refs[ENT]
 dck, dr = refs[DOOR]
 ep = er['p']
 c, sn = math.cos(ep[5]), math.sin(ep[5])
 wx, wy = ep[0] + AT[0] * c + AT[1] * sn, ep[1] - AT[0] * sn + AT[1] * c
-dp = [round(wx, 2), round(wy, 2), round(ep[2] + AT[2], 2), 0.0, 0.0, round((ep[5] + math.pi) % math.tau, 4)]
-out = (-sn, -c)                        # (the entrance frame's -y: out to the crater)
-# the arrival outside: 150 in front of the disc's face (its middle: local x 3.5, front y 34 turned to the room)
-disc = (dp[0] + (-3.5) * math.cos(dp[5]) + (-34.0) * math.sin(dp[5]), dp[1] - (-3.5) * math.sin(dp[5]) + (-34.0) * math.cos(dp[5]))
+dp = [round(wx, 2), round(wy, 2), round(ep[2] + AT[2], 2), 0.0, 0.0, round((ep[5] + TURN) % math.tau, 4)]
+out = (math.sin(dp[5]), math.cos(dp[5]))   # (the door's own +y, its plate's side: out to the crater)
+# the arrival outside, facing out: straight out from the disc's middle, 64 in front of the apron, on the landing. The game
+# puts you out of Vault 22 at (-77.4, -436.2) (its inside door's XTEL, in the entrance's frame), but here the land falls
+# away there, east of vaultgate's landing (107 under it, off the navmesh); 100 in front of the disc it stood against the
+# apron's lip. Its height is set from the ground under it below
+ARRIVE = (-160.0, -300.0)
+aw = (ep[0] + ARRIVE[0] * c + ARRIVE[1] * sn, ep[1] - ARRIVE[0] * sn + ARRIVE[1] * c)
 ops = [] if AGAIN else [{'op': 'record_new', 'record': ent_rec, 'name': 'v50_entrance'},
                         {'op': 'record', 'key': DOOR_REC, 'record': door_rec},
                         {'op': 'swap', 'cell': eck, 'ref': ENT, 'base': '$v50_entrance'},
-                        {'op': 'move', 'cell': dck, 'ref': DOOR, 'p': dp}]
-if AGAIN:
-    dp = list(dr['p'])
+                        {'op': 'move', 'cell': dck, 'ref': DOOR, 'p': dp},
+                        {'op': 'record_new', 'record': plug_rec, 'name': 'v50_plug'},
+                        {'op': 'add', 'cell': eck, 'base': '$v50_plug', 'p': list(ep), 's': 1, 'name': 'v50_plug_ref'}]
 for k, (ck, r) in refs.items():
     t = r.get('tel') or {}
     if not AGAIN and t.get('door') == DOOR and t.get('p'):
-        na = [round(disc[0] + out[0] * 150, 2), round(disc[1] + out[1] * 150, 2), t['p'][2], 0.0, 0.0, round(math.atan2(out[0], out[1]) % math.tau, 4)]
+        na = [round(aw[0], 2), round(aw[1], 2), t['p'][2], 0.0, 0.0, round((ep[5] + math.pi) % math.tau, 4)]
         ops.append({'op': 'tel', 'cell': ck, 'ref': k, 'tel': dict(t, p=na)})
 
 
@@ -138,7 +168,7 @@ def door_world(x, y, z):
 
 # (the swept space sampled every 16, in the door's frame; v50leaves.swept reads the entrance's, the door turned half round)
 SWEEP = [door_world(x, y, z) for x in range(-160, 440, 16) for y in range(-160, 50, 16) for z in range(-130, 190, 16)
-         if v50leaves.swept((v50leaves.AT[0] - x, v50leaves.AT[1] - y, v50leaves.AT[2] + z), 0.0)]
+         if v50leaves.swept(v50leaves.door_to_entrance(x, y, z), 0.0)]
 
 
 def name_of(b):
@@ -167,7 +197,7 @@ def in_sweep(refs_):
         p = r.get('p')
         if rk in (ENT, DOOR) or not p or not r.get('base') or math.dist(p[:3], dp[:3]) > 1500:
             continue
-        if r.get('tel') or r.get('persistent') or rk in named:
+        if r.get('tel') or r.get('persistent') or rk in named or name_of(r['base']) == 'FOLabVault50Plug':
             continue
         b = obnd(r['base'])
         if not b or b == [0] * 6:
@@ -302,6 +332,14 @@ say('the landing up to the apron: its front edge found at %d of %d spots, %d lan
     % (len(edge), len(SPAN), raised, len(land_ops), len(ramp_moved)))
 say('  the front edge of the apron (entrance x: y, top):', {k: (v[0], round(v[1])) for k, v in sorted(edge.items())})
 ops += land_ops + ramp_moved
+# the arrival out of the Vault on what is under it now (the apron's top or the raised land), not where it used to be
+for o in ops:
+    if o['op'] == 'tel':
+        ax_, ay_ = o['tel']['p'][0], o['tel']['p'][1]
+        under = [z_ for z_ in (apron_top(ax_, ay_), ground(ax_, ay_, lambda k_, f_: f_['h'])) if z_ is not None]
+        if under:
+            o['tel'] = dict(o['tel'], p=[ax_, ay_, round(max(under) + 4.0, 1)] + list(o['tel']['p'][3:]))
+            say('arrival out of the Vault at', o['tel']['p'])
 say('door at', dp, '| ops', len(ops))
 if not REAL:
     say('dry run: nothing saved, no files written')
@@ -354,11 +392,13 @@ say('doorpick: %d of %d' % (res['picked'], res['spots']), res['by'])
 E = []
 for s in hkshape.collision_shapes(gd.read_file('meshes' + BS + ENT_MODEL)):
     E += doorpick._world(s['v'], s['i'], (0, 0, 0), (0, 0, 0), 1.0)
+for s in hkshape.collision_shapes(gd.read_file('meshes' + BS + PLUG_MODEL)):
+    E += doorpick._world(s['v'], s['i'], (0, 0, 0), (0, 0, 0), 1.0)
 for s in hkshape.collision_shapes(gd.read_file('meshes' + BS + DOOR_MODEL)):
-    E += doorpick._world(s['v'], s['i'], (0, 0, math.pi), AT, 1.0)
+    E += doorpick._world(s['v'], s['i'], (0, 0, TURN), AT, 1.0)
 leaks = [(x, z) for x in range(-420, 260, 16) for z in range(10, 230, 20)
          if not any((lambda d_: d_ is not None and d_ < 700)(doorpick._hit((x, -420.0, z), (0.0, 1.0, 0.0), t_)) for t_ in E)]
-say('lines straight through the doorway:', len(leaks), '(the game\'s, uncut, with its ruined door: 1)')
+say('lines straight through the doorway:', len(leaks), "(the game's, uncut, with its ruined door: 1)", leaks)
 ac = arrivalcheck.check(gd, pr)
 mine = [b for b in ac['bad'] if b['door'] == DOOR]
 say('arrivals out of the Vault: %s' % ('clear' if not mine else mine))

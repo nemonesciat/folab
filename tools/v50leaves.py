@@ -1,5 +1,5 @@
 """v50leaves: Vault22Entrance's drawn model made clear of Vault 50's gear door (the Workshop, 23 Nov 2026: "a bunch of
-leaves clipped into it"). The door stands at AT in the entrance's frame, turned half round; as it opens its disc (radius
+leaves clipped into it"). The door stands at AT in the entrance's frame, turned TURN; as it opens its disc (radius
 DISC_R, middle at door x 3.2, z 31.5) is pulled 120 back (door y 34 down to -150) and rolled 270 along door x. Every
 triangle of the entrance's foliage (`LEAVES`: its ivy, moss and evergreen sprigs) with a corner or its middle within
 MARGIN of that swept space is taken out; the rest of the ivy stays. The entrance's own ruined drill (`DRILL`) is taken out
@@ -14,7 +14,17 @@ import sys
 sys.path.insert(0, r'C:\Users\AMD RYZEN\Claude Code Projects\FOLab\app')
 import nif, outfitjoin  # noqa: E402
 
-AT = (-60.5, -105.0, 20.0)
+# (where the game's own ruined disc sits, VGearDoorR22 at (-20.79, 25.4, -4.18) turned -5 degrees from Vault22Entrance
+# in the Mojave, its face on the socket's outer edge: the intact model turned half round and moved (-144.5, -83, 15.5)
+# in the ruined door's frame lands its disc there, within 3 every way. The user, 23 Nov 2026: "the gear door is supposed
+# to sit on the outer edge of the gear socket, not deep within")
+GAME_DOOR, GAME_TURN = (-20.79, 25.4, -4.18), math.radians(-5.0)
+INTACT_IN_RUINED = (-144.5, -83.0, 15.5)
+_c, _s = math.cos(GAME_TURN), math.sin(GAME_TURN)
+AT = (GAME_DOOR[0] + INTACT_IN_RUINED[0] * _c + INTACT_IN_RUINED[1] * _s,
+      GAME_DOOR[1] - INTACT_IN_RUINED[0] * _s + INTACT_IN_RUINED[1] * _c,
+      GAME_DOOR[2] + INTACT_IN_RUINED[2])
+TURN = GAME_TURN + math.pi
 DISC_R, DISC_X, DISC_Z = 151.0, 3.2, 31.5
 ROLL_X = 273.1                       # (VGearDoor01b's key at 20.7 s: rolled aside)
 REST_Y, PULL_Y, THICK = 34.0, -150.0, 64.0
@@ -24,7 +34,16 @@ DRILL = ('vgeardrillr01.dds', 'vgeardrill01ra.dds', 'vmeshr01.dds')
 
 
 def door_local(p):
-    return (-(p[0] - AT[0]), -(p[1] - AT[1]), p[2] - AT[2])
+    """The entrance's frame to the door's."""
+    c, s = math.cos(TURN), math.sin(TURN)
+    dx, dy = p[0] - AT[0], p[1] - AT[1]
+    return (dx * c - dy * s, dx * s + dy * c, p[2] - AT[2])
+
+
+def door_to_entrance(x, y, z):
+    """The door's frame to the entrance's."""
+    c, s = math.cos(TURN), math.sin(TURN)
+    return (AT[0] + x * c + y * s, AT[1] - x * s + y * c, AT[2] + z)
 
 
 def swept(p, m=MARGIN):
