@@ -1,0 +1,13 @@
+--- a/app/modelmake.py
++++ b/app/modelmake.py
+@@ -293,7 +293,9 @@
+     # (no face left out, even one nobody was meant to see: it takes the part's look, or another face's. Every model of
+     # FOLab's a closed solid; the user, 22 Nov 2026: "i never want to see an incomplete shitty half model". Rounded
+     # or not as it was before, so a part keeps its outline)
+-    if not mesh.lean:                           # (a far model keeps them out: modelsets.far_of)
++    # (but a part with every face left out is collision alone, whatever its look: drawn, it was a slab over each FOLab
++    # door's leaves and round the Kilauea's glass, 22 Nov 2026)
++    if not mesh.lean and any(v is not None for v in looks_of.values()):     # (a far model keeps them out: modelsets.far_of)
+         fill = part.get('look') or next((v for v in looks_of.values() if v is not None), None)
+         looks_of = {name: v if v is not None else fill for name, v in looks_of.items()}
+     if b > 0:

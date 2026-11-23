@@ -1,0 +1,25 @@
+--- a/app/settlerset.py
++++ b/app/settlerset.py
+@@ -135,6 +135,7 @@
+ CURVE = 1.7                     # (steep at the ridge, flat at the eave: z falls as 1 - (1 - v) ** CURVE)
+ ROWS = (0.0, 0.12, 0.25, 0.38, 0.5, 0.62, 0.74, 0.86, 1.0)
+ ALONG = 15
++ROWS_FAR, ALONG_FAR = (0.0, 0.35, 0.7, 1.0), 5      # (a far model's roof: the distant blocks hold 65,000 corners each)
+ 
+ 
+ def _profile(h, rise, v):
+@@ -157,9 +158,13 @@
+         sw = max(0.0, (u - 0.35) / 0.65) ** 2
+         across, drop = _profile(h, rise, v)
+         return (x, sgn * (across + 0.45 * horn * v * v * sw), top - drop + horn * v * v * sw)
++    xs_far = [-L / 2 + L * k / (ALONG_FAR - 1) for k in range(ALONG_FAR)]
+     for sgn in (-1, 1):
+         rows = [[point(x, v, sgn) for x in xs] for v in ROWS]
+-        P.append({'shape': 'sheet', 'rows': rows, 'look': lk, 'under_look': 'red' if board else lk, 'thick': 6.0, 'at': [0, 0, 0], 'far': far})
++        P.append({'shape': 'sheet', 'rows': rows, 'look': lk, 'under_look': 'red' if board else lk, 'thick': 6.0, 'at': [0, 0, 0]})
++        if far:                     # (afar the same sweep in a few rows: the full one was ~1,800 corners a wall, 23 Nov 2026)
++            P.append({'shape': 'sheet', 'rows': [[point(x, v, sgn) for x in xs_far] for v in ROWS_FAR], 'look': lk,
++                      'under_look': 'red' if board else lk, 'thick': 6.0, 'at': [0, 0, 0], 'far_only': True})
+         if board:
+             eave = [point(x, 1.0, sgn) for x in xs]
+             P.append({'shape': 'sheet', 'rows': [eave, [(x, y, z - 26) for x, y, z in eave]], 'look': board, 'thick': 8.0, 'at': [0, 0, 0], 'far': False})

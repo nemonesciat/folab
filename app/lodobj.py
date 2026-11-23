@@ -362,7 +362,8 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
             continue
         cx, cy = int(math.floor(x / CELL)), int(math.floor(y / CELL))
         bx, by = sw_x + ((cx - sw_x) // BLOCK) * BLOCK, sw_y + ((cy - sw_y) // BLOCK) * BLOCK
-        blocks.setdefault((bx, by), []).append((shapes, x, y, z, rz, s, (cx - bx) * BLOCK + (cy - by)))
+        grows = bool(plants) and farplants.is_plant(farplants._name(gd, pr, base), stand.models.get(base) or '')
+        blocks.setdefault((bx, by), []).append((shapes, x, y, z, rz, s, (cx - bx) * BLOCK + (cy - by), grows))
         shown += 1
         kinds[base] = kinds.get(base, 0) + 1
         for sh in shapes:
@@ -389,9 +390,11 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
         segments = [[] for _ in range(16)]
         ntri = 0
         ox, oy = bx * CELL, by * CELL
-        # (biggest first: when a block is full, what's left out is the smallest)
-        items.sort(key=lambda q: -_size(q[0]) * q[5])
-        for shapes, x, y, z, rz, s, seg in items:
+        # (what's built before what grows, then biggest first: when a block is full, what's left out is the smallest plants.
+        # Biggest first alone let the far plants, Zion's trees scaled far up, fill the Huáng town's block: 28 of its 61 wall
+        # lengths, its 6 screens and the freighter were left out, 23 Nov 2026)
+        items.sort(key=lambda q: (q[7], -_size(q[0]) * q[5]))
+        for shapes, x, y, z, rz, s, seg, _grows in items:
             if len(verts) + sum(len(sh['p']) // 3 for sh in shapes) > MAX_VERTS or                     ntri + sum(len(sh['i']) // 3 for sh in shapes) > MAX_TRIS:
                 dropped += 1
                 continue
