@@ -88,8 +88,8 @@ if missing:
     sys.exit('the catalogue lacks these pool places: %s' % missing)
 chosen = SI.plan(gd, pr, pool)
 say('places to make again', len(chosen))
-ops, follow, rep = SI.ops(gd, pr, server._place_clear_ops, pool, chosen)
-say('ops', len(ops), {k: rep[k] for k in ('places',)}, 'skipped', rep['skipped'][:5], 'by pool', rep['by_pool'])
+ops, follow, rep = SI.ops(gd, pr, server._place_clear_ops, pool, chosen, {b['key'] for b in cat})
+say('ops', len(ops), {k: rep.get(k) for k in ('places', 'given a way out')}, 'skipped', rep['skipped'], 'by pool', rep['by_pool'])
 if os.path.getmtime(mod) != seen:
     sys.exit('Waikiki.json changed while loading: nothing written')
 pr.apply(LABEL, ops)
@@ -107,7 +107,7 @@ by = collections.Counter(gd.edid(src[k]) if k in src else '?' for k in new_keys)
 nolink, nonav, bad = [], [], []
 for k in new_keys:
     doors = SI._doors_into(pr, k)
-    if len(doors) != 1 or not (pr.cells[k]['refs'].get(doors[0][2]['tel']['door']) or {}).get('tel'):
+    if not doors or not all((pr.cells[k]['refs'].get(d[2]['tel']['door']) or {}).get('tel') for d in doors):
         nolink.append(k)
     if k not in pr.navmesh:
         nonav.append(k)
