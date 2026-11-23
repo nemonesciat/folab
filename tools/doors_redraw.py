@@ -1,11 +1,11 @@
-"""doors_redraw.py [real] [--home H] [--app A]: FOLab's own doors' models, and the Kilauea's (closed and open), written
-afresh into the mod's files.
+"""doors_redraw.py [real] [--home H] [--app A]: FOLab's own doors' models written afresh into the mod's files (not the
+hotels': left as the user saw them working until they see the fixed ones).
 
 doorset's doors carry one box of collision over the doorway, collision alone. Since modelmake gives every face left out a
 look (the closed-model rule, 22 Nov 2026), that box took its part's look ('trim') and was drawn: a slab over the leaves,
 so every FOLab door (homes, bungalows, hotels; not the lifts) showed as a plain painted panel. 9297809 gives the box no
 look. The Kilauea's drum of glass is walled the same way (towerset._glass_wall: 24 boxes, gold): drawn, a gold slab
-round its lobby glass in the city and in its view world; fixed the same way. A sweep of every set's 210 pieces found
+round its lobby glass in the city and in its view world; fixed in towerset, but not written here (see REDRAW). A sweep of every set's 210 pieces found
 no other (D:/FOLabScratch/huang/sweep.py). This writes each of these pieces the mod has a record of into
 projects/<mod> assets/ again (modelsets.build, with this checkout's doorset and towerset), and says which files changed. No change to the mod's records: no Undo, nothing in Waikiki.json.
 Then the usual build and install carries the new files.
@@ -59,7 +59,9 @@ for m in ('doorset', 'towerset'):
     mods[m] = sys.modules[m] = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mods[m])
 doorset = mods['doorset']
-REDRAW = dict(doorset.PIECES, **{k: modelsets.PIECES[k] for k in ('kilauea', 'kilauea_open')})
+# (the hotels' models are left as the user saw them working, 07:04: the story session, 22 Nov 2026; towerset's fix
+# reaches them only once the user has seen the new ones in game)
+REDRAW = dict(doorset.PIECES)
 pr = project.Project.open('Waikiki')
 have = {recordio.field(r, 'EDID') for k, r in pr.records.items() if k.startswith('+') and r.get('type') in ('DOOR', 'STAT')}
 root = library.assets_dir(pr)

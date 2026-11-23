@@ -650,7 +650,7 @@ def granary():
         _window(P, x, 0.0, w=120, h=90, z=170, side=1)
     for sx in (-1, 1):
         _window(P, sx * hw, D / 2.0, w=140, h=90, z=170, along='y', side=-sx)
-    return _desc('FOLabHuangGranary', P, ground=False)
+    return _desc('FOLabHuangGranaryRoom', P, ground=False)       # (not the place's own editor ID, FOLabHuangGranary)
 
 
 # ---------- what stands in them (front -y, on z 0, unless in a game piece's frame) ----------
