@@ -232,11 +232,9 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
         looks['leaf_r'] = look(leaf, region=(1.0, 0.0, 0.0, 1.0))      # (the other leaf of a pair the picture's mirror)
     if flush:
         t = 5.0 + FLUSH_OUT                      # (FLUSH_OUT: the leaf thicker toward the room, its front further out: see LEAF_Y)
-        lw = (W - 2 * side) / leaves
-        for k in range(leaves):
-            x = -W / 2.0 + side + lw * (k + 0.5)
+        for k, (x, w) in enumerate(_leaf_spans(-W / 2.0 + side, W / 2.0 - side, leaves)):
             lk = 'leaf_r' if leaves == 2 and k == 1 else 'leaf'
-            _box(P, [lw - 1, t, H - top], [x, -t / 2.0 + 0.5, 0], lk, back=None, left='trim', right='trim', top='trim', bottom=None, front=lk)
+            _box(P, [w, t, H - top], [x, -t / 2.0 + 0.5, 0], lk, back=None, left='trim', right='trim', top='trim', bottom=None, front=lk)
         if top:
             _box(P, [W - 2 * side, t, top], [0, -t / 2.0 + 0.5, H - top], 'top', front='top', back=None, left='trim', right='trim', top='trim', bottom=None)
         if casing:
@@ -260,11 +258,9 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
         # face (NoVacHouse01/02 at y 0, NVGoodSprhome02 at -5.8). In the hole at y 3.5-8.5 only the liners took the
         # crosshair, 23 Nov 2026. doorpick checks it; a placement whose wall stands further out is moved out by the step)
         ly = LEAF_Y
-        lw = (inner - 2 * side) / leaves
-        for k in range(leaves):
-            x = -inner / 2.0 + side + lw * (k + 0.5)
+        for k, (x, w) in enumerate(_leaf_spans(-inner / 2.0 + side, inner / 2.0 - side, leaves)):
             lk = 'leaf_r' if leaves == 2 and k == 1 else 'leaf'
-            _box(P, [lw - 1, 5, lh], [x, ly, 3], lk, front=lk, back=lk, left='trim', right='trim', top='trim', bottom=None)
+            _box(P, [w, 5, lh], [x, ly, 3], lk, front=lk, back=lk, left='trim', right='trim', top='trim', bottom=None)
         if side:
             for sx in (-1, 1):
                 _box(P, [side, 4, lh], [sx * (inner / 2.0 - side / 2.0), ly, 3], 'side', front='side', back='side', left='trim', right='trim', top='trim', bottom=None)
@@ -281,6 +277,18 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
         front = -(LEAF_Y - 2.5)                     # (the box from the leaves' front to the wall's back)
         _box(P, [W, back + front, H], [0, (back - front) / 2.0, 0], None, solid=True, **NONE)
     return {'name': name, 'looks': looks, 'parts': P, 'ground': True}
+
+
+def _leaf_spans(x0, x1, leaves):
+    """(middle, width) of each leaf between x0 and x1: half a unit clear of the frame either side, and a pair meeting
+    with no gap (the Workshop, 23 Nov 2026: a 1-unit seam between the leaves showed daylight and missed the crosshair)."""
+    lw = (x1 - x0) / leaves
+    out = []
+    for k in range(leaves):
+        a = x0 + lw * k + (0.5 if k == 0 else 0.0)
+        b = x0 + lw * (k + 1) - (0.5 if k == leaves - 1 else 0.0)
+        out.append(((a + b) / 2.0, b - a))
+    return out
 
 
 LEAF_Y = -3.5           # (a hole door's leaves' middle: 5 thick, so their front 6 in front of the wall's face)
