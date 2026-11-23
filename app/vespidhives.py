@@ -22,7 +22,8 @@ Records (all the mod's own; `RECORDS` order):
     the doctor's chest        FOLabWaikikiDoctorChest gets four Antivenom (the Waikiki doctor sells them)
 
 Each hive (`sites`) stands where the land is high (`HIGH`) and level enough for its foot (`LEVEL_ROOM`), far from any map
-marker (`CLEAR`), from roads, and from the other hives (`APART`); on a peak or ridge top a 'hill' hive, in a high valley a
+marker (`CLEAR`, `WIDE`), any door that leads somewhere, what marks a walked way (`keep_off`), roads, and the other hives
+(`APART`); on a peak or ridge top a 'hill' hive, in a high valley a
 'ruin' one; the 'great' one (whose door leads to the dungeon, vespidcave.py) on the best spot of all. Its mouth faces
 downhill. Three persistent markers a hive: life (the hive alive and its heart; the burnt hive opposite), pool (its
 Vespids) and fire (off until it burns).
@@ -46,7 +47,16 @@ AWAY = 6000.0               # (the player this far from a burnt hive: its Vespid
 RESPAWN = 0x8               # (ACBS flag: as the game's cazadores that come back)
 
 HIGH = 4500.0               # (land this high or over: the ridges and the high valleys)
-CLEAR = 4500.0              # (from any map marker: a hive is a place of its own, not in a camp)
+CLEAR = 5000.0              # (from any map marker: a hive is a place of its own, not in a camp)
+WIDE = {"Ka'au Crater": 9500.0}  # (markers whose place is wide: the whole crater, Vault 50's climb and door in it)
+DOOR_CLEAR = 4000.0         # (from any door that leads somewhere: the vault's gear door, cave mouths, doors in the rock)
+WALKED_CLEAR = 2500.0       # (from what marks a way people walk: trail signs, rock-door frames, the climbs' rails)
+WALKED = ('NVDLC02signPostTall', 'NVDLC02trailSnHike', 'CaveExitDoorFrame', 'GuardRail')   # (editor IDs, by their start)
+CAIRN = ('NVDLC02RockCanyon13', 'NVDLC02RockCanyon12', 'NVDLC02RockCanyon06')    # (cresttrail.CAIRN: a stack of these marks the trail)
+CAIRN_TOGETHER = 150.0      # (the stack's rocks this near one another)
+QUEST_CLEAR = 3000.0        # (from a named ref: what quests point at, the spots their scripts move people to)
+CREST_Z = 15000.0           # (the Crest Trail's signposts this high are on the crest itself: the trail runs from one to the next)
+CREST_GAP = 22000.0         # (two crest signposts further apart than this aren't one stretch of trail)
 ROAD_CLEAR = 1200.0
 APART = 11000.0
 LEVEL_ROOM = 360.0          # (the most the ground may rise across a hive's foot: more is buried in the hill)
@@ -370,12 +380,82 @@ def _near(pts, x, y, d):
     return any((x - a) ** 2 + (y - b) ** 2 < d * d for a, b in pts)
 
 
-def sites(gd, pr, world, seed=SEED, step=1000.0):
-    """[(kind, x, y, z, rz)]: where each hive stands and its turn (its mouth, -y, down the hill)."""
+def keep_off(gd, pr, world, why=False):
+    """[(x, y, how far)] (why: and what it is): what a hive keeps away from besides roads. The story session's standing
+    check (23 Nov 2026, after a hive stood on Ka'au Crater's floor by Vault 50's climb and door): trails, doors and their
+    arrivals, climbs, cave mouths, quest spots and settlements, not only map markers:
+      every map marker (settlements, camps, sights): CLEAR, or its WIDE reach (the whole of Ka'au Crater)
+      every door that leads somewhere, and where it puts you: DOOR_CLEAR (the vault's gear door, cave and rock doors)
+      what marks a walked way: trail signs, rock-door frames, climbs' rails (WALKED), the Crest Trail's cairns: WALKED_CLEAR
+      every named ref (quests' spots, persistent markers): QUEST_CLEAR"""
+    import birds
+    out = [(x, y, WIDE.get(n, CLEAR), 'marker ' + n) for n, x, y, _z in _markers(pr)]
+    cells = {gd.key(c) for c in gd.grid(world).values()}
+    walked, rocks, crest = {}, [], []
+    for ck, c in pr.cells.items():
+        if ck not in cells:
+            continue
+        for rk, r in c.get('refs', {}).items():
+            p, b = r.get('p'), r.get('base')
+            if not p or not b or r.get('removed'):
+                continue
+            if r.get('tel'):
+                out.append((p[0], p[1], DOOR_CLEAR, 'door ' + rk))
+                q = (r['tel'] or {}).get('p')
+                if q and cell_at(gd, world, q[0], q[1]):
+                    out.append((q[0], q[1], DOOR_CLEAR, 'arrival of door ' + rk))
+                continue
+            if (r.get('extra') or {}).get('edid') or r.get('edid'):
+                out.append((p[0], p[1], QUEST_CLEAR, 'named ref ' + str((r.get('extra') or {}).get('edid') or r.get('edid'))))
+            if b not in walked:
+                e = birds._edid(gd, pr, b)
+                walked[b] = 'walk' if e.startswith(WALKED) else 'cairn' if e in CAIRN else None
+            if walked[b] == 'walk':
+                e = birds._edid(gd, pr, b)
+                out.append((p[0], p[1], WALKED_CLEAR, 'way marker ' + e))
+                if e == 'NVDLC02signPostTall' and p[2] >= CREST_Z:
+                    crest.append((p[0], p[1]))
+            elif walked[b] == 'cairn':
+                rocks.append((p[0], p[1]))
+    # (a cairn: three of its rocks stood together; a lone canyon rock is only a rock)
+    for x, y in rocks:
+        if sum(1 for a_, b_ in rocks if (a_ - x) ** 2 + (b_ - y) ** 2 < CAIRN_TOGETHER ** 2) >= 3:
+            out.append((x, y, WALKED_CLEAR, 'Crest Trail cairn'))
+    # (the Crest Trail along the top: from one crest signpost to the next, east to west; its line isn't marked between)
+    crest.sort()
+    for (x0, y0), (x1, y1) in zip(crest, crest[1:]):
+        ln = math.hypot(x1 - x0, y1 - y0)
+        if ln > CREST_GAP:
+            continue
+        for k in range(int(ln // 500) + 1):
+            t = k * 500.0 / ln if ln else 0.0
+            out.append((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, WALKED_CLEAR, 'Crest Trail (between its signposts)'))
+    return out if why else [o[:3] for o in out]
+
+
+def nearest(gd, pr, world, x, y, spots=None):
+    """[(what, distance, its own clearance)] of what a hive at x, y is nearest, a line per kind (for the hand-over)."""
+    spots = spots if spots is not None else keep_off(gd, pr, world, why=True)
+    best = {}
+    for a_, b_, d, what in spots:
+        kind = what.split(' ')[0] if not what.startswith(('marker', 'Crest')) else ('settlement or marker' if what.startswith('marker') else 'trail')
+        dist = math.hypot(a_ - x, b_ - y)
+        if kind not in best or dist < best[kind][1]:
+            best[kind] = (what, round(dist), d)
+    return best
+
+
+def _clear_of(spots, x, y):
+    return not any((x - a) ** 2 + (y - b) ** 2 < d * d for a, b, d in spots)
+
+
+def sites(gd, pr, world, seed=SEED, step=1000.0, avoid=()):
+    """[(kind, x, y, z, rz)]: where each hive stands and its turn (its mouth, -y, down the hill). avoid: more [(x, y, how
+    far)] to keep away from (`keep_off` is always kept)."""
     import hiveset
     import roadgen
     g = roadgen.Ground(gd, pr, world)
-    marks = [(x, y) for _n, x, y, _z in _markers(pr)]
+    off = keep_off(gd, pr, world) + list(avoid)
     roads = _roads(gd, pr, world)
     xs = [k[0] for k in gd.grid(world)]
     ys = [k[1] for k in gd.grid(world)]
@@ -386,7 +466,7 @@ def sites(gd, pr, world, seed=SEED, step=1000.0):
             h = g.at(x, y)
             if h is None or h < HIGH:
                 continue
-            if _near(marks, x, y, CLEAR) or _near(roads, x, y, ROAD_CLEAR):
+            if not _clear_of(off, x, y) or _near(roads, x, y, ROAD_CLEAR):
                 continue
             cands.append((x, y, h))
     rnd = random.Random(seed)
@@ -486,7 +566,7 @@ def ridge_campfires(gd, pr, world):
 
 # ---------- the ops ----------
 
-def ops(gd, pr, world, seed=SEED, slug=None, info=None, cave=None):
+def ops(gd, pr, world, seed=SEED, slug=None, info=None, cave=None, avoid=()):
     """(ops, report). One Undo; nothing is changed here. info: hiveset.all_files' second answer (the models' paths and
     sizes); files go in by `put_files`."""
     import api_quests as aq
@@ -506,7 +586,7 @@ def ops(gd, pr, world, seed=SEED, slug=None, info=None, cave=None):
                     'box': hiveset.build(k)['box'], 'mouth': hiveset.mouth_spot(k)} for k in hiveset.KINDS}
         info['heart'] = {'mesh': hiveset.MESH % hiveset.HEART[1], 'box': hiveset.heart()['box']}
     doctor = next((k for k, r in pr.records.items() if r.get('type') == 'CONT' and recordio.field(r, 'EDID') == DOCTOR_CHEST), None)
-    where = sites(gd, pr, world, seed)
+    where = sites(gd, pr, world, seed, avoid=avoid)
     camps = ridge_campfires(gd, pr, world)
     n = len(where)
     great = next((i + 1 for i, s in enumerate(where) if s[0] == 'great'), 0)
@@ -693,8 +773,8 @@ def put_files(gd, pr, progress=print, cave=None):
     return sorted(made), info
 
 
-def build(server, progress=print):
-    """Into the open mod: files, then one Undo. Returns the report."""
+def build(server, progress=print, avoid=()):
+    """Into the open mod: files, then one Undo. Returns the report. avoid: more [(x, y, how far)] for the hives to keep off."""
     gd, pr = server.GD, server.PR
     world = next(w for w in gd.worlds() if gd.edid(w) == 'FOLabWaikiki')
     import vespidcave as VC
@@ -703,7 +783,7 @@ def build(server, progress=print):
     if cave is None:
         progress('no cave walked closed: the great hive gets no dungeon')
     paths, info = put_files(gd, pr, progress, cave)
-    o, rep = ops(gd, pr, world, info=info, cave=cave)
+    o, rep = ops(gd, pr, world, info=info, cave=cave, avoid=avoid)
     rep['files'] = paths
     made = server.edit("Vespids and their hives", o)['made']
     assert made == rep['keys'], ('keys not as reserved', made[:5], rep['keys'][:5])
