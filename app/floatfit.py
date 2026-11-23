@@ -5,7 +5,8 @@ the high side's platform into the dirt (the user tried it, 23 Nov 2026).
 groundfit.fit and close_gaps only knew the buildings in townbuild's catalogue (the game's own, measured where its land meets
 their walls). Here a building is any of those, any piece from the game's architecture folders at least BIG across (not street
 dressing), or any piece of FOLab's own building sets (FOLAB_SETS: hotels, restyle, the resort and its landmarks, settler,
-bamboo, coast, Huáng, ...). Its foot is its model's lowest point (OBND): the same from the project or a built plugin.
+bamboo, coast, Huáng, ...). Its foot is its model's lowest point, read from the mesh (FOLab's own sets go down in a closed
+footing their bounds leave out); the same from the project or a built plugin.
 
 measure(): for each, the land just outside its walls (OUT past them, RING points a side), and how far its foot stands over the
 lowest of it. Points over water (a pier, a stilt house) and inside another building's box (a row joined wall to wall) don't
@@ -16,6 +17,7 @@ rise with it (buildings and road pieces never move). Returns ops, one Undo.
 
 `py -3 app/floatfit.py [--home H] [--plugin built.esp]`: the count, from the mod as it is or from a built plugin alone."""
 import math
+import os
 import struct
 
 GAP = 24.0              # land this far under a wall's foot, just outside it, is daylight under the building
@@ -85,19 +87,32 @@ def kind(btype, edid, model, ob, s=1.0):
     e = (edid or '').lower()
     if not ob or btype not in ('STAT', 'SCOL', 'ACTI', 'FURN', 'TERM', 'CONT'):
         return None
+    if e.startswith('folabfooting'):
+        return 'footing'                        # (footings.py: a closed base under a wall)
     if e.startswith(('folabroad', 'wastelandroad')) or '/sidewalk/' in m or m.rsplit('/', 1)[-1].startswith('road_') or \
             ('/landscape/roads/' in m and 'chunk' not in e):
         return 'road'
-    if any(w in e for w in NOT_BUILDINGS):
+    if any(w in e for w in NOT_BUILDINGS) and not any(w in e for w in ('shed', 'house', 'hall', 'home')):
         return None
     wide = max(ob[3] - ob[0], ob[4] - ob[1]) * s
     parts = m.split('/')
     if 'folab' in parts:
         i = parts.index('folab')
         folder = parts[i + 1] if i + 1 < len(parts) - 1 else ''
+        if folder == 'city':                     # (the city set: its stacked shanties are buildings; its ramps, lookouts and bridges stand on legs)
+            return 'building' if 'shanty' in e else None
         return 'building' if folder in FOLAB_SETS and wide >= 128 else None
     if '/architecture/' in m and '/streetdressing/' not in m and 'vine' not in e and 'rubble' not in e and 'litter' not in e and wide >= BIG:
         return 'building'
+    return None
+
+
+def folab_folder(model):
+    """The FOLab set a model belongs to (its folder under meshes/folab), or None."""
+    parts = (model or '').lower().replace(chr(92), '/').split('/')
+    if 'folab' in parts:
+        i = parts.index('folab')
+        return parts[i + 1] if i + 1 < len(parts) - 1 else None
     return None
 
 
@@ -125,7 +140,9 @@ def things(gd, pr, world):
                 cache[base] = base_info(gd, pr, base)
             btype, edid, model, ob = cache[base]
             s = float(s or 1.0)
-            out.append({'key': k, 'ck': ck, 'p': list(p), 's': s, 'base': base, 'edid': edid, 'ob': ob, 'kind': kind(btype, edid, model, ob, s), 'mine': own})
+            kd = kind(btype, edid, model, ob, s)
+            out.append({'key': k, 'ck': ck, 'p': list(p), 's': s, 'base': base, 'edid': edid, 'ob': ob, 'kind': kd, 'mine': own,
+                        'folder': folab_folder(model), 'low': model_lowest(gd, model) if kd == 'building' else None})
     return out
 
 
@@ -196,10 +213,45 @@ def catalogue_mids(gd):
     return {}
 
 
+ASSETS = None           # (a folder of the mod's own files read before the game's: a built plugin's assets)
+_lowest = {}
+
+
+def model_lowest(gd, model):
+    """The lowest point of a model's mesh, or None if it can't be read. FOLab's own sets go down below their floor in a
+    closed footing (modelsets.footed) that their bounds leave out, as do many of the game's foundations: this is where
+    the model really meets, or doesn't meet, the ground."""
+    if not model:
+        return None
+    key = model.lower()
+    if key not in _lowest:
+        low = None
+        try:
+            import nif
+            data = None
+            if ASSETS:
+                p = os.path.join(ASSETS, model)
+                if os.path.isfile(p):
+                    with open(p, 'rb') as f:
+                        data = f.read()
+            if data is None:
+                data = gd.read_file(model)
+            zs = [z for sh in nif.mesh_from_nif(data) for z in sh['p'][2::3]]
+            low = min(zs) if zs else None
+        except Exception:       # (a model FOLab can't read: its bounds stand for it)
+            low = None
+        _lowest[key] = low
+    return _lowest[key]
+
+
 def foot_of(b, mids):
+    """A building's foot: its model's lowest point (footings included), else the bottom of its bounds."""
     o, s = b['ob'], b['s']
+    low = b.get('low')
+    if low is None or low > o[2]:
+        low = o[2]
     mid = mids.get(b['base'])
-    return b['p'][2] + (mid if mid is not None else o[2]) * s
+    return b['p'][2] + (mid if mid is not None else low) * s
 
 
 def _boxes_near(items):
@@ -249,6 +301,7 @@ def measure(gd, pr, world, L=None, items=None, mids=None, only_mine=None):
     builds = [b for b in items if b['kind'] == 'building' and (b['mine'] or not only_mine)]
     near = _boxes_near([b for b in items if b['kind'] == 'building'])
     rnear = _boxes_near([b for b in items if b['kind'] == 'road'])
+    fnear = _boxes_near([b for b in items if b['kind'] == 'footing'])
     out = []
     for b in builds:
         foot = foot_of(b, mids)
@@ -265,8 +318,12 @@ def measure(gd, pr, world, L=None, items=None, mids=None, only_mine=None):
             road = _inside_any(rnear, x, y)
             if road is not None:
                 g = max(g, road['p'][2] + road['ob'][5] * road['s'])     # (a road piece there: its top is what meets the wall)
-            if foot - g > worst:
-                worst, at = foot - g, (round(x), round(y))
+            here = foot
+            ft = _inside_any(fnear, x, y, pad=OUT + 16.0)
+            if ft is not None:
+                here = min(foot, ft['p'][2] + ft['ob'][2] * ft['s'])     # (a footing under the wall there: its bottom is the foot)
+            if here - g > worst:
+                worst, at = here - g, (round(x), round(y))
         out.append({'key': b['key'], 'ck': b['ck'], 'name': b['edid'], 'gap': round(worst, 1), 'at': at, 'b': b})
     out.sort(key=lambda r: -r['gap'])
     return out

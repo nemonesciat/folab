@@ -74,6 +74,7 @@ BASES = {HOTEL: ('STAT', 'FOLabHotelTest', r'meshes\folab\hotel\test.nif', [-300
          SHACK: ('STAT', 'WoodShack01', r'meshes\architecture\wasteland\woodshack01.nif', [-200, -200, 0, 200, 200, 300])}
 floatfit.base_info = lambda gd, pr, key: BASES.get(key, ('', '', '', None))
 floatfit.catalogue_mids = lambda gd: {}
+floatfit.model_lowest = lambda gd, model: None    # (no meshes here: bounds stand for them, but where a test says)
 import server  # noqa: E402
 server._land_tex = {}
 gd = FakeGD()
@@ -159,3 +160,39 @@ g = roadgen.Ground(gd, pr, None)
 under = max(g.at(X + 550 + dx, Y + dy) for dx in (-128, 0, 128) for dy in (-128, 0, 128))
 check('the land under the shack rises no more than BURY_OTHER (%d)' % under, under <= floatfit.BURY_OTHER + 8)
 check('the shack didn\'t move', pr.ref('+K')['p'][2] == 0.0)
+
+# ---------- a piece whose mesh goes down in a footing its bounds leave out: the footing closes the gap ----------
+floatfit.model_lowest = lambda gd, model: -200.0 if 'hotel' in model else None
+pr = FakePR(gd, lambda x, y: 0.0)
+pr.put(gd, '+H', HOTEL, X, Y, 150.0)
+check('a hotel 150 over the land, its mesh 200 under its floor: no daylight', gap_of(pr, '+H') == 0.0, gap_of(pr, '+H'))
+pr.cells[next(k for k, c in pr.cells.items() if '+H' in c['refs'])]['refs']['+H']['p'][2] = 300.0
+check('… 300 over it: daylight under the footing, 100', abs(gap_of(pr, '+H') - 100) < 0.5, gap_of(pr, '+H'))
+
+# ---------- footings: a road along the wall, so the land can't come up; a footing closes it ----------
+import footings  # noqa: E402
+floatfit.model_lowest = lambda gd, model: None
+FOOT = '+000009'
+BASES[FOOT] = ('STAT', 'FOLabFootingConcrete512x128', r'meshes\folab\footing\concrete_512_128.nif', [-256, 0, -128, 256, 48, 0])
+check('a footing is its own kind', floatfit.kind(*BASES[FOOT]) == 'footing')
+pr = FakePR(gd, lambda x, y: 0.0)
+pr.put(gd, '+H', SHACK, X, Y, 90.0)                       # (a shack 90 over flat land)
+L = floatfit.Land(gd, pr, None)
+b = next(t for t in floatfit.things(gd, pr, None) if t['key'] == '+H')
+blocks = footings.plan(L, b, floatfit.foot_of(b, {}))
+check('footings planned all round a shack standing 90 over the land (%d)' % len(blocks), len(blocks) >= 4)
+check('each a standard size, deep enough: top over the foot, bottom under the land', all(k['length'] in footings.LENGTHS and k['height'] in footings.HEIGHTS
+      and k['p'][2] - k['height'] <= -footings.SINK + 0.5 and k['p'][2] >= 90 for k in blocks), blocks[:2])
+for n, k in enumerate(blocks):
+    pr.put(gd, '+F%d' % n, FOOT, k['p'][0], k['p'][1], k['p'][2], k['p'][5])
+    BASES[FOOT][3][2] = -k['height']
+check('with the footings under it, no daylight under the shack', gap_of(pr, '+H') <= floatfit.DONE, gap_of(pr, '+H'))
+w_ = [footings._out_of(a) for _n, _s, a, _l, _t in footings.side_frames(b)]
+check('each wall\'s outward side points out of the box', w_ == [(0.0, -1.0), (0.0, 1.0), (-1.0, -0.0), (1.0, -0.0)], w_)
+inward = []
+for k in blocks:
+    rz = k['p'][5]
+    iy = (math.sin(rz), math.cos(rz))                     # (a footing's +y in the world, as floatfit._world turns)
+    inward.append(iy[0] * (X - k['p'][0]) + iy[1] * (Y - k['p'][1]) > 0)
+check('every footing faces out: its +y points into the building', all(inward), inward)
+check('every footing\'s outer face is on its wall', all(abs(floatfit._box_dist(b['ob'], b['s'], *floatfit._local(b['p'], k['p'][0], k['p'][1]))) < 1.0 for k in blocks))
