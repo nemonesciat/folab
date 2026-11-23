@@ -13,6 +13,15 @@
       "port": 8771
     },
     {
+      "name": "folab-pick3",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\pick3&& set FOLAB_NV_INI=D:\\FOLabScratch\\pick3\\ini&& set TEMP=D:\\FOLab-tmp&& set TMP=D:\\FOLab-tmp&& py -3 app/server.py 8846 --no-browser"
+      ],
+      "port": 8846
+    },
+    {
       "name": "folab-test",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [
