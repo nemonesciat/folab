@@ -1059,7 +1059,9 @@ def hall(red=False):
     import settlerset
     d = settlerset.hall(1300, 700, 380, True) if red else settlerset.hall()
     d['parts'] = [p for p in d['parts'] if p.get('look') != 'door'
-                  and not (p.get('look') == 'gold' and [round(v) for v in p['size']] == [10, 10, 230])]
+                  and not (p.get('look') == 'gold' and [round(v) for v in p['size']] == [10, 10, 230])
+                  and not (p.get('shape') == 'cylinder' and abs(p['at'][0]) < 1.0 and p['at'][1] < -300)]   # (nor the porch post
+    # that stood square in front of the door: the middle bay is the way in)
     d['name'] = 'FOLabHuangHall' + ('Red' if red else '')
     return d
 

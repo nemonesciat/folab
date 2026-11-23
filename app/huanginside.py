@@ -301,7 +301,7 @@ def place_record(gd, pr, edid, full):
     fac = _mine(pr, FACTION, 'FACT')
     if fac:
         at = next((i + 1 for i, s in enumerate(rec['subs']) if s['tag'] in ('XCLW', 'LNAM', 'LTMP', 'XCLL', 'DATA')), len(rec['subs']))
-        rec['subs'].insert(at, {'tag': 'XOWN', 'kind': 'formid', 'label': 'Owner', 'value': fac})
+        rec['subs'].insert(at, {'tag': 'XOWN', 'kind': 'F', 'label': 'Owner', 'value': fac})
     rec.pop('copied_from', None)
     return rec
 
@@ -439,14 +439,18 @@ def navmesh_ops(gd, pr, names, tags):
 
 # ---------- who lives there ----------
 # A Huáng who sleeps in a place walks to it at night (`SLEEP_AT`, for `SLEEP_FOR` hours) and lies in their bed; some spend
-# a while at home by day too (sandboxing round their bed's room for `DAY_FOR` hours from the hour given). Both packages
-# lead to the person's linked ref (the game's DefaultSleepAlwaysLinkedRef and DefaultSandboxLinkedMarker512, scheduled), so
-# the bed is linked to their ref outside (XLKR) and kept loaded (persistent); their own packages follow these.
+# a while at home by day too (sandboxing round their bed's room for `DAY_FOR` hours from the hour given). Each person has
+# packages of their own that name their bed (a sleep package near that ref, the game's DefaultSleepAlways256 scheduled; a
+# sandbox near it, DefaultSandboxEditorLocation512's), so nothing of theirs changes but their package list (their linked
+# ref is the people session's: a sandbox marker by day). Their bed is kept loaded (persistent), as a package's target must
+# be; their own packages follow these.
 SLEEP_AT, SLEEP_FOR, DAY_FOR = 22, 8, 2
-SLEEP_FROM, DAY_FROM = 'DefaultSleepAlwaysLinkedRef', 'DefaultSandboxLinkedMarker512'
+SLEEP_FROM, DAY_FROM = 'DefaultSleepAlways256', 'DefaultSandboxEditorLocation512'
+SLEEP_NEAR, DAY_NEAR = 128, 512
 
 
-def _pack(gd, src, edid, hour, hours):
+def _pack(gd, src, edid, hour, hours, target, radius):
+    import api_characters
     rec = recordio.load(gd, _game(gd, src, 'PACK'))
     recordio.set_field(rec, 'EDID', edid, label='Editor ID')
     for s in rec['subs']:
@@ -456,6 +460,7 @@ def _pack(gd, src, edid, hour, hours):
                     f['value'] = int(hour)
                 elif f.get('name') == 'Duration':
                     f['value'] = int(hours)
+    api_characters.set_place(rec, 0, target, radius)          # (near a ref: the bed, or the bench)
     rec.pop('copied_from', None)
     return rec
 
@@ -487,21 +492,18 @@ WHO = [('FOLabHuangElder01', 'FOLabHuangEldersHall', 'huang_bed_red', 0, 13),
 def people_ops(gd, pr, who=WHO):
     """who: [(NPC_ editor ID, place editor ID, what they use there: a piece ('huang_bed', 'huang_bench'...), which of
     them in the place (0 the first by key), the hour they come home by day or None)]. (ops, report): one Undo, applied
-    on its own (the packages' keys are taken as planned)."""
+    on its own (the packages' keys are taken as planned: the records are made first)."""
+    import copy
     out, new, rep = [], [], {'housed': [], 'skipped': []}
-    packs = {}
 
-    def pack(kind, hour):
-        key = (kind, hour)
-        if key not in packs:
-            edid = PREFIX + ('SleepAtHome' if kind == 'sleep' else 'DayAtHome%02d' % hour)
-            k = _mine(pr, edid, 'PACK')
-            if not k:
-                src, h, n = (SLEEP_FROM, SLEEP_AT, SLEEP_FOR) if kind == 'sleep' else (DAY_FROM, hour, DAY_FOR)
-                k = '+%06X' % (pr.next_id + len(new))      # (the records are made first: their keys known now)
-                new.append({'op': 'record_new', 'record': _pack(gd, src, edid, h, n), 'name': edid})
-            packs[key] = k
-        return packs[key]
+    def pack(kind, stem, hour, target):
+        edid = PREFIX + ('Sleep' if kind == 'sleep' else 'Day') + stem
+        if _mine(pr, edid, 'PACK'):
+            raise ValueError('%s is the mod\'s already: these people have their packages' % edid)
+        src, h, n, r = (SLEEP_FROM, SLEEP_AT, SLEEP_FOR, SLEEP_NEAR) if kind == 'sleep' else (DAY_FROM, hour, DAY_FOR, DAY_NEAR)
+        k = '+%06X' % (pr.next_id + len(new))
+        new.append({'op': 'record_new', 'record': _pack(gd, src, edid, h, n, target, r), 'name': edid})
+        return k
     for npc, place, piece, nth, day in who:
         nk = _mine(pr, npc, 'NPC_')
         ck = _mine(pr, place, 'CELL')
@@ -509,28 +511,24 @@ def people_ops(gd, pr, who=WHO):
         if not (nk and ck and pk):
             rep['skipped'].append((npc, 'no NPC_, place or piece'))
             continue
-        placed = [t for t in _refs_of(pr, nk) if not t[0].startswith('+')]
         things = _refs_of(pr, pk, inside=ck)
-        if len(placed) != 1 or nth >= len(things):
-            rep['skipped'].append((npc, 'placed %d times; %d of %s there' % (len(placed), len(things), piece)))
-            continue
-        ock, ork, orr = placed[0]
-        if orr.get('link'):
-            rep['skipped'].append((npc, 'already linked to %s' % orr['link']))
+        if nth >= len(things):
+            rep['skipped'].append((npc, '%d of %s there' % (len(things), piece)))
             continue
         _bc, brk, _br = things[nth]
-        rec = __import__('copy').deepcopy(pr.records[nk])
+        rec = copy.deepcopy(pr.records[nk])
         first = next((i for i, s in enumerate(rec['subs']) if s['tag'] == 'PKID'), None)
         if first is None:
             rep['skipped'].append((npc, 'has no packages of its own'))
             continue
-        mine = ([pack('sleep', SLEEP_AT)] if piece.startswith('huang_bed') else []) + ([pack('day', day)] if day is not None else [])
+        stem = npc[len(PREFIX):] if npc.startswith(PREFIX) else npc
+        mine = ([pack('sleep', stem, SLEEP_AT, brk)] if piece.startswith('huang_bed') else []) + \
+            ([pack('day', stem, day, brk)] if day is not None else [])
         if not mine:
             rep['skipped'].append((npc, 'neither a bed nor an hour by day'))
             continue
         rec['subs'][first:first] = [{'tag': 'PKID', 'label': 'AI package', 'kind': 'F', 'value': k} for k in mine]
         out.append({'op': 'record', 'key': nk, 'record': rec})
         out.append({'op': 'persist', 'cell': ck, 'ref': brk})
-        out.append({'op': 'ref_set', 'cell': ock, 'ref': ork, 'set': {'link': brk, 'persistent': True}})
         rep['housed'].append((npc, place, piece, nth, day))
     return new + out, rep

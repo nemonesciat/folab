@@ -59,7 +59,7 @@ check('the bed\'s collision box at its head draws nothing (its lattice shows)', 
 hall, plain = HS.hall(), settlerset.hall()
 check('the hall is settlerset\'s but for the painted door', len(hall['parts']) == len(plain['parts']) - 2
       and not any(p.get('look') == 'door' for p in hall['parts']))
-check('the hall keeps every solid part', sum(1 for p in hall['parts'] if p.get('solid', True)) == sum(1 for p in plain['parts'] if p.get('solid', True)))
+check('the hall keeps every other solid part', sum(1 for p in hall['parts'] if p.get('solid', True)) == sum(1 for p in plain['parts'] if p.get('solid', True)) - 1)
 
 gd = gamedata.GameData()
 for role, n in (('home', 0), ('home', 1), ('elders', 0), ('granary', 0)):

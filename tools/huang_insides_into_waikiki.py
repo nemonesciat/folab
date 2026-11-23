@@ -70,6 +70,10 @@ for _m in ('navgen', 'navbuild'):
         _spec.loader.exec_module(sys.modules[_m])
         say('using this checkout\'s', _m)
 import gamedata, project, server, navbuild, recordio  # noqa: E402
+for _m in ('huangset', 'huanginside'):           # (this checkout's, whatever the app has)
+    _spec = importlib.util.spec_from_file_location(_m, os.path.join(MINE, _m + '.py'))
+    sys.modules[_m] = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(sys.modules[_m])
 import huangset as HS, huanginside as HI  # noqa: E402
 import doorray  # noqa: E402
 
@@ -139,6 +143,11 @@ for p in rep['places']:
     say('door', p['edid'], '%d of %d rays' % (rays[p['edid']]['hits'], rays[p['edid']]['rays']), rays[p['edid']]['blocked_by'] or '')
 pr.save()
 say('saved')
+wrote = None
+if not REAL:                     # (the plugin written in the scratch home's build folder: the writer takes all of it)
+    import espwrite
+    wrote = espwrite.write(gd, pr, pr.plugin_path())
+    say('plugin written', pr.plugin_path(), wrote, 'bytes')
 ok = (all(r['hits'] == r['rays'] for r in rays.values()) and all(isinstance(nrep.get(t), dict) and nrep[t].get('doors') == 1 for t in tags)
       and arep.get('doors', 0) >= len(tags) and not arep.get('doors_missed') and not prep['skipped'])
 json.dump({'places': rep['places'], 'names': {t: names.get(t) for t in tags}, 'rays': rays,
