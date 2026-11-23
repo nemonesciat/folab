@@ -154,6 +154,12 @@ def check(refs, label):
 
 refs = all_refs()
 before, _P = check(refs, 'before')
+# whoever arrives on the navmesh before the step must still after it (49 arrivals were off it before: not this step's)
+was_on = set()
+for rk_, v_ in before.items():
+    for ack, ark, a in v_['leads']:
+        if on_navmesh(cell_at(refs[rk_][0], a[0], a[1]), a[0], a[1], a[2] - 8):
+            was_on.add(ark)
 refit, files = doorswap.refit_ops(gd, pr, write=REAL)
 say('door models written again', files, '| records refit', [o['key'] for o in refit])
 if not REAL:
@@ -174,6 +180,7 @@ merged = bool(refit)
 refs = all_refs()
 mid, P = check(refs, 'with the doors made again')
 ops, moved, gone, cleared = [], [], set(), []
+leads_all = {r_.get('tel', {}).get('door') for _c, r_ in refs.values() if r_.get('tel')}
 LOOSE = ('barricade', 'rubble', 'debris', 'broken', 'heap') + __import__('doorout').CLUTTER
 for rk, v in mid.items():
     if v['picked'] == v['spots']:
@@ -191,6 +198,8 @@ for rk, v in mid.items():
         for ork, orr in list(P.near(group_of(ck), p[0], p[1])):
             if ork == rk or ork in gone or orr.get('base') not in loose:
                 continue
+            if name(orr['base'])[1] == 'DOOR' or orr.get('tel') or orr.get('persistent') or ork in leads_all:
+                continue                                 # (never a door or anything something names: 'lamp' took a LamplightSouvDoor)
             dx, dy = orr['p'][0] - p[0], orr['p'][1] - p[1]
             along, across = dx * out[0] + dy * out[1], abs(-dx * out[1] + dy * out[0])
             reach = 320 if any(w in (name(orr['base'])[0] or '').lower() for w in ('rubble', 'heap')) else 160
@@ -223,7 +232,8 @@ for rk, v in mid.items():
         if (a[0] - p[0]) * out[0] + (a[1] - p[1]) * out[1] < ARRIVE_CLEAR:
             na = list(a)
             na[0], na[1] = round(p[0] + out[0] * (ARRIVE_CLEAR + 40), 2), round(p[1] + out[1] * (ARRIVE_CLEAR + 40), 2)
-            ops.append({'op': 'tel', 'cell': ack, 'ref': ark, 'tel': dict(refs[ark][1]['tel'], p=na)})
+            if on_navmesh(cell_at(ck, na[0], na[1]), na[0], na[1], na[2] - 8) or not on_navmesh(cell_at(ck, a[0], a[1]), a[0], a[1], a[2] - 8):
+                ops.append({'op': 'tel', 'cell': ack, 'ref': ark, 'tel': dict(refs[ark][1]['tel'], p=na)})      # (never off the navmesh if it was on)
     moved.append({'door': rk, 'is': name(r['base'])[0], 'cell': ck, 'out': k})
 say('loose things taken away', len(cleared), collections.Counter(cleared).most_common(8))
 say('moved out', sum(1 for m in moved if m['out']), '| most %.0f' % max([m['out'] or 0 for m in moved] or [0]),
@@ -269,7 +279,7 @@ for m in moved:
         one_way.append(rk)
     for ock, ork, orr in [(c_, k_, x_) for k_, (c_, x_) in refs.items() if (x_.get('tel') or {}).get('door') == rk]:
         a = orr['tel']['p']
-        if not on_navmesh(cell_at(ck, a[0], a[1]), a[0], a[1], a[2] - 8):
+        if not on_navmesh(cell_at(ck, a[0], a[1]), a[0], a[1], a[2] - 8) and ork in was_on:
             off_mesh.append((rk, ork))
 say('moved doors: %d, largest move %.0f, arrivals off the navmesh %d, links one way %d' % (
     sum(1 for m in moved if m['out']), max([m['out'] or 0 for m in moved] or [0]), len(off_mesh), len(one_way)))
