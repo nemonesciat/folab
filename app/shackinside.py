@@ -63,17 +63,23 @@ def _doors_into(pr, key):
             if (r.get('tel') or {}).get('door') in inside]
 
 
-def ops(gd, pr, clear_ops, pool, chosen):
-    """clear_ops: fn(place key) -> the ops that empty a place (server._place_clear_ops)."""
+def ops(gd, pr, clear_ops, pool, chosen, buildings=None):
+    """clear_ops: fn(place key) -> the ops that empty a place (server._place_clear_ops); buildings: the catalogue's buildings'
+    base keys (for a way out where there was none)."""
     out, follow, rep = [], [], {'places': 0, 'skipped': [], 'by_pool': {}}
     for n, (key, pick) in enumerate(chosen):
         doors = _doors_into(pr, key)
-        if len(doors) != 1:
-            rep['skipped'].append((key, '%d doors lead in' % len(doors)))
+        if not doors:
+            rep['skipped'].append((key, '0 doors lead in'))
             continue
-        dck, drk, dr = doors[0]
+        # (two buildings may share one place: every door outside leads to the new way out, which leads back to the first)
+        dck, drk, dr = sorted(doors, key=lambda d: d[1])[0]
         old_exit = dr['tel']['door']
         arrive_out = (pr.cells[key]['refs'].get(old_exit) or {}).get('tel', {}).get('p')
+        if not arrive_out:
+            # (a place you could get into but not out of: out a step clear of the door, away from the building it is on)
+            arrive_out = _out_of(pr, dck, dr, buildings or set())
+            rep['given a way out'] = rep.get('given a way out', 0) + 1
         if not arrive_out:
             rep['skipped'].append((key, 'its way out leads nowhere'))
             continue
@@ -88,7 +94,8 @@ def ops(gd, pr, clear_ops, pool, chosen):
         out.append({'op': 'record_revert', 'key': key})
         made, _kept, game_doors = townbuild.inside_ops(gd, pool[pick], tag, edid, full)
         out += made
-        out.append({'op': 'tel', 'cell': dck, 'ref': drk, 'tel': {'door': '$' + tag + 'x', 'p': pool[pick]['arrive_in']}})
+        for ock, ork, _o in doors:
+            out.append({'op': 'tel', 'cell': ock, 'ref': ork, 'tel': {'door': '$' + tag + 'x', 'p': pool[pick]['arrive_in']}})
         out.append({'op': 'tel', 'cell': '$' + tag, 'ref': '$' + tag + 'x', 'tel': {'door': drk, 'p': arrive_out}})
         for m, (lk, base) in enumerate(sorted(markers.items())):
             a = pool[pick]['arrive_in']
@@ -99,6 +106,25 @@ def ops(gd, pr, clear_ops, pool, chosen):
         rep['places'] += 1
         rep['by_pool'][pick] = rep['by_pool'].get(pick, 0) + 1
     return out, follow, rep
+
+
+OUT = 120.0          # (a way out given where there was none: this far from the door, away from its building)
+
+
+def _out_of(pr, ck, door, buildings):
+    """[x y z rx ry rz]: a step outside a door, away from the middle of the nearest catalogue building in its cell."""
+    import math
+    p = door['p']
+    best = None
+    for r in (pr.cells.get(ck) or {}).get('refs', {}).values():
+        if r.get('base') in buildings and r.get('p') and not r.get('removed'):
+            d = math.hypot(r['p'][0] - p[0], r['p'][1] - p[1])
+            if d < 2000 and (best is None or d < best[0]):
+                best = (d, r['p'])
+    if best is None or best[0] < 1:
+        return None
+    ux, uy = (p[0] - best[1][0]) / best[0], (p[1] - best[1][1]) / best[0]
+    return [round(p[0] + ux * OUT, 2), round(p[1] + uy * OUT, 2), round(p[2], 2), 0.0, 0.0, round(math.atan2(ux, uy) % math.tau, 4)]
 
 
 def after(gd, pr, names, follow):
