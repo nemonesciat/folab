@@ -57,7 +57,7 @@ bed = made['huang_bed']
 check('the bed\'s collision box at its head draws nothing (its lattice shows)', 'textures\\folab\\huang\\window.dds' in [s['tex'] for s in bed['shapes']]
       and sum(len(s['i']) for s in bed['shapes'] if s['tex'].endswith('rosewood.dds')) // 3 < 260)
 hall, plain = HS.hall(), settlerset.hall()
-check('the hall is settlerset\'s but for the painted door', len(hall['parts']) == len(plain['parts']) - 2
+check('the hall is settlerset\'s but for the painted door and the porch post in front of it', len(hall['parts']) == len(plain['parts']) - 3
       and not any(p.get('look') == 'door' for p in hall['parts']))
 check('the hall keeps every other solid part', sum(1 for p in hall['parts'] if p.get('solid', True)) == sum(1 for p in plain['parts'] if p.get('solid', True)) - 1)
 

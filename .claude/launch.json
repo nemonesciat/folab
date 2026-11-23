@@ -2,6 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "folab-huang-insides",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\huang\\home&& set FOLAB_NV_INI=D:\\FOLabScratch\\huang\\ini&& cd /d C:\\Users\\AMD RYZEN\\Claude Code Projects\\FOLab&& py -3 app/server.py 8796 --no-browser"
+      ],
+      "port": 8796
+    },
+    {
       "name": "folab",
       "runtimeExecutable": "py",
       "runtimeArgs": [
