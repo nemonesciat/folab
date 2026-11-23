@@ -84,7 +84,7 @@ say('the whole step')
 form = lambda e, tag: next(f for f, (i, r) in gd.forms.items() if r.tag == tag and gd.edid(f) == e)
 ent_f, gear_f, r108_f = form('Vault22Entrance', 'STAT'), form('VGearDoor01', 'ACTI'), form('VGearDoorR108', 'DOOR')
 ent_raw = gd.read_file(gd.model_path('STAT', gd.describe(ent_f)[3]))
-ent_cut, gone = entcut.cut(ent_raw)
+ent_cut, gone = ent_raw, []                # (the disc stands at the doorway's face, in front of the game's slab: no cut)
 leaves_before = v50leaves.check(ent_cut)
 ent_cut, leaf_counts = v50leaves.cut(ent_cut)
 gear_raw = gd.read_file(gd.model_path('ACTI', gd.describe(gear_f)[3]))
@@ -104,8 +104,7 @@ hidden = {'p': [-100.0, -72.0, 50.0, -99.9, -72.0, 50.0, -100.0, -72.0, 50.1], '
           'uv': [0.0, 0.0, 0.01, 0.0, 0.0, 0.01], 'i': [0, 1, 2],
           'tex': chr(92).join(['textures', 'dungeons', 'vault', 'VGearDoor01.dds'])}    # (one speck inside the disc: a model needs a shape)
 plug_nif = nifmake.build('FOLabVault50Plug', [hidden], [{'points': corners, 'faces': faces, 'material': 'metal'}])
-files = {'meshes' + BS + ENT_MODEL: ent_cut, 'meshes' + BS + DOOR_MODEL: gear_nif, PLATE: plate, PLATE[:-4] + '_n.dds': plate_n,
-         'meshes' + BS + PLUG_MODEL: plug_nif}
+files = {'meshes' + BS + ENT_MODEL: ent_cut, 'meshes' + BS + DOOR_MODEL: gear_nif, PLATE: plate, PLATE[:-4] + '_n.dds': plate_n}
 say('entrance: %d triangles of its collision collapsed (the slab) | the door model on %s | files %d' % (len(gone), old_plate, len(files)))
 say('entrance drawn: foliage and drill triangles in the swept space %d; taken out (out, kept) %s' % (leaves_before, leaf_counts))
 # records
@@ -145,14 +144,13 @@ out = (math.sin(dp[5]), math.cos(dp[5]))   # (the door's own +y, its plate's sid
 # puts you out of Vault 22 at (-77.4, -436.2) (its inside door's XTEL, in the entrance's frame), but here the land falls
 # away there, east of vaultgate's landing (107 under it, off the navmesh); 100 in front of the disc it stood against the
 # apron's lip. Its height is set from the ground under it below
-ARRIVE = (-160.0, -300.0)
+ARRIVE = (-67.0, -300.0)      # (straight out from the disc's middle)
 aw = (ep[0] + ARRIVE[0] * c + ARRIVE[1] * sn, ep[1] - ARRIVE[0] * sn + ARRIVE[1] * c)
 ops = [] if AGAIN else [{'op': 'record_new', 'record': ent_rec, 'name': 'v50_entrance'},
                         {'op': 'record', 'key': DOOR_REC, 'record': door_rec},
                         {'op': 'swap', 'cell': eck, 'ref': ENT, 'base': '$v50_entrance'},
                         {'op': 'move', 'cell': dck, 'ref': DOOR, 'p': dp},
-                        {'op': 'record_new', 'record': plug_rec, 'name': 'v50_plug'},
-                        {'op': 'add', 'cell': eck, 'base': '$v50_plug', 'p': list(ep), 's': 1, 'name': 'v50_plug_ref'}]
+]
 for k, (ck, r) in refs.items():
     t = r.get('tel') or {}
     if not AGAIN and t.get('door') == DOOR and t.get('p'):
@@ -391,8 +389,6 @@ say('doorpick: %d of %d' % (res['picked'], res['spots']), res['by'])
 # no line straight through the doorway: the cut entrance and the door's own collision, in the entrance's frame
 E = []
 for s in hkshape.collision_shapes(gd.read_file('meshes' + BS + ENT_MODEL)):
-    E += doorpick._world(s['v'], s['i'], (0, 0, 0), (0, 0, 0), 1.0)
-for s in hkshape.collision_shapes(gd.read_file('meshes' + BS + PLUG_MODEL)):
     E += doorpick._world(s['v'], s['i'], (0, 0, 0), (0, 0, 0), 1.0)
 for s in hkshape.collision_shapes(gd.read_file('meshes' + BS + DOOR_MODEL)):
     E += doorpick._world(s['v'], s['i'], (0, 0, TURN), AT, 1.0)
