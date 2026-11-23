@@ -58,6 +58,24 @@ def _hash_kept(path, mark=None):
     return _kept[k]
 
 
+def write_new(path, data):
+    """data as path, a new file put in its place (never written into the one there). nv-rs's mods folder holds hard links
+    to the build's files (nvrs.put_in), so writing into a file there changed the game at once, before any install: on 22
+    Nov 2026 new distant blocks and models went live beside an older Waikiki.esp at a Save. A new file leaves every
+    link on the old one until it is put in again."""
+    tmp = path + '.folab-tmp'
+    with open(tmp, 'wb') as f:
+        f.write(data)
+    os.replace(tmp, path)
+
+
+def copy_new(src, dest):
+    """src copied as dest, a new file put in its place (as write_new), dates kept as shutil.copy2 keeps them."""
+    tmp = dest + '.folab-tmp'
+    shutil.copy2(src, tmp)
+    os.replace(tmp, dest)
+
+
 def scan(root):
     """Every file under root: {path under it as spelt: (size, modified in ns)}, from the folders' listings alone (on
     Windows no file is opened: a mod's 19,000 files in a second). A hard link's listing may lag what was written through

@@ -18,6 +18,7 @@ import os
 import shutil
 import struct
 
+import install as installing      # (lodgen has an install() of its own)
 import land
 import maptiles
 import loadout
@@ -542,8 +543,7 @@ def generate(gd, pr, world, out, only_changed=None, progress=None, beyond=False,
     def put(rel, data):
         path = os.path.join(out, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as f:
-            f.write(data)
+        installing.write_new(path, data)            # (a new file: a game folder linking the old one keeps it)
         files.append(rel)
     written = not only
     if written:
@@ -599,7 +599,7 @@ def install(pr, data_dir, out=None):
                 os.makedirs(os.path.dirname(keep), exist_ok=True)
                 shutil.copy2(dest, keep)
             os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copy2(src, dest)
+            installing.copy_new(src, dest)
             done.append(rel)
     os.makedirs(project.BUILD_DIR, exist_ok=True)
     with open(manifest_path(pr), 'w', encoding='utf-8') as f:

@@ -204,9 +204,8 @@ def _free(root, rel):
 def _put(root, rel, data):
     full = os.path.join(root, rel)
     os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full + '.tmp', 'wb') as f:
-        f.write(data)
-    os.replace(full + '.tmp', full)
+    import install
+    install.write_new(full, data)
 
 
 def _picture_to_dds(name, data):
@@ -295,7 +294,7 @@ def publish(pr):
         if o is None or o[0] != size or o[1] < when:
             out = os.path.join(dest, rel)
             os.makedirs(os.path.dirname(out), exist_ok=True)
-            shutil.copy2(os.path.join(root, rel), out)
+            install.copy_new(os.path.join(root, rel), out)      # (never into the old: nv-rs links to it until Play)
     for rel in there:
         if bsa.norm(rel) not in have:
             os.remove(os.path.join(dest, rel))

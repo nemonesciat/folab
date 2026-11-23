@@ -176,8 +176,8 @@ def ops(gd, pr, world, size=SIZE, progress=None):
     rel = path_for(gd, world)
     dest = os.path.join(library.assets_dir(pr), 'textures', rel)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(dest, 'wb') as f:
-        f.write(dds.encode(size, size, rgba))
+    import install
+    install.write_new(dest, dds.encode(size, size, rgba))
     key = gd.key(world)
     rec = pr.records.get(key) or recordio.load(gd, world)
     rec = dict(rec, subs=[dict(s) for s in rec['subs']])

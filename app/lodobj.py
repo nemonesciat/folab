@@ -23,6 +23,7 @@ import os
 import struct
 
 import dds
+import install
 import lodgen
 import nif
 
@@ -374,8 +375,7 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
     def put(rel, data):
         path = os.path.join(out, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'wb') as f:
-            f.write(data)
+        install.write_new(path, data)               # (a new file: a game folder linking the old one keeps it)
         files.append(rel)
     size, px = sheet.build()
     tex_dir = os.path.join('textures', 'landscape', 'lod', edid, 'blocks')
