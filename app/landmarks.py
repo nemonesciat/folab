@@ -612,12 +612,12 @@ def clear_of(ops, boxes):
     return [o for o in ops if o.get('op') != 'add' or not inside(o['p'])]
 
 
-def standing(gd, pr, world):
-    """Where landmarks' pieces stand in a world (for landsoft's keep): each big piece as (x, y, turn, x0, y0, x1, y1)."""
+def lifted_bounds(gd):
+    """{base key: OBND} of the game's big pieces the sets lift (a building's walls, a casino's front), as standing counts them:
+    a set's own pieces, and of what's added round one only what is found nowhere else (a truck is a truck anywhere)."""
     keys = {}
     for name, spec in SETS.items():
         got = lift(gd, name)
-        # (a set's own pieces, and of what's added round one only what is found nowhere else: a truck is a truck anywhere)
         own = re.compile(spec['match']) if spec.get('match') else None
         for key, *_r in (got['pieces'] if got else ()):
             if key not in keys:
@@ -625,6 +625,13 @@ def standing(gd, pr, world):
                 b = _obnd(gd, fid)
                 if b and max(b[3] - b[0], b[4] - b[1]) >= 600 and ((own and own.search(gd.edid(fid).lower())) or gd.edid(fid) in ONLY_HERE):
                     keys[key] = b
+    return keys
+
+
+def standing(gd, pr, world):
+    """Where landmarks' pieces stand in a world (for landsoft's keep): each big piece as (x, y, turn, x0, y0, x1, y1)."""
+    # (a set's own pieces, and of what's added round one only what is found nowhere else: a truck is a truck anywhere)
+    keys = dict(lifted_bounds(gd))
     crane = _base(gd, CRANE[0])
     if crane is not None:
         keys[gd.key(crane)] = _obnd(gd, crane)

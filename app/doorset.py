@@ -245,7 +245,7 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
                 _box(P, [c, 8, H + c], [sx * (W + c) / 2.0, -3.5, 0], 'trim', back=None, bottom=None)
             _box(P, [W + 2 * c, 8, c], [0, -3.5, H], 'trim', back=None)
             _box(P, [W + 2 * c + 16, 26, 5], [0, -12.0, 0], 'trim', back=None)      # (the step)
-        _box(P, [W + 2 * casing, 8, H + casing], [0, -3.5, 0], 'trim', solid=True, **NONE)
+        _box(P, [W + 2 * casing, 8, H + casing], [0, -3.5, 0], None, solid=True, **NONE)      # (collision alone: no look, so nothing draws it)
     else:
         d = depth
         L = liner
@@ -273,7 +273,7 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
             for sx in (-1, 1):
                 _box(P, [c, 5, H + c], [sx * (W / 2.0 + c / 2.0 - 2), -2.0, 0], 'trim', back=None, bottom=None)
             _box(P, [W + 2 * c - 4, 5, c], [0, -2.0, H - 2], 'trim', back=None)
-        _box(P, [W, max(8.0, d), H], [0, max(8.0, d) / 2.0, 0], 'trim', solid=True, **NONE)
+        _box(P, [W, max(8.0, d), H], [0, max(8.0, d) / 2.0, 0], None, solid=True, **NONE)
     return {'name': name, 'looks': looks, 'parts': P, 'ground': True}
 
 

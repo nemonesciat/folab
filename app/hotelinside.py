@@ -17,6 +17,7 @@ door, trash), in the building's frame: x along it, y to the town side, z over it
 +x). `RH_DOORS` are the doors, named for linking: the way in, the lift to the guest floors, the lookout's stair head.
 Frame and units as historicset (front to -y the sea, 70 units a metre)."""
 import math
+import os
 import random
 
 import historicset as hs
@@ -27,6 +28,8 @@ from modelsets import FLOOR, look
 from texwear import Field, Picture, grade, mix, mul
 
 LH = 2 * FLOOR                  # (the lobby's height: two of the hotel's floors)
+DESK_TOP = 86                   # (a front desk's top over the piece's foot: 78 over the floor, a metre and a bit; it was 1.6 m)
+DESK_ON = DESK_TOP - 8          # (the same over the floor, for what stands on it)
 FLOOR_TOP = 8.0                 # (the ground floor's top over the piece's foot)
 WALL = 40
 PIER = 100
@@ -81,14 +84,17 @@ def koa(size=256, seed=1320):
 
 
 def glass(size=256, seed=1330):
-    """Old window glass: grimy, streaked, a little green, seen through. Its alpha is how much it hides."""
+    """Old window glass: grimy, streaked, a little green, seen through. Its alpha is how much it hides, blended (the shape's
+    look is alpha 'blend'): mostly clear, 0.1 to 0.2, grime and the run of rain streaks to about 0.4, never near-opaque
+    (it was 0.2 to 0.85 under a cut-out at 64, so most of each pane drew solid in game, 22 Nov 2026)."""
     dirt = Field(size, size, seed, 4, 5)
     streak = Field(size, size, seed + 1, 2, 3, stretch=(4, 0.25))
     pic = Picture(size, size, clear=(150, 170, 160), gloss=120)
     for p in range(size * size):
         d, s = dirt.v[p], streak.v[p]
         pic.rgb[p] = grade(mix((150, 170, 160), (120, 108, 86), d))
-        pic.a[p] = min(0.85, 0.2 + 0.4 * d * d + 0.15 * s)
+        pic.a[p] = min(0.4, 0.1 + 0.22 * d * d * d + 0.1 * s * s)
+    pic.plain_halving = True        # (blended, not a cut-out: its smaller copies plain means, texpaint.colour_map)
     return pic
 
 
@@ -134,7 +140,27 @@ def rug(w=512, h=256, seed=1350):
     return pic
 
 
+def runner(w=256, h=1024, seed=1355):
+    """The court's runner from the door to the middle of the hall: red, a gold border, a gold diamond down it every so often,
+    trodden pale down the middle."""
+    worn = Field(w, h, seed, 3, 5)
+    pic = Picture(w, h, gloss=6)
+    for y in range(h):
+        for x in range(w):
+            p = y * w + x
+            edge = min(x, w - 1 - x) / w
+            c = (128, 22, 30) if edge > 0.14 else ((206, 168, 84) if edge > 0.09 else (128, 22, 30))
+            dy, dx = (y % 128) - 64, x - w // 2
+            if edge > 0.14 and 20 < abs(dx) + abs(dy) < 28:
+                c = (206, 168, 84)                  # (the diamonds)
+            mid = max(0.0, 1.0 - abs(dx) / (w * 0.3))
+            c = mix(c, (160, 120, 110), mid * 0.4 * worn.v[p])
+            pic.rgb[p] = grade(c)
+    return pic
+
+
 modelsets.TEXTURES.update({
+    'hist/rhl_runner': runner,
     'hist/rhl_marble': marble,
     'hist/rhl_ceiling': ceiling,
     'hist/rhl_koa': koa,
@@ -155,9 +181,10 @@ def looks():
         'rhl_marble': look('hist/rhl_marble', tile=512),
         'rhl_ceiling': look('hist/rhl_ceiling', tile=512),
         'rhl_koa': look('hist/rhl_koa', tile=256),
-        'rhl_glass': dict(look('hist/rhl_glass', tile=400), alpha=True),
+        'rhl_glass': dict(look('hist/rhl_glass', tile=400), alpha='blend'),        # (blended as the game's window glass: nifmake.ALPHA_BLEND)
         'rhl_keys': look('hist/rhl_keys'),
         'rhl_rug': look('hist/rhl_rug'),
+        'rhl_runner': look('hist/rhl_runner'),
         'rhl_inside': look('hist/rhl_inside', tile=512),
         'rhl_arch_sea': dict(look('hist/rhl_arch_sea'), alpha=True),
         'rhl_arch_bay': dict(look('hist/rhl_arch_bay'), alpha=True),
@@ -408,11 +435,13 @@ def rh_lobby(P):
         hs._box(P, [34, hs.RH_D - 2 * WALL, 30], [k * 200, 0, LH - 30], 'rhl_koa', solid=False, top=None)
     hs._box(P, [hs.RH_W - 2 * WALL, 30, 30], [0, 0, LH - 60], 'rhl_koa', solid=False, top=None)
     desk_x, desk_y = -900, D2 - WALL - 170
-    hs._box(P, [700, 90, 104], [desk_x, desk_y, 8], 'rhl_koa', material='wood')
-    hs._box(P, [740, 120, 8], [desk_x, desk_y, 112], 'rhl_koa', material='wood')            # (its top, over the front)
+    hs._box(P, [700, 90, DESK_TOP - 8], [desk_x, desk_y, 8], 'rhl_koa', material='wood')
+    hs._box(P, [740, 120, 8], [desk_x, desk_y, DESK_TOP], 'rhl_koa', material='wood')            # (its top, over the front)
     hs._box(P, [560, 14, 190], [desk_x, D2 - WALL - 7, 130], 'rhl_koa', solid=False, front='rhl_keys', back=None)
     hs._box(P, [1500, 520, 2], [400, -20, 8], 'rhl_rug', solid=False, bottom=None)
     hs._box(P, [900, 360, 2], [-900, -60, 8], 'rhl_rug', solid=False, bottom=None)
+    # (the court's runner, from the door straight in, over the rugs)
+    hs._box(P, [180, hs.RH_D - 2 * WALL - 40, 2], [0, 0, 10], 'rhl_runner', solid=False, bottom=None)
     # the lift bank against the east end (it stands in front of the end's two windows: the lifts had stood in them)
     hs._box(P, [BANK, 660, LH], [W2 - WALL - BANK / 2.0, 0, 0], 'rhl_inside', top=None, bottom=None)
     for ly in (150, -150):
@@ -444,23 +473,23 @@ RH_THINGS = [
     ('DirtyChandelier', 750, 0, LH - 120, 0), ('TenPennyChandelier', 1500, 0, LH - 120, 0),
     ('NVTopsLargeAmb', 0, 0, LH - 160, 0), ('NVTopsWarmAmb', -1300, 0, LH - 160, 0), ('NVTopsWarmAmb', 1300, 0, LH - 160, 0),
     ('NVTopsWarmKey2', -900, 120, 260, 0), ('NVTopsWarmKey2', 400, -100, 260, 0), ('NVTopsWarmKey2', 1700, 0, 260, 0),
-    # the front desk
-    ('Telephone01', -1100, DESK[1] - 10, 120, 180), ('LootCashRegisterNV', -760, DESK[1] - 5, 120, 180), ('HotelLamp', -600, DESK[1], 120, 180),
-    ('BookGeneric02b', -980, DESK[1], 120, 160),
+    # the front desk (stood on its top)
+    ('Telephone01', -1100, DESK[1] - 10, DESK_ON, 180), ('LootCashRegisterNV', -760, DESK[1] - 5, DESK_ON, 180), ('HotelLamp', -600, DESK[1], DESK_ON, 180),
+    ('BookGeneric02b', -980, DESK[1], DESK_ON, 160),
+    # the court's way in: torches either side of the runner from the door
+    ('OasisTorch01', -170, 240, 0, 0), ('OasisTorch01', 170, 240, 0, 0), ('OasisTorch01', -170, -60, 0, 0), ('OasisTorch01', 170, -60, 0, 0),
     # sitting by the sea windows: sofas and chairs round low tables, lamps
-    ('SubCouch01F', 250, -230, 8, 180), ('SubCouch01F', 650, -230, 8, 180), ('SubEndtableDirty01', 450, -260, 8, 0), ('HotelLamp', 450, -260, 60, 0),
-    ('HotelChair01F', 300, 40, 8, 0), ('HotelChair01F', 600, 40, 8, 0), ('HotelChair01L', 1000, -120, 8, 270),
-    ('HotelChair01F', -350, -250, 8, 180), ('HotelChair01R', -600, -100, 8, 90),
-    # planters and palms along the walls
-    ('NVTOPSRecPlanter03', -1850, -250, 8, 0), ('NVTOPSRecPlanter03', 1600, -280, 8, 0), ('NVTOPSRecPlanter03', -1850, 250, 8, 0),
-    ('NVGoldfingerBanana', -1850, -250, 40, 0), ('NVGoldfingerBanana', 1600, -280, 40, 70), ('NVFalseSpireaPlant', -1850, 250, 40, 0),
-    ('CementPlanterRd01', -300, 280, 8, 0), ('CementPlanterRd01', 300, 280, 8, 0), ('NVFalseSpireaPlant', -300, 280, 40, 0), ('NVFalseSpireaPlant', 300, 280, 40, 0),
-    # luggage left where the guests left it
-    ('SuitCase01Empty', -1300, 200, 8, 30), ('SuitCase02', -1340, 150, 8, 75), ('SuitCase01Empty', 1100, 250, 8, 300),
-    # those who live here now: mattresses by the east end, a fire barrel, sandbags inside the door, trash
-    ('BedMattress01FloorL', 1550, 200, 8, 90), ('BedMattress01FloorR', 1550, -150, 8, 90), ('FireBarrelSwitching', 1300, 30, 8, 0),
-    ('SandbagStraight', -260, D2 - 170, 8, 0), ('SandbagStraight', 260, D2 - 170, 8, 0),
-    ('DLC05TrashPile01', -1700, -50, 8, 40), ('DLC05TrashPile03', 1000, 300, 8, 200),
+    ('SubCouch01F', 250, -230, 0, 180), ('SubCouch01F', 650, -230, 0, 180), ('SubEndtableDirty01', 450, -260, 0, 0), ('HotelLamp', 450, -260, 37.6, 0),
+    ('HotelChair01F', 300, 40, 0, 0), ('HotelChair01F', 600, 40, 0, 0), ('HotelChair01L', 1000, -120, 0, 270),
+    ('HotelChair01F', -350, -250, 0, 180), ('HotelChair01R', -600, -100, 0, 90),
+    # planters and palms along the walls (a plant stands in its planter's earth)
+    ('NVTOPSRecPlanter03', -1850, -250, 0, 0), ('NVTOPSRecPlanter03', 1600, -280, 0, 0), ('NVTOPSRecPlanter03', -1850, 250, 0, 0),
+    ('NVGoldfingerBanana', -1850, -250, 32, 0), ('NVGoldfingerBanana', 1600, -280, 32, 70), ('NVFalseSpireaPlant', -1850, 250, 32, 0),
+    ('NVSagoPalm01', -330, 280, 0, 0), ('NVSagoPalm02', 330, 280, 0, 40),
+    # the tribute brought in, stacked by the lift bank till it's counted
+    ('CrateGenericNV', 1500, 270, 0, 10), ('NVWaterCrateSqr01', 1620, 280, 0, 85), ('Barrel03static', 1560, 180, 0, 0), ('Barrel03static', 1460, 170, 0, 0),
+    # the court's guards inside the door
+    ('SandbagStraight', -260, D2 - 170, 0, 0), ('SandbagStraight', 260, D2 - 170, 0, 0),
 ]
 # (doors: name, edid, x, y, z, face; 'in' the way in from the town, 'lift' to the guest floors, 'lookout' up the tower)
 RH_DOORS = [
@@ -525,8 +554,8 @@ def mo_lobby(P):
             P.append({'shape': 'cylinder', 'r': 34, 'r2': 30, 'h': LH - 8, 'sides': 10, 'at': [-600 + 400 * k, sy * 190, 8], 'look': 'mo_column',
                       'caps': False, 'material': 'stone'})
     desk_y = D2_ - WALL - 160
-    hs._box(P, [520, 90, 104], [-520, desk_y, 8], 'rhl_koa', material='wood')
-    hs._box(P, [560, 120, 8], [-520, desk_y, 112], 'rhl_koa', material='wood')
+    hs._box(P, [520, 90, DESK_TOP - 8], [-520, desk_y, 8], 'rhl_koa', material='wood')
+    hs._box(P, [560, 120, 8], [-520, desk_y, DESK_TOP], 'rhl_koa', material='wood')
     hs._box(P, [420, 14, 190], [-520, D2_ - WALL - 7, 130], 'rhl_koa', solid=False, front='rhl_keys', back=None)
     hs._box(P, [900, 380, 2], [250, -30, 8], 'rhl_rug', solid=False, bottom=None)
     lift_frame(P, W2 - WALL, MO_LIFT_Y, FLOOR_TOP, 270)
@@ -553,15 +582,20 @@ MO_LIFT_Y = 120
 MO_DESK_Y = MD2 - WALL - 160
 MO_TOP = hs.MO_FLOORS * FLOOR + 30 - FLOOR_TOP      # (the pavilion's floor over the lobby's)
 MO_THINGS = [
-    ('TenPennyChandelier', -450, 0, LH - 120, 0), ('TenpennyChandelierDark', 450, 0, LH - 120, 0),
+    # ceiling fans down the middle, the old colonial hotel's, and one chandelier over the desk
+    ('NVceilingFan', -650, 0, LH - 2, 0), ('NVceilingFan', -200, 0, LH - 2, 45), ('NVceilingFan', 250, 0, LH - 2, 20), ('NVceilingFan', 700, 0, LH - 2, 70),
+    ('TenpennyChandelierDark', -520, 260, LH - 120, 0),
     ('NVTopsLargeAmb', 0, 0, LH - 160, 0), ('NVTopsWarmKey2', -520, 200, 260, 0), ('NVTopsWarmKey2', 400, -150, 260, 0),
-    ('Telephone01', -650, MO_DESK_Y - 10, 120, 180), ('HotelLamp', -380, MO_DESK_Y, 120, 180), ('LootCashRegisterNV', -500, MO_DESK_Y - 5, 120, 180),
-    ('SubCouchDirty01F', 150, -300, 8, 180), ('SubCouch01F', 500, -300, 8, 180), ('SubEndtableDirty01', 330, -320, 8, 0),
-    ('HotelChair01F', 200, 60, 8, 0), ('HotelChair01L', 650, -60, 8, 270), ('HotelChair01F', -250, -280, 8, 180),
-    ('NVTOPSRecPlanter03', -800, -330, 8, 0), ('NVTOPSRecPlanter03', 800, -330, 8, 0), ('NVGoldfingerBanana', -800, -330, 40, 0), ('NVFalseSpireaPlant', 800, -330, 40, 0),
-    ('SuitCase01Empty', -760, 250, 8, 20), ('SuitCase02', 700, 260, 8, 300),
-    ('BedMattress01FloorL', 650, 200, 8, 0), ('FireBarrelSwitching', 0, 120, 8, 0), ('SandbagStraight', -230, MD2 - 160, 8, 0), ('SandbagStraight', 230, MD2 - 160, 8, 0),
-    ('DLC05TrashPile02', -700, -50, 8, 120),
+    ('Telephone01', -650, MO_DESK_Y - 10, DESK_ON, 180), ('HotelLamp', -380, MO_DESK_Y, DESK_ON, 180), ('LootCashRegisterNV', -500, MO_DESK_Y - 5, DESK_ON, 180),
+    ('SubCouchDirty01F', 150, -300, 0, 180), ('SubCouch01F', 500, -300, 0, 180), ('SubEndtableDirty01', 330, -320, 0, 0), ('TenpennyVase01', 330, -320, 37.6, 0),
+    ('HotelChair01F', 200, 60, 0, 0), ('HotelChair01L', 650, -60, 0, 270), ('HotelChair01F', -250, -280, 0, 180),
+    # benches along the back wall under the windows, as on a veranda; palms by the door from the portico
+    ('BenchMuseumStatic01', -600, -(MD2 - WALL - 40), 0, 0), ('BenchMuseumStatic01', -150, -(MD2 - WALL - 40), 0, 0),
+    ('NVSagoPalm01', -420, MD2 - 150, 0, 0), ('NVSagoPalm02', 420, MD2 - 150, 0, 60),
+    ('NVTOPSRecPlanter03', -800, -330, 0, 0), ('NVTOPSRecPlanter03', 800, -330, 0, 0), ('NVGoldfingerBanana', -800, -330, 32, 0), ('NVFalseSpireaPlant', 800, -330, 32, 0),
+    ('SuitCase01Empty', -760, 250, 0, 20), ('SuitCase02', 700, 260, 0, 300),
+    ('BedMattress01FloorL', 650, 200, 0, 0), ('FireBarrelSwitching', 0, 120, 0, 0), ('SandbagStraight', -230, MD2 - 160, 0, 0), ('SandbagStraight', 230, MD2 - 160, 0, 0),
+    ('DLC05TrashPile02', -700, -50, 0, 120),
     # the pavilion
     ('SandbagStraight', 0, -270, MO_TOP, 0), ('BedMattress01FloorR', 220, -150, MO_TOP, 90), ('HotelChair01F', -200, -230, MO_TOP, 180),
     ('NVTopsWarmKey2', 0, 0, MO_TOP + 180, 0),
@@ -591,6 +625,7 @@ def _face_out(deg):
 
 
 KIL_THINGS = []
+KIL_K = 1 / 0.8                     # (the Kilauea stands at 0.8 and where things go shrinks with it: a counter's top, 73.4, is this much more in its frame)
 for _k, _deg in enumerate(range(0, 360, 30)):
     if _deg in (30, 150, 270):
         continue                                    # (the fins stand on those bearings)
@@ -604,16 +639,18 @@ for _deg in (90, 210, 330):
     _x, _y = _round_at(2600, _deg)
     KIL_THINGS += [('NVTOPSRecPlanter03', _x, _y, 0, 0), ('NVGoldfingerBanana', _x, _y, 30, 0), ('NVTopsWarmKey2', _x, _y, 300, 0)]
 KIL_THINGS += [('NVTopsLargeAmb', 0, -1200, 700, 0), ('NVTopsLargeAmb', 0, 1200, 700, 0),
-               ('BarTaps01', 1350, -1700, 100, 210), ('DinerCounterMid01', 1350, -1700, 0, 210), ('Stool01', 1250, -1800, 0, 30),
+               ('BarTaps01', 1350, -1700, 73.4 * KIL_K, 210), ('DinerCounterMid01', 1350, -1700, 0, 210), ('Stool01', 1250, -1800, 0, 30),
                ('BedMattress01FloorL', -2000, 900, 0, 30), ('FireBarrelSwitching', -1700, 700, 0, 0), ('DLC05TrashPile04', 2000, 600, 0, 0),
                ('SandbagStraight', -700, -2450, 0, 165), ('SandbagStraight', -450, -2500, 0, 175)]
+# (the casino's rug in the middle, under the chandeliers: the Tops' own, nine pieces)
+KIL_THINGS += [('NVTOPSCasinoRug', _x * 236, _y * 210, 0.5, 0) for _x in (-1, 0, 1) for _y in (-1, 0, 1)]
 for _deg in range(0, 360, 45):                      # (the deck: chairs round the glass, low tables, lights)
     _x, _y = _round_at(1600, _deg)
     KIL_THINGS.append(('HotelChair01F', _x, _y, KIL_DECK, _face_out(_deg)))
     _x, _y = _round_at(1200, _deg + 22)
     KIL_THINGS.append(('SubEndtableDirty01', _x, _y, KIL_DECK, 0))
 KIL_THINGS += [('NVTopsLargeAmb', 0, -1000, KIL_DECK + 380, 0), ('NVTopsLargeAmb', 0, 1000, KIL_DECK + 380, 0), ('TenPennyChandelier', 900, 0, KIL_DECK + 360, 0),
-               ('TenPennyChandelier', -900, 0, KIL_DECK + 360, 0), ('BarTaps01', 0, 800, KIL_DECK + 100, 180), ('DinerCounterMid01', 0, 800, KIL_DECK, 180),
+               ('TenPennyChandelier', -900, 0, KIL_DECK + 360, 0), ('BarTaps01', 0, 800, KIL_DECK + 73.4 * KIL_K, 180), ('DinerCounterMid01', 0, 800, KIL_DECK, 180),
                ('SandbagStraight', 1500, -800, KIL_DECK, 120), ('BedMattress01FloorR', -800, -900, KIL_DECK, 40)]
 _IN = _round_at(2860, 255)
 _OUT = _round_at(2940, 255)
@@ -662,6 +699,28 @@ def leaf_turn(gd, key):
     return -90.0 if (b[3] - b[0]) < (b[4] - b[1]) else 0.0
 
 
+_seats = {}
+
+
+def seat(gd, key):
+    """How far over what it stands on a thing's origin goes, so its model stands on it as the game stands it: chairs and
+    sofas are made round their middle (the game stands HotelChair01F 36 over the floor). Hung things (lights, chandeliers,
+    ceiling fans) hang where they're put: 0."""
+    if key not in _seats:
+        import library
+        f = gd.from_key(key)
+        edid = (gd.edid(f) or '').lower()
+        if gd.forms[f][1].tag == 'LIGH' or any(w in edid for w in ('chandelier', 'ceilingfan')):
+            _seats[key] = 0.0
+        else:
+            try:
+                b = library.bounds_of(gd.read_file('meshes' + chr(92) + gd.describe(f)[3]))
+                _seats[key] = round(-b[2], 2)
+            except (KeyError, ValueError, OSError, TypeError):
+                _seats[key] = 0.0
+    return _seats[key]
+
+
 def _frame(gd, pr, hotel, parent):
     """Where the hotel stands in the city (its closed piece, once): (its cell, its ref, at), at(lx, ly, lz, face, rise=0)
     the world's [x y z rx ry rz] of a spot in the building's frame (z over its ground floor's top; rise unscaled, a door's
@@ -703,7 +762,7 @@ def relay_ops(gd, pr, hotel, parent, child, reach=400.0):
             if r.get('base') and r.get('p') and not r.get('removed')]
     want = {t[0] for t in v['things']} | {d[1] for d in v['doors']}
     keys = {gd.edid(f): gd.key(f) for f, (_i, r) in gd.forms.items() if gd.edid(f) in want}
-    items = [(e, at(lx, ly, lz, face)) for e, lx, ly, lz, face in v['things'] if e in keys]
+    items = [(e, at(lx, ly, lz, face, seat(gd, keys[e]))) for e, lx, ly, lz, face in v['things'] if e in keys]
     arrive = {}
     for _n, e, lx, ly, lz, face in v['doors']:
         if e in keys:
@@ -734,6 +793,71 @@ def relay_ops(gd, pr, hotel, parent, child, reach=400.0):
     return ops, moved
 
 
+def restyle_ops(gd, pr, hotel, parent, child, old_things, near=60.0):
+    """A lobby made over where it stands in the mod: its own model written again (modelsets.put: the desks lowered, the
+    court's runner), and its things brought in line with VIEWS: each thing view_ops put there (found as the ref of the same
+    base nearest where old_things, the lists it was put by, stood it, within `near`) moved to where VIEWS stands it now,
+    seated; what's no longer listed taken out; what's new added. The city's own copies round it and the doors are left.
+    Returns (ops, report)."""
+    v = VIEWS[hotel]
+    _wck, wr, at = _frame(gd, pr, hotel, parent)          # (first: it brings in every set, the signs' glow pictures among them)
+    # (the model written again, and any picture the mod lacks; the pictures it has are left as they are: a newer FOLab may
+    # have written them better than this one would)
+    import library
+    made = modelsets.build(v['open'])
+    root = library.assets_dir(pr)
+    written = []
+    for rel, data in made['files'].items():
+        full = os.path.join(root, rel)
+        if rel == made['mesh'] or not os.path.isfile(full):
+            if not os.path.isfile(full) or open(full, 'rb').read() != data:
+                library._put(root, rel, data)
+                written.append(rel)
+    info = {'mesh': made['mesh'], 'written': written}
+    grid = gd.grid(child)
+    cells = {gd.key(c) for c in grid.values()}
+    cell_of = lambda wx, wy: gd.key(grid[(int(wx // 4096), int(wy // 4096))])
+    want = {t[0] for t in v['things']} | {t[0] for t in old_things}
+    keys = {gd.edid(f): gd.key(f) for f, (_i, r) in gd.forms.items() if gd.edid(f) in want and f >> 24 == 0}
+    refs = [(ck, rk, r) for ck, c in pr.cells.items() if ck in cells for rk, r in c['refs'].items()
+            if r.get('base') and r.get('p') and not r.get('removed') and rk.startswith('+')]
+    # (what's ours: where the old lists stood each thing, with or without the seat it lacked)
+    ours, used = [], set()
+    for e, lx, ly, lz, face in old_things:
+        if e not in keys:
+            continue
+        p = at(lx, ly, lz, face)
+        best = None
+        for ck, rk, r in refs:
+            if r['base'] != keys[e] or rk in used:
+                continue
+            d = math.hypot(r['p'][0] - p[0], r['p'][1] - p[1])
+            if d < near and abs(r['p'][2] - p[2]) < 80 and (best is None or d < best[0]):
+                best = (d, ck, rk, r)
+        if best:
+            used.add(best[2])
+            ours.append((e, best[1], best[2], best[3]))
+    new = [(e, at(lx, ly, lz, face, seat(gd, keys[e]))) for e, lx, ly, lz, face in v['things'] if e in keys]
+    ops, moved, added, gone = [], 0, 0, 0
+    left = list(ours)
+    for e, p in new:
+        match = [o for o in left if o[0] == e]
+        if match:
+            o = min(match, key=lambda o: math.hypot(o[3]['p'][0] - p[0], o[3]['p'][1] - p[1]) + abs(o[3]['p'][2] - p[2]))
+            left.remove(o)
+            if max(abs(a - b) for a, b in zip(o[3]['p'][:3], p[:3])) > 0.5 or abs(o[3]['p'][5] - p[5]) > 1e-3:
+                ops.append({'op': 'move', 'cell': o[1], 'ref': o[2], 'p': p})
+                moved += 1
+        else:
+            ops.append({'op': 'add', 'cell': cell_of(p[0], p[1]), 'base': keys[e], 'p': p, 's': 1})
+            added += 1
+    for e, ck, rk, _r in left:
+        ops.append({'op': 'remove', 'cell': ck, 'ref': rk})
+        gone += 1
+    return ops, {'hotel': hotel, 'model': info.get('mesh'), 'written': info['written'], 'found': len(ours), 'of': sum(1 for t in old_things if t[0] in keys),
+                 'moved': moved, 'added': added, 'removed': gone, 'missing': sorted({t[0] for t in v['things']} - set(keys))}
+
+
 def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
     """Everything that goes into a hotel's small world (already added, viewworld.add_world), as ops for one Undo: the
     open hotel where the city stands the closed one, the city round it (viewworld.stage_ops), its things and lights, its
@@ -761,7 +885,7 @@ def view_ops(gd, pr, hotel, parent, child, progress=print, linked=()):
     n = 0
     for edid, lx, ly, lz, face in v['things']:
         if edid in keys:
-            p = at(lx, ly, lz, face)
+            p = at(lx, ly, lz, face, seat(gd, keys[edid]))
             ops.append({'op': 'add', 'cell': cell_of(p[0], p[1]), 'base': keys[edid], 'p': p, 's': 1})
             n += 1
     names = {}

@@ -13,15 +13,6 @@
       "port": 8771
     },
     {
-      "name": "folab-doorfix",
-      "runtimeExecutable": "cmd",
-      "runtimeArgs": [
-        "/c",
-        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\doorfix&& set FOLAB_NV_INI=D:\\FOLabScratch\\doorfix\\ini&& set TEMP=D:\\FOLab-tmp&& set TMP=D:\\FOLab-tmp&& py -3 app/server.py 8845 --no-browser"
-      ],
-      "port": 8845
-    },
-    {
       "name": "folab-test",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [
@@ -184,6 +175,42 @@
       "port": 8791
     },
     {
+      "name": "folab-valley",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLab-valley\\home&& set FOLAB_NV_INI=D:\\FOLab-valley\\home\\ini&& py -3 app/server.py 8793 --no-browser"
+      ],
+      "port": 8793
+    },
+    {
+      "name": "folab-rhlift3",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\rhlift3&& set FOLAB_NV_INI=D:\\FOLabScratch\\doors\\ini&& py -3 app/server.py 8843 --no-browser"
+      ],
+      "port": 8843
+    },
+    {
+      "name": "folab-rhlift",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\rhlift&& set FOLAB_NV_INI=D:\\FOLabScratch\\doors\\ini&& py -3 app/server.py 8842 --no-browser"
+      ],
+      "port": 8842
+    },
+    {
+      "name": "folab-doors",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLabScratch\\doors&& set FOLAB_NV_INI=D:\\FOLabScratch\\doors\\ini&& py -3 app/server.py 8841 --no-browser"
+      ],
+      "port": 8841
+    },
+    {
       "name": "folab-voice",
       "runtimeExecutable": "cmd",
       "runtimeArgs": [
@@ -191,6 +218,60 @@
         "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLab-voice\\ui&& set FOLAB_NV_INI=D:\\FOLab-voice\\ui\\ini&& set FOLAB_CHATTERBOX=D:\\FOLab-voice\\chatterbox&& py -3 app/server.py 8792 --no-browser"
       ],
       "port": 8792
+    },
+    {
+      "name": "folab-storm",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_HOME=D:\\FOLab-weather12\\home&& set FOLAB_NV_INI=D:\\FOLab-weather12\\ini&& py -3 app/server.py 8794 --no-browser"
+      ],
+      "port": 8794
+    },
+    {
+      "name": "folab-lights",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_HOME=D:\\FOLab-lights\\home&& set FOLAB_NV_INI=D:\\FOLab-lights\\ini&& set FOLAB_NO_GAME_WRITES=1&& py -3 app/server.py 8797 --no-browser"
+      ],
+      "port": 8797
+    },
+    {
+      "name": "folab-vault2",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_HOME=D:\\FOLab-vault2\\home&& set FOLAB_NV_INI=D:\\FOLab-vault2\\ini&& set FOLAB_NO_GAME_WRITES=1&& py -3 app/server.py 8798 --no-browser"
+      ],
+      "port": 8798
+    },
+    {
+      "name": "folab-flotilla",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_HOME=D:\\FOLab-flotilla\\crew&& set FOLAB_NV_INI=D:\\FOLab-flotilla\\ini&& set FOLAB_NO_GAME_WRITES=1&& py -3 app/server.py 8793 --no-browser"
+      ],
+      "port": 8793
+    },
+    {
+      "name": "folab-edit",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_FAKE_GAMES=D:\\FOLab-editing\\games&& set FOLAB_NVRS_PLACES=D:\\FOLab-editing\\games\\nv-rs-pad&& set FOLAB_HOME=D:\\FOLab-editing\\home&& set FOLAB_NV_INI=D:\\FOLab-editing\\ini&& py -3 app/server.py 8786 --no-browser"
+      ],
+      "port": 8786
+    },
+    {
+      "name": "folab-edit-waikiki",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": [
+        "/c",
+        "set FOLAB_NO_GAME_WRITES=1&& set FOLAB_FAKE_GAMES=D:\\FOLab-editing\\games&& set FOLAB_NVRS_PLACES=D:\\FOLab-editing\\games\\nv-rs-pad&& set FOLAB_HOME=D:\\FOLab-editing\\waikiki&& set FOLAB_NV_INI=D:\\FOLab-editing\\ini&& py -3 app/server.py 8787 --no-browser"
+      ],
+      "port": 8787
     }
   ]
 }

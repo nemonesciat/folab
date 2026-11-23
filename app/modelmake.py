@@ -634,6 +634,8 @@ def _sheet(mesh, part, place):
         v = _unit3(_cross3((d[0] - c[0], d[1] - c[1], d[2] - c[2]), (b[0] - a[0], b[1] - a[1], b[2] - a[2])))
         return v if v[2] >= 0 else (-v[0], -v[1], -v[2])
     N = [[nrm(i, k) for k in range(m)] for i in range(n)]
+    # (a look with no 'tile' shows its picture, or its region, once over the whole sheet)
+    UL, VL = max(max(r) for r in U) or 1.0, max(max(r) for r in V) or 1.0
     for i in range(n - 1):
         for k in range(m - 1):
             quad = [(i, k), (i, k + 1), (i + 1, k + 1), (i + 1, k)]
@@ -641,12 +643,12 @@ def _sheet(mesh, part, place):
             a, b, d = rows[i][k], rows[i][k + 1], rows[i + 1][k]
             fn = _cross3((b[0] - a[0], b[1] - a[1], b[2] - a[2]), (d[0] - a[0], d[1] - a[1], d[2] - a[2]))
             top = quad if fn[2] >= 0 else quad[::-1]
-            mesh.face(up_look, [(place.point(rows[ii][kk]), place.normal(N[ii][kk]), _lay(ul, U[ii][kk], V[ii][kk], 1, 1)) for ii, kk in top])
+            mesh.face(up_look, [(place.point(rows[ii][kk]), place.normal(N[ii][kk]), _lay(ul, U[ii][kk], V[ii][kk], UL, VL)) for ii, kk in top])
             low = []
             for ii, kk in top[::-1]:
                 p, q = rows[ii][kk], N[ii][kk]
                 low.append((place.point((p[0] - q[0] * thick, p[1] - q[1] * thick, p[2] - q[2] * thick)),
-                            place.normal((-q[0], -q[1], -q[2])), _lay(dl, U[ii][kk], V[ii][kk], 1, 1)))
+                            place.normal((-q[0], -q[1], -q[2])), _lay(dl, U[ii][kk], V[ii][kk], UL, VL)))
             mesh.face(down_look, low)
 
 
@@ -762,7 +764,8 @@ def make(desc):
     shapes = {}
     for name, s in mesh.by_look.items():        # looks over the same pictures are one shape: one thing for the game to draw
         look = looks[name]
-        kind = (look['tex'].lower(), look.get('normal', '').lower(), look.get('gloss', 10.0), bool(look.get('alpha')), look.get('glow', ''), look.get('glow_mult', 1.0))
+        alpha = 'blend' if look.get('alpha') == 'blend' else bool(look.get('alpha'))      # ('blend': glass, nifmake)
+        kind = (look['tex'].lower(), look.get('normal', '').lower(), look.get('gloss', 10.0), alpha, look.get('glow', ''), look.get('glow_mult', 1.0))
         if kind not in shapes:
             shapes[kind] = {'p': [], 'n': [], 'uv': [], 'i': [], 'tex': look['tex'], 'normal': look.get('normal', ''), 'gloss': kind[2], 'alpha': kind[3], 'glow': kind[4], 'glow_mult': kind[5]}
         to = shapes[kind]

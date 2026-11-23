@@ -323,6 +323,17 @@ def _looks(nif, props):
     return tex.replace('/', '\\'), blend, test, double
 
 
+def _glow_of(nif, props):
+    """A shape's glow picture (its texture set's third slot), '' for none."""
+    for pi in props:
+        p = nif.block(pi)
+        if p and p['type'] in ('BSShaderPPLightingProperty', 'Lighting30ShaderProperty'):
+            ts = nif.block(p['texset'])
+            if ts and len(ts['textures']) > 2 and ts['textures'][2]:
+                return ts['textures'][2].replace('/', '\\')
+    return ''
+
+
 def mesh_from_nif(data, max_verts=200000, placed=True):
     """Triangles of a model in its own coordinates, with texture names, for the 3D view. The same shape as
     Morrowind Workshop's: [{'p', 'uv', 'i', 'tex', 'alpha', 'double'}] with positions in game units, and 'c' (red,
@@ -369,6 +380,9 @@ def mesh_from_nif(data, max_verts=200000, placed=True):
         tex, blend, test, double = _looks(nif, b['props'])
         got = {'p': pos, 'uv': [round(u, 4) for u in d['uv']], 'i': idx, 'tex': tex,
                'alpha': 'blend' if blend else 'test' if test else '', 'double': double}
+        glow = _glow_of(nif, b['props'])
+        if glow:
+            got['glow'] = glow                  # (its glow picture: the view draws it lit at night, web/nightview.js)
         c = d['colors']
         if c and len(c) == 4 * (len(v) // 3) and any(x < 0.98 for k, x in enumerate(c) if k % 4 != 3):
             # (the shade baked into its corners, as the game multiplies the texture by it: red, green, blue a corner)

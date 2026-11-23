@@ -40,7 +40,7 @@ check('triangles apart are joined without any turning over', sorted(turn(t) for 
 # --- the two pieces ---
 gd = gamedata.GameData()
 game = nif.Nif(gd.read_file('meshes\\clutter\\junk\\nvsandwichboard02.nif'))
-want_tris = {'kiosk': 336, 'umbrella': 210}
+want_tris = {'kiosk': 736, 'umbrella': 210}         # (the kiosk's boards are surfboards since 21 Nov 2026, not flat discs)
 made = {}
 check('the set lists its pieces', set(modelsets.PIECES) >= {'kiosk', 'umbrella', 'palm_tall', 'banana', 'hibiscus', 'dune_grass'})
 for piece in ('kiosk', 'umbrella'):
@@ -252,7 +252,8 @@ check('the beach set is a different planting', {o['base'] for o in jadds}.isdisj
 
 # --- hotels: towers with a far model each, for the skyline ---
 import lodobj  # noqa: E402
-hotels = [k for k, v in modelsets.PIECES.items() if v['set'] == 'hotel']
+# modelsets' own four towers; coastset's hotels (Kahala Reef is long and low by design) are checked in their own part
+hotels = [k for k, v in modelsets.PIECES.items() if v['set'] == 'hotel' and v['describe'].__module__ == 'modelsets']
 bad = []
 for piece in hotels:
     m = made[piece] = modelsets.build(piece)
@@ -455,8 +456,11 @@ for piece, deck in (('lifeguard_tower', 210), ('hale', 24), ('hula_stage', 40)):
     if not f[0] or f[1] < 0.9 * f[0]:
         walk_bad.append((piece, f))
 check('the lifeguard tower, the hale and the hula stage are walked up from the ground', not walk_bad, walk_bad)
+lamp = modelsets.build('puffer_lamp')
+check("a lit piece glows the game's way: white.dds in the glow slot", waikikiset.GLOW.encode() in lamp['nif'])
 torch = modelsets.build('tiki_torch_lit')
-check("a lit piece glows the game's way: white.dds in the glow slot", waikikiset.GLOW.encode() in torch['nif'])
+check("a torch's flame isn't drawn: the game's fire stands at its spot", not any(s.get('alpha') for s in nif.mesh_from_nif(torch['nif']))
+      and torch['fires'] == [(0.0, 0.0, 180.0, 0.35)], torch['fires'])
 sign = modelsets.build('motel_sign_0')
 mesh = nif.mesh_from_nif(sign['nif'])
 board = [sh for sh in mesh if 'motels' in sh['tex'].lower()][0]

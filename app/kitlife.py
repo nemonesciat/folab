@@ -207,7 +207,7 @@ def live(game, ts, plan, made, items, rng, only=None):
         return
     things = things_of(game)
     if not getattr(plan, 'story', None):
-        plan.story = rng.choice(sorted(STORIES))
+        plan.story = rng.choice(sorted(k for k, v in STORIES.items() if not v.get('given')))    # (a given story is one place's own)
     story = STORIES[plan.story]
     if only is None:
         plan.finds = []
@@ -226,8 +226,10 @@ def live(game, ts, plan, made, items, rng, only=None):
         rng.shuffle(walls)
         rng.shuffle(floors)
         squares = sum(1 for c in o['cells'] if c not in plan.air)
-        names = list(story.get(purpose, ()))
-        rng.shuffle(names)
+        # (a room's own name first, then what it's furnished as: a place with a story of its own names its rooms)
+        names = list(story.get(o.get('name')) or story.get(purpose, ()))
+        if not (story.get('given') and story.get(o.get('name'))):
+            rng.shuffle(names)          # (a place's own story names its rooms' scenes in the order they matter)
         if o.get('wrecked'):
             names = ['last stand'] if rng.random() < 0.5 else ['lay down']
         o['scenes'] = []
@@ -252,7 +254,7 @@ def live(game, ts, plan, made, items, rng, only=None):
             items += got
             taken.add(c)
             o['scenes'].append(name)
-        ed = rng.choice(FINDS.get(purpose, ANY_FIND)) if walls else None
+        ed = rng.choice(story.get('finds', {}).get(o.get('name')) or FINDS.get(purpose, ANY_FIND)) if walls else None
         key = things.game.key(things.keys[ed][0]) if ed in things.keys else None
         if key and rng.random() < FIND_SHARE and have[key] < most:
             m, c, d = walls.pop()
@@ -378,7 +380,10 @@ def secure(game, ts, plan, made, items, rng):
     finds = [it for it in getattr(plan, 'finds', []) if id(it) in present and it.owner in rooms]
     if office is not None:
         # (the key is on a find in a room left open, the deepest there is: the office is worth going down for)
-        open_finds = [it for it in finds if it.owner != office and it.owner not in shut]
+        # (never by a way in: a back door's room would hand the key to whoever came in by it)
+        doors_out = {plan.cells.get(c) for c, _d in (plan.exits() if hasattr(plan, 'exits') else ())}
+        open_finds = [it for it in finds if it.owner != office and it.owner not in shut and it.owner not in doors_out] or \
+            [it for it in finds if it.owner != office and it.owner not in shut]
         things.keys.setdefault(KEY_FROM, (_key_fid(game), 'misc'))
         key_size = things.size(KEY_FROM)
         if open_finds and key_size:
@@ -388,11 +393,12 @@ def secure(game, ts, plan, made, items, rng):
                 z = spot.p[2] + size[1] - key_size[0] + 1
                 items.append(D.Item('$made', [spot.p[0], spot.p[1], z, 0.0, 0.0, rng.random() * 2 * math.pi], 1.0, 'key', spot.owner, spot.piece))
                 finds.remove(spot)          # (a lid with the key on it opens freely)
-                plan.locks['key'] = rooms[spot.owner].get('dress') or rooms[spot.owner]['purpose']
+                plan.locks['key'] = rooms[spot.owner].get('name') or rooms[spot.owner].get('dress') or rooms[spot.owner]['purpose']
                 for d in can[office]:
                     d.extra = _lock(KEY_LOCK, '$made')
                 plan.locks['rooms'] += 1
                 plan.locks['shut'].append(office)
+                plan.locks['office'] = (rooms[office].get('name') or '').capitalize() or None
     for n in shut:
         lv = _level(depth(n), rng)
         for d in can[n]:
@@ -416,7 +422,9 @@ def locks_said(plan):
         return ''
     out = '%d room%s and %d thing%s to search locked, harder further down.' % (k['rooms'], '' if k['rooms'] == 1 else 's', k['finds'], '' if k['finds'] == 1 else 's')
     if k['key']:
-        out += " The overseer's office needs a key: it's in the %s." % k['key']
+        # (a room of a place's own is named with its article already: 'the armoury')
+        where = k['key'] if k['key'].startswith(('the ', 'a ')) else 'the ' + k['key']
+        out += " %s needs a key: it's in %s." % (k.get('office') or "The overseer's office", where)
     return out
 
 
@@ -438,5 +446,7 @@ def people(plan):
     """What the Kit tab asks Populate for once the vault has its navmesh, or None."""
     s = getattr(plan, 'story', None)
     if not s:
+        return None
+    if s not in PEOPLE:
         return None
     return dict(PEOPLE[s], skip=list(NOT_PLACED))

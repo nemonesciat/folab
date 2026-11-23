@@ -104,6 +104,15 @@ class Life:
         self.tier_of = {}
         self.taken = []
         self.blocked = None                     # (blocked(x, y) -> True where nobody can stand: inside a building, a landmark)
+        self._world, self._B = world, None
+
+    @property
+    def B(self):
+        """The closed buildings (indoors), always kept out of whatever blocked says besides."""
+        if self._B is None:
+            import indoors
+            self._B = indoors.Buildings(self.gd, self.pr, self._world)
+        return self._B
 
     def key(self, tags, edid):
         k = (tags, edid.lower())
@@ -190,7 +199,7 @@ class Life:
                 px, py = x + math.sin(a) * d, y + math.cos(a) * d
                 z = self.ground.at(px, py)
                 cell = self.grid.get((int(px // 4096), int(py // 4096)))
-                if z is None or z < 8 or cell is None or (self.blocked and self.blocked(px, py)):
+                if z is None or z < 8 or cell is None or (self.blocked and self.blocked(px, py)) or self.B.inside(px, py, z):
                     continue
                 self.ops.append({'op': 'add', 'cell': self.gd.key(cell), 'base': key, 'p': [round(px, 1), round(py, 1), round(z + 4.0, 1), 0.0, 0.0, round(self.rng.uniform(0, math.tau), 3)], 's': 1})
                 n += 1

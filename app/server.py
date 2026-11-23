@@ -937,6 +937,9 @@ def new_place(body):
     edid = _free_edid(body['edid'])
     recordio.set_field(rec, 'EDID', edid, label='Editor ID')
     recordio.set_field(rec, 'FULL', body['name'], label='Name')
+    if not body.get('copy'):
+        import placewater
+        placewater.make_dry(rec)                        # (an empty place: the copied place's water would stand over whatever goes in)
     ops = [{'op': 'record_new', 'record': rec}]
     if body.get('copy'):
         for t in cell_things(src):
@@ -1103,7 +1106,102 @@ def report():
     return '\n'.join(l for l in lines if l is not None)
 
 
+HOLDING = {'on': False, 'path': None}       # (the running FOLab holds the mod it has open: project.hold)
+
+
+def _hold_open():
+    """The mod open now is held against other programs writing it (project.hold); the one before let go."""
+    if not HOLDING['on']:
+        return
+    path = PR.path if PR else None
+    if path == HOLDING['path']:
+        return
+    if HOLDING['path']:
+        project.release(HOLDING['path'])
+    HOLDING['path'] = None
+    if path:
+        try:
+            project.hold(path)
+            HOLDING['path'] = path
+        except project.InUse as e:
+            print('Not holding %s: %s' % (path, e), flush=True)
+
+
+def save_status():
+    """For the header: when the plugin was last saved, and whether edits came since (the edits themselves are
+    written to the mod as they're made; Save writes the plugin the game loads)."""
+    built = os.path.join(project.BUILD_DIR, PR.plugin)
+    at = os.path.getmtime(built) if os.path.isfile(built) else None
+    return {'saved_at': at, 'saved': bool(at) and at >= PR.modified(), 'held': HOLDING['path'] == PR.path,
+            'other_holder': project.holder(PR.path)}
+
+
+def play_in():
+    """The places the user chose for Put in game (setting 'play_in'): 'main' (the game's Data or MO2) and nv-rs
+    folders. Empty: FOLab's usual place (the game or MO2)."""
+    out = []
+    for p in load_settings().get('play_in') or []:
+        if p == 'main' or nvrs.is_nvrs(p):
+            out.append(p)
+    return out
+
+
+def _short_where(r):
+    if r['kind'] == 'main':
+        return 'MO2' if loadout.current() else 'the game'
+    if r['kind'] == 'nv-rs':
+        return os.path.basename(os.path.normpath(r['folder']))
+    return r['where']
+
+
+def set_play_in(places):
+    found = {os.path.normcase(os.path.normpath(f)): f for f in nvrs.all_found(load_settings().get('nvrs_dir'))}
+    keep = []
+    for p in places or []:
+        if p == 'main':
+            keep.append('main')
+        elif os.path.normcase(os.path.normpath(p)) in found:
+            keep.append(found[os.path.normcase(os.path.normpath(p))])
+        else:
+            raise ValueError('Not a copy of nv-rs FOLab knows: %s' % p)
+    save_settings(play_in=keep)
+    return state()
+
+
+def put_in_chosen():
+    """Put in game when places are chosen: the mod saved, then put in each chosen place (nv-rs through nvrs.put_in, as
+    every install of Waikiki is done; the game or MO2 as Put in game always did). Each checked again after. A game
+    running from one nv-rs folder holds only that one: the others are still done."""
+    saved = save()
+    out = {'done': [], 'failed': []}
+    lo = loadout.current()
+    for r in install_places():
+        if not r.get('chosen'):
+            continue
+        name = _short_where(r)
+        try:
+            if r['kind'] == 'main':
+                not_while_playing()
+                if lo:
+                    put_in_mo2(saved)
+                else:
+                    install.install(GD.data_dir, saved['path'])
+            elif r.get('note'):
+                raise ValueError(r['note'])
+            elif playtest.running_in(r['folder']):
+                raise ValueError('it is running: close the game there first, then press Put in game again')
+            else:
+                nvrs.put_in(r['folder'], [saved['path']], _nvrs_setup())
+            out['done'].append(name)
+        except Exception as e:
+            out['failed'].append({'where': name, 'why': str(e)})
+    out['state'] = state()
+    out['install'] = {}
+    return out
+
+
 def state():
+    _hold_open()
     s = {'game': GD.data_dir, 'interiors': len(GD.interiors), 'project': PR.state() if PR else None,
          'projects': project.list_projects(), 'kinds': PLACEABLE}
     s['nvse'] = nvse.status(GD.data_dir)
@@ -1119,6 +1217,9 @@ def state():
         s['installed']['places'] = install_places(s['installed'])
         built = os.path.join(project.BUILD_DIR, PR.plugin)
         s['project']['built'] = os.path.isfile(built) and os.path.getmtime(built) >= PR.modified()
+        s['project'].update(save_status())
+        s['play_in'] = play_in()
+        s['nvrs_all'] = nvrs.all_found(load_settings().get('nvrs_dir'))
         s['project']['masters'] = masters()
         s['project']['undo'] = s['project']['undo'] or api_maps.undo_label(PR)
     return s
@@ -1233,7 +1334,14 @@ def stale_copies():
     nv = None
     if _engine() == 'nv-rs':
         nv = [nvrs.mods_dir(f) for f in nvrs.all_found(load_settings().get('nvrs_dir'))]
-    out = copies.stale(built, lo, mine, nv)
+    chosen = play_in()
+    if chosen:
+        # (places chosen: only what could load instead of those. An nv-rs plays its own mods folder alone; the copies
+        # round MO2 or the game's Data matter only when that place is chosen too)
+        nv = None                       # (the chosen nv-rs are places of their own, each with its own row)
+        if 'main' not in chosen:
+            lo, mine = None, None
+    out = copies.stale(built, lo, mine, nv) if lo or nv else []
     # far views the game would draw nothing of (copies.far_view: settings and files counted from different corners)
     out += copies.far_view([install._assets_folder(built)] + ([mine] if mine else []))
     return out
@@ -1296,6 +1404,13 @@ def install_places(main=None):
         for r in rows:
             if r['kind'] == 'nv-rs':
                 r['note'] = 'FOLab was started from MO2, which breaks nv-rs: start FOLab on its own to update this one.'
+    chosen = {p if p == 'main' else os.path.normcase(os.path.normpath(p)) for p in play_in()}
+    for r in rows:
+        r['name'] = _short_where(r)
+        if chosen:
+            r['chosen'] = (r['kind'] == 'main' and 'main' in chosen) or                 (r['kind'] == 'nv-rs' and os.path.normcase(os.path.normpath(r['folder'])) in chosen)
+        else:
+            r['chosen'] = r['kind'] == 'main'
     return rows
 
 
@@ -1622,6 +1737,49 @@ def kit_drawn(body):
     if not kits or body['kit'] not in kits:
         return {'note': 'The kits are still being read: a moment.'}
     return kitplan.drawn(GD, kits, body['kit'], body['rooms'], body.get('links', []), int(body['seed']), body['at'], _kits['tilesets'], _kits['walls'], kit_survey(kits))
+
+
+def kit_drawing(body):
+    """The last place made, as a drawing for the Kit tab's floor plan: kitplan.drawing_of, with the kit it was made from."""
+    last = _kits['tilesets'].get('last')
+    if not last:
+        return {'note': 'Make a place first: its plan comes over to the drawing.'}
+    out = kitplan.drawing_of(last['plan'])
+    out['kit'] = last['name']
+    return out
+
+
+def kit_picture(body):
+    """The last place made, every level from above, as an SVG's text (planpic)."""
+    import planpic
+    last = _kits['tilesets'].get('last')
+    if not last:
+        return {'note': 'Make a place first.'}
+    return {'svg': planpic.svg(last['plan'], last['items'])}
+
+
+def kit_drawcheck(body):
+    """A drawing checked while it's drawn: kitdrawings.check, planned as Build would without its pieces."""
+    import kitdrawings
+    kits = kits_state()
+    if not kits or body.get('kit') not in kits:
+        return {'ok': False, 'problems': [], 'notes': ['The kits are still being read: a moment.'], 'waiting': True}
+    ts = kitplan.tiles_for(GD, kits, body['kit'], _kits['tilesets'], kit_survey(kits))
+    return kitdrawings.check(ts, body.get('rooms', []), body.get('links', []))
+
+
+def kit_plans(path, body):
+    """Drawn plans kept by name: list, save, load, delete."""
+    import kitdrawings
+    if path == '/api/kit/plans':
+        return {'plans': kitdrawings.names()}
+    if path == '/api/kit/plan/save':
+        return {'plans': kitdrawings.save(body['name'], body['drawing'])}
+    if path == '/api/kit/plan/load':
+        return {'drawing': kitdrawings.load(body['name'])}
+    if path == '/api/kit/plan/delete':
+        return {'plans': kitdrawings.remove(body['name'])}
+    raise KeyError(path)
 
 
 def kit_click(body):
@@ -2373,6 +2531,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(kit_themes(body))
                 if u.path == '/api/kit/drawn':
                     return self.send(kit_drawn(body))
+                if u.path == '/api/kit/drawcheck':
+                    return self.send(kit_drawcheck(body))
+                if u.path in ('/api/kit/plans', '/api/kit/plan/save', '/api/kit/plan/load', '/api/kit/plan/delete'):
+                    return self.send(kit_plans(u.path, body))
+                if u.path == '/api/kit/drawing':
+                    return self.send(kit_drawing(body))
+                if u.path == '/api/kit/picture':
+                    return self.send(kit_picture(body))
                 if u.path == '/api/kit/click':
                     return self.send(kit_click(body))
                 if u.path == '/api/kit/oneclicks':
@@ -2400,6 +2566,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(save())
                 if u.path == '/api/play':
                     return self.send(play(body))
+                if u.path == '/api/install/where':
+                    return self.send(set_play_in(body.get('places')))
+                if u.path == '/api/install' and play_in():
+                    return self.send(put_in_chosen())
                 if u.path == '/api/install':
                     not_while_playing()
                     saved = save()
@@ -2407,7 +2577,7 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(put_in_mo2(saved))
                     return self.send({'install': install.install(GD.data_dir, saved['path']), 'state': state()})
                 if u.path == '/api/install/everywhere':
-                    return self.send(install_everywhere())
+                    return self.send(put_in_chosen() if play_in() else install_everywhere())
                 if u.path == '/api/install/stale_out':
                     not_while_playing()
                     old = [c for c in stale_copies() if c['movable']]
@@ -2510,6 +2680,9 @@ def main():
         json.dump({'url': url, 'pid': os.getpid(), 'port': port}, f)
     import atexit
     atexit.register(lambda: os.path.exists(running) and os.remove(running))
+    HOLDING['on'] = True                # (from now on the mod open is held: scripts may not write it)
+    _hold_open()
+    atexit.register(lambda: HOLDING['path'] and project.release(HOLDING['path']))
     if '--no-browser' not in args and not os.environ.get('FOLAB_NO_BROWSER'):
         import webbrowser
         webbrowser.open(url)

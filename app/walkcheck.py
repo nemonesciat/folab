@@ -249,7 +249,7 @@ def walkable():
                                ('the bridge door', (battleship.SPOTS['bridge'][0], battleship.SPOTS['bridge'][1] + 60.0, z3)),
                                ('port bridge wing', (-560.0, -1700.0, z3)), ('starboard bridge wing', (560.0, -1700.0, z3))]},
         'natatorium': {}, 'battery_randolph': {}, 'guard_tower': __import__('guardtower').WALK,
-    } | __import__('bambooset').WALKS | {v['open']: {'ground': None, 'starts': [tuple(v['arrive_in'][:3])]} for v in _views().values()}
+    } | __import__('bambooset').WALKS | __import__('treevillage').WALKS | {v['open']: {'ground': None, 'starts': [tuple(v['arrive_in'][:3])]} for v in _views().values()}
 
 
 def _views():
@@ -261,7 +261,7 @@ def _views():
 def check_piece(gd, piece, how=None):
     import modelsets
     if piece not in modelsets.PIECES:
-        import bambooset, battleship, guardtower, historicset, towerset  # noqa: F401  (they add their pieces)
+        import bambooset, battleship, guardtower, historicset, towerset, treevillage  # noqa: F401  (they add their pieces)
     how = how if how is not None else walkable().get(piece, {})
     return walk(gd, [of_piece(piece)], ground=how.get('ground', 0.0), starts=how.get('starts'), goals=how.get('goals'), voxel=how.get('voxel'))
 
@@ -295,7 +295,7 @@ def main(names):
     import gamedata
     import landmarks
     gd = gamedata.GameData()
-    import bambooset, battleship, guardtower, historicset, towerset  # noqa: F401
+    import bambooset, battleship, guardtower, historicset, towerset, treevillage  # noqa: F401
     own = list(walkable())
     sets = [n for n, s in landmarks.SETS.items() if not s.get('own')]
     for name in names or own + sets:

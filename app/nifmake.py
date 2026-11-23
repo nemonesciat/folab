@@ -34,6 +34,11 @@ HAVOK_SCALE = 7.0
 HULL_RADIUS = 0.1                  # Havok units: every convex shape of the game's statics has this
 MATERIALS = {'stone': 0, 'cloth': 1, 'dirt': 2, 'glass': 3, 'grass': 4, 'metal': 5, 'organic': 6, 'water': 8, 'wood': 9}
 ALPHA_TEST, ALPHA_CUT = 4844, 64    # no blending, a pixel drawn or not: what most of the game's plants carry
+# Glass ('alpha': 'blend'): blended by its picture's alpha, no test, as the game's own window glass (the Goodsprings store's,
+# the Vault's windows, Big MT's glass barrier: NiAlphaProperty 0x10ED at 0, shader flags 0x82000181). With the plants' cut-out
+# a pane of grimy glass (alpha mostly 64 to 112) drew solid where it should be clear, clear only at its cleanest spots: the
+# hotels' lobby windows read inverted in game (the user, 22 Nov 2026).
+ALPHA_BLEND, BLEND_SHADER = 0x10ED, 0x82000181
 _PROPERTY = struct.pack('<3I', 0, 0, 0x80000000)        # an empty list, as Havok writes one out
 
 
@@ -473,19 +478,20 @@ def build(name, shapes, solids=()):
     for k, s in enumerate(shapes):
         me = len(blocks)
         children.append(me)
-        cut = bool(s.get('alpha'))              # see-through where the texture says so: leaves
+        blend = s.get('alpha') == 'blend'       # glass: blended (ALPHA_BLEND)
+        cut = bool(s.get('alpha'))              # see-through where the texture says so: leaves, glass
         props = ([me + 4] if cut else []) + [me + 3, me + 1]
         add('NiTriStrips', struct.pack('<iIiI', text('%s:%d' % (name, k)), 0, -1, 0x8000E) + identity
             + struct.pack('<I%dii' % len(props), len(props), *props, -1) + struct.pack('<iiIiB', me + (5 if cut else 4), -1, 0, 0, 0))
         add('BSShaderPPLightingProperty', struct.pack('<iIi', -1, 0, -1)
-            + struct.pack('<HIIIfIi', 1, 1, 0x82000101 if cut else 0x82000001, 1, 1.0, 3, me + 2) + struct.pack('<fiff', 0.0, 0, 4.0, 1.0))
+            + struct.pack('<HIIIfIi', 1, 1, BLEND_SHADER if blend else 0x82000101 if cut else 0x82000001, 1, 1.0, 3, me + 2) + struct.pack('<fiff', 0.0, 0, 4.0, 1.0))
         # (a glowing shape, as the game's lamps and neon: a glow map in the third slot, the material's emissive white and
         # its multiplier how bright)
         add('BSShaderTextureSet', struct.pack('<i', 6) + _sized(s['tex']) + _sized(s.get('normal', '')) + _sized(s.get('glow', '')) + _sized('') * 3)
         glow = 1.0 if s.get('glow') else 0.0
         add('NiMaterialProperty', struct.pack('<iIi', -1, 0, -1) + struct.pack('<9f', 0, 0, 0, glow, glow, glow, s.get('gloss', 10.0), 1, s.get('glow_mult', 1.0) if glow else 1))
         if cut:
-            add('NiAlphaProperty', struct.pack('<iIi', -1, 0, -1) + struct.pack('<HB', ALPHA_TEST, ALPHA_CUT))
+            add('NiAlphaProperty', struct.pack('<iIi', -1, 0, -1) + (struct.pack('<HB', ALPHA_BLEND, 0) if blend else struct.pack('<HB', ALPHA_TEST, ALPHA_CUT)))
         add('NiTriStripsData', _strips_data(s))
     blocks[0] = ('BSFadeNode', struct.pack('<iI%diiI' % len(extras), root_name, len(extras), *extras, -1, 0x8000E) + identity
                  + struct.pack('<Ii', 0, collision) + struct.pack('<I%di' % len(children), len(children), *children)
@@ -518,7 +524,7 @@ def check(data, shapes, solids=()):
             wrong.append('shape %d: %d triangles read back of %d' % (k, len(b['i']) // 3, want))
         if b['tex'].lower() != s['tex'].replace('/', '\\').lower():
             wrong.append('shape %d: texture %s read back as %s' % (k, s['tex'], b['tex']))
-        if b['alpha'] != ('test' if s.get('alpha') else ''):
+        if b['alpha'] != ('blend' if s.get('alpha') == 'blend' else 'test' if s.get('alpha') else ''):
             wrong.append('shape %d: see-through read back as %r' % (k, b['alpha']))
         if len(b['p']) != len(s['p']) or any(abs(x - y) > 0.01 for x, y in zip(b['p'], s['p'])):
             wrong.append('shape %d: its corners moved' % k)

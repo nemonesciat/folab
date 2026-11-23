@@ -45,6 +45,7 @@ KINDS = {
     'no_way_back': (WARN, 'Doors with no way back', 'A door leads somewhere, but the door at the other end doesn\'t lead back.'),
     'same': (WARN, 'Changes identical to the game', 'Records that say just what the game already says. They do nothing except get in the way of other mods.'),
     'same_edid': (WARN, 'Two things with one editor ID', 'Scripts and the console find things by editor ID: only one of these can be found.'),
+    'under_water': (WARN, 'Places under water', 'The place\'s water stands over its floor (copied with the record of a game place that has a pool): nothing shows it, but whoever is in there swims and can\'t run.'),
     'no_lights': (INFO, 'Places with no lights', 'Places with no lights in them, so only the place\'s own ambient light shows them.'),
     'unreachable': (INFO, 'Places nothing leads to', 'Places of the mod\'s own that no door in it leads to. Fine if you only reach them another way.'),
     'unused_master': (INFO, 'Masters nothing uses', 'Files the plugin says it needs, though nothing in it uses them. It makes players install more than they need.'),
@@ -772,6 +773,7 @@ def check_mod(S):
         scan = Scan(gd, built, pr).run()
         try:
             check_project_nav(scan, gd, pr)
+            check_project_water(scan, gd, pr)
             groups = scan.report()
         finally:
             scan.close()
@@ -819,6 +821,14 @@ def check_project_nav(scan, gd, pr):
             # (one at a time: it replaces the game's mesh, which isn't for a "fix everything")
             fix = {'action': 'navmesh', 'cell': ckey, 'label': 'Make a new navmesh', 'one': True} if st.get('can') else None
             scan.add('navmesh_game', '%s: %d thing%s added or removed.' % (_place(gd, pr, ckey), n, '' if n == 1 else 's'), {'cell': ckey}, fix)
+
+
+def check_project_water(scan, gd, pr):
+    """The mod's own places whose water stands over their floor (placewater.py)."""
+    import placewater
+    for ckey, edid, h, lowest in placewater.under_water(pr):
+        scan.add('under_water', '%s: its water stands at %d, %d over the lowest thing in it.' % (_place(gd, pr, ckey), h, h - lowest),
+                 {'cell': ckey}, {'action': 'dry', 'cell': ckey, 'label': 'Make it dry'})
 
 
 def _is_marker(gd, fid):
@@ -943,6 +953,9 @@ def fix_ops(S, fixes):
                             hit = True
                     if not hit:
                         why.append('%s: its model is no longer %s.' % (key, old))
+            elif a == 'dry':
+                import placewater
+                placewater.make_dry(record(f['cell']))
             elif a == 'compile':
                 recs[f['key']] = script_record(gd, pr, f['key'], record(f['key']))
             else:

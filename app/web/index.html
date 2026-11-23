@@ -35,7 +35,7 @@ nav button:hover{color:var(--text);background:var(--hover)}
 nav button:hover svg{stroke:var(--gold)}
 nav button.on{color:var(--gold2);border-color:var(--line2);background:var(--panel2)}
 nav button.on svg{stroke:var(--gold)}
-.bar{display:flex;gap:6px;align-items:center;margin-left:auto;justify-content:flex-end;min-width:0}
+.bar{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin-left:auto;justify-content:flex-end;min-width:0}  /* (a narrow window: two rows, never over the page buttons) */
 .bar .modpill{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .btn{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;padding:5px 11px;cursor:pointer;white-space:nowrap;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 1px 0 rgba(0,0,0,.25);transition:border-color .15s,background .15s}
 .btn:hover{border-color:var(--gold)}
@@ -277,7 +277,9 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
   </nav>
   <div class="bar">
     <span id="modpill" class="pill modpill" title="Your mod">No mod open</span>
-    <span id="gamepill" class="pill" title="Is the saved plugin in the game?"></span>
+    <span id="actpill" class="pill" style="display:none"></span>
+    <span id="savepill" class="pill" style="display:none;cursor:pointer"></span>
+    <span id="gamepill" class="pill" style="cursor:pointer" title="Is the saved plugin in the game? Click to choose where it goes"></span>
     <button class="btn" id="b-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
     <button class="btn" id="b-redo" title="Redo (Ctrl+Y)">↷ Redo</button>
     <button class="btn primary" id="b-save" title="Write your mod's plugin (Ctrl+S)">Save</button>
@@ -311,7 +313,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
     <div id="tools">
       <div class="tgrp" data-grp="view" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="seg"><button class="btn" id="t-map" title="The place from above (M)">🗺 Map</button><button class="btn on" id="t-3d" title="The 3D view (M)">3D</button></span><button class="btn ico" id="t-help" title="The 3D view's controls">?</button></div>
       <div class="tgrp" data-grp="handles" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn on" id="t-move" title="Move (1)">✥ Move</button><button class="btn" id="t-turn" title="Turn (2)">⟳ Turn</button><button class="btn" id="t-scale" title="Size (3): drag any handle, it grows or shrinks evenly">⤢ Scale</button><button class="btn" id="t-space" title="The handles point the world's directions (click: the thing's own)">✛ World axes</button></div>
-      <div class="tgrp" data-grp="snap" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="grp">Grid <select id="t-grid"><option value="0">off</option><option>8</option><option>16</option><option>32</option><option>64</option><option selected>128</option><option>256</option></select></span><span class="grp">Angle <select id="t-angle"><option value="0">off</option><option>5</option><option selected>15</option><option>45</option><option>90</option></select></span><span class="grp"><label title="While moving, pieces slide into place against the pieces round them: edge to edge, sides level, standing on top"><input type="checkbox" id="t-snap" checked> Snap pieces</label></span><span class="grp"><label title="After you move something with the arrows, it comes to rest on the ground or whatever is under it. Several keep their places to each other. Dragging the up arrow leaves it where you put it"><input type="checkbox" id="t-land"> Land on what's below</label></span></div>
+      <div class="tgrp" data-grp="snap" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="grp" title="Dragging the arrows moves in jumps of this many units. Off: it moves smoothly, exactly where you drag it.">Move step <select id="t-grid"><option value="0" selected>off</option><option>1</option><option>8</option><option>16</option><option>32</option><option>64</option><option>128</option><option>256</option></select></span><span class="grp" title="Dragging the turn rings turns in jumps of this many degrees. Off: it turns smoothly.">Turn step <select id="t-angle"><option value="0" selected>off</option><option>1</option><option>5</option><option>15</option><option>45</option><option>90</option></select></span><span class="grp"><label title="While you drag, what you move jumps to line up with pieces right beside it (edge to edge, sides level, standing on top). For building walls and floors from pieces; leave it off to move things freely."><input type="checkbox" id="t-snap"> Line up with pieces</label></span><span class="grp"><label title="After you drag something along the ground, it drops onto the ground or whatever is under it. Dragging the up arrow leaves it where you put it."><input type="checkbox" id="t-land"> Drop onto what's below</label></span></div>
       <div class="tgrp" data-grp="edit" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn" id="t-drop" title="Set the selected thing down on what's below it (End)">⤓ Drop down</button><button class="btn" id="t-dup" title="Duplicate (Ctrl+D)">⧉ Duplicate</button><button class="btn" id="t-del" title="Remove (Delete)">✕ Remove</button></div>
       <div class="tgrp" data-grp="show" title=""><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><span class="grp"><label><input type="checkbox" id="t-markers"> Markers</label></span><span class="grp"><label><input type="checkbox" id="t-removed"> Removed</label></span><span class="grp"><label title="Light each place with its own lights, as in game"><input type="checkbox" id="t-light" checked> Game light</label></span></div>
       <div class="tgrp" data-grp="outside" title="" id="tg-outside" style="display:none"><span class="tb-grip" title="Drag to move these buttons. Right-click to arrange them.">⋮⋮</span><button class="btn" id="t-ground" title="Shape, paint and tint the ground outside">⛰ Ground</button><button class="btn" id="ls-btn" title="Shape many cells at once: ridges, valleys, plateaus, hills… drawn on the flat map">🗺⛰ Shape land</button></div>
@@ -382,6 +384,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/farthings.js"></script>
 <script src="/web/viewtools.js"></script>
 <script src="/web/sky.js"></script>
+<script src="/web/nightview.js"></script>
 <script src="/web/landshape.js"></script>
 <script src="/web/help.js"></script>
 <script src="/web/toolbar.js"></script>
@@ -429,6 +432,7 @@ code{font-family:var(--mono);background:var(--bg2);padding:1px 5px;border-radius
 <script src="/web/mapland.js"></script>
 <script src="/web/citysteps.js"></script>
 <script src="/web/newgame.js"></script>
+<script src="/web/nudge.js"></script>
 <script src="/web/home.js"></script>
 </body>
 </html>

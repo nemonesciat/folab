@@ -296,23 +296,31 @@ def line_text(n, title):
     return '  {Song %d %s}' % (n, title)
 
 
-def line_source(quest_edid, n):
+def line_source(quest_edid, n, gate=None):
+    """Song n's result script. gate: a station that talks (radiotalk.py) counts the songs since it last did."""
     q = quest_edid
-    return ('set %s.iLastSong3 to %s.iLastSong2\r\nset %s.iLastSong2 to %s.iLastSong1\r\nset %s.iLastSong1 to %d' % (q, q, q, q, q, n))
+    out = ('set %s.iLastSong3 to %s.iLastSong2\r\nset %s.iLastSong2 to %s.iLastSong1\r\nset %s.iLastSong1 to %d' % (q, q, q, q, q, n))
+    if gate:
+        out += '\r\nset %s.%s to %s.%s + 1' % (q, gate['name'], q, gate['name'])
+    return out
 
 
-def line_conditions(quest, n, depth=HISTORY):
-    return [{'or': False, 'use_target': False, 'op': '!=', 'fn': GET_QUEST_VARIABLE, 'p1': quest, 'p2': v, 'run': 0, 'ref': '', 'value': float(n)}
-            for v in range(1, depth + 1)]
+def line_conditions(quest, n, depth=HISTORY, gate=None):
+    out = [{'or': False, 'use_target': False, 'op': '!=', 'fn': GET_QUEST_VARIABLE, 'p1': quest, 'p2': v, 'run': 0, 'ref': '', 'value': float(n)}
+           for v in range(1, depth + 1)]
+    if gate:                                # (a station that talks: no song while talk is due)
+        out.append({'or': False, 'use_target': False, 'op': '<', 'fn': GET_QUEST_VARIABLE, 'p1': quest, 'p2': gate['var'], 'run': 0, 'ref': '',
+                    'value': float(gate['every'])})
+    return out
 
 
-def line_plain(gd, quest, n, title, sound, depth=HISTORY):
+def line_plain(gd, quest, n, title, sound, depth=HISTORY, gate=None):
     """Song n's line, on the game's first Mojave Music Radio line (its flags, its response's numbers); its result script
     still to compile."""
     l = qr.info_plain(_copy(gd, patterns(gd)['line']))
     r = dict(l['responses'][0], sound=sound, text=line_text(n, title))
     r.pop('pads', None)                 # (the game's hold leftovers from its editor's memory)
-    l.update(quest=quest, topic=patterns(gd)['topic'], responses=[r], conditions=line_conditions(quest, n, depth), choices=[], src='', begin=None, end=None)
+    l.update(quest=quest, topic=patterns(gd)['topic'], responses=[r], conditions=line_conditions(quest, n, depth, gate), choices=[], src='', begin=None, end=None)
     return l
 
 
@@ -343,9 +351,10 @@ def _forms(gd, pr, extra=None):
     return api_quests.ModForms(gd, _With(pr, extra or {}))
 
 
-def _compiled(gd, pr, plain, quest_edid, n, extra=None):
+def _compiled(gd, pr, plain, quest_edid, n, extra=None, gate=None):
     import api_quests
-    plain['begin'] = {'source': line_source(quest_edid, n), 'parts': api_quests.compile_parts(line_source(quest_edid, n), _forms(gd, pr, extra))}
+    src = line_source(quest_edid, n, gate)
+    plain['begin'] = {'source': src, 'parts': api_quests.compile_parts(src, _forms(gd, pr, extra))}
     plain['end'] = qr.empty_script()
     rec = qr.info_record(plain)
     rec['topic'] = plain['topic']
@@ -520,7 +529,7 @@ def _depth(count):
     return max(0, min(HISTORY, count - 1))
 
 
-def _track_ops(gd, pr, st_edid, quest, quest_edid, put, first_n, keys, free, depth, extra):
+def _track_ops(gd, pr, st_edid, quest, quest_edid, put, first_n, keys, free, depth, extra, gate=None):
     """record_new ops for songs first_n.. (a SOUN and its line each), their keys taken from keys in order."""
     ops = []
     for k, (title, rel, _i, _mono) in enumerate(put):
@@ -529,19 +538,30 @@ def _track_ops(gd, pr, st_edid, quest, quest_edid, put, first_n, keys, free, dep
         srec = song_record(gd, free('%sSong%02d' % (st_edid, n)), rel[len('sound\\'):])
         extra[skey] = srec
         ops.append({'op': 'record_new', 'record': srec})
-        ops.append({'op': 'record_new', 'record': _compiled(gd, pr, line_plain(gd, quest, n, title, skey, depth), quest_edid, n, extra)})
+        ops.append({'op': 'record_new', 'record': _compiled(gd, pr, line_plain(gd, quest, n, title, skey, depth, gate), quest_edid, n, extra, gate)})
     return ops
 
 
-def _relined(gd, pr, quest, depth, skip=()):
-    """ops giving the station's existing lines conditions of another depth."""
+def _relined(gd, pr, quest, depth, skip=(), gate=None, extra=None):
+    """ops giving the station's existing song lines conditions of another depth, or another gate (radiotalk.py); a line
+    already as it should be is left."""
     ops = []
+    quest_edid = recordio.field((extra or {}).get(quest) or pr.records[quest], 'EDID')
     for k, r in pr.records.items():
         if r['type'] == 'INFO' and recordio.field(r, 'QSTI') == quest and k not in skip:
             l = qr.info_plain(r)
             m = re.search(r'iLastSong1\s+to\s+(\d+)', (l.get('begin') or {}).get('source', ''), re.I)
-            if m and len(l['conditions']) != depth:
-                l['conditions'] = line_conditions(quest, int(m.group(1)), depth)
+            if not m:
+                continue                    # (a talk line, or one added by hand)
+            n = int(m.group(1))
+            want = line_conditions(quest, n, depth, gate)
+            src = line_source(quest_edid, n, gate)
+            same_src = (l.get('begin') or {}).get('source', '').replace('\r\n', '\n') == src.replace('\r\n', '\n')
+            if [qr.condition_sub(c) for c in l['conditions']] != [qr.condition_sub(c) for c in want] or not same_src:
+                l['conditions'] = want
+                if not same_src:
+                    import api_quests
+                    l['begin'] = {'source': src, 'parts': api_quests.compile_parts(src, _forms(gd, pr, extra))}
                 rec = qr.info_record(l)
                 for f in ('topic', 'seq'):
                     if f in r:
@@ -625,8 +645,10 @@ def add_tracks(gd, pr, edit, key, files):
     quest_edid = recordio.field(pr.records[st['quest']], 'EDID')
     depth = _depth(len(st['tracks']) + len(put))
     first = max([t['n'] for t in st['tracks']] or [0]) + 1
-    ops = _relined(gd, pr, st['quest'], depth)
-    ops += _track_ops(gd, pr, st['edid'], st['quest'], quest_edid, put, first, _keys(pr), _taken(gd, pr), depth, {})
+    import radiotalk
+    gate = radiotalk.gate_of(pr, st['quest'])
+    ops = _relined(gd, pr, st['quest'], depth, gate=gate)
+    ops += _track_ops(gd, pr, st['edid'], st['quest'], quest_edid, put, first, _keys(pr), _taken(gd, pr), depth, {}, gate)
     out = edit('%d song%s for %s' % (len(put), '' if len(put) == 1 else 's', st['name']), ops)
     out.update(station=key, left_out=left)
     return out
@@ -638,7 +660,8 @@ def remove_track(gd, pr, edit, key, track):
     if not t:
         raise RadioProblem('That song isn\'t on the station any more.')
     ops = [{'op': 'record_revert', 'key': t['key']}, {'op': 'record_revert', 'key': t['sound']}]
-    ops += _relined(gd, pr, st['quest'], _depth(len(st['tracks']) - 1), skip=(t['key'],))
+    import radiotalk
+    ops += _relined(gd, pr, st['quest'], _depth(len(st['tracks']) - 1), skip=(t['key'],), gate=radiotalk.gate_of(pr, st['quest']))
     out = edit('Take %s off %s' % (t['title'], st['name']), ops)
     out['station'] = key
     return out
@@ -651,6 +674,8 @@ def remove_station(gd, pr, edit, key):
         ops.append({'op': 'remove', 'cell': st['where']['cell'], 'ref': st['where']['ref']})
     for t in st['tracks']:
         ops += [{'op': 'record_revert', 'key': t['key']}, {'op': 'record_revert', 'key': t['sound']}]
+    import radiotalk
+    ops += [{'op': 'record_revert', 'key': t['key']} for t in radiotalk.talk_of(gd, pr, st['quest'])]
     quest = pr.records[st['quest']]
     script = recordio.field(quest, 'SCRI')
     ops += [{'op': 'record_revert', 'key': k} for k in (st['quest'], script, key) if k and k.startswith('+')]

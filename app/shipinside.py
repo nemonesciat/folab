@@ -35,6 +35,7 @@ import kitindex
 import kitplan
 import landmarks
 import modelsets
+import placewater
 import recordio
 import roadgen
 import texwear as tw
@@ -702,19 +703,21 @@ def _refs(gd, things, scales=()):
     return out
 
 
-def build(gd, key):
-    """A place built from the kit and walked: Built. Raises ValueError saying why when no seed gives one that walks."""
+def build(gd, key, L=None, title=None):
+    """A place built from the kit and walked: Built. Raises ValueError saying why when no seed gives one that walks.
+    L, title: another ship's place (flotillainside.py), under a key of its own."""
     if (id(gd), key) in _built:
         return _built[(id(gd), key)]
     ts, sv = kit(gd)
     if sv is None:
         raise ValueError('No survey of what the game stands in the Utility kit, so her doors could not be hung.')
-    L = layout(key)
+    L = L or layout(key)
+    title = title or PLACES[key][1]
     want = {game_edid(t['edid']) for t in L.things if t['edid'] not in OWN} | {DOOR_IN}
     forms = _forms(gd, want)
     lacking = sorted(want - set(forms))
     if lacking:
-        raise ValueError('The game files lack what the %s holds: %s.' % (PLACES[key][1], ', '.join(lacking)))
+        raise ValueError('The game files lack what the %s holds: %s.' % (title, ', '.join(lacking)))
     door_key = gd.key(forms[DOOR_IN])
     cache = {}
     why = collections.Counter()
@@ -787,7 +790,7 @@ def build(gd, key):
         _built[(id(gd), key)] = B
         return B
     raise ValueError('The %s could not be built from the Utility kit in %d tries: %s.' % (
-        PLACES[key][1], TRIES, '; '.join('%s (%d)' % w for w in why.most_common())))
+        title, TRIES, '; '.join('%s (%d)' % w for w in why.most_common())))
 
 
 _own_built = {}
@@ -937,6 +940,7 @@ def board(gd, pr, world, ship, prefix='FOLab', again=False):
     for key, (edid, full, _fn) in PLACES.items():
         rec = recordio.load(gd, gd.from_key(like['cell']))
         rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('XOWN', 'XRNK')]
+        placewater.make_dry(rec)
         recordio.set_field(rec, 'EDID', prefix + edid, label='Editor ID')
         recordio.set_field(rec, 'FULL', full, label='Name')
         ops.append({'op': 'record_new', 'record': rec, 'name': 'mo_' + key})

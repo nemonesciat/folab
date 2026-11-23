@@ -75,6 +75,22 @@ the model for style, UI and approach. Python, standard library first, code in `a
   on the beach, a woman by the fire takes the Pip-Boy for a captain's kin and points you to Waikiki. Seven NPC_ of its own,
   placed off and switched on by the script; travel packages to markers of its own; one Undo. Spots are worked out from the
   camp's map marker (`spots`). Built and rehearsed on a copy; not yet in Waikiki or seen in game.
+- Boat travel (`boatferry.py`, `tests/test_boatferry.py`; `docs/waikiki-boats-plan.md`, which also weighs a boat you steer):
+  a boat (ACTI of the game's Boat03a, prompt "Sail") by the shore at each of `STOPS`, an arrival XMarkerHeading ashore;
+  a message per stop, a trip quest (not start-enabled, stops itself) fades, `player.MoveTo`, passes `hours`. Only the
+  game's own commands (nv-rs runs no extender: its read-me). Rehearsed on a copy (`D:\FOLab-boats\boats_into_waikiki.py`);
+  not yet in Waikiki or seen in game. The Waimanalo stop (Blue Lagoon, inside the settlers' road) waits on the user.
+- Quest people dressed (`questdress.py`; the user, 21 Nov 2026: "giving these quests npcs newer clothes"): the beachcomber,
+  Kuliʻouʻou's seven and the doctor lose the prospector armour and hat lists (`GONE`) and wear fixed pieces (`WEARS`) of
+  what draws in game (shirt with trousers, board shorts, a woman's printed dress, boater, lauhala, sunglasses, the
+  pirates' armour, head wraps); never the joined shirt-and-shorts. One Undo; rehearsed, not yet in Waikiki.
+- People doing things (`activity.py`, `surffish.py`; plan `docs/waikiki-activity-plan.md`, pictures `docs/waikiki-activity-*.png`;
+  the user, 21 Nov 2026: "the world needs a lot more activity"): markets, pier fishers, pirates at their boats, Huáng farmers
+  in the maize, court and Shouwei patrols (`worldrec` rings), fire barrels, the game's refugee children, pirates by the
+  road, wildlife only where none is near, by the game's idle markers (sandboxing people use them); surfboards of FOLab's
+  own and fishing spots (Raw Reef Fish, cooked at campfires by a recipe of its own). `apply_all`: one Undo, the touched
+  navmeshes re-signed in it (people and markers have no collision); keys taken as planned (`_Reserve`). Not possible:
+  surfing out at sea, a carried board (no animations). Rehearsed 258 s; not yet seen in game.
 - Waikiki made livelier (`waikikilife.py`, `tests/test_waikikilife.py`; the user, 21 Nov 2026): the road start to Waikiki found
   through road pieces (`way`, `Way`); hostiles out of Waikiki (`WAIKIKI_R` round the hotels) and dangerous ones off the road
   (`BAND`; small ones too for the first `QUIET`; a mod's own dangerous one past it becomes a small one); locals (surfer copies,
@@ -216,7 +232,13 @@ the model for style, UI and approach. Python, standard library first, code in `a
   doors in its frame (scaled with the ref: the Kilauea stands at 0.8); `view_ops` furnishes the world and links the way in
   with a door on the city's copy. `hotelfloors.py` (its docstring; `tests/test_hotelfloors.py`) the floors between, as
   places of the mod's own, lift from the lobby to the first, the top floor's lift (on the penthouse key) to the lookout.
-  Not tried in the game. After the city changes round a hotel, `viewworld.restage` brings its world in line: the city's land on
+  Not tried in the game. `make(..., concept=)` plans a hotel its own way (`docs/waikiki-hotel-interiors.md`): `hotelcourt.py`
+  the Royal Hawaiian as the Kahuna's court (a fortress: guard posts with locked far doors, `holds` checks each is the only way
+  on but for a locked servants' way, one level a floor, the throne), `hotelmaze.py` the Kilauea as a labyrinth (ways round,
+  stairs within a floor, the high-end kit as the Lucky 38's reads no corridors); `tests/test_hotelplans.py`. Both in Waikiki
+  since 22 Nov 2026 05:25 (nv-rs-pad), with the lobbies remade (`hotelinside.restyle_ops`: desks 78 over the floor, things
+  seated by `seat`, each lobby its own look); nobody placed in the floors yet; not yet seen in game. The default `make`
+  builds the floors as before. After the city changes round a hotel, `viewworld.restage` brings its world in line: the city's land on
   each of its cells, each copy moved to where its original stands now (same base within `MATCH`), what the city gained copied in;
   the hotel's own rooms and the closed hotel (`skip`) left.
 - The USS Missouri (`battleship.py`, `shipinside.py`, `shipplace.py`, `tests/test_battleship.py`): FOLab's own battleship in place of
@@ -243,6 +265,24 @@ the model for style, UI and approach. Python, standard library first, code in `a
   a screen of trees toward the city. Not tried in the game.
 - Pip-Boy world map (`worldmap.py`, `tests/test_worldmap.py`; no button yet, `pipmap.py` in the scratch folder runs it): a world FOLab made had no ICON (worldgen drops the template's), so the Pip-Boy map was blank and nothing could be fast travelled to. `picture` draws a 1024 square in the game's manner (grey: shaded heights, dark sea with a pale shore, roads, pavement and buildings from what the mod placed, a cell grid, the frame's ticks and corner brackets); `ops` writes it under `textures\interface\worldmap\` in the mod's own files and a `record` op on the WRLD sets ICON, MNAM (size, size, then north-west and south-east cells of the square) and clears DATA's no-fast-travel flag. Markers are left as they are (flags 2: they show once found). Run it after anything that moves ground or stands things.
 - Roads in the ground (`roadbed.py`, last in `/api/maps/dress`, after `landsoft`): the game's road piece is a slab, top at its origin, sides 25 under; the Mojave stands its origin about 14 over the land (5 in 100 with a point more than 32 over). `bed` lays every piece again on the ground as it is (slope along, a lean only where the ground leans), brings the land to the pieces' planes (the mean where pieces share ground, `ROUNDS` times so they agree), re-seats what stands there; `gaps` measures. Without it 37 in 100 showed their sides on Waikiki, with it 3. `roadgen.UNDER` is 12 for the same reason. Pavement (`osmdress.footings`' slabs) is bedded there too, harder: a slab's mesh is a bare sheet 16 over its origin with no sides (the game hides the edge with kerb pieces), so the sheet goes `SLAB_OVER` above land made flat and level under it (held ground by a building's wall too), and a slab whose ground still isn't flat within `SLAB_ROUGH`, or is in the sea, is taken out; `slab_gaps` measures. `footings` cuts each wall's strip into slab-size squares (scaled to the wall's length, `SLAB_FIT`), drops squares off dry open ground or lying in a slab already down (`laid`: two sheets at one height flicker). Doorways: `townbuild`'s catalogue keeps `shut` beside `doors` (what the game closes a doorway with when nobody goes through: a `...DoorStatic`, `DoorBarricade`, a door that leads nowhere), stood with the building; a building with neither (mobile homes, wrecks) has its door in its own mesh or none. Boards over doorways (`WoodPlanksGroup*`) count as `shut` too. A landmark set with a catalogue building among its `extra` pieces stands it with its doors and `shut` once `landmarks.know(cat)` was called (the landmarks route does): the grand hotel's wings were see-through at the door without. To look at a scratch home in the editor: launch config `folab-look` (port 8773).
+- Everyday editing you can trust (22 Nov 2026, the user: "I'm unsure if MY edits will save. I have to ask you literally
+  everything"; `tests/test_editsafe.py`, help doc `edit-your-map`, first in Help). A running FOLab holds the mod it has open
+  (`projects/<mod>.inuse`, `project.hold`, through `server._hold_open` in `state()`): any other process that writes that
+  mod (a script's apply, save, sync) gets `project.InUse` and nothing changes; reading is fine; a dead FOLab's lock is none.
+  So a real-mode script needs FOLab closed (worktrees' older apps don't know the lock: never run those on a held mod). The
+  header: `#savepill` "✓ Saved 14:32" / "● Not saved yet" (the plugin built since the last edit, `server.save_status`), a
+  close warning while not saved; `#gamepill` says how each place Put in game puts it stands; clicking it is Where your mod
+  goes (setting `play_in`: 'main' and nv-rs folders; `server.put_in_chosen`, as every Waikiki install, `nvrs.put_in` with
+  the setup; a game running from one nv-rs holds only that one, `playtest.running_in`). Moving: Move step and Turn step off,
+  Line up with pieces (was Snap pieces) off and says when it moves something, Drop onto what's below off (new localStorage
+  names, so old saved steps don't come back); `web/nudge.js`: arrow keys 1 unit as you look (Shift 16, or the Move step),
+  Page Up/Down, Ctrl+←/→ turn, a run one Undo. A scratch FOLab may put into a pretend nv-rs under `FOLAB_FAKE_GAMES`
+  (`FOLAB_NVRS_PLACES` replaces where nv-rs is looked for): launch configs `folab-edit`, `folab-edit-waikiki` (a copy on D:).
+  Keys (the user: "I had to press delete 10 times and it did nothing"): the 3D canvas had no tabindex, so a clicked
+  Position or search box kept the keys; now a click in the view blurs any box and takes them (world.js), Esc leaves a
+  box, and a Delete/End/Page key that went into a box says so once (`typedHint`). Every edit shows `#actpill` at once
+  ("⏳ Removing MilkCrate01…") until the mod has it ("✓ Removed MilkCrate01 · Ctrl+Z puts it back"; `busyStart`/`busyEnd`,
+  undo and redo too); Remove hides the thing at once and `REMOVING` keeps a second Delete from removing more.
 - A big mod's edits (21 Nov 2026: three things into a crate on Waikiki took ~10 minutes end to end): a mod is `projects/<mod>.json`
   plus `<mod>.changes`, a line of JSON an edit with only the entries it changed (`project.py` docstring). Changes are found by
   comparing every entry with what was last written (cells, records, cellinfo, water pickled, `project.pickled`; land and navmesh by
@@ -275,6 +315,12 @@ the model for style, UI and approach. Python, standard library first, code in `a
   frame: a swap of base only. DOOR records copy the replaced game door's sounds. Run once (`records_of`).
   In Waikiki (nv-rs-pad) since 22 Nov 2026 05:25, after the hotels' new floors: 460 doors, 31 lifts; not yet seen in game.
   `missing_lifts` adds a locked lift door where a hotel lobby's lift frame has none (the Royal Hawaiian's lift2, 22 Nov).
+- Nobody inside a building (`indoors.py`, `tests/test_indoors.py`; 22 Nov 2026: people seen through the closed Royal Hawaiian's
+  glass): one check, `Buildings(gd, pr, world).inside(x, y, z)`, over the catalogue's buildings, the landmark sets' pieces (not
+  towers or the statue: `NOT_CLOSED`) and FOLab's closed pieces (`CLOSED`), each by its outline from its collision (walls cut at
+  body height, doorways plugged, what they enclose filled: not the box, which takes in a hotel's lawns), source-plugin refs
+  included. `waikikilife.Spots.stand` (activity, factionfolk, waikikilife, sidequests, boatferry pick through it), activity's
+  pier decks and `worldlife.Life.stand` refuse a spot inside. `everyone_inside` lists who stands in one now.
 - Doors you can walk out of (`doorclear.py`, `tests/test_doorclear.py`; the user, 21 Nov 2026: "exiting a house placed me inside
   the building shell"): the game stands its DoorBarricade ~90-120 out in front of a door it bars, past `townbuild.SHUT_SAME`, so
   townbuild stood it in front of doors given a place too and you came out between wall and boards (274 of Waikiki's 1,732 ways
@@ -373,6 +419,11 @@ the model for style, UI and approach. Python, standard library first, code in `a
   locks), finds against walls where the navmesh ends. Keys: KEYM of the mod's own on the lid of another find of the spot.
   `new_ways` adds ramp towers and roof camps through `rooftops.plan(only=, extras=False, limit=)`. Never let `modelsets.put`
   write over a ramp's file already in the mod (its towers were walked on the old design): the run script adds missing files only.
+- Wrecks and lookouts (`seafinds.py`, `lookouts.py`, `tests/test_seafinds.py`; `docs/waikiki-loot-plan.md`): the game's wrecks laid on the
+  sea's floor by depth band (`DEPTHS`, the big hulls ~930 tall so middling is 880 down; Lake Mead's B-29 is ~1,300), along the slope with a
+  list, bedded `BED`, top `UNDER` the water; finds beside on the floor (lootplace `Seat` with `wet`), lakelurks keeping the deeper ones.
+  Lookouts: finds on guard, bamboo, court and lifeguard towers' tops (`Tops.on_top`: a surface within `ON_TOP` of the top's level),
+  sniper nests, Diamond Head's rim, the Kilauea's deck in its small world, markers at towers with none near. Rehearsed, not saved.
 - Held weapons (`nifmake.build_held`, `clubs.py`, `tests/test_clubs.py`): a melee weapon's model as the game lays its own out
   (measured over the machete, lead pipe, baton, bat, sledgehammers): BSXFlags 66, NiStringExtraData 'Prn' = 'Weapon' on the
   root, one convex box on layer 5 in a loose body (`_held_body`: box inertia, quality debris, the game's damping); the grip at
@@ -408,6 +459,39 @@ the model for style, UI and approach. Python, standard library first, code in `a
   `fair_ops` takes only rainy/snowy weathers (kind 4, 8) out of the island's region: Zion Valley's sunny day is filed as
   cloudy (2). Test 10's storms seen cycling in nv-rs-pad (21 Nov); in Waikiki since 21 Nov 2026 16:03 (D:\FOLab-weather11\
   storms_into_waikiki.py); the hurricane peak not yet seen in game.
+  What a storm leaves (`stormafter.py`, the user's yes 21 Nov): wrack on the wet sand (`shore_points`: sand, low, the sea near;
+  the game's logs, planks, tyres, broken crates, a boat now and then; refilling copies of its duffle bag, suitcases, damaged
+  crates as finds), all under one persistent parent the script switches on at the storm's second half (`WRACK_STEP`) and off
+  1 to 2 days after it, when you're off the island; people (`WHO`) linked to a marker inside the nearest unlocked place with a
+  navmesh (`REACH`, `ROOM`), the game's DefaultSandboxLinkedMarker512 copied first in their packages, conditioned on the global
+  FOLabStormShelter the script holds at 1 from the building step to the storm's end (set only where a walk ends). Its own
+  script variables go last (a save's values keep their places). Don't remake the navmeshes health then calls out of date:
+  the wrack comes and goes, and markers don't block. In Waikiki (nv-rs-pad) since 22 Nov 2026 05:25 (D:\FOLab-weather12\
+  after_into_waikiki.py); not yet seen in game.
+- Island things (`islandset.py`, `islandswap.py`, `tests/test_islandset.py`; `docs/waikiki-island-things.md`, its pictures): FOLab's own
+  pieces for the Mojave's commonest outdoor things (`REPLACES`: crates, lawn chair, canyon rocks, Bitter Springs' clotheslines,
+  kettle grill, refugee and Legion tents), each in the game piece's frame (`LIFT` where its frame differs), so `islandswap.ops`
+  is a 'swap' of base (it reads the plugin's own refs as well as the mod's added ones, which restyle.where doesn't). One draw a
+  piece: every look but the glowing ones a region of one sheet (`_sheeted`; a sheet shape without 'tile' now shows a region
+  once, modelmake). Finds (`ITEMS`, `build_item`, `item_record`): loose models and records copied from the game's like item.
+  Proposal only (night of 21 Nov 2026): nothing in Waikiki until the user picks.
+- Night lights (`nightlights.py`, `tests/test_nightlights.py`; ideas for what power means in play `docs/waikiki-night-lights.md`;
+  the user, 21 Nov 2026: "tiki torches, lanterns, strings of lanterns or lights ... a reason for power to be useful"): FOLab's
+  own set 'night' (paper lanterns and oil lamps hung from a hook at their origin, lantern posts, torches, fire pits, a
+  generator, strings on poles, `string_piece` strings sized hook to hook), each lit piece with a `_day` twin (`day`: no
+  glow, no 'night' parts). Lit pieces and their LIGH are children of the persistent disabled marker FOLabNightLights,
+  twins the opposite way; FOLabNightLightsQuest's script enables it `DUSK` to `DAWN`. `POWERED` landmarks get bulbs and a
+  generator, the rest fire. Budget: `LIGHT_APART` from every light, `CELL_LIGHTS`, `CELL_DRAWS`. Hangs on other sets'
+  pieces by `HANGS`/`ALONG` in their frames. View > Night (`web/nightview.js`; nif.py gives a shape's glow picture, world.js
+  draws it as emissive) shows it. Not yet seen in either game.
+  Flames are never drawn (the user, 22 Nov 2026, of a fire pit's crossed flame cards: "a glitchy lava lamp ... the three
+  bars on the top"): `modelsets.build` takes any card of a see-through flame look out of every set's piece (`drawn_fires`)
+  and the game's own animated fire, `GAME_FIRE` FXFireSmall01 (an add-on node: MPSFireSmall01's particles and crackle,
+  as the game stands it on its fire pits), stands at each card's foot as a thing of its own, scaled by the card's width
+  (`fires_of`). Night torches and pits get theirs as lit children of the marker (`FLAMES`), pieces that always burn
+  (waikikiset's torches, gate, planters; restyle's beach bar) with no parent; `nightlights.flame_fix` adds them to a mod
+  that has the pieces: run it after anything stands more of them. FOLab's 3D view doesn't draw particles: there the
+  fire is its editor marker, an orange cone the game doesn't draw.
 - Sky (`web/sky.js`, View > Sky): a shader dome round the camera, haze at the horizon; View > Distant buildings is `FT.on`.
 - Backups (`backups.py`, `web/backups.js` the Tools tab Backups, `/api/tools/backups`, `tests/test_backups.py`): kinds by the name
   with its time taken out; per kind the newest `KEEP` and one a day for `DAYS`, then a size cap, never the newest of a kind or
@@ -475,8 +559,13 @@ the model for style, UI and approach. Python, standard library first, code in `a
 - Vault stories (`kitlife.py`): a vault is a shelter people went on living in. `live` lays each vault's story (`STORIES`, `plan.story`) room by room over what `kitdress` stood there: `SCENES` of the game's things by editor ID on free squares, `FINDS` to search. Stays a maze on purpose: the user wants vaults twisty, with rooms worth exploring. Vaults go down (`Spec.down`, `VAULT_STAIRS`): each wing starts down a flight, the reactor's deepest.
   POI: `secure` (after `clear_ways`) locks rooms `lockable` finds (every doorway has a door, `Item.link`, nothing beyond them) and some `plan.finds`, harder deeper; the office needs a key laid on a find elsewhere, the key a KEYM of the mod's own (`key_record`, first in the ops, named `$made`, which `project.apply` also resolves in a lock). `people` names the game places Populate learns from per story (`populate.plan` `like`/`skip`, `apply` `away`); `kits.js` `kitPeople` runs it after `navMake`.
   Scenes not `IN_THE_OPEN` go only on wall squares; `HUNG_AT` things hang at the game's height. `is_window` (a closed side with a sill, or a piece named for a window): `PlanTiles.window`, never on an 'x' side.
-  Holes: `open_edges` counts a gap of `GAP_FALLS` or more between a floor's edge and the wall, with nothing within `DROP_SAFE` under it, as a hole (a corner piece whose floor stops short, a dead end narrower than what it closes); `walk_check` and SetPiece's final check look `EDGE_REACH` past the eroded walk, since a player squeezes past furniture.
+  Holes: `open_edges` counts a gap of `GAP_FALLS` or more between a floor's edge and the wall, with nothing within `DROP_SAFE` under it, as a hole (a corner piece whose floor stops short, a dead end narrower than what it closes); `walk_check` and SetPiece's final check look `EDGE_REACH` past the eroded walk, since a player squeezes past furniture. Every column across a gap must have something to land on (or floor within a step of where you stand); floor running on under rock too low to stand under (`FLOOR_ON`) is no hole: the cave kit's "holes" were all that (33 and 37 in two samples, 0 now).
+  A second way out: `Spec(back=True)` gives that room a back door (`Plan.back`, `add_back`, `exits()`; kitdress hangs an exit door there with `link='back'`, its op `exit: 'back'`).
 - Compact plans: `Planner.attach_best` weighs every way of joining a room (`_weigh_room`, `COMPACT_*`) and tries the best in `fill` as it goes. `side_purposes` gives the rooms round a tall room what they're for (`o['dress']`). `tools/vault_measure.py` measures vaults as seen: outline, gaps, rooms that read as what they're for, repeats.
+- Kaʻau's Vault inside (`kaauvault.py`, `tests/test_kaauvault.py`, plan and open questions `docs/waikiki-vault-plan.md`): a program of the user's decided rooms (each `Spec.name`, kept in the plan as `o['name']`; kitlife lays scenes and finds by name first), `PROPOSED` ones only with `proposed=True`; story `kaau` is `given` (never drawn for other vaults) and `kept` (nothing wrecked; kitdress keeps a kept story's rooms clean: no rubble, nothing by `DIRTY_WORDS`, no failing or red lights, `DIM_WORDS`); `vault_place(better=)` prefers a back door and the reactor deepest. The user's answers of 22 Nov 2026: a council (the council chamber, the Council Key), kitchens and cold store, servants' quarters, the back door room. It is Vault 50 (`NAME`): `vaultnumber.py` paints 50 on the plate Vault 22's gear door shows (it showed 92) in the game's own stencil figures and swaps the crater's door to a copy on that picture. Its people are predominantly Caucasian, founding families with elite names: the story session drafts the names, never made up here. The first version went into Waikiki 22 Nov 05:25 (nv-rs-pad); the decided one is rehearsed by `D:\FOLab-vault2\vault_cave_into_waikiki.py` (empties that place and lays it again, same key renamed), not seen in 3D or in game. Caves: `docs/waikiki-caves.md` (tunnels on 512, CaveEpic caverns on 1,024: FOLab plans only the first).
+- A door into the mountain (`rockdoor.py`, `tests/test_kocave.py`): the game's CaveExitDoorFrame with CaveDoor01 at its origin a quarter turn round (as six of the game's stand), set into a slope facing down it: a pad levelled in front, land only raised behind (`BANK`), Zion's canyon rocks either side and a crag behind (`ROCKS`), plants on the pad cleared, a path cut from a trail point (cresttrail's tread and mud); `spot` finds a slope for it below a trail facing away, or above one (`up`) facing back. The Vault's back door (windward face north of Ka'au's climb's top) and the cave's mouth.
+- The first Ko'olau cave (`kocave.py`, `tests/test_kocave.py`): `kitplan.filled` with the cave kit, its way out at a `CaveHallAntagonizerEntrance` opening on nothing (where the game hangs its cave load doors), dressed from the game's own caves, walked with everything in. Its mouth outside is on the Wai'alae Nui ridge (the user: "the first cave goes in the Ko'olau ridges"; the ridge is FOLab's pick). What it is and its name are the user's to say; not in Waikiki.
+- Planner (gap list `docs/folab-interior-planner.md`, after Morrowind Workshop's): `planpic.svg` draws a plan, every level from above; `kitplan.drawing_of` turns a generated plan into the Kit tab's drawing (`/api/kit/drawing`, Draw from the last place; balcony rooms fold into their tall room), `/api/kit/picture` (See the plan). `plan_from_drawing` leaves out a link it can't make and joins an unreached room to the nearest reached one, saying so; a vault is rejected for a hole furnished as well as bare (other kits: bare only, their catwalks are open). `kitdrawings.py`: a drawing checked as Build would plan it without pieces (`/api/kit/drawcheck`), drawings kept by name in `plans/` under FOLab's home; kitroom.js moves and resizes drawn rooms, undo/redo (`krSnap`).
 - MO2 loadouts (`loadout.py`, `web/loadouts.js`, Tools tab, `/api/tools/loadout`): an instance's ModOrganizer.ini, a profile's modlist.txt (highest priority first; `*` unmanaged), plugins.txt and loadorder.txt (a new profile has none: order goes by the files' dates, as the game's). A `Loadout` is the virtual folder worked out from the files (real Data, mods on, overwrite); `server.use_loadout` makes it what `load_game` loads and `GD.view` what files come through. Anything opening a plugin goes through `loadout.plugin_path`, a loose file through `GD.loose_path`, not `data_dir`. `loadout.py` only reads; while one is current `refuse_writes` stops everything that writes to the real game. `mod_needs` refuses a mod whose links name plugins not loaded. A patch is an ordinary new mod made in a loadout: records load from the winner (`recordio.load`, `src`), which `espwrite` makes a master. `mo2write.py` is the one place MO2 changes: Put in MO2 (`put_in_mo2`) makes a mod folder marked `madeByFOLab=true` in meta.ini, adds it to modlist.txt, plugins.txt and loadorder.txt with backups, refuses while MO2 runs (it rewrites the lists when it closes) and never touches a folder it didn't make. Test only on a separate profile. Started from MO2 (`loadout.under_mo2`: usvfs is hooked in; `running_setup` finds the profile by the plugins.txt MO2 shows it): MO2 is locked and running, so Put in MO2 writes only the folder (`switch_on`), and `playtest.launch` may start the game, whose child process gets the virtual folder. `add_to_run_list` adds FOLab beside MO2's Run button. Play here in a loadout (FOLab opened on its own): `server._put_in_setup`/`_put_test_in_setup` put the mod and a `FOLab Test` mod in the profile (`install_mod`'s `may_be_open`: MO2 may be open if the lists need no change), `playtest.launch_through_mo2` runs `ModOrganizer.exe -p profile run -e <title>`; tests replace `playtest._start`. `playtest.floor_near` puts you on a mod's own place's floor, wherever the view was. Started from MO2, Play here, Open in game and Give it to me go in for one run (`server._run_inside`, `mo2write.place_inside`): files written through the virtual Data (new ones land in overwrite, checked; the mod's own FOLab folder written in place; anything real Data or another mod has is never written through), `FOLab Play Here.esp` (not FOLab Test.esp, which real Data may hold), lines added to the profile's plugins.txt and taken out `RELEASE_AFTER` the game starts; files out at Open in game, quit and next start (`clean_inside`, noted in `mo2_inside.json` in FOLab's home; a file changed since stays). Tests swap `mo2write.VIRTUAL`.
 - Mod conflicts (`conflicts.py`, `web/conflicts.js`, under `/api/tools/conflicts/`): a plugin against the active load order, read only. Headers first (`Index`: formid, type, offset, flags, parent, kept sorted in `cache/conflicts`, named by file size and date), then only copies of what it touches. A change is what differs from its base, the last copy among the files it's built on; it's lost if the winner doesn't say the same in that field (`lost_fields`: struct fields by `schema.py`, repeated subrecords as a bag, links through `recdiff.spelled`). NAVI is never a clash (the game merges it). Moves go through `loadorder.save`, only at a click; test with a fake Data and `LOCALAPPDATA`. The script's globals are `MCF`/`mcf*`, since comforts.js has `CF`/`cf*`.
 - Quests and dialogue: `questrec.py` (QUST/DIAL/INFO as plain data and back, byte exact over every game record; `write_lines` puts each INFO in its DIAL's type-7 group, copying a game topic from the file that first has it with our quests added), `api_quests.py` (routes under /api/quest, /api/dlg; scripts compiled on save through `ModForms`; board, check), `web/quests.js`, `dialogue.js`, `questboard.js`. An INFO record keeps its topic in `rec['topic']` and its place in `rec['seq']`. Silent lines need no voice files (TRDT sound 0, words in NAM1). Conditions: `schema.condition_fields` reads CTDA parameters by function, so their links are keys and re-point; only conditions in records saved before this keep raw numbers.

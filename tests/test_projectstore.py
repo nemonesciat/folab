@@ -110,3 +110,57 @@ copied = copy.deepcopy(pr.cells)
 pr.cells = copied
 pr.sync()
 check('the same contents in other objects: the same digest', pr.digest('cells', A) == d2)
+
+# dry runs: a script's own save in place of ours (how dry runs were always made), or dry_run; neither file ever touched
+for how in ('save stubbed', 'dry_run'):
+    pr = project.Project.open('Store Test')
+    pr.apply('Before the dry run', [{'op': 'move', 'cell': A, 'ref': made[0], 'p': [1, 1, 1, 0, 0, 0]}])
+    files = lambda: [open(p, 'rb').read() if os.path.isfile(p) else None for p in (pr.path, pr.journal_path)]
+    had = files()
+    called = []
+    if how == 'dry_run':
+        pr.dry_run = True
+    else:
+        pr.save = lambda *a, **k: called.append(1)
+    d0 = pr.digest('cells', A)
+    pr.apply('Dry', [{'op': 'move', 'cell': A, 'ref': made[0], 'p': [2, 2, 2, 0, 0, 0]},
+                     {'op': 'record_new', 'record': {'type': 'MISC', 'flags': 0, 'src': '', 'subs': []}}])
+    moved = pr.cells[A]['refs'][made[0]]['p'][0] == 2 and pr.digest('cells', A) != d0
+    pr.undo(); pr.redo()
+    pr.cells[A]['refs'][made[0]]['p'][1] = 99.0
+    pr.esm = not pr.esm
+    pr.sync(); pr.compact(); pr.save(); pr.save(afresh=True)
+    for n in range(3):
+        pr.apply('Dry %d' % n, [{'op': 'move', 'cell': A, 'ref': made[0], 'p': [n, 2, 2, 0, 0, 0]}])
+    check('a dry run (%s): the .json and .changes byte for byte as before' % how, files() == had)
+    check('… while the mod in memory changes, digests with it', moved)
+    if how != 'dry_run':
+        check('… the stand-in save called where apply always called save', len(called) >= 4, str(len(called)))
+    check('… and read back, the mod is as before the dry run', project.Project.open('Store Test').cells[A]['refs'][made[0]]['p'][:3] == [1, 1, 1])
+
+# a dry run on a mod another FOLab has open: allowed (nothing is written); a real edit still refused
+import subprocess
+other = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+try:
+    pr = project.Project.open('Store Test')
+    json.dump({'pid': other.pid, 'by': 'FOLab', 'since': 0}, open(project.lock_path(pr.path), 'w', encoding='utf-8'))
+    files = lambda: [open(p, 'rb').read() if os.path.isfile(p) else None for p in (pr.path, pr.journal_path)]
+    had = files()
+    pr.dry_run = True
+    try:
+        pr.apply('Dry on a held mod', [{'op': 'move', 'cell': A, 'ref': made[0], 'p': [3, 3, 3, 0, 0, 0]}])
+        pr.sync(); pr.save()
+        ok = True
+    except project.InUse:
+        ok = False
+    check('a dry run on a mod another FOLab holds: no InUse, files as they were', ok and files() == had)
+    pr.dry_run = False
+    try:
+        pr.apply('Real on a held mod', [{'op': 'move', 'cell': A, 'ref': made[0], 'p': [4, 4, 4, 0, 0, 0]}])
+        refused = False
+    except project.InUse:
+        refused = True
+    check('… a real edit there is still refused', refused and files() == had)
+finally:
+    other.kill()
+    os.remove(project.lock_path(pr.path))

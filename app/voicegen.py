@@ -359,18 +359,32 @@ def speak(text, voice='am_michael', speed=1.0, pitch=0.0, lively=1.0):
     return audio, merge_marks(timed)
 
 
-def write_line(base, text, voice='am_michael', speed=1.0, pitch=0.0, lively=1.0, engine='kokoro', feeling=None):
+def speak_zh(text, voice='zm_yunjian', speed=1.0):
+    """(audio, timed sounds) for Mandarin written in pinyin (g2pzh), by Kokoro's Chinese voices (zf_, zm_). Its tune is
+    left as spoken: in Mandarin the pitch is the tones, so voicefx's pitch and tune widening would change the words."""
+    import g2pzh
+    audio, timed = kokoro().create(g2pzh.sounds(text), voice, speed=speed)
+    audio, timed = breathe(audio, timed, speed)
+    return audio, [(g2pzh.lip_sound(p), a, b) for p, a, b in timed]
+
+
+def write_line(base, text, voice='am_michael', speed=1.0, pitch=0.0, lively=1.0, engine='kokoro', feeling=None, lang='en'):
     """Writes base + '.ogg' and base + '.lip', sounding as the game's own voices do (voicefx.master); returns seconds
     spoken. engine 'chatterbox' acts it out (feeling: Chatterbox's exaggeration, None for CALM's)."""
     import soundfile
     import voicefx
-    if engine == 'chatterbox':
+    if lang == 'zh':                        # (Mandarin in pinyin: Kokoro's Chinese voices; Chatterbox here speaks English)
+        audio, timed = speak_zh(text, voice, speed)
+    elif engine == 'chatterbox':
         audio, timed = speak_chatterbox(text, voice, speed, pitch, lively, exaggeration=feeling)
     else:
         audio, timed = speak(text, voice, speed, pitch, lively)
     audio = voicefx.master(audio, is_female(voice))
     os.makedirs(os.path.dirname(base), exist_ok=True)
-    soundfile.write(base + '.ogg', audio, RATE, format='OGG', subtype='VORBIS')
+    # (a second at a time: one call with a clip of ~25 s took Python down with it, 22 Nov 2026; 20 s was fine)
+    with soundfile.SoundFile(base + '.ogg', 'w', RATE, 1, format='OGG', subtype='VORBIS') as f:
+        for k in range(0, len(audio), RATE):
+            f.write(audio[k:k + RATE])
     seconds = len(audio) / RATE
     with open(base + '.lip', 'wb') as f:
         f.write(lipwrite.write(lipwrite.from_timeline(timed, seconds=seconds)))

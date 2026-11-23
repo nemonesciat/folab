@@ -390,13 +390,13 @@ def place_doors(ts, sv, plan, made, rng, share=0.8):
                 got = (style[room], got[1])
             style.setdefault(room, got[0])
             out.append(Item(got[0], got[1], 1.0, 'door', plan.cells[c], link=link))
-    if plan.exit:
-        c, d = plan.exit
+    for k, (c, d) in enumerate(plan.exits()):
         m = by.get(c)
         if m:
             got = _exit_in(ts, sv, table, m, d, rng)
             if got:
-                out.append(Item(got[0], got[1], 1.0, 'exit', plan.cells[c]))
+                # (the second way out is the back door: link='back' says which it is)
+                out.append(Item(got[0], got[1], 1.0, 'exit', plan.cells[c], link='back' if k else None))
     return out
 
 
@@ -426,6 +426,11 @@ def _exit_in(ts, sv, table, m, d, rng):
 
 SOLID = ('furn', 'cont', 'stat', 'rubble', 'act', 'term')
 RUBBLE_SHARE = 0.3      # (of a ruined room's squares, how many get a heap)
+# (a place kept up, lit and clean: none of what the game's rooms have of these; a light by these words is a failing one)
+DIRTY_WORDS = {'dirty', 'broken', 'destroyed', 'burnt', 'burned', 'blood', 'bloody', 'gore', 'skeleton', 'skull', 'bones', 'trash', 'garbage',
+               'damaged', 'ruined', 'rusty', 'rust', 'wrecked', 'dead', 'corpse', 'debris', 'grime', 'stain', 'dmg',
+               'litter', 'cobweb', 'cobwebs', 'puddle', 'leak', 'filth', 'dust', 'dusty'}
+DIM_WORDS = {'red', 'flicker', 'flickering', 'broken', 'off', 'dead', 'dim', 'emergency', 'spark', 'sparks', 'busted'}
 LIGHTS_PER = 7          # (a room gets at least a light for this many squares...)
 LIGHTS_MAX = 5          # (...and no more than one for this many: overlapping lights flicker in the game)
 
@@ -611,6 +616,12 @@ def wreck_some(plan, rng):
     rooms = [o for o in plan.owners if o['kind'] == ROOM_KIND]
     if any('wrecked' in o for o in rooms):
         return
+    import kitlife
+    if kitlife.STORIES.get(getattr(plan, 'story', None), {}).get('kept'):
+        # (a place whose story says it's kept up: nothing left wrecked)
+        for o in rooms:
+            o['wrecked'] = False
+        return
     # (of what the place has several of: its one rec room is what makes it a place people lived)
     kinds = collections.Counter(o['purpose'] for o in rooms)
     can = [o for o in rooms if not o.get('main') and not o.get('tall') and not o.get('whole') and not o.get('part_of') and kinds[o['purpose']] > 1]
@@ -662,7 +673,10 @@ def dress(ts, sv, plan, made, rng, purposes=None, ruined=False, only=None):
         _rubble(sv, plan, made, out, rng)
     if wrecks:
         _rubble(sv, plan, [m for m in made if m.owner in wrecks], out, rng, WRECK_RUBBLE, WRECK_HEAPS)
-    _even_out_lights(ts, sv, plan, made, out, rng, only)
+    clean = _kept(plan)
+    if clean:
+        out[:] = [it for it in out if not dirty(sv, it)]
+    _even_out_lights(ts, sv, plan, made, out, rng, only, clean)
     _not_a_showroom(ts, sv, plan, out, rng)
     _no_clashes(sv, out)
     keep_fronts(ts, plan, out)
@@ -786,8 +800,24 @@ def _rubble(sv, plan, made, out, rng, share=RUBBLE_SHARE, least=0):
         done[m.owner] += 1
 
 
-def _even_out_lights(ts, sv, plan, made, items, rng, only=None):
-    """Every room and corridor lit, none blazing: the game's lights from the game's sets for these same pieces."""
+def _kept(plan):
+    import kitlife
+    return bool(kitlife.STORIES.get(getattr(plan, 'story', None), {}).get('kept'))
+
+
+def dirty(sv, it):
+    """Rubble, or something whose name says it's dirty, broken or dead: what a place kept up has none of. A light that says
+    it's failing counts too."""
+    info = sv.info.get(it.key, ('thing', (), ''))
+    if it.what == 'rubble' or info[0] == 'rubble':
+        return True
+    words = set(words_of(info[2] or ''))
+    return bool(words & DIRTY_WORDS) or (it.what == 'light' and bool(words & DIM_WORDS))
+
+
+def _even_out_lights(ts, sv, plan, made, items, rng, only=None, clean=False):
+    """Every room and corridor lit, none blazing: the game's lights from the game's sets for these same pieces. clean: a place
+    kept up has no failing lights, and its rooms are lit as well as the game's best lit (`LIGHTS_PER` halved)."""
     per = collections.defaultdict(list)
     for it in items:
         if it.what == 'light':
@@ -799,7 +829,8 @@ def _even_out_lights(ts, sv, plan, made, items, rng, only=None):
         if o['kind'] == VOID_KIND or (only is not None and o['n'] != only):
             continue
         n = sum(1 for c in o['cells'] if c not in plan.air)
-        least, most = max(1, n // LIGHTS_PER), max(1, n // LIGHTS_MAX)
+        least, most = max(1, n // (max(1, LIGHTS_PER // 2) if clean else LIGHTS_PER)), max(1, n // LIGHTS_MAX)
+        least = min(least, most)
         have = per[o['n']]
         while len(have) > most:
             drop = have.pop(rng.randrange(len(have)))
@@ -809,7 +840,8 @@ def _even_out_lights(ts, sv, plan, made, items, rng, only=None):
         for m in tiles:
             if len(have) >= least:
                 break
-            got = [s for s in sv.sets.get(m.key, ()) if any(sv.info.get(i[0], ('',))[0] == 'light' for i in s)]
+            got = [s for s in sv.sets.get(m.key, ()) if any(sv.info.get(i[0], ('',))[0] == 'light' for i in s)
+                   and not (clean and any(dirty(sv, Item(i[0], None, 1.0, sv.info.get(i[0], ('thing',))[0], None)) for i in s))]
             if not got:
                 continue
             s = rng.choice(got)
@@ -863,7 +895,7 @@ def item_ops(items, origin=(0.0, 0.0, 0.0)):
     for it in items:
         op = {'op': 'add', 'gen': True, 'base': it.key, 'p': [origin[0] + it.p[0], origin[1] + it.p[1], origin[2] + it.p[2], it.p[3], it.p[4], it.p[5]], 's': it.s}
         if it.what == 'exit':
-            op['exit'] = True
+            op['exit'] = 'back' if it.link == 'back' else True
         if it.extra:
             op['extra'] = it.extra
         out.append(op)

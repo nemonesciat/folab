@@ -16,6 +16,7 @@ Not done: cover (no NVCA), ledge links, preferred triangles (those last by hand:
 
 Outdoors the columns reach MARGIN past the cell on every side and the mesh is cut at the cell's edge, so an edge isn't
 taken for a wall and two neighbouring cells get the same heights along their shared border."""
+import collections
 import heapq
 import math
 import struct
@@ -39,6 +40,7 @@ RADIUS = 16.0           # one ring of places. 16: 80%, 32: 70%, 48: 57%. Its mes
 HEIGHT_ERROR = 16.0     # 90% of its meshes' surface is within 16 of the collision
 OUTLINE_ERROR = 1.25    # voxels: at least 0.71 to smooth a diagonal staircase of places at all
 MARGIN = 96.0           # outdoors: how far past the cell's edge things still count
+WIDE = 2048.0           # outdoors: how far past it a piece with no ground in the cell may find ground (_joined_beyond)
 MAX_EDGE = 1024.0       # 99.9% of its edges are shorter
 MIN_AREA2 = 32.0        # twice the area, seen from above, of the smallest triangle allowed to appear
 MIN_SHAPE = 0.012       # ...and of the thinnest: twice its area over its longest side squared
@@ -661,7 +663,15 @@ def _lay_refs(gd, field, refs, cache, report, any_door=False):
             if r.get('pos'):
                 seeds.append(r['pos'])
             continue
-        if r['type'] != 'REFR' or not _usable(gd, r):
+        if r['type'] != 'REFR':
+            continue
+        if r['base'] is None and r.get('door') and r.get('pos') is not None:     # (a door of the mod's own, navbuild.place_refs)
+            if r.get('leads'):
+                doors.append((r['ref'], r['pos']))
+            if r.get('leads') or any_door:
+                seeds.append(r['pos'])
+            continue
+        if not _usable(gd, r):
             continue
         if r['base'] is None and r.get('model'):            # (one of the mod's own models)
             solid = _solid_of_file(gd, r['model'], cache, report)
@@ -737,6 +747,44 @@ def _water_of(gd, cell):
     return None
 
 
+def _joined_beyond(g, pieces, wanted, crop, wide_field, step, headroom, radius):
+    """The pieces dropped in a cell's own field (no ground of their own there) that join ground past its edge: a deck
+    whose stair, or a bridge whose far end, stands in the next cell. The field reaches only MARGIN past the cell, so
+    whether a piece is kept is decided again over WIDE past it, only for pieces that come to the field's edge (others
+    can't join anything the cell doesn't hold), and only then is the wider field made: a cell with nothing like that comes
+    out as before. Tree villages' platforms in a neighbouring cell had no mesh at all (Waikiki, 22 Nov 2026)."""
+    _joined_beyond.last = 0
+    v = g.v
+    x0, y0, x1, y1 = crop[0] - MARGIN + 3 * v, crop[1] - MARGIN + 3 * v, crop[2] + MARGIN - 3 * v, crop[3] + MARGIN - 3 * v
+    edge = []
+    for k, piece in enumerate(pieces):
+        if k in wanted or len(piece) < MIN_REGION or any(g.p[i][5] for i in piece):
+            continue                            # (only what stands off the ground: a sliver of land cut by the field's
+                                                #  edge is the neighbour's to mesh, and keeping it changed half of all cells)
+        if any(not (x0 <= g.p[i][1] * v <= x1 and y0 <= g.p[i][0] * v <= y1) for i in piece):
+            edge.append(k)
+    if not edge:
+        return set()
+    field = wide_field()
+    w = Graph(_places(field, headroom), v, step, headroom)
+    wkeep = w.erode([True] * len(w.p), radius)
+    wpieces, wlabel = w.pieces(wkeep)
+    grounded = {k for k, piece in enumerate(wpieces) if sum(1 for i in piece if w.p[i][5]) >= MIN_REGION}
+    out = set()
+    for k in edge:
+        hits = 0
+        for i in pieces[k]:
+            iy, ix, z = g.p[i][:3]
+            for j in w.by.get((iy, ix), ()):
+                if abs(w.p[j][2] - z) < 1.0 and wkeep[j] and wlabel[j] in grounded:
+                    hits += 1
+                    break
+        if hits * 2 >= len(pieces[k]):         # (most of it is the same ground-joined piece in the wider field)
+            out.add(k)
+    _joined_beyond.last = len(out)
+    return out
+
+
 def _floor_pieces(g, pieces):
     """The pieces at floor level: as low as the lowest one big enough to walk about on, give or take a stair or two."""
     big = [(sum(g.p[i][2] for i in piece) / len(piece), k) for k, piece in enumerate(pieces) if len(piece) >= MIN_REGION]
@@ -748,7 +796,7 @@ def _floor_pieces(g, pieces):
 
 def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM, radius=RADIUS,
              height_error=HEIGHT_ERROR, outline_error=None, refs=None, floors=False, refs_of=None, land_of=None,
-             water=False):
+             water=False, beyond=False):
     """A navmesh for one cell of a gamedata.GameData: (mesh or None, report). Links to doors are made by
     navmesh.link_doors, across cell edges by navmesh.link_edges. Form IDs in the mesh are gd's load-order ones.
     refs: what's in a place inside, if not the game's own (a mod's changes; cell may then be the mod's own key).
@@ -756,7 +804,9 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
     area: a place being built may have nothing linked yet, the biggest surface is often its roof, and on several levels
     "floor level" alone is only the lowest.
     Outside, a mod's changes come through refs_of(cell) (what stands in a cell), land_of(x, y) (a square's heights, None
-    for the game's) and water (its height, None for no water; False: as the game has it)."""
+    for the game's) and water (its height, None for no water; False: as the game has it).
+    beyond: outside, also keep what stands off the ground and joins it only past the cell (_joined_beyond). Asked for
+    only by what builds such things (tree villages): over the game's cells it kept rock tops and a CollisionMarker's."""
     t0 = time.time()
     report = {'collision': 0, 'drawn': 0, 'unread': 0, 'placed': 0, 'kept_pieces': 0, 'dropped_pieces': 0}
     outside = cell in gd.ext_cells
@@ -770,17 +820,22 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
         world = gd.ext_cells[cell]
         gx, gy = gd.cell_grid(cell)
         crop = (gx * CELL, gy * CELL, (gx + 1) * CELL, (gy + 1) * CELL)
-        field = Field(voxel, cos, (crop[0] - MARGIN, crop[1] - MARGIN, crop[2] + MARGIN, crop[3] + MARGIN))
         tex = {}
-        for dy in (-1, 0, 1):
-            for dx in (-1, 0, 1):
-                _lay_ground(gd, field, world, gx + dx, gy + dy, tex, land_of)
-                c = gd.grid(world).get((gx + dx, gy + dy))
-                if c is None:
-                    continue
-                d, s = _lay_refs(gd, field, refs_of(c) if refs_of else gd.refs(c), cache, report)
-                if dx == 0 and dy == 0:
-                    doors, seeds = d, s
+
+        def lay(reach, rep):
+            f = Field(voxel, cos, (crop[0] - reach, crop[1] - reach, crop[2] + reach, crop[3] + reach))
+            got = ([], [])
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    _lay_ground(gd, f, world, gx + dx, gy + dy, tex, land_of)
+                    c = gd.grid(world).get((gx + dx, gy + dy))
+                    if c is None:
+                        continue
+                    d, s = _lay_refs(gd, f, refs_of(c) if refs_of else gd.refs(c), cache, rep)
+                    if dx == 0 and dy == 0:
+                        got = (d, s)
+            return f, got
+        field, (doors, seeds) = lay(MARGIN, report)
     else:
         field = Field(voxel, cos)
         doors, seeds = _lay_refs(gd, field, gd.refs(cell) if refs is None else refs, cache, report, any_door=floors)
@@ -795,6 +850,15 @@ def generate(gd, cell, voxel=None, slope=SLOPE_MAX, step=STEP, headroom=HEADROOM
         for k, piece in enumerate(pieces):
             if sum(1 for i in piece if g.p[i][5]) >= MIN_REGION:
                 wanted.add(k)
+        # (and whatever a door that leads somewhere stands on, ground or not: a hotel's glazed lobby in its view world
+        # stands on its own model, closed off from the land, and its lift doors had nothing to link to, 22 Nov 2026)
+        for _ref, pos in doors:
+            i = g.nearest(pos, SEED_REACH, keep)
+            if i is not None:
+                wanted.add(label[i])
+        if beyond:
+            wanted |= _joined_beyond(g, pieces, wanted, crop, lambda: lay(WIDE, collections.Counter())[0], step, headroom, radius)
+            report['kept_beyond'] = getattr(_joined_beyond, 'last', 0)
     else:
         for pos in seeds:
             i = g.nearest(pos, SEED_REACH, keep)
