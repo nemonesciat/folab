@@ -231,7 +231,7 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
     if leaves == 2:
         looks['leaf_r'] = look(leaf, region=(1.0, 0.0, 0.0, 1.0))      # (the other leaf of a pair the picture's mirror)
     if flush:
-        t = 5.0
+        t = 5.0 + FLUSH_OUT                      # (FLUSH_OUT: the leaf thicker toward the room, its front further out: see LEAF_Y)
         lw = (W - 2 * side) / leaves
         for k in range(leaves):
             x = -W / 2.0 + side + lw * (k + 0.5)
@@ -284,6 +284,7 @@ def unit(name, W, H, leaf, trim_look, leaves=1, depth=16.0, liner=8.0, casing=0.
 
 
 LEAF_Y = -3.5           # (a hole door's leaves' middle: 5 thick, so their front 6 in front of the wall's face)
+FLUSH_OUT = 0.0         # (a flush door's leaf this much thicker toward the room)
 
 
 def lift_door(name, W, H, low, frame=18.0):
