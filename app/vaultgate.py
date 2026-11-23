@@ -333,3 +333,240 @@ def ops(gd, pr, world, side, cat=None):
                added=sum(1 for o in B.ops if o['op'] == 'add'), removed=sum(1 for o in B.ops if o['op'] == 'remove'),
                ledge_line=[[round(x), round(y)] for x, y in ledge], track_line=[[round(x), round(y)] for x, y in track[::8]])
     return lands + moves + B.ops, rep, sorted(B.cells)
+
+
+# ---------- the climb kept tidy (the user, 23 Nov 2026: "gotta tidy up the foliage around that door, the path up the
+# vault, both looked rough"): a kept way to an elite vault. Nothing grows on the walk (the ledge, the turn platforms, the
+# landing) nor where a guardrail, the portal or the door's swing stands; the walk's ground painted LEDGE_GROUND, which
+# carries no grass, and every grass sample whose blades would reach it moved onto its ground's twin with none; low ferns and
+# ti along the uphill side, nothing on the walkway, a few framing plants either side of the portal, kept off the door. ----------
+
+WALK_HALF = 200.0            # (the walk: this either side of the path's line, as the ledge is levelled)
+CLEAR_PAD = 40.0             # (and a plant's middle this much further out still goes: its leaves reach in)
+RAIL_CLEAR = 150.0           # (a plant this near a guardrail's middle goes: its bounds cross the rail)
+SWING = 380.0                # (the gear door's disc rolls aside: nothing grows within this of its front)
+GRASS_OFF = 40.0             # (no grass blade reaches within this of the walk's edge)
+EDGE_OUT = 175.0             # (the edge planting: this far uphill of the path's line, the levelled walk's inner edge against the wall)
+EDGE_KEEP = 150.0            # (an edge plant keeps at least this far from the line: the walkway's middle stays clear)
+EDGE_EVERY = 330.0
+EDGE_PLANTS = ['FOLabJungleFernSmall', 'FOLabJungleTiGreen', 'FOLabJungleFern', 'FOLabJungleTiRed']
+TURN_KEEP = 320.0            # (no edge planting within this of a turn-back: the platform stays open)
+FRAME = [('FOLabJungleTreeFern', -720.0, -360.0), ('FOLabJungleHeliconia', -620.0, -420.0), ('FOLabJungleTiRed', -740.0, -470.0),
+         ('FOLabJungleTreeFern', 700.0, -360.0), ('FOLabJungleHeliconia', 600.0, -420.0), ('FOLabJungleTiRed', 720.0, -470.0)]
+                             # (framing the portal from the landing's back strip, either side: x across from the entrance's
+                             # origin, y out from it; the portal's face is 274 out, the door's swing keeps the middle clear)
+TOO_STEEP = 1.0              # (no edge plant where the ground rises more than this per unit across its foot: a cliff)
+
+
+def _grows(gd, pr, key, cache):
+    if key not in cache:
+        import natcompound
+        e = natcompound._named(gd, pr, key) or ''
+        cache[key] = (any(w.lower() in e.lower() for w in natcompound.GROWS + ('Hibiscus', 'Taro', 'Heliconia', 'Jungle', 'Understory'))
+                      and not any(w.lower() in e.lower() for w in ('Road', 'Door', 'Marker', 'Rock', 'Boulder', 'Crag', 'Light', 'Lamp', 'Street', 'Sign')))
+    # ('Street' holds 'tree': the landing's two street lamps went with the plants in the first try, 23 Nov 2026)
+    return cache[key]
+
+
+def path_lines(gd, pr):
+    """The climb's walk as it stands in a mod: ([(x, y, z)] lines leg by leg, turn platforms, the entrance's (x, y), the
+    landing's height, the guardrails' places). Read back from its guardrails (each RAIL_OUT to the open side and RAIL_UP
+    over the path), the turns put back at the legs' ends, and the platforms joining them."""
+    import collections
+    import recordio
+    ent = None
+    rails = []
+    for ck, c in pr.cells.items():
+        for rk, r in (c.get('refs') or {}).items():
+            b = r.get('base') or ''
+            if r.get('removed') or not r.get('p') or ':' not in b:
+                continue
+            if b.startswith('+'):
+                rec = pr.records.get(b)
+                if rec and recordio.field(rec, 'EDID') in ('FOLabVault22EntranceOpen',):
+                    ent = r['p']
+                continue
+            e = gd.edid(gd.from_key(b)) or ''
+            if e == RAIL and abs(r['p'][0] - DOOR_X) < 2600 and abs(r['p'][1] - FLOOR[1]) < 9000:
+                rails.append(r['p'])
+            elif e == ENTRANCE:
+                ent = r['p']
+    land_z = round((FLOOR_Z + DOOR_UP - 120.0) / 8.0) * 8.0
+    n = len(LEGS)
+    turns = [(DOOR_X + ox, land_z - k * (land_z - FLOOR_Z) / (n - 1)) for k, ox in enumerate(LEGS)]
+    legs = collections.defaultdict(list)
+    for x, y, z, *_r in rails:
+        pz = z - RAIL_UP
+        k = min(range(n - 1), key=lambda k: 0 if min(turns[k][1], turns[k + 1][1]) - 40 <= pz <= max(turns[k][1], turns[k + 1][1]) + 40
+                else min(abs(pz - turns[k][1]), abs(pz - turns[k + 1][1])))
+        legs[k].append((x, y + RAIL_OUT, pz))
+    lines, ends = [], []
+    for k in sorted(legs):
+        (xa, za), (xb, zb) = turns[k], turns[k + 1]
+        pts = sorted(legs[k], key=lambda p: (p[0] - xa) / ((xb - xa) or 1))
+        line = [(xa, pts[0][1], za)] + pts + [(xb, pts[-1][1], zb)]
+        lines.append(line)
+        ends.append((line[0], line[-1]))
+    plats = [[ends[k][1], ends[k + 1][0]] for k in range(len(ends) - 1)]
+    return lines, plats, (ent[0], ent[1]) if ent else None, land_z, [r[:3] for r in rails]
+
+
+def tidy(gd, pr, world, side, cat):
+    """(ops, report, cells): the climb kept tidy (see above). Nothing placed but plants; nothing moves."""
+    import json
+    import land as landmod
+    import plantgrass
+    import huangland
+    import recordio
+    T = cresttrail.Trail(gd, pr, world, side, cat)
+    B = T.B
+    lines, plats, ent, land_z, rails = path_lines(gd, pr)
+    if not lines or ent is None:
+        raise ValueError('the climb is not in this mod (no guardrails or no entrance)')
+    ex, ey = ent
+    # (the landing as climb() lays it: the wall's face 500 in front of the entrance, the landing LANDING[1] in front of that)
+    landing = (DOOR_X - LANDING[0], ey - 500.0 - 2 * LANDING[1] + 20.0, DOOR_X + LANDING[0], ey - 500.0 + 20.0)
+    segs = []
+    for line in lines + plats:
+        for a, b in zip(line, line[1:]):
+            segs.append(((a[0], a[1]), (b[0], b[1])))
+
+    def to_walk(x, y):
+        if landing[0] <= x <= landing[2] and landing[1] <= y <= landing[3]:
+            return 0.0
+        best = 1e9
+        for (ax, ay), (bx, by) in segs:
+            dx, dy = bx - ax, by - ay
+            L2 = dx * dx + dy * dy or 1.0
+            u = max(0.0, min(1.0, ((x - ax) * dx + (y - ay) * dy) / L2))
+            best = min(best, math.hypot(x - ax - u * dx, y - ay - u * dy))
+        return best
+    door = (ex - 18.0, ey + 27.0 - 150.0)
+    portal = (ex - 1025.0, ey - 274.0, ex + 885.0, ey + 1725.0)       # (Vault22Entrance's bounds, turned 0)
+    rep = {'plants taken out': 0, 'by reason': {}, 'painted points': 0, 'edge plants': 0, 'framing plants': 0}
+    cache = {}
+    xs = [p[0] for s in segs for p in s] + [landing[0], landing[2], portal[0], portal[2]]
+    ys = [p[1] for s in segs for p in s] + [landing[1], landing[3], portal[1], portal[3]]
+    box = (min(xs) - 600, min(ys) - 600, max(xs) + 600, max(ys) + 600)
+    # 1. what grows on the walk, by the rails, in the portal or the door's swing: out
+    for ck, c in pr.cells.items():
+        for rk, r in (c.get('refs') or {}).items():
+            p = r.get('p')
+            if not p or r.get('removed') or not (box[0] < p[0] < box[2] and box[1] < p[1] < box[3]):
+                continue
+            if not _grows(gd, pr, r.get('base') or '', cache):
+                continue
+            why = None
+            if to_walk(p[0], p[1]) < WALK_HALF + CLEAR_PAD:
+                why = 'walk'
+            elif any(math.hypot(p[0] - q[0], p[1] - q[1]) < RAIL_CLEAR for q in rails):
+                why = 'rail'
+            elif portal[0] - CLEAR_PAD <= p[0] <= portal[2] + CLEAR_PAD and portal[1] - CLEAR_PAD <= p[1] <= portal[3]:
+                why = 'portal'
+            elif math.hypot(p[0] - door[0], p[1] - door[1]) < SWING:
+                why = 'door'
+            if why:
+                B.take_out([(ck, rk)])
+                rep['plants taken out'] += 1
+                rep['by reason'][why] = rep['by reason'].get(why, 0) + 1
+    # 2. the walk's ground: LEDGE_GROUND at full (it carries no grass), the layers under it faded
+    f_ = next(f for f, (_i, r) in gd.forms.items() if r.tag == 'LTEX' and gd.edid(f) == LEDGE_GROUND)
+    key, texinfo = gd.key(f_), landmod.texture_of_fid(gd, f_, {})
+    touched = set()
+
+    def form(cx, cy):
+        f = B._form((cx, cy))
+        if f is not None and (cx, cy) not in touched:
+            f['q'] = json.loads(json.dumps(f['q']))     # (a land entry is replaced whole, never changed in place)
+            touched.add((cx, cy))
+        return f
+    for gy in range(int(box[1] // 128), int(box[3] // 128) + 2):
+        for gx in range(int(box[0] // 128), int(box[2] // 128) + 2):
+            d = to_walk(gx * 128.0, gy * 128.0)
+            if d > WALK_HALF:
+                continue
+            a = 1.0 if d < WALK_HALF - 64.0 else max(0.0, (WALK_HALF - d) / 64.0)
+            for cx in ({gx // 32, (gx - 1) // 32} if gx % 32 == 0 else {gx // 32}):
+                for cy in ({gy // 32, (gy - 1) // 32} if gy % 32 == 0 else {gy // 32}):
+                    f = form(cx, cy)
+                    if not f:
+                        continue
+                    r_, c_ = gy - cy * 32, gx - cx * 32
+                    for q in range(4):
+                        rr, cc = r_ - (q >> 1) * 16, c_ - (q & 1) * 16
+                        if 0 <= rr <= 16 and 0 <= cc <= 16:
+                            huangland.lay_paint(f['q'][q], rr * 17 + cc, key, texinfo, a)
+                            rep['painted points'] += 1
+    # 3. no grass blade reaching the walk: every sample whose blades would, moved onto its ground's twin with none
+    grows, plain = huangland.no_grass_rules(gd, pr)
+    hits = {}
+    half = WALK_HALF + GRASS_OFF
+    for (ax, ay), (bx, by) in segs:
+        L = math.hypot(bx - ax, by - ay)
+        if not L:
+            continue
+        ux, uy = (bx - ax) / L, (by - ay) / L
+        foot = ((ax + bx) / 2, (ay + by) / 2, ux, -uy, -L / 2 - half, -half, L / 2 + half, half)
+        for xy, got in plantgrass.points_under(foot).items():
+            hits.setdefault(xy, set()).update(got)
+    lx = (landing[2] - landing[0]) / 2 + GRASS_OFF
+    lyh = (landing[3] - landing[1]) / 2 + GRASS_OFF
+    for xy, got in plantgrass.points_under(((landing[0] + landing[2]) / 2, (landing[1] + landing[3]) / 2, 1.0, 0.0, -lx, -lyh, lx, lyh)).items():
+        hits.setdefault(xy, set()).update(got)
+    g_rep = {}
+    for xy, h in hits.items():
+        f = form(*xy)
+        if f:
+            plantgrass.clear_points(f, h, grows, plain, g_rep)
+    rep['grass'] = g_rep
+    # 4. the edges dressed: low ferns and ti uphill of each leg (the wall's side, +y of the line), framing at the portal
+    own = {recordio.field(r, 'EDID'): k for k, r in pr.records.items() if r.get('type') == 'STAT' and k.startswith('+')}
+    turn_pts = [(e[0], e[1]) for line in lines for e in (line[0], line[-1])]
+    counter = [0]
+
+    def stand(edid, x, y, yaw, near_walk=WALK_HALF + 20.0, on_landing=False):
+        base = own.get(edid)
+        g = B.ground.at(x, y)
+        ck = B.w.cell_at(x, y)
+        if not base or g is None or ck is None:
+            return False
+        if (not on_landing and to_walk(x, y) < near_walk) or math.hypot(x - door[0], y - door[1]) < SWING + 60.0:
+            return False
+        if portal[0] <= x <= portal[2] and portal[1] <= y <= portal[3]:
+            return False
+        lows = [B.ground.at(x + dx, y + dy) for dx in (-40, 0, 40) for dy in (-40, 0, 40)]
+        lows = [v for v in lows if v is not None]
+        if not lows or (max(lows) - min(lows)) / 80.0 > TOO_STEEP:
+            return False
+        B.ops.append({'op': 'add', 'cell': ck, 'base': base, 'p': [round(x, 1), round(y, 1), round(min(lows) - 4.0, 1), 0.0, 0.0,
+                      round(yaw % math.tau, 4)], 's': 1.0})
+        B.cells.add(ck)
+        return True
+    for line in lines:
+        L = 0.0
+        for a, b in zip(line, line[1:]):
+            seg = math.hypot(b[0] - a[0], b[1] - a[1])
+            if not seg:
+                continue
+            ux, uy = (b[0] - a[0]) / seg, (b[1] - a[1]) / seg
+            nx, ny = -uy, ux
+            if ny < 0:
+                nx, ny = -nx, -ny                       # (uphill: the wall's side, +y)
+            t = (EDGE_EVERY - L % EDGE_EVERY) % EDGE_EVERY
+            while t < seg:
+                px, py = a[0] + ux * t, a[1] + uy * t
+                if all(math.hypot(px - p[0], py - p[1]) > TURN_KEEP for p in turn_pts):
+                    k = counter[0]
+                    if stand(EDGE_PLANTS[k % len(EDGE_PLANTS)], px + nx * EDGE_OUT, py + ny * EDGE_OUT, (k * 2.39) % math.tau, near_walk=EDGE_KEEP):
+                        rep['edge plants'] += 1
+                        counter[0] += 1
+                t += EDGE_EVERY
+            L += seg
+    for edid, dx, dy in FRAME:
+        if stand(edid, ex + dx, ey + dy, (dx * 0.01) % math.tau, on_landing=True):
+            rep['framing plants'] += 1
+    lands = [{'op': 'land', 'cell': gd.key(B.w.grid[k]), 'land': B.forms[k]} for k in sorted(touched) if k in B.w.grid]
+    rep['land cells'] = len(lands)
+    rep['walk'] = {'legs': len(lines), 'platforms': len(plats), 'landing': [round(v) for v in landing]}
+    cells = sorted({o['cell'] for o in lands} | {o['cell'] for o in B.ops if o.get('cell')})
+    return lands + B.ops, rep, cells
