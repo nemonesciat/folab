@@ -151,7 +151,8 @@ def index(gd):
 # ---------- the mod's own files ----------
 
 def assets_dir(pr):
-    return os.path.join(project.PROJECTS_DIR, pr.name + ' assets')
+    """The mod's own files. A Save As copy shares the folder of the mod it was copied from (files_of)."""
+    return os.path.join(project.PROJECTS_DIR, (getattr(pr, 'files_of', None) or pr.name) + ' assets')
 
 
 def built_dir(pr):

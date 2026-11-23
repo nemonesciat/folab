@@ -1106,25 +1106,14 @@ def report():
     return '\n'.join(l for l in lines if l is not None)
 
 
-HOLDING = {'on': False, 'path': None}       # (the running FOLab holds the mod it has open: project.hold)
+WORKING = {'on': False}          # (the running FOLab: the mod it has open keeps edits unsaved until Save; project.py)
 
 
 def _hold_open():
-    """The mod open now is held against other programs writing it (project.hold); the one before let go."""
-    if not HOLDING['on']:
-        return
-    path = PR.path if PR else None
-    if path == HOLDING['path']:
-        return
-    if HOLDING['path']:
-        project.release(HOLDING['path'])
-    HOLDING['path'] = None
-    if path:
-        try:
-            project.hold(path)
-            HOLDING['path'] = path
-        except project.InUse as e:
-            print('Not holding %s: %s' % (path, e), flush=True)
+    """The mod open now works as a program's file does: edits unsaved until Save, kept in its .recovery meanwhile, and held
+    against other writers only while there are some (project.Project.working)."""
+    if WORKING['on'] and PR and not PR.working and not PR.dry_run:
+        PR.working = True
 
 
 def save_status():
@@ -1132,7 +1121,10 @@ def save_status():
     written to the mod as they're made; Save writes the plugin the game loads)."""
     built = os.path.join(project.BUILD_DIR, PR.plugin)
     at = os.path.getmtime(built) if os.path.isfile(built) else None
-    return {'saved_at': at, 'saved': bool(at) and at >= PR.modified(), 'held': HOLDING['path'] == PR.path,
+    unsaved = PR.unsaved()
+    return {'saved_at': at, 'saved': not unsaved and bool(at) and at >= PR.modified(), 'unsaved': unsaved,
+            'unsaved_edits': PR.unsaved_edits, 'recovery': PR.recovery_found, 'reloaded': PR.reloaded,
+            'held': unsaved, 'files_of': PR.files_of,
             'other_holder': project.holder(PR.path)}
 
 
@@ -1543,6 +1535,92 @@ def new_world(body, shaped=None):
     me = len(GD.plugins) - 1
     out['world'] = GD.key((me << 24) | (wid & 0xFFFFFF))
     return out
+
+
+def leave_mod(body):
+    """Before another mod is opened: unsaved edits in this one saved ('save'), thrown away ('discard'), or the switch refused."""
+    if not PR or not PR.unsaved():
+        return
+    then = (body or {}).get('then')
+    if then == 'save':
+        save()
+    elif then == 'discard':
+        PR.throw_away_recovery()
+    else:
+        raise ValueError('%s has unsaved changes: save them or throw them away first.' % PR.name)
+
+
+def discard():
+    """Don't save: the unsaved edits thrown away, the mod opened again as it was last saved."""
+    if not PR:
+        raise ValueError('Open a mod first.')
+    name = PR.name
+    PR.throw_away_recovery()
+    return open_project(name)
+
+
+def recover(keep):
+    """The unsaved edits a FOLab left beside the mod: laid back on (keep), or thrown away."""
+    if not PR:
+        raise ValueError('Open a mod first.')
+    if keep:
+        n = PR.recover()
+    else:
+        PR.throw_away_recovery()
+        n = 0
+    out = state()
+    out['recovered'] = n
+    return out
+
+
+SIDE_SKIP = ('assets', 'source')        # (a Save As copy shares these with the mod it came from)
+
+
+def save_as(name):
+    """Save As: the mod as it is now (unsaved edits too) written under a new name, and opened in its place. Its own models and
+    pictures are shared with the mod it came from (files_of), not copied; small side files (maps, voices list, groups) are.
+    The mod it came from stays as it was last saved."""
+    if not PR:
+        raise ValueError('Open a mod first.')
+    import shutil
+    new = project.safe_name(name)
+    if not new or new.lower() == PR.name.lower():
+        raise ValueError('Give the copy a new name.')
+    dest = os.path.join(project.PROJECTS_DIR, new + '.json')
+    if os.path.exists(dest) or os.path.exists(os.path.join(project.BUILD_DIR, new + '.esp')):
+        raise ValueError('There is a mod called %s already: pick another name.' % new)
+    lo = loadout.current()
+    if lo and new.lower() + '.esp' in lo.plugin_files():
+        raise ValueError('This loadout already has a plugin called %s.esp. Pick another name.' % new)
+    PR.sync()
+    # (the side files to copy, listed before the copy is written: only folders of this mod's own, as "<mod> maps",
+    # and its groups file; never another mod (any .json straight in projects is one: "Waikiki copy.json" starts as
+    # "Waikiki ..." does), its shared models and pictures, its source plugin or its "before ..." backups)
+    side = []
+    mods = {os.path.splitext(e)[0].lower() for e in os.listdir(project.PROJECTS_DIR) if e.lower().endswith('.json')}
+    for e in os.listdir(project.PROJECTS_DIR):
+        src = os.path.join(project.PROJECTS_DIR, e)
+        if not e.startswith(PR.name + ' '):
+            continue
+        rest = e[len(PR.name) + 1:]
+        if os.path.isdir(src) and rest not in SIDE_SKIP and not rest.startswith('before') and e.lower() not in mods:
+            side.append((src, rest))
+        elif os.path.isfile(src) and rest == 'groups.json':
+            side.append((src, rest))
+    d = PR.to_dict()
+    d.update(name=new, plugin=new + ('.esm' if PR.plugin.lower().endswith('.esm') else '.esp'), files_of=PR.files_of or PR.name)
+    tmp = dest + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(d, f, separators=(',', ':'))
+    os.replace(tmp, dest)
+    for src, rest in side:
+        to = os.path.join(project.PROJECTS_DIR, new + ' ' + rest)
+        if os.path.isdir(src):
+            shutil.copytree(src, to, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, to)
+    PR.throw_away_recovery()            # (the edits went with the copy; the original stays as it was saved)
+    return open_project(new)
 
 
 def open_project(name, create=False):
@@ -2199,8 +2277,10 @@ def give(body):
 
 
 def save():
+    """Save: the unsaved edits into the mod (project.store), then the plugin the game loads."""
     path = PR.plugin_path()
     PR.sync()                               # (anything changed by hand written too: each edit already wrote its own)
+    PR.store()
     n = espwrite.write(GD, PR, path)
     library.publish(PR)
     return {'path': path, 'bytes': n, 'state': state()}
@@ -2459,10 +2539,19 @@ class Handler(BaseHTTPRequestHandler):
                 if u.path == '/api/give':
                     return self.send(give(body))
                 if u.path == '/api/project/new':
+                    leave_mod(body)
                     return self.send(open_project(body['name'], create=True))
                 if u.path == '/api/project/open':
+                    leave_mod(body)
                     return self.send(open_project(body['name']))
+                if u.path == '/api/project/discard':
+                    return self.send(discard())
+                if u.path == '/api/project/recover':
+                    return self.send(recover(bool(body.get('keep'))))
+                if u.path == '/api/project/saveas':
+                    return self.send(save_as(body.get('name') or ''))
                 if u.path == '/api/project/adopt':
+                    leave_mod(body)
                     name = adopt.adopt(GD, loadout.plugin_path(GD.data_dir, os.path.basename(body['file'])))
                     return self.send(open_project(name))
                 if not PR:
@@ -2680,9 +2769,8 @@ def main():
         json.dump({'url': url, 'pid': os.getpid(), 'port': port}, f)
     import atexit
     atexit.register(lambda: os.path.exists(running) and os.remove(running))
-    HOLDING['on'] = True                # (from now on the mod open is held: scripts may not write it)
+    WORKING['on'] = True                # (from now on the mod open keeps its edits unsaved until Save)
     _hold_open()
-    atexit.register(lambda: HOLDING['path'] and project.release(HOLDING['path']))
     if '--no-browser' not in args and not os.environ.get('FOLAB_NO_BROWSER'):
         import webbrowser
         webbrowser.open(url)

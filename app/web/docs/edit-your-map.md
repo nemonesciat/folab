@@ -1,6 +1,6 @@
 # How to edit your map
 
-*The short version: click a thing, move it, look at the box at the top that says **Saved**, press **Put in game**. Everything below is the same, step by step.*
+*The short version: click a thing, move it, press **Save** (Ctrl+S), press **Put in game**. Everything below is the same, step by step.*
 
 ## Find your spot
 
@@ -48,21 +48,30 @@ Something jumped and you don't know why? Look at these four first.
 
 Every change is one step: **Ctrl+Z** takes it back, **Ctrl+Y** puts it back. A run of arrow-key nudges counts as one step.
 
-## Is it saved?
+## Saving, like any program
 
-The box at the top beside your mod's name says:
+Your changes stay in FOLab until you **Save** (Ctrl+S, or **File ▸ Save**). Until then the top shows a star after your mod's
+name (for example `Waikiki *`) and **● Not saved (3 changes)**. After saving it says **✓ Saved 14:32**.
 
-- **✓ Saved 14:32**: everything you've done is in your mod's plugin.
-- **● Not saved yet**: you've changed things since. Press **Save** (or **Ctrl+S**, or click that box).
+- **File ▸ Open…** (Ctrl+O): your mods, and any plugin to open as a mod. If something is unsaved, FOLab asks first:
+  **Save**, **Don't save**, or **Cancel**.
+- **File ▸ Save As…**: a copy of your mod as it is now, under a new name, and FOLab carries on in the copy. The original stays
+  as you last saved it. Models and pictures are shared with the original, not copied.
+- **File ▸ Throw away unsaved changes…**: back to how you last saved it.
+- **Put in game**, **Open in game** and **Play here** ask to save first when something is unsaved: the game gets your mod
+  as it's saved.
 
-Your edits are never thrown away: FOLab writes each one down the moment you make it, so they're there when you open FOLab again even if you didn't save. **Save** is what puts them into the plugin the game loads. If you close FOLab before saving, it asks first.
+**Nothing is lost if FOLab closes first.** Closing the window shows Edge's "Leave site?" box while something is unsaved. If
+you leave anyway, or the PC crashes, your unsaved changes wait beside the mod, and the next time FOLab opens it asks:
+**Get them back** or **Throw them away**.
 
-While FOLab is open, nothing else can change your mod (other tools, and Claude's scripts, are told to wait), so your edits and theirs can't overwrite each other.
+**Other tools and Claude's scripts:** while nothing is unsaved, they may change your mod, and FOLab picks that up before your
+next change. From your first unsaved change until you save, they're told to wait, so nobody's work overwrites anybody's.
 
 ## Put it in the game
 
 - The next box says where your mod is: for example **✓ In nv-rs-pad and nv-rs-next**, or **● nv-rs-next has an older save**.
-- Press **Put in game**. FOLab saves, puts your mod into every game ticked, and checks each one. The box turns green when they all have it.
+- Press **Put in game**. FOLab saves (asking first if something is unsaved), puts your mod into every game ticked, and checks each one. The box turns green when they all have it.
 - **Click that box** to choose which games get it (the game itself, MO2, or each copy of nv-rs on your PC).
 
 Then start the game there and load a save. Close the game before pressing Put in game again: a running game holds the file.

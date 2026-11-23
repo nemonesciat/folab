@@ -21,7 +21,14 @@ Undo keeps, a step, what the step changed as it was before (cells and records as
 
 While FOLab's server has a mod open it holds <name>.inuse beside it (hold/release): any other process that tries to write
 that mod (a script's save, apply, sync) gets InUse instead, so a script can't overwrite the user's edits, nor FOLab a
-script's. Reading is always allowed. A lock left by a FOLab that died counts for nothing."""
+script's. Reading is always allowed. A lock left by a FOLab that died counts for nothing.
+
+Working (FOLab's own copy, `working` True; 23 Nov 2026, the user: "you Open it ... and can save, save as"): an edit isn't
+written into the mod but into <name>.recovery beside it, lines as the .changes has them, the first naming the mod's files as
+they were (`_remember`). store() (Save) moves those lines onto the .changes and drops the file; throwing them away is opening
+the mod again. A FOLab that closed or crashed with unsaved edits leaves the file: the next open finds it (`recovery_found`)
+and recover() lays it on. The lock is held only while there are unsaved edits; with none, another program may change the
+mod, and the next edit opens it again first (`_fresh`), so nothing is laid over an old copy."""
 import hashlib
 import io
 import json
@@ -82,6 +89,10 @@ def _mark(path):
 
 class InUse(ValueError):
     """The mod is open in a running FOLab, and this is another program trying to change it."""
+
+
+def recovery_path(path):
+    return os.path.splitext(path)[0] + '.recovery'
 
 
 def lock_path(path):
@@ -241,9 +252,186 @@ class Project:
         self.next_id = d.get('next_id', FIRST_ID)
         self.undo_stack, self.redo_stack = [], []
         self.dry_run = False                    # (True: nothing is written, whatever is done; see _writing_off)
+        self.files_of = d.get('files_of')       # (a Save As copy: the mod whose own files it shares)
+        self.working = False                    # (FOLab's copy: edits go to the .recovery until store(); see the docstring)
+        self._rec = 0                           # bytes in the .recovery written by this copy (0: nothing unsaved)
+        self.unsaved_edits = 0
+        self.reloaded = None                    # (when the mod was opened again because something else changed it)
+        self.recovery_found = self._look_for_recovery()
         self._base = _mark(path)               # the .json the lines go on
         self._journal = os.path.getsize(self.journal_path) if had else 0
         self._resync()
+        self._disk = self._disk_mark()
+
+    @property
+    def recovery_path(self):
+        return recovery_path(self.path)
+
+    def _disk_mark(self):
+        """The mod's files as they are on disk: the .json's size and date, the .changes' size."""
+        try:
+            j = os.path.getsize(self.journal_path)
+        except OSError:
+            j = 0
+        return (tuple(_mark(self.path) or ()), j)
+
+    def disk_changed(self):
+        return self._disk_mark() != self._disk
+
+    def unsaved(self):
+        return bool(self._rec)
+
+    def _look_for_recovery(self):
+        """Unsaved edits a FOLab left beside the mod: {'when', 'edits', 'fits'} (fits: made on the mod as it is now)."""
+        rp = self.recovery_path
+        try:
+            with open(rp, 'rb') as f:
+                first = f.readline()
+                n = sum(1 for line in f if line.endswith(b'\n'))
+            head = json.loads(first)
+        except (OSError, ValueError):
+            return None
+        if not n:
+            return None
+        try:
+            j = os.path.getsize(self.journal_path)
+        except OSError:
+            j = 0
+        fits = head.get('base') == _mark(self.path) and head.get('journal') == j
+        return {'when': os.path.getmtime(rp), 'edits': n, 'fits': fits}
+
+    def recover(self):
+        """Lay the unsaved edits a FOLab left (the .recovery) on the mod, still unsaved."""
+        rp = self.recovery_path
+        d = self.to_dict()
+        with open(rp, 'rb') as f:
+            size = len(f.readline())
+            good = 0
+            for line in f:
+                if not line.endswith(b'\n'):
+                    break                       # (a last line cut short: left out, and cut off the file below)
+                size += len(line)
+                e = json.loads(line)
+                for part, ents in (e.get('set') or {}).items():
+                    d.setdefault(part, {}).update(ents)
+                for part, keys in (e.get('del') or {}).items():
+                    for k in keys:
+                        (d.get(part) or {}).pop(k, None)
+                for k, v in (e.get('head') or {}).items():
+                    setattr(self, k, v)
+                good += 1
+        for part in DIFFED + WHOLE:
+            setattr(self, part, d.get(part, {}))
+        self.unsaved_edits = good
+        if good and os.path.getsize(rp) != size:
+            with open(rp, 'r+b') as f:
+                f.truncate(size)
+        self._rec = size if good else 0
+        self.recovery_found = None
+        self._resync()
+        if self._rec:
+            hold(self.path)
+        return good
+
+    def throw_away_recovery(self):
+        """The unsaved edits left beside the mod, gone (the mod itself as it was saved)."""
+        try:
+            os.remove(self.recovery_path)
+        except OSError:
+            pass
+        self.recovery_found = None
+        if self._rec:
+            self._rec = 0
+            self.unsaved_edits = 0
+            release(self.path)
+
+    def _fresh(self):
+        """Before an edit with nothing unsaved: if another program changed the mod since, it's opened again first (Undo
+        starts afresh), so the edit goes on what's there now."""
+        if not self.working or self._rec or self.dry_run or not self.disk_changed():
+            return False
+        keep = self.working
+        self.__init__(self.path)
+        self.working = keep
+        self.reloaded = time.time()
+        return True
+
+    def _line(self, ch, head):
+        """One line of changes (the .changes' form) for ch (_diff()'s) and the head."""
+        written = getattr(self, '_written', {})
+        sets, dels = [], {}
+        for part, ents in ch.items():
+            rows = []
+            for k, (_old, new) in ents.items():
+                if new is None:
+                    dels.setdefault(part, []).append(k)
+                    continue
+                v = getattr(self, part)[k]
+                if part in WHOLE:
+                    text = self._text(part, k, v, written)
+                    written[(part, k)] = (v, text)
+                else:
+                    text = json.dumps(v, separators=(',', ':'))
+                rows.append(json.dumps(k) + ':' + text)
+            if rows:
+                sets.append(json.dumps(part) + ':{' + ','.join(rows) + '}')
+        bits = ['"t":%.3f' % time.time()]
+        if sets:
+            bits.append('"set":{' + ','.join(sets) + '}')
+        if dels:
+            bits.append('"del":' + json.dumps(dels))
+        if head != self._saved_head:
+            bits.append('"head":' + json.dumps(self._head(), separators=(',', ':')))
+        return ('{' + ','.join(bits) + '}\n').encode('utf-8')
+
+    def _remember(self, ch, head):
+        """Working: the edit's line onto the .recovery, not the mod. The first one holds the mod against other writers."""
+        line = self._line(ch, head)
+        if not self._rec:
+            hold(self.path)
+            if os.path.exists(self.recovery_path):
+                # (unsaved edits a FOLab left, not yet got back or thrown away: never written over, kept aside)
+                os.replace(self.recovery_path, self.recovery_path + time.strftime(' %Y-%m-%d %H%M%S.old'))
+                self.recovery_found = None
+            line =(json.dumps({'base': self._base, 'journal': self._journal, 'folab': 1}) + '\n').encode() + line
+        with open(self.recovery_path, 'ab' if self._rec else 'wb') as f:
+            f.write(line)
+            f.flush()
+            os.fsync(f.fileno())
+        self._rec += len(line)
+        self.unsaved_edits += 1
+        self._take(ch, head)
+        return ch
+
+    def store(self):
+        """Save: the unsaved edits (the .recovery's lines) put onto the mod's .changes, the .recovery gone, the lock let
+        go. Refused if the mod's files were changed by another program meanwhile (nothing of either is lost then)."""
+        self.sync()
+        if not self._rec:
+            return 0
+        if self.disk_changed():
+            raise ValueError('%s was changed by another program while you had unsaved changes, so Save would mix the two. '
+                             'Use Save As to keep yours as a copy.' % self.name)
+        with open(self.recovery_path, 'rb') as f:
+            f.readline()
+            lines = f.read()
+        out = lines
+        if not self._journal:
+            out = (json.dumps({'base': self._base, 'folab': 1}) + '\n').encode() + lines
+        with open(self.journal_path, 'ab' if self._journal else 'wb') as f:
+            f.write(out)
+            f.flush()
+            os.fsync(f.fileno())
+        self._journal += len(out)
+        n = self.unsaved_edits
+        os.remove(self.recovery_path)
+        self._rec = 0
+        self.unsaved_edits = 0
+        release(self.path)
+        if self._journal > max(JOURNAL_MOST, self._base[0] // 2):
+            self.save()
+        self._disk = self._disk_mark()
+        return n
 
     @property
     def journal_path(self):
@@ -270,7 +458,8 @@ class Project:
     def to_dict(self):
         return {'name': self.name, 'plugin': self.plugin, 'author': self.author, 'description': self.description,
                 'cells': self.cells, 'records': self.records, 'land': self.land, 'water': self.water, 'navmesh': self.navmesh, 'drop': self.drop, 'cellinfo': self.cellinfo, 'next_id': self.next_id,
-                'source': self.source, 'esm': self.esm, 'trim_masters': self.trim_masters, 'newgame': self.newgame}
+                'source': self.source, 'esm': self.esm, 'trim_masters': self.trim_masters, 'newgame': self.newgame,
+                **({'files_of': self.files_of} if self.files_of else {})}
 
     def save(self, afresh=False):
         """Write the mod's .json whole and start its .changes afresh. An edit writes only what it changed (_commit): this is
@@ -301,6 +490,15 @@ class Project:
         self._base = _mark(self.path)
         self._start_journal()
         self._resync()
+        if self._rec:                           # (written whole: the unsaved edits are in it now)
+            try:
+                os.remove(self.recovery_path)
+            except OSError:
+                pass
+            self._rec = 0
+            self.unsaved_edits = 0
+            release(self.path)
+        self._disk = self._disk_mark()
 
     def compact(self):
         """The mod as its .json alone (before copying it as a file), unless that's what it is already."""
@@ -368,35 +566,13 @@ class Project:
             if stand_in is not True:
                 stand_in()
             return ch
+        if self.working:
+            return self._remember(ch, head)
         check_free(self.path)
         if self._base is None or _mark(self.path) != self._base:
             self.save()                         # (the .json was written by something else since: the mod written whole)
             return ch
-        written = getattr(self, '_written', {})
-        sets, dels = [], {}
-        for part, ents in ch.items():
-            rows = []
-            for k, (_old, new) in ents.items():
-                if new is None:
-                    dels.setdefault(part, []).append(k)
-                    continue
-                v = getattr(self, part)[k]
-                if part in WHOLE:
-                    text = self._text(part, k, v, written)
-                    written[(part, k)] = (v, text)
-                else:
-                    text = json.dumps(v, separators=(',', ':'))
-                rows.append(json.dumps(k) + ':' + text)
-            if rows:
-                sets.append(json.dumps(part) + ':{' + ','.join(rows) + '}')
-        bits = ['"t":%.3f' % time.time()]
-        if sets:
-            bits.append('"set":{' + ','.join(sets) + '}')
-        if dels:
-            bits.append('"del":' + json.dumps(dels))
-        if head != self._saved_head:
-            bits.append('"head":' + json.dumps(self._head(), separators=(',', ':')))
-        line = ('{' + ','.join(bits) + '}\n').encode('utf-8')
+        line = self._line(ch, head)
         if not self._journal:
             line = (json.dumps({'base': self._base, 'folab': 1}) + '\n').encode() + line
         with open(self.journal_path, 'ab' if self._journal else 'wb') as f:
@@ -407,6 +583,7 @@ class Project:
         self._take(ch, head)
         if self._journal > max(JOURNAL_MOST, self._base[0] // 2):
             self.save()                         # (folded in: the lines would take longer to read than the .json)
+        self._disk = self._disk_mark()
         return ch
 
     def _take(self, ch, head):
@@ -499,6 +676,7 @@ class Project:
         A record_new or add with a 'name' can be named later in the same ops as '$name' (a cell, a ref, a door's link, what a
         placed thing is):
         self.names says what each became."""
+        self._fresh()
         self.sync()                 # (anything changed by hand before this edit stays when it's undone, as it always did)
         head = self._head_copy()
         made, new_record = [], None
@@ -637,7 +815,7 @@ class Project:
         return made
 
     def undo(self):
-        if not self.undo_stack:
+        if self._fresh() or not self.undo_stack:
             return None
         self.sync()
         label, back, head = self.undo_stack.pop()
@@ -647,7 +825,7 @@ class Project:
         return label
 
     def redo(self):
-        if not self.redo_stack:
+        if self._fresh() or not self.redo_stack:
             return None
         self.sync()
         label, back, head = self.redo_stack.pop()

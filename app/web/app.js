@@ -26,7 +26,9 @@ function setState(s){
   A.state = s;
   const p = s.project;
   $('#welcome').style.display = p ? 'none' : 'flex';
-  $('#modpill').innerHTML = p ? `✎ <b>${esc(p.plugin)}</b> · ${p.changes} change${p.changes === 1 ? '' : 's'}` : 'No mod open';
+  $('#modpill').innerHTML = p ? `✎ <b>${esc(p.name)}${p.unsaved ? ' *' : ''}</b> · ${p.changes} change${p.changes === 1 ? '' : 's'}` : 'No mod open';
+  $('#modpill').title = p ? `${p.name}${p.unsaved ? ': changes not saved yet' : ''}. Its plugin is ${p.plugin}.${p.files_of ? ' Its own models and pictures are shared with ' + p.files_of + '.' : ''} Click for the My mod page.` : 'Your mod';
+  document.title = p ? `${p.unsaved ? '* ' : ''}${p.name} - FOLab` : 'FOLab';
   $('#b-undo').disabled = !(p && p.undo); $('#b-undo').title = p && p.undo ? `Undo ${p.undo} (Ctrl+Z)` : 'Nothing to undo';
   $('#b-redo').disabled = !(p && p.redo); $('#b-redo').title = p && p.redo ? `Redo ${p.redo} (Ctrl+Y)` : 'Nothing to redo';
   $('#b-save').disabled = $('#b-install').disabled = !p;
@@ -80,17 +82,18 @@ function saveBar(s){
   if (!sp) return;
   if (!p){ sp.style.display = 'none'; return; }
   sp.style.display = '';
-  const safe = p.held ? `\n\nWhile FOLab is open, nothing else can change ${p.name} (other tools and Claude's scripts are told to wait), so your edits are safe.`
-    : p.other_holder ? `\n\nCareful: another FOLab has ${p.name} open too. Close one of them.` : '';
-  if (p.saved){ sp.className = 'pill ok'; sp.textContent = '✓ Saved ' + clock(p.saved_at); sp.title = `Everything you've done is saved into ${p.plugin}.` + safe; }
-  else {
-    sp.className = 'pill warn'; sp.textContent = '● Not saved yet';
-    sp.title = `You've made edits since ${p.saved_at ? 'you last saved (' + clock(p.saved_at) + ')' : 'the mod was started'}. FOLab keeps them as you go, but the game only sees them after Save (Ctrl+S). Click to save now.` + safe;
+  const safe = p.unsaved ? `\n\nUntil you save, other tools and Claude's scripts can't change ${p.name}, so nobody's work overwrites anybody's. If FOLab closes first, your changes wait beside the mod and FOLab offers them back next time.`
+    : `\n\nNothing is unsaved, so other tools may change ${p.name}; FOLab picks that up before your next change.`;
+  if (p.saved){ sp.className = 'pill ok'; sp.textContent = '✓ Saved ' + clock(p.saved_at); sp.title = `Everything you've done is saved in ${p.name} and its plugin ${p.plugin}.` + safe; }
+  else if (p.unsaved){
+    sp.className = 'pill warn'; sp.textContent = `● Not saved (${p.unsaved_edits} change${p.unsaved_edits === 1 ? '' : 's'})`;
+    sp.title = `Your changes since ${p.saved_at ? 'you last saved (' + clock(p.saved_at) + ')' : 'you opened it'} are only in FOLab: Save (Ctrl+S) writes them into ${p.name} and makes the plugin the game loads. Click to save now.` + safe;
   }
+  else { sp.className = 'pill warn'; sp.textContent = '● Plugin not made yet'; sp.title = `${p.name} is saved, but its plugin (what the game loads) is older. Click to save and make it.` + safe; }
 }
 addEventListener('beforeunload', e => {
   const p = A.state && A.state.project;
-  if (p && !p.saved){ e.preventDefault(); e.returnValue = 'Your edits are not saved into ' + p.plugin + ' yet.'; return e.returnValue; }
+  if (p && p.unsaved){ e.preventDefault(); e.returnValue = 'Your changes to ' + p.name + ' are not saved yet.'; return e.returnValue; }
 });
 
 async function newMod(name){
