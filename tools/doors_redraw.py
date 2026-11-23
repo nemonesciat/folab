@@ -1,10 +1,13 @@
-"""doors_redraw.py [real] [--home H] [--app A]: FOLab's own doors' models written afresh into the mod's files.
+"""doors_redraw.py [real] [--home H] [--app A]: FOLab's own doors' models, and the Kilauea's (closed and open), written
+afresh into the mod's files.
 
 doorset's doors carry one box of collision over the doorway, collision alone. Since modelmake gives every face left out a
 look (the closed-model rule, 22 Nov 2026), that box took its part's look ('trim') and was drawn: a slab over the leaves,
 so every FOLab door (homes, bungalows, hotels; not the lifts) showed as a plain painted panel. 9297809 gives the box no
-look. This writes each door piece the mod has a record of into projects/<mod> assets/ again (modelsets.build, with this
-checkout's doorset), and says which files changed. No change to the mod's records: no Undo, nothing in Waikiki.json.
+look. The Kilauea's drum of glass is walled the same way (towerset._glass_wall: 24 boxes, gold): drawn, a gold slab
+round its lobby glass in the city and in its view world; fixed the same way. A sweep of every set's 210 pieces found
+no other (D:/FOLabScratch/huang/sweep.py). This writes each of these pieces the mod has a record of into
+projects/<mod> assets/ again (modelsets.build, with this checkout's doorset and towerset), and says which files changed. No change to the mod's records: no Undo, nothing in Waikiki.json.
 Then the usual build and install carries the new files.
 
 Without `real`: into a copy of the assets in D:\\FOLabScratch\\doorsredraw (made from the real ones), to compare."""
@@ -47,16 +50,21 @@ os.environ['FOLAB_NO_GAME_WRITES'] = '1'
 sys.path.insert(0, APP)
 import library, modelsets, project, recordio  # noqa: E402
 modelsets._all_sets()
-for k in [k for k, v in modelsets.PIECES.items() if v.get('set') == 'doors']:
-    del modelsets.PIECES[k]
-spec = importlib.util.spec_from_file_location('doorset', os.path.join(MINE, 'doorset.py'))
-doorset = sys.modules['doorset'] = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(doorset)
+# (this checkout's doorset and towerset over the app's: their collision boxes have no look)
+for k in [k for k, v in modelsets.PIECES.items() if v.get('set') == 'doors'] + ['kilauea', 'kilauea_open', 'kilauea_steps']:
+    modelsets.PIECES.pop(k, None)
+mods = {}
+for m in ('doorset', 'towerset'):
+    spec = importlib.util.spec_from_file_location(m, os.path.join(MINE, m + '.py'))
+    mods[m] = sys.modules[m] = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mods[m])
+doorset = mods['doorset']
+REDRAW = dict(doorset.PIECES, **{k: modelsets.PIECES[k] for k in ('kilauea', 'kilauea_open')})
 pr = project.Project.open('Waikiki')
 have = {recordio.field(r, 'EDID') for k, r in pr.records.items() if k.startswith('+') and r.get('type') in ('DOOR', 'STAT')}
 root = library.assets_dir(pr)
 changed, same = [], 0
-for piece, what in doorset.PIECES.items():
+for piece, what in REDRAW.items():
     if what['edid'] not in have and what['edid'] + 'Static' not in have:
         continue
     made = modelsets.build(piece)

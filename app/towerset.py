@@ -254,7 +254,7 @@ def _glass_wall(parts, r, h, z, n=24):
     for k in range(n):
         a = 360.0 / n * (k + 0.5)
         parts.append({'shape': 'box', 'size': [chord, 30, h], 'at': [math.cos(math.radians(a)) * r, math.sin(math.radians(a)) * r, z],
-                      'turn': [0, 0, a + 90], 'look': 'gold', 'material': 'glass', 'solid': True,
+                      'turn': [0, 0, a + 90], 'look': None, 'material': 'glass', 'solid': True,      # (no look: nothing draws it)
                       'faces': {f: None for f in ('front', 'back', 'left', 'right', 'top', 'bottom')}})
 
 
