@@ -309,6 +309,9 @@ def survey(gd, progress=None):
                 if box[0] - 96 <= lx <= box[3] + 96 and box[1] - 96 <= ly <= box[4] + 96:
                     row = {'base': gd.key(d['base']), 'x': round(lx, 1), 'y': round(ly, 1), 'z': round(d['pos'][2] - r['pos'][2], 1),
                            'rz': round((d['rot'][2] - r['rot'][2]) % math.tau, 4), 'tx': round(d['rot'][0], 4), 'ty': round(d['rot'][1], 4)}
+                    if abs((d['scale'] or 1.0) - 1) > 0.005:
+                        row['s'] = round(d['scale'], 3)     # (Cottonwood Cove's barracks doors are 0.95: at 1 their
+                        # edges stood in the shack's frame, which took nv-rs's pick there, 23 Nov 2026)
                     inside = _inside_of(gd, d, r)
                     if inside:
                         row['inside'] = inside
@@ -1223,7 +1226,7 @@ def _put(f, w, ox, oy, rz, fp, level, ops, gone, rep, row=None, poi=False):
             continue                            # (the game has this door twice in one doorway: NoVacHouse01)
         dx, dy = turn(d['x'], d['y'], rz)
         dck = w.cell_at(ox + dx, oy + dy) or ck
-        o = {'op': 'add', 'cell': dck, 'base': d['base'], 'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)], 's': 1}
+        o = {'op': 'add', 'cell': dck, 'base': d['base'], 'p': [round(ox + dx, 2), round(oy + dy, 2), round(z + d['z'], 2), d['tx'], d['ty'], round((rz + d['rz']) % math.tau, 4)], 's': d.get('s', 1)}
         rep['doors'] += 1
         if inside and k == inside['door']:
             ops.extend(w.ins.make(inside, b, row, o, dck, _arrive_out(inside, ox, oy, z, rz, b)))
