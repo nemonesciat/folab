@@ -37,8 +37,11 @@ ALPHA_TEST, ALPHA_CUT = 4844, 64    # no blending, a pixel drawn or not: what mo
 # Glass ('alpha': 'blend'): blended by its picture's alpha, no test, as the game's own window glass (the Goodsprings store's,
 # the Vault's windows, Big MT's glass barrier: NiAlphaProperty 0x10ED at 0, shader flags 0x82000181). With the plants' cut-out
 # a pane of grimy glass (alpha mostly 64 to 112) drew solid where it should be clear, clear only at its cleanest spots: the
-# hotels' lobby windows read inverted in game (the user, 22 Nov 2026).
-ALPHA_BLEND, BLEND_SHADER = 0x10ED, 0x82000181
+# hotels' lobby windows read inverted in game (the user, 22 Nov 2026). What the user SAW working (07:10 inside, 07:20 outside,
+# nv-rs) is the hand patch: blended and tested at 0 (0x12ED, threshold 0), shader flags as the cut-outs' (0x82000101). The
+# game's own setting above was never seen in game, and a rebuild with it changed the seen windows (22 Nov 2026, 20:05):
+# keep the seen one until a run shows the other.
+ALPHA_BLEND, BLEND_SHADER = 0x12ED, 0x82000101
 _PROPERTY = struct.pack('<3I', 0, 0, 0x80000000)        # an empty list, as Havok writes one out
 
 
@@ -508,6 +511,96 @@ def build(name, shapes, solids=()):
     head += struct.pack('<II', len(strings), max(len(s) for s in strings)) + b''.join(_sized(s) for s in strings)
     head += struct.pack('<I', 0)
     return head + b''.join(d for _k, d in blocks) + struct.pack('<II', 1, 0)        # (the end: one root, block 0)
+
+
+def open_edges(shapes, tol=0.05, found=None):
+    """How much of a mesh's edge is open, in units: 0 for a closed solid or a sheet drawn from both sides. shapes: as
+    `build` takes them (or nif.mesh_from_nif gives them), all welded together by position. An edge must be met by one
+    going the other way; where one face is cut finer than its neighbour (a cylinder's cap against its side), the finer
+    edges along the coarser one count as meeting it. The user, 22 Nov 2026: every model of FOLab's whole."""
+    import collections
+    cells = {}
+
+    def key(p):                                 # (welded by distance, not rounding: a corner on a cell's edge, as a file's
+        c = (math.floor(p[0] / tol), math.floor(p[1] / tol), math.floor(p[2] / tol))      # 32-bit floats put
+        for dx in (-1, 0, 1):                   # some, was two corners, 22 Nov 2026)
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for q in cells.get((c[0] + dx, c[1] + dy, c[2] + dz), ()):
+                        if abs(q[0] - p[0]) <= tol and abs(q[1] - p[1]) <= tol and abs(q[2] - p[2]) <= tol:
+                            return q
+        cells.setdefault(c, []).append(p)
+        return p
+    pos = {}
+    edges = collections.Counter()
+    for s in shapes:
+        P = s['p']
+        for i in range(0, len(s['i']), 3):
+            t = []
+            for j in s['i'][i:i + 3]:
+                p = tuple(P[3 * j:3 * j + 3])
+                kk = key(p)
+                pos.setdefault(kk, p)
+                t.append(kk)
+            for j in range(3):                  # (a sliver welded flat still counts both its long edges: they meet)
+                if t[j] != t[(j + 1) % 3]:
+                    edges[(t[j], t[(j + 1) % 3])] += 1
+    left = []
+    for (a, b), n in edges.items():
+        for _ in range(max(0, n - edges.get((b, a), 0))):
+            left.append((a, b))
+    if not left:
+        return 0.0
+    # (an edge still open may be met by finer ones lying along it the other way)
+    by_line = collections.defaultdict(list)
+    for a, b in left:
+        pa, pb = pos[a], pos[b]
+        d = [pb[c] - pa[c] for c in range(3)]
+        ln = math.sqrt(sum(x * x for x in d)) or 1.0
+        by_line[tuple(round(x / ln * 20) for x in d)].append((pa, pb))
+    gap = 0.0
+    near = [(i, j, k) for i in (-1, 0, 1) for j in (-1, 0, 1) for k in (-1, 0, 1)]
+    for u, segs in by_line.items():
+        # (its partners run the other way: looked for round the opposite direction, its neighbours too, so a direction
+        # on the edge of a step, as a file's 32-bit floats leave some, still finds them)
+        others = [q for dv in near for q in by_line.get((-u[0] + dv[0], -u[1] + dv[1], -u[2] + dv[2]), ())]
+        for pa, pb in segs:
+            d = [pb[c] - pa[c] for c in range(3)]
+            ln = math.sqrt(sum(x * x for x in d))
+            if ln < 1e-9:
+                continue
+            e = [x / ln for x in d]
+            cover = []
+            for qa, qb in others:
+                offb = [qb[c] - pa[c] for c in range(3)]
+                ab = sum(offb[c] * e[c] for c in range(3))
+                if math.sqrt(max(0.0, sum(x * x for x in offb) - ab * ab)) > 4 * tol:
+                    continue                        # (both its ends on the line)
+                # (the other way along the same line: q goes from qa to qb opposite to e, on the line through pa)
+                dq = [qb[c] - qa[c] for c in range(3)]
+                if sum(dq[c] * e[c] for c in range(3)) >= 0:
+                    continue
+                off = [qa[c] - pa[c] for c in range(3)]
+                along = sum(off[c] * e[c] for c in range(3))
+                if math.sqrt(max(0.0, sum(x * x for x in off) - along * along)) > 4 * tol:
+                    continue
+                t0 = along
+                t1 = sum((qb[c] - pa[c]) * e[c] for c in range(3))
+                cover.append((min(t0, t1), max(t0, t1)))
+            cover.sort()
+            at, miss = 0.0, 0.0
+            for c0, c1 in cover:
+                if c0 > at:
+                    miss += min(c0, ln) - at
+                at = max(at, c1)
+                if at >= ln:
+                    break
+            miss += max(0.0, ln - at)
+            if miss > 4 * tol:
+                gap += miss
+                if found is not None:               # (the open edges themselves, for a picture)
+                    found.append((pa, pb))
+    return gap
 
 
 def check(data, shapes, solids=()):
