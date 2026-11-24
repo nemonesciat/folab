@@ -228,12 +228,13 @@ def _pieces_bytes(pieces):
     return b''.join(out)
 
 
-def _hide(buf, n, shape, keep, parts):
+def _hide(buf, n, shape, keep, parts, drop=None):
     """Turns each triangle of the shape whose middle (bind pose) keep(z) refuses into three of one corner in its data, and
     leaves it out of its partition (rewritten as plain triangles into parts[block]). A piece of the partition left with no
     triangle goes, and its entry in the dismember list with it (parts[skin instance]): the game draws every piece, and
     one with nothing to draw stopped it (nv-rs: "DrawIndexedPrimitive without an index buffer", 21 Nov 2026, the first
-    shirt and shorts). Returns how many triangles the shape still draws."""
+    shirt and shorts). drop(corners): left out when it says so, in keep's place (the crab's tail, by its bones). Returns how
+    many triangles the shape still draws."""
     b = n.block(shape)
     V0 = n.block(b['data'])['verts']
     R, t0, sc = b['R'], b['t'], b['s']          # (the shape's own place under the root: its corners are kept round it)
@@ -247,7 +248,7 @@ def _hide(buf, n, shape, keep, parts):
     gone = set()
     for k in range(nt):
         t = struct.unpack_from('<3H', d, tri_at + 6 * k)
-        if not keep(sum(V[3 * c + 2] for c in t) / 3.0):
+        if (drop(t) if drop is not None else not keep(sum(V[3 * c + 2] for c in t) / 3.0)):
             gone.add(tuple(sorted(t)))
             struct.pack_into('<3H', buf, tri_at + 6 * k, t[0], t[0], t[0])
     skin = b['skin']
