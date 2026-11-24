@@ -366,7 +366,6 @@ def build_worn(name, shapes):
     frame: offsets from the head bone along the body's axes, z up, +y the face; HEAD_AT is added), the file holding its
     own 'Bip01 Head' node, no collision. Not rigid on the bone: a rigid model hangs in the bone's own turned frame (its
     x is up), so the boater, built rigid in the body's axes, sat on its edge on the side of the head (21 Nov 2026)."""
-    import outfitjoin
     moved = []
     for sh in shapes:
         sh = dict(sh)
@@ -376,20 +375,34 @@ def build_worn(name, shapes):
                 P[k + a] += HEAD_AT[a]
         sh['p'] = P
         moved.append(sh)
-    data = build(name, moved)
+    R = tuple(tuple(HEAD_TURN[c][r] for c in range(3)) for r in range(3))         # (body to bone: the turn undone)
+    T = tuple(-sum(R[r][c] * HEAD_AT[c] for c in range(3)) for r in range(3))
+    return build_bound(name, moved, 'Bip01 Head', R, T, HEAD_PART, rest=(HEAD_AT, HEAD_TURN))
+
+
+def build_bound(name, shapes, bone_name, R, T, part, rest=None):
+    """The bytes of a model skinned wholly to one bone, as the game's worn hats are to the head (build_worn) and as a
+    creature's extra body file can be to any of its bones: the shapes given in the body's space at rest, (R, T) the
+    bone's bind as the body's own skin data has it (body to bone: v_bone = R v + T), `part` its dismember partition
+    (flags, body part). The file holds its own node of that name, placed where the bone is at rest (`rest`: (place,
+    turn) when known exactly, else worked back from the bind)."""
+    import outfitjoin
+    data = build(name, shapes)
     n = nif.Nif(data)
     blocks = [data[n.offsets[i]:n.offsets[i] + n.sizes[i]] for i in range(len(n.types))]
     types = list(n.types)
     strings = list(n.strings)
     types[0] = 'NiNode'
-    if 'Bip01 Head' not in strings:
-        strings.append('Bip01 Head')
+    if bone_name not in strings:
+        strings.append(bone_name)
+    turn = tuple(tuple(R[c][r] for c in range(3)) for r in range(3))             # (bone to body)
+    at = tuple(-sum(turn[r][c] * T[c] for c in range(3)) for r in range(3))
+    if rest:
+        at, turn = rest
     bone = len(blocks)
-    blocks.append(struct.pack('<iIiI', strings.index('Bip01 Head'), 0, -1, 0x8000E) + struct.pack('<3f', *HEAD_AT)
-                  + struct.pack('<9f', *[v for row in HEAD_TURN for v in row]) + struct.pack('<fIiII', 1.0, 0, -1, 0, 0))
+    blocks.append(struct.pack('<iIiI', strings.index(bone_name), 0, -1, 0x8000E) + struct.pack('<3f', *at)
+                  + struct.pack('<9f', *[v for row in turn for v in row]) + struct.pack('<fIiII', 1.0, 0, -1, 0, 0))
     types.append('NiNode')
-    R = tuple(tuple(HEAD_TURN[c][r] for c in range(3)) for r in range(3))         # (body to bone: the turn undone)
-    T = tuple(-sum(R[r][c] * HEAD_AT[c] for c in range(3)) for r in range(3))
     for i, t in enumerate(n.types):
         if t == 'BSShaderPPLightingProperty':          # (the skinned bit, as the fedora's 0x82000003: without it the game
             blk = bytearray(blocks[i])                  # draws the shape with the still shader and the hat isn't seen,
@@ -412,8 +425,8 @@ def build_worn(name, shapes):
         in_bone = [tuple(sum(R[r][c] * V[3 * k + c] for c in range(3)) + T[r] for r in range(3)) for k in range(nv)]
         mid = tuple(sum(q[a] for q in in_bone) / nv for a in range(3))
         radius = max(sum((q[a] - mid[a]) ** 2 for a in range(3)) ** 0.5 for q in in_bone)
-        skin, sd, part = len(blocks), len(blocks) + 1, len(blocks) + 2
-        blocks.append(struct.pack('<iiiIiI', sd, part, 0, 1, bone, 1) + struct.pack('<HH', *HEAD_PART))
+        skin, sd, part_at = len(blocks), len(blocks) + 1, len(blocks) + 2
+        blocks.append(struct.pack('<iiiIiI', sd, part_at, 0, 1, bone, 1) + struct.pack('<HH', *part))
         types.append('BSDismemberSkinInstance')
         blocks.append(struct.pack('<13f', 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1) + struct.pack('<IB', 1, 1)
                       + struct.pack('<9f', *[v for row in R for v in row]) + struct.pack('<3ff', *T, 1.0)
