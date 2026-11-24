@@ -40,6 +40,21 @@ pr = FakePR(WAIKIKI)
 us = PT.units(pr)
 covered = [PT._edid(pr, k) for u in us for k in u['keys']]
 check('every one of the 59 is in exactly one unit', sorted(covered) == sorted(WAIKIKI))
+KIDS = ['FOLabChildAAF', 'FOLabChildAAM', 'FOLabChildAFChild', 'FOLabChildCM', 'FOLabChildCM2', 'FOLabChildCF']
+COURT = (['FOLabCourtGuard%02d' % n for n in range(1, 4)] + ['FOLabCourtRetainer%02d' % n for n in range(1, 5)]
+         + ['FOLabCourtServant%02d' % n for n in range(1, 7)] + ['FOLabCourtGuest%02d' % n for n in range(1, 11)])
+big = FakePR(WAIKIKI + KIDS + COURT)
+new_units = {u['name']: len(u['keys']) for u in PT.units(big) if any(PT._edid(big, k) in KIDS + COURT for k in u['keys'])}
+check('the children and the Moana\'s court (ourpeople) are pools of their own: %s' % new_units,
+      new_units == {'child': 6, 'courtguard': 3, 'courtretainer': 4, 'courtservant': 6, 'courtguest': 10})
+check('everyone, old and new, in exactly one unit', sorted(PT._edid(big, k) for u in PT.units(big) for k in u['keys'])
+      == sorted(WAIKIKI + KIDS + COURT))
+for u in PT.units(big):
+    for t in PT.TOPICS:
+        if len(set(u['lines'].get(t) or [])) < (4 if len(u['keys']) > 3 else 2):
+            check('%s: %s enough different lines' % (u['name'], t), False)
+check('the new pools\' lines are plain ASCII, at most 80 characters',
+      all(x.isascii() and 0 < len(x) <= 80 for u in PT.units(big) for t in PT.TOPICS for x in u['lines'][t]))
 check('every named person in NAMED is one of them', set(PT.NAMED) <= set(WAIKIKI))
 for u in us:
     for t in PT.TOPICS:

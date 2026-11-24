@@ -191,6 +191,34 @@ POOLS = {
         'HELLO': ["Help us.", "Please. Get us out.", "Who are you?", "Quiet. They'll hear."],
         'IdleChatter': ["How long have we been here?", "They feed us when they remember.", "I can hear the guard.",
                         "Where are they taking us?"]}),
+    # (the Kahuna's court living in the Moana: ourpeople, the user's word 23 Nov 2026)
+    'courtguard': ('fighter', ('FOLabCourtGuard',), {
+        'GOODBYE': ["Keep the peace.", "Go on.", "Mind your manners here.", "The court is watching.", "Off with you."],
+        'HELLO': ["You're in the Kahuna's house.", "Weapon down.", "State your business.", "Guests only up here.",
+                  "Easy, stranger."],
+        'IdleChatter': ["Quiet night.", "Change of watch soon.", "Keep the stairs clear.", "Nobody up without leave.",
+                        "Kahuna's in good spirits."]}),
+    'courtretainer': ('civil', ('FOLabCourtRetainer',), {
+        'GOODBYE': ["The court thanks you.", "Go well.", "We'll speak again.", "Mind the protocol.", "A hui hou."],
+        'HELLO': ["You have business with the court?", "Aloha. Be brief.", "The Kahuna is busy.", "Speak plainly.",
+                  "Visitors are rare up here."],
+        'IdleChatter': ["The Kahuna will want to hear of it.", "Too many petitions this week.", "The guest rooms are full.",
+                        "Word from the toll post?", "Keep the old ways, and the house keeps you."]}),
+    'courtservant': ('civil', ('FOLabCourtServant',), {
+        'GOODBYE': ["Excuse me.", "Work to do.", "Mahalo.", "I'd best get on.", "Mind the floor, it's wet."],
+        'HELLO': ["Can I help you?", "Pardon me.", "Aloha.", "Looking for someone?", "Guests are upstairs."],
+        'IdleChatter': ["The linen won't wash itself.", "Feast tonight. More work.", "Kitchen's short again.",
+                        "Rooms on six need airing.", "Don't let the steward see you sit."]}),
+    'courtguest': ('civil', ('FOLabCourtGuest',), {
+        'GOODBYE': ["Enjoy the house.", "Until later.", "A hui hou.", "Do look at the view.", "Off you go then."],
+        'HELLO': ["Oh. Aloha.", "Another guest?", "Lovely, isn't it?", "You're not from the court.", "Howzit."],
+        'IdleChatter': ["The Kahuna keeps a fine house.", "Best view on the island.", "Is there a feast tonight?",
+                        "The sea's calm today.", "I hear the pirates are restless."]}),
+    'child': ('civil', ('FOLabChild',), {          # (the refugee children made the mod's own: ourpeople, activity.kids)
+        'GOODBYE': ["Bye!", "Shoots!", "See you, stranger!", "A hui hou!", "Gotta go!"],
+        'HELLO': ["Who are you?", "Is that a Pip-Boy?", "You talk funny.", "Aloha!", "Got any candy?"],
+        'IdleChatter': ["I found a shell this big!", "Race you to the pier!", "Mom says don't go near the boats.",
+                        "I'm not scared of pirates.", "Tag, you're it!"]}),
 }
 
 # The barks: topic -> {'fighter' | 'pirate' | 'civil' | 'all': [lines]}, with the face the game shows (emotion, strength)
@@ -311,10 +339,12 @@ def ops(gd, pr, topics=TOPICS):
     tkeys = {name: _topic(gd, name) for name in topics}
     out, plan, rep = [], [], {name: 0 for name in topics}
     us = units(pr)
+    fresh = set()                                           # (units given lines in this go)
     for u in us:
         for name, t in tkeys.items():
             if any(pr.records[lk].get('topic') == t for k in u['keys'] for lk in says.get(k, [])):
                 continue                                    # (they have one there already)
+            fresh.add(u['name'])
             lines, (emotion, strength) = _lines(u, name)
             for text in lines:
                 rec = json.loads(json.dumps(pr.records[template]))
@@ -337,9 +367,10 @@ def ops(gd, pr, topics=TOPICS):
                 out.append({'op': 'record', 'key': k, 'record': new})
                 plan.append({'line': k, 'number': r['number'], 'unit': u['name'], 'keys': u['keys']})
                 rep[name] += 1
-    # (a crowd's lines from before, its greetings, were spoken into one folder only: into all of them too)
+    # (a crowd's lines from before, its greetings, were spoken into one folder only: into all of them too; only for crowds
+    # given lines now, so a later go for new people doesn't speak every crowd again)
     for u in us:
-        if len(u['keys']) > 1:
+        if len(u['keys']) > 1 and u['name'] in fresh:
             for lk in sorted({lk for k in u['keys'] for lk in says.get(k, [])}):
                 for r in qr.info_plain(json.loads(json.dumps(pr.records[lk])))['responses']:
                     plan.append({'line': lk, 'number': r['number'], 'unit': u['name'], 'keys': u['keys']})
