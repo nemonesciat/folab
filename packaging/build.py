@@ -1,7 +1,8 @@
 """Build FOLab for people without Python: a folder (and a zip of it) with FOLab.exe, its own Python and the app.
 
 Run with the Python FOLab is developed with:  py -3 packaging\\build.py
-Output: packaging\\out\\FOLab\\ and packaging\\out\\FOLab-<version>-portable.zip. Nothing is downloaded: Python comes
+Output: packaging\\out\\FOLab\\, packaging\\out\\FOLab-<version>-portable.zip and, beside it, the voice pack
+FOLab-voice-pack-<version>.zip (the voice maker's packages, a download of their own: app\\voicepack.py). Nothing is downloaded: Python comes
 from this computer's own installation (only the standard library FOLab uses), and FOLab.exe is compiled with the C#
 compiler that ships with Windows. (After Morrowind Workshop's packaging/build.py.)
 
@@ -37,6 +38,8 @@ APP_SKIP = {'__pycache__'}
 # modules run only from the developer's Python (they need numpy/PIL/scipy, which FOLab.exe's Python hasn't): copied, not
 # import-checked; FOLab.exe never imports them at start
 DEV_ONLY = {'garmentprint', 'armourset'}
+# modules that need the voice pack's numpy (each imported only when lines or radio are voiced): checked with the pack
+VOICE_ONLY = {'voicefx', 'voicealign', 'radiofx', 'radiojingle'}
 # the voice maker's packages (numpy, onnxruntime, soundfile and what they need), every one under a permissive licence:
 # staged from PyPI's own wheels (not this Python's: Anaconda's numpy drags in Intel's maths libraries) by
 #     py -3 -m pip install --target "packaging\voice packages" --only-binary=:all: numpy onnxruntime soundfile
@@ -44,6 +47,13 @@ DEV_ONLY = {'garmentprint', 'armourset'}
 VOICE = os.path.join(HERE, 'voice packages')
 VOICE_SKIP = {'bin', '__pycache__'}
 VOICE_NEVER = ('phonemizer', 'espeakng_loader', 'kokoro_onnx')
+
+VOICE_NOTICES = """FOLab's voice pack: the packages FOLab's voice maker runs on, each under its own licence:
+
+numpy (BSD), onnxruntime (MIT), soundfile (BSD) with libsndfile (LGPL 2.1, its own DLL), cffi (MIT), pycparser (BSD),
+protobuf (BSD), flatbuffers (Apache 2.0), packaging (Apache 2.0 or BSD), typing_extensions (PSF): their licences are in
+*.dist-info beside this file. None of them is GPL.
+"""
 
 
 def log(*a):
@@ -148,14 +158,7 @@ def build_python(py_dir):
     copy_tree(os.path.join(PY, 'Lib'), lib, LIB_SKIP)
     site = os.path.join(lib, 'site-packages')
     os.makedirs(site)
-    if os.path.isdir(VOICE):
-        if any(n.lower().startswith(VOICE_NEVER) for n in os.listdir(VOICE)):
-            raise SystemExit('"packaging\\voice packages" holds a GPL package (one of %s): stage it again with only numpy, '
-                             'onnxruntime, soundfile' % ', '.join(VOICE_NEVER))
-        copy_tree(VOICE, site, VOICE_SKIP)
-        log('  voice packages:', ', '.join(sorted(n.split('-')[0] for n in os.listdir(site) if n.endswith('.dist-info'))))
-    else:
-        log('  ! no voice packages staged: this FOLab will have no voice maker')
+    # the voice maker's packages go in the voice pack, not here (stage_voice): FOLab is ~45 MB without them
     added = collect_dlls(py_dir)
     log('  DLLs the modules need:', ', '.join(added) or 'none')
     # a "._pth" file makes this Python ignore any other Python on the computer
@@ -163,24 +166,51 @@ def build_python(py_dir):
         f.write('Lib\nLib\\site-packages\nDLLs\n..\\app\n')
 
 
-def check_python(py_dir):
-    """Import everything FOLab uses with the bundled Python, with nothing else on PATH."""
+def stage_voice():
+    """The voice pack's packages, unzipped as FOLab would have them (packaging\\out\\voice pack), or None."""
+    if not os.path.isdir(VOICE):
+        log('  ! no voice packages staged: no voice pack this time')
+        return None
+    if any(n.lower().startswith(VOICE_NEVER) for n in os.listdir(VOICE)):
+        raise SystemExit('"packaging\\voice packages" holds a GPL package (one of %s): stage it again with only numpy, '
+                         'onnxruntime, soundfile' % ', '.join(VOICE_NEVER))
+    dst = os.path.join(OUT, 'voice pack')
+    os.makedirs(dst)
+    copy_tree(VOICE, dst, VOICE_SKIP)
+    log('  voice pack:', ', '.join(sorted(n.split('-')[0] for n in os.listdir(dst) if n.endswith('.dist-info'))))
+    return dst
+
+
+def check_python(py_dir, voice_dir=None):
+    """Import everything FOLab uses with the bundled Python, with nothing else on PATH; then, apart, the voice maker
+    with the voice pack on the path as voicepack.load() puts it there, and that FOLab without it has none."""
     env = {k: v for k, v in os.environ.items() if not k.upper().startswith(('PYTHON', 'CONDA'))}
     env['PATH'] = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'System32')
     mods = sorted(os.path.splitext(f)[0] for f in os.listdir(os.path.join(STAGE, 'app')) if f.endswith('.py')
-                  and os.path.splitext(f)[0] not in DEV_ONLY)
-    # the voice maker: its packages load (each finds its own DLLs), Ogg can be written, words become sounds, nothing GPL
-    voice = ('import numpy, onnxruntime, soundfile, g2p\n'
-             'assert "OGG" in soundfile.available_formats()\n'
-             'assert g2p.phonemes("Aloha, stranger.")\n'
-             'assert not [m for m in sys.modules if m.split(".")[0] in %r]\n' % (VOICE_NEVER,)) if os.path.isdir(VOICE) else ''
+                  and os.path.splitext(f)[0] not in DEV_ONLY | VOICE_ONLY)
     code = ('import sys, ctypes, zlib, json, http.server, webbrowser, mmap, hashlib, base64\n'
-            'for m in %r: __import__(m)\n' % mods + voice +
+            'for m in %r: __import__(m)\n' % mods +
+            'import voicepack\nassert not voicepack.importable(), "the voice packages are in FOLab itself"\n'
             'print("ok", sys.version.split()[0], sys.prefix)\n')
+    _run_check(py_dir, env, code, 'The bundled Python does not work')
+    if voice_dir:
+        # the voice maker: its packages load from the pack's folder (each finds its own DLLs), Ogg can be written, words
+        # become sounds, nothing GPL
+        code = ('import sys\nsys.path.append(%r)\n' % voice_dir +
+                'import numpy, onnxruntime, soundfile, g2p\n'
+                'for m in %r: __import__(m)\n' % sorted(m for m in VOICE_ONLY if os.path.isfile(os.path.join(STAGE, 'app', m + '.py'))) +
+                'assert "OGG" in soundfile.available_formats()\n'
+                'assert g2p.phonemes("Aloha, stranger.")\n'
+                'assert not [m for m in sys.modules if m.split(".")[0] in %r]\n' % (VOICE_NEVER,) +
+                'print("ok voice pack")\n')
+        _run_check(py_dir, env, code, 'The voice pack does not work with the bundled Python')
+
+
+def _run_check(py_dir, env, code, what):
     r = subprocess.run([os.path.join(py_dir, 'python.exe'), '-c', code], env=env, capture_output=True, text=True,
                        cwd=os.path.join(STAGE, 'app'))
     if r.returncode != 0 or not r.stdout.startswith('ok'):
-        raise SystemExit('The bundled Python does not work:\n' + r.stdout + r.stderr)
+        raise SystemExit(what + ':\n' + r.stdout + r.stderr)
     log('  check:', r.stdout.strip())
 
 
@@ -216,9 +246,8 @@ three.js, its DDSLoader and TransformControls (MIT License, Copyright 2010-2021 
 Cinzel (Natanael Gama), Inter (Rasmus Andersson), Oswald (Vernon Adams and contributors) and Share Tech Mono (Carrois
 Type Design): SIL Open Font License 1.1 - app\\web\\vendor\\OFL-*.txt and app\\web\\vendor\\licenses.
 
-For voiced lines: numpy (BSD), onnxruntime (MIT), soundfile (BSD) with libsndfile (LGPL 2.1, its own DLL), cffi (MIT),
-pycparser (BSD), protobuf (BSD), flatbuffers (Apache 2.0), packaging (Apache 2.0 or BSD), typing_extensions (PSF): their
-licences are in python\\Lib\\site-packages\\*.dist-info. The CMU Pronouncing Dictionary (Carnegie Mellon University,
+For voiced lines, in the voice pack (a download of its own): numpy, onnxruntime, soundfile and what they need, each
+under its own licence (the pack's THIRD_PARTY_NOTICES.txt). The CMU Pronouncing Dictionary (Carnegie Mellon University,
 BSD-style) - app\\cmudict-LICENSE.txt. Kokoro's token table (app\\kokorovocab.json, from Kokoro-82M, Apache 2.0).
 Kokoro's model itself is not included: you download it, and FOLab finds it in your Downloads folder.
 
@@ -247,6 +276,30 @@ def main():
         make(ver)
     finally:
         restore_kept()
+    own_voice_pack(ver)
+
+
+def own_voice_pack(ver):
+    """The FOLab you run from packaging\\out\\FOLab gets this build's voice pack (as if you'd installed it), so voicing
+    goes on working there; the zip for others is left as it is."""
+    vz = os.path.join(OUT, 'FOLab-voice-pack-%s.zip' % ver)
+    if not os.path.isfile(vz):
+        return
+    sys.path.insert(0, APP)
+    import voicepack
+    was = os.environ.get('FOLAB_HOME')
+    os.environ['FOLAB_HOME'] = STAGE
+    try:
+        voicepack.install(vz)
+        voicepack.tidy()
+        log('  voice pack put in', os.path.join(STAGE, voicepack.FOLDER))
+    except (OSError, ValueError) as e:
+        log('  ! the voice pack was not put in your own FOLab:', e)
+    finally:
+        if was is None:
+            os.environ.pop('FOLAB_HOME', None)
+        else:
+            os.environ['FOLAB_HOME'] = was
 
 
 def restore_kept():
@@ -270,7 +323,8 @@ def make(ver):
     os.makedirs(os.path.join(STAGE, 'app'))
     copy_tree(APP, os.path.join(STAGE, 'app'), APP_SKIP)
     build_python(os.path.join(STAGE, 'python'))
-    check_python(os.path.join(STAGE, 'python'))
+    voice_dir = stage_voice()
+    check_python(os.path.join(STAGE, 'python'), voice_dir)
     strip_pycache(STAGE)
     log('FOLab.exe')
     compile_launcher(os.path.join(STAGE, 'FOLab.exe'), icon, ver)
@@ -289,6 +343,15 @@ def make(ver):
                 zf.write(p, os.path.join('FOLab', os.path.relpath(p, STAGE)))
     size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _d, fs in os.walk(STAGE) for f in fs)
     log('Done: %s (%.0f MB unpacked, %.0f MB zipped)' % (z, size / 1e6, os.path.getsize(z) / 1e6))
+    if voice_dir:
+        sys.path.insert(0, APP)
+        import voicepack
+        with open(os.path.join(voice_dir, 'THIRD_PARTY_NOTICES.txt'), 'w', encoding='utf-8') as f:
+            f.write(VOICE_NOTICES)
+        vz = voicepack.make(voice_dir, os.path.join(OUT, 'FOLab-voice-pack-%s.zip' % ver), ver)
+        shutil.rmtree(voice_dir)
+        log('Voice pack: %s (%.0f MB zipped)' % (vz, os.path.getsize(vz) / 1e6))
+        # (a FOLab you run from packaging\\out\\FOLab keeps its installed voice pack: it isn't one of BUILT)
 
 
 if __name__ == '__main__':

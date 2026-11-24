@@ -591,8 +591,13 @@ the model for style, UI and approach. Python, standard library first, code in `a
   in the original). No GPL in FOLab (the user's choice, 20 Nov): never kokoro-onnx, phonemizer or espeak-ng; `voicegen.Kokoro`
   runs the model itself (onnxruntime, `kokorovocab.json`), `g2p.py` is FOLab's own words to sounds (CMU dictionary
   `cmudict.dict`, Hawaiian spelling, spelling rules) in misaki's letters (A I O W Y glides, which `voicegen.GLIDES` splits for
-  the lip). FOLab.exe carries numpy, onnxruntime, soundfile from `packaging/voice packages` (PyPI wheels, staged by hand: see
-  build.py `VOICE`). In the editor: `api_voices.py` (`/api/voice/`), `web/voices.js` (a Voice part in dialogue.js's line
+  the lip). numpy, onnxruntime, soundfile (PyPI wheels in `packaging/voice packages`, staged by hand: see build.py `VOICE`)
+  are the voice pack, a download of its own since 23 Nov 2026 (`voicepack.py`, `tests/test_voicepack.py`; 94 of FOLab's
+  139 MB): `FOLab-voice-pack-<version>.zip` beside FOLab's zip, one folder `voice pack\` with `voicepack.json` (its
+  Python), unzipped into FOLab's folder or installed from Downloads by the Voice part's Install; `load()` puts it on
+  sys.path (no restart); `/api/voice/status` answers from it when it's missing. Modules needing numpy at the top
+  (build.py `VOICE_ONLY`: voicefx, voicealign, radiofx, radiojingle) are imported only inside functions and checked with
+  the pack; the build puts the pack into the developer's own out\FOLab. In the editor: `api_voices.py` (`/api/voice/`), `web/voices.js` (a Voice part in dialogue.js's line
   editor: voice, speed, pitch, hear, "Voice this line", "Voice every line for"); choices and what was voiced in
   `projects/<mod> voices/voices.json`, not the mod's file, not in Undo. Only the mod's own lines; the speaker's voice type
   (following a template with traits) names the folder. Less flat (the user, 21 Nov: "everyone will sound flat and

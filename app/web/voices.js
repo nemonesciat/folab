@@ -55,10 +55,31 @@ function voPicked(){
           engine: VO.line && VO.line.engine};
 }
 
+// No voice pack (voicepack.py): it's a download of its own. Install when it's in Downloads, else where to get it.
+function voPackBox(box, p){
+  box.innerHTML = `<div class="qp-sub">Voice</div><div class="qp-note">${esc(p.why)}</div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      ${p.zip ? '<button class="btn" id="vo-pack">Install the voice pack</button>' : ''}
+      <button class="btn" id="vo-pack-look">${p.zip ? 'Look again' : 'I’ve downloaded it: look again'}</button>
+      <a class="btn" href="${esc(p.page)}" target="_blank" rel="noopener">FOLab’s downloads</a></div>`;
+  const again = () => { VO.status = null; voDrawLine(); };
+  box.querySelector('#vo-pack-look').onclick = again;
+  const b = box.querySelector('#vo-pack');
+  if (b) b.onclick = async () => {
+    b.disabled = true; b.textContent = 'Installing…';
+    try {
+      const r = await post('/api/voice/pack/install', {});
+      toast(r.ready ? 'Voice pack in: you can voice lines now.' : r.why, !r.ready);
+    } catch (e){ fail(e); }
+    again();
+  };
+}
+
 async function voDrawLine(){
   const box = $('#vo-box'); if (!box) return;
   const key = DL.editKey;
   const st = await voStatus();
+  if (!st.engine && st.pack){ voPackBox(box, st.pack); return; }
   if (!st.engine){ box.innerHTML = `<div class="qp-sub">Voice</div><div class="qp-note">${esc(st.why)}</div>`; return; }
   if (!st.model){ box.innerHTML = `<div class="qp-sub">Voice</div><div class="qp-note">${esc(st.why)}</div>`; return; }
   let info;

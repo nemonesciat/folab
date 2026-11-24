@@ -47,6 +47,9 @@ new and has only been tried on a small setup. Big mod lists may take a while to 
   folder if it can't. A GOG copy is found too, but starting the game from FOLab is only tried with Steam's).
 - With the **portable download** (FOLab.exe), nothing else: Python comes with it. From the source: **Python 3.10 or newer** for Windows, from [python.org](https://www.python.org/downloads/) (tick "Add to PATH" and
   the "py launcher"). Nothing else to install.
+- For voiced lines only: **FOLab's voice pack** (`FOLab-voice-pack-<version>.zip`, a download of its own beside FOLab's,
+  about 30 MB; leave it in Downloads and press Install on a line's Voice part, or unzip it into FOLab's folder) and the
+  Kokoro voice model (see the dialogue editor's Voice part). From the source, `pip install numpy onnxruntime soundfile`.
 - For Play here and Give it to me in game: **xNVSE** (download it from its page and FOLab installs it from your Downloads folder) and
   **JIP LN NVSE** (from its Nexus page).
 

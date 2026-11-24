@@ -34,6 +34,12 @@ You don't need voice files. A line needs only its words; with no voice file, the
 
 Your character needs a **voice type** even so (the Create page, Characters): the check tells you if one hasn't got it. To add voices later, put files where the game looks: `Data\Sound\Voice\YourMod.esp\voice type\quest_topic_line_1.ogg`, with a `.lip` beside each.
 
+FOLab can voice your lines itself (a line's **Voice** part). That needs **FOLab's voice pack**, a download of its own so
+FOLab stays small for everyone else: get `FOLab-voice-pack-<version>.zip` from FOLab's Nexus Files tab or GitHub page and
+leave it in your Downloads folder, then press **Install the voice pack** on the Voice part (or unzip it into FOLab's
+folder yourself). It works at once, no restart. A voice pack fits the FOLab it was made with and later ones on the same
+Python; the Voice part says if yours doesn't.
+
 ## Board
 
 Your mod's quests, each as a row of stages from left to right. What moves it on is written between them: a line said (and who says it), or a script. A move that skips stages arcs over them. Moves with no stage to wait for are listed under **Any time**.

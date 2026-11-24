@@ -40,6 +40,7 @@ import adopt
 import api_scripts
 import api_quests
 import api_voices
+import voicepack
 import api_characters
 import radio
 import browse
@@ -2336,6 +2337,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.startswith(('/api/quest/', '/api/dlg/')):
                 with _lock:
                     return self.send(api_quests.get(u.path, q, GD, PR, BR))
+            if u.path == '/api/voice/status':
+                vp = voicepack.state()          # (no voice pack: what to get, and Install when it's in Downloads)
+                if not vp['ready']:
+                    return self.send({'engine': False, 'model': False, 'why': vp['why'], 'pack': vp})
             if u.path.startswith('/api/voice/'):
                 with _lock:
                     got = api_voices.get(u.path, q, GD, PR)
@@ -2561,6 +2566,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send({'error': 'Open or start a mod first.'}, code=400)
                 if u.path.startswith(('/api/quest/', '/api/dlg/')):
                     return self.send(api_quests.post(u.path, body, GD, PR, BR, edit))
+                if u.path == '/api/voice/pack/install':
+                    return self.send(voicepack.install())
                 if u.path.startswith('/api/voice/'):
                     got = api_voices.post(u.path, body, GD, PR)
                     if got is None:
@@ -2719,6 +2726,8 @@ def main():
     args = sys.argv[1:]
     port = next((int(a) for a in args if a.isdigit()), PORT)
     t = time.time()
+    voicepack.tidy()
+    voicepack.load()                    # (the voice maker's packages, a download of their own, when they're in)
     modtools.gametest.on_start()        # (a game test cut off last time: the user's files back first)
     last = load_settings().get('project')
     if last:
