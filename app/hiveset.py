@@ -13,7 +13,8 @@ boxes. A far model (`far_desc`): the shell at a twelfth of the corners, no lips,
 Sizes are game units (70 to the metre); front is -y; the model stands on z 0 with `SINK` of it under the ground.
 
     build(kind)            {'nif', 'far', 'files', 'box', 'triangles', 'mouth', ...}
-    KINDS                  'ruin' (grown over a building), 'hill' (standing alone: slopes, peaks), 'great' (the dungeon's)
+    KINDS                  'ruin' (grown over a building), 'hill' (a mountain top), 'cliff' (set into a steep hillside),
+                           'great' (the big dungeon's)
 """
 import functools
 import math
@@ -29,6 +30,7 @@ FAR_SIDES = 18
 KINDS = {
     'ruin': ('FOLabVespidHive', 'vespid_hive', 520.0, 1080.0, 15, 31, True, (0.30, 230.0, 60.0)),
     'hill': ('FOLabVespidHiveHill', 'vespid_hive_hill', 440.0, 1000.0, 15, 33, False, (0.30, 230.0, 130.0)),
+    'cliff': ('FOLabVespidHiveCliff', 'vespid_hive_cliff', 420.0, 940.0, 15, 35, False, (0.30, 230.0, 130.0)),   # (set into a steep slope: vespidhives seats it so the hill takes its back)
     'great': ('FOLabVespidHiveGreat', 'vespid_hive_great', 700.0, 1500.0, 19, 37, True, (0.26, 300.0, 70.0)),
 }
 # the building a hive grew over (kinds with a ruin): half its width (x), half its depth (y), its walls' height. The paper
@@ -587,7 +589,7 @@ def comb(size=1024, seed=8):
     rgb *= (0.9 + 0.2 * tone)[..., None]
     # light: honey faintly alight, a very few cells lit from deep in, a thread or two of vein over the walls
     lit = np.zeros((n, n))
-    lit[honey] = 0.22
+    lit[honey] = 0.07                                   # (a green sheen in the amber, not a lamp)
     deep_lit = (K == 5) & (hd < 0.8)
     lit[deep_lit] = 0.45 * np.clip(1 - hd[deep_lit] / 0.8, 0, 1)
     glow = lit[..., None] * np.array(GLOW, np.float64)[None, None, :]
@@ -781,7 +783,7 @@ def burnt_nif(data):
 
 
 def all_files(progress=print):
-    """{path: bytes} of every hive model (each kind, alive and burnt, with its far model), the heart and all pictures;
+    """{path: bytes} of every hive model (each kind, alive and burnt, with its far model) and all pictures;
     and {kind: {'mesh', 'burnt', 'box', 'mouth'}}."""
     files, info = {}, {}
     for kind in KINDS:
@@ -793,8 +795,5 @@ def all_files(progress=print):
         info[kind] = {'mesh': made['mesh'], 'burnt': burnt, 'box': made['box'], 'mouth': made['mouth'], 'triangles': made['triangles']}
         if progress:
             progress('hive %s: %d triangles' % (kind, made['triangles']))
-    h = heart()
-    files.update(h['files'])
-    info['heart'] = {'mesh': h['mesh'], 'box': h['box']}
     files.update(burnt_pictures())
     return files, info

@@ -56,8 +56,6 @@ for kind in hiveset.KINDS:
     mx, my, mz = made['mouth']
     s0 = made['solids'][0]['points']
     check('… its door stands outside the collision', my < min(p[1] for p in s0), '%s %s' % (my, min(p[1] for p in s0)))
-h = hiveset.heart()
-check('the heart: something solid to activate, chest high', h['box'][5] > 80 and b'bhkConvexVerticesShape' in h['nif'])
 
 # ---------- the scripts compile ----------
 import api_scripts
@@ -73,14 +71,13 @@ for i in range(n):
         k += 1
 quest = qr.quest_record({'edid': VH.QUEST, 'script': '+000900', 'name': '', 'flags': {'start_enabled': True}, 'priority': 50, 'delay': 2.0, 'stages': [], 'objectives': []})
 extra['+000901'] = quest
-c = sc.compile(VH.quest_script(n, 1), '+000900', 'quest', extra)
+c = sc.compile(VH.quest_script(n, 0), '+000900', 'quest', extra)
 check('the hives\' script compiles', hasattr(c, 'subrecords'), str(c)[:200])
-msg = VH._message('FOLabVespidHiveBurnMsg', 'x')
-c2 = sc.compile(VH.heart_script('FOLabVespidHiveBurnMsg'), '+000902', 'object', {'+000903': msg})
-check('the heart\'s script compiles', hasattr(c2, 'subrecords'), str(c2)[:200])
-if hasattr(c, 'subrecords'):
-    c3 = sc.compile(VH.queen_script(), '+000904', 'object', dict(extra, **{'+000900': sc._record_of(c, VH.QUEST_SCRIPT)}))
-    check('the queen\'s script compiles', hasattr(c3, 'subrecords'), str(c3)[:200])
+msg = VH._message('FOLabVespidHiveDiesMsg', 'x')
+c3 = sc.compile(VH.queen_script('FOLabVespidHiveDiesMsg'), '+000904', 'object', {'+000905': msg})
+check("the queens' script compiles: her death ends her hive", hasattr(c3, 'subrecords'), str(c3)[:200])
+b = vespid.creature(G, 'brood', 'test', None, '+000904')
+check("a small hive's Brood Queen: between a Vespid and the great queen", 0.85 < [s_ for s_ in b['subs'] if s_['tag'] == 'BNAM'][0]['fields'][0]['value'] < 1.7)
 r = VH.recipe(G)
 check('the island antivenom: a Xander root and a broc flower make the game\'s Antivenom', sorted(G.edid(G.from_key(s['value'])) for s in r['subs'] if s['tag'] == 'RCIL') == ['BrocFlower', 'XanderRoot']
       and [G.edid(G.from_key(s['value'])) for s in r['subs'] if s['tag'] == 'RCOD'] == ['NVAntivenom'])

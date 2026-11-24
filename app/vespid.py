@@ -39,6 +39,7 @@ SIZE, WING_SIZE = 1024, 512
 KINDS = {
     'vespid': ('FOLabVespid', 'Vespid', 0.85, 200, 18, 1.0, 1.0),
     'queen': ('FOLabVespidQueen', 'Vespid Queen', 1.7, 900, 30, 2.2, 2.0),
+    'brood': ('FOLabVespidBroodQueen', 'Vespid Brood Queen', 1.3, 450, 22, 1.6, 1.5),   # (a small hive's queen)
 }
 QUEEN = 'queen'
 GLOW_COLOUR = (0.45, 1.0, 0.35)         # (the material's emissive: the glow picture's light is this colour; the Glowing One's

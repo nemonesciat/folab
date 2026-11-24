@@ -50,6 +50,13 @@ NAME = 'The Great Hive'
 DOOR = 'OffDoorMetalDoor01EXTERIOR'
 VESPIDS = 5
 SEED = 50
+# every other hive's small inside (the user, 23 Nov 2026: "all the hives were to be dungeons ... one big big dungeon and
+# the other small, but they should all be locations"): sizes by the hive's number, each a little different
+SMALL_SIZES = [(4, 3), (5, 3), (4, 4), (5, 4), (3, 5), (5, 3), (4, 4), (4, 5)]
+SMALL_NAME = 'Vespid Nest'
+SMALL = {'comb_every': 2, 'chamber_combs': 1, 'vespids': 2}
+GREAT = {'comb_every': COMB_EVERY, 'chamber_combs': CHAMBER_COMBS, 'vespids': VESPIDS}
+_SHARED = {}                    # (the kit index, its survey, the planner's stores: built once a run, for every cave)
 
 
 # ---------- pictures (numpy, PIL: a build step) ----------
@@ -228,17 +235,18 @@ def piece_files(gd, keys):
 
 # ---------- comb ----------
 
-def comb_desc(name='FOLabVespidComb', seed=1, tiers=4):
+def comb_desc(name='FOLabVespidComb', seed=1, tiers=8):
     """A stack of comb tiers on stalks, as a nest grows in a hollow: each tier a broad, shallow disc of comb (cells lit
-    from within, eggs), paper round its rim, a paper stalk to the next; about 330 tall. Solid at its stalk only, so it never shuts a tunnel."""
+    from within, eggs), paper round its rim, a paper stalk to the next; 8 tiers about 40 apart, about 340 tall. Solid at its stalk only, so it never shuts a tunnel."""
     rnd = random.Random(seed)
-    comb = {'tex': TEX % 'comb', 'normal': TEX % 'comb_n', 'glow': TEX % 'comb_g', 'glow_mult': 1.5, 'tile': 220, 'gloss': 60.0}
+    comb = {'tex': TEX % 'comb', 'normal': TEX % 'comb_n', 'glow': TEX % 'comb_g', 'glow_mult': 1.5, 'tile': 460, 'gloss': 60.0}   # (cells about half a metre: giant wasps)
     paper = {'tex': TEX % 'paper', 'normal': TEX % 'paper_n', 'tile': 128}
     parts, z = [], 0.0
     parts.append({'shape': 'cylinder', 'r': 16, 'r2': 12, 'h': 330, 'sides': 8, 'look': 'paper', 'at': [0, 0, 0], 'solid': True, 'material': 'organic'})
+    # (tiers packed close, as a nest's are: the user, 23 Nov 2026, 'closer together and more tightly packed')
     for k in range(tiers):
-        z += rnd.uniform(60, 85)
-        r = rnd.uniform(95, 150) * (1.1 - 0.12 * k)
+        z += 18.0 + rnd.uniform(18, 24)
+        r = rnd.uniform(120, 150) * (1.08 - 0.05 * k)
         parts.append({'shape': 'cylinder', 'r': r, 'r2': r, 'h': 18, 'sides': 20, 'look': 'paper', 'cap_look': 'comb', 'at': [rnd.uniform(-10, 10), rnd.uniform(-10, 10), z],
                       'solid': False})                # (only the stalk is solid: a stack never shuts a tunnel)
     return {'name': name, 'looks': {'comb': comb, 'paper': paper}, 'parts': parts, 'ground': True}
@@ -253,18 +261,22 @@ def comb_model():
 
 # ---------- the cave ----------
 
-def plan(gd, seed=SEED, kits=None, survey=None, store=None, cache=None):
+def plan(gd, seed=SEED, kits=None, survey=None, store=None, cache=None, size=SIZE, fill=None):
     """The cave: kocave.make's answer with 'combs' [(x, y, z, rz)], 'lights' [(x, y, z)], 'queen' (x, y, z, rz),
     'chamber' (x, y, z, rz), 'vespids' [(x, y, z, rz)], all in the place's own frame; None if no cave walked."""
     import kitdress as D
     import kitindex as K
     import kitplan as P
     import kocave
-    kits = kits or K.build(gd)
-    survey = survey or D.survey(gd, kits, only={kocave.KIT})
-    store = {} if store is None else store
-    cache = {} if cache is None else cache
-    g = kocave.make(gd, kits, SIZE[0], SIZE[1], seed, store, cache, survey)
+    fill = fill or GREAT
+    if 'kits' not in _SHARED:
+        _SHARED['kits'] = kits or K.build(gd)
+        _SHARED['survey'] = survey or D.survey(gd, _SHARED['kits'], only={kocave.KIT})
+        _SHARED['store'], _SHARED['cache'] = {}, {}
+    kits, survey = _SHARED['kits'], _SHARED['survey']
+    store = _SHARED['store'] if store is None else store
+    cache = _SHARED['cache'] if cache is None else cache
+    g = kocave.make(gd, kits, size[0], size[1], seed, store, cache, survey)
     if not g:
         return None
     rnd = random.Random(seed)
@@ -306,8 +318,8 @@ def plan(gd, seed=SEED, kits=None, survey=None, store=None, cache=None):
     ch = spot(order[0], (140.0, 90.0)) or q
     out['chamber'] = (ch[0], ch[1], ch[2], rnd.uniform(0, math.tau)) if ch else None
     # comb: in the chamber's squares, then every COMB_EVERY squares along the way, against the side away from the walk
-    chamber = [c for c in order if far[c] >= far[order[0]] - 1][:CHAMBER_COMBS + 1]
-    along = [c for c in order[len(chamber):] if far[c] % COMB_EVERY == 0 and far[c] > 1]
+    chamber = [c for c in order if far[c] >= far[order[0]] - 1][:fill['chamber_combs'] + 1]
+    along = [c for c in order[len(chamber):] if far[c] % fill['comb_every'] == 0 and far[c] > 1]
     for c in chamber[1:] + along:
         s = spot(c, (rnd.uniform(-150, 150), rnd.uniform(-150, 150)))
         if s:
@@ -317,7 +329,7 @@ def plan(gd, seed=SEED, kits=None, survey=None, store=None, cache=None):
     out['lights'] = [l for l in out['lights'] if l]
     mid = [c for c in order if 0.3 * far[order[0]] <= far[c] <= 0.75 * far[order[0]]]
     rnd.shuffle(mid)
-    for c in mid[:VESPIDS]:
+    for c in mid[:fill['vespids']]:
         s = spot(c)
         if s:
             out['vespids'].append((s[0], s[1], s[2] + 20.0, rnd.uniform(0, math.tau)))
@@ -329,7 +341,7 @@ def plan(gd, seed=SEED, kits=None, survey=None, store=None, cache=None):
     return out
 
 
-def cell_record(gd):
+def cell_record(gd, edid='FOLabVespidGreatHive', full=NAME):
     """The place's record: a game cave's (its lighting, sound, flags), named the nest's."""
     import json
     import recordio
@@ -337,8 +349,8 @@ def cell_record(gd):
     rec = json.loads(json.dumps(recordio.load(gd, f)))
     rec['src'] = ''
     rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('XOWN', 'XRNK', 'XEZN')]
-    recordio.set_field(rec, 'EDID', 'FOLabVespidGreatHive', label='Editor ID')
-    recordio.set_field(rec, 'FULL', NAME, label='Name')
+    recordio.set_field(rec, 'EDID', edid, label='Editor ID')
+    recordio.set_field(rec, 'FULL', full, label='Name')
     return rec
 
 
@@ -347,63 +359,67 @@ def cell_record(gd):
 TAG = 'vhcave'
 
 
-def records(gd, cave, comb_mesh, comb_box):
-    """(ops making the place's record, each re-dressed piece's STAT and the comb's; {piece key: '$name'}) and the files."""
+def piece_records(gd, caves, comb_mesh, comb_box):
+    """(ops making a STAT of the mod's own for every kit piece any of `caves` uses, re-dressed, and the comb's;
+    {piece key: '$name'})."""
     import json
     import recordio
     import vespidhives as VH
-    files, models = piece_files(gd, [m.key for m in cave['made']])
-    ops = [{'op': 'record_new', 'record': cell_record(gd), 'name': TAG}]
-    names = {}
+    keys = sorted({m.key for c in caves for m in c['made']})
+    _files, models = piece_files(gd, keys)
+    ops, names = [], {}
     for i, (k, (path, edid)) in enumerate(sorted(models.items())):
         rec = json.loads(json.dumps(recordio.load(gd, gd.from_key(k))))
         rec['src'] = ''
-        rec['subs'] = [s for s in rec['subs'] if s['tag'] not in ('MODT',)]
+        rec['subs'] = [s_ for s_ in rec['subs'] if s_['tag'] not in ('MODT',)]
         recordio.set_field(rec, 'EDID', edid, label='Editor ID')
         recordio.set_field(rec, 'MODL', path[7:], label='Model')
         name = '%sp%d' % (TAG, i)
         ops.append({'op': 'record_new', 'record': rec, 'name': name})
         names[k] = '$' + name
     ops.append({'op': 'record_new', 'record': VH._stat('FOLabVespidComb', comb_mesh[7:], comb_box), 'name': TAG + 'comb'})
-    return ops, names, files
+    return ops, names
 
 
-def things(gd, cave, names, queen_key, vespid_key, chamber_key, door_key, outside_door, outside_arrival, finds=None):
-    """The adds into the place and the two door links. outside_door: '$name' of the hive's door outside."""
+def place_ops(gd, cave, tag, edid, full, names, queen_key, queen_parent, vespid_key, chamber_key, outside_door, outside_arrival,
+              finds=None):
+    """Ops for one hive's inside: its place (named '$tag'), its pieces, things, comb, lights, queen (her enable parent
+    `queen_parent`: the hive's life, which her death switches off), cache and Vespids, and the two door links.
+    outside_door: (its cell, '$name' of the hive's door outside). finds: (honey, royal jelly or None) by the combs."""
     import vespidhives as VH
     light = gd.key(VH._game(gd, 'LIGH', LIGHT))
-    cell = '$' + TAG
-    ops = []
+    cell = '$' + tag
+    ops = [{'op': 'record_new', 'record': cell_record(gd, edid, full), 'name': tag}]
     for m in cave['made']:
         ops.append({'op': 'add', 'cell': cell, 'base': names.get(m.key, m.key), 'p': [m.x, m.y, m.z, 0.0, 0.0, m.turn * math.pi / 2], 's': 1.0})
     for it in cave['items']:
         o = {'op': 'add', 'cell': cell, 'base': it.key, 'p': list(it.p), 's': it.s}
         if it.what == 'exit':
-            o['name'] = TAG + 'x'
+            o['name'] = tag + 'x'
         elif it.extra:
             o['extra'] = it.extra
         ops.append(o)
     for x, y, z, rz in cave['combs']:
         ops.append({'op': 'add', 'cell': cell, 'base': '$' + TAG + 'comb', 'p': [x, y, z - 4.0, 0.0, 0.0, round(rz, 4)], 's': 1.0})
     if finds:
-        # (honey by every other comb, royal jelly by the two deepest: the chamber's own are in its cache)
         honey, royal = finds
         for i, (x, y, z, rz) in enumerate(cave['combs']):
-            if i < 2 or i % 2 == 0:
-                ops.append({'op': 'add', 'cell': cell, 'base': royal if i < 2 else honey,
+            if (royal and i < 2) or i % 2 == 0:
+                ops.append({'op': 'add', 'cell': cell, 'base': royal if (royal and i < 2) else honey,
                             'p': [round(x + 70 * math.cos(rz), 1), round(y + 70 * math.sin(rz), 1), z + 2.0, 0.0, 0.0, 0.0], 's': 1.0})
     for x, y, z in cave['lights']:
         ops.append({'op': 'add', 'cell': cell, 'base': light, 'p': [x, y, z, 0.0, 0.0, 0.0], 's': 1.0})
     if cave['queen']:
-        ops.append({'op': 'add', 'cell': cell, 'base': queen_key, 'p': [cave['queen'][0], cave['queen'][1], cave['queen'][2], 0.0, 0.0, round(cave['queen'][3], 4)], 's': 1.0})
+        ops.append({'op': 'add', 'cell': cell, 'base': queen_key, 'p': [cave['queen'][0], cave['queen'][1], cave['queen'][2], 0.0, 0.0, round(cave['queen'][3], 4)],
+                    's': 1.0, 'extra': {'props': {'parent': {'ref': queen_parent, 'opposite': False, 'popin': False}}}})
     if cave['chamber']:
         x, y, z, rz = cave['chamber']
         ops.append({'op': 'add', 'cell': cell, 'base': chamber_key, 'p': [x, y, z + 1.0, 0.0, 0.0, round(rz, 4)], 's': 1.0})
     for x, y, z, rz in cave['vespids']:
         ops.append({'op': 'add', 'cell': cell, 'base': vespid_key, 'p': [x, y, z, 0.0, 0.0, round(rz, 4)], 's': 1.0})
-    links = [{'op': 'tel', 'cell': outside_door[0], 'ref': outside_door[1], 'tel': {'door': '$' + TAG + 'x', 'p': cave['arrive']}},
-             {'op': 'tel', 'cell': cell, 'ref': '$' + TAG + 'x', 'tel': {'door': outside_door[1], 'p': outside_arrival}}]
-    return ops, links
+    links = [{'op': 'tel', 'cell': outside_door[0], 'ref': outside_door[1], 'tel': {'door': '$' + tag + 'x', 'p': cave['arrive']}},
+             {'op': 'tel', 'cell': cell, 'ref': '$' + tag + 'x', 'tel': {'door': outside_door[1], 'p': outside_arrival}}]
+    return ops + links
 
 
 # ---------- closed, as a solid is ----------
@@ -479,17 +495,47 @@ def leaks(gd, cave, points=LEAK_POINTS, rays=LEAK_RAYS, seed=1):
     return out
 
 
-def closed_plan(gd, seed=SEED, tries=4, progress=None):
+def closed_plan(gd, seed=SEED, tries=4, progress=None, size=SIZE, fill=None):
     """A plan that walks (plan) and is closed as a solid (no ray from inside leaves it: `leaks`), trying further seeds;
     None if none of `tries` is. The answer carries 'leaks' (0) and 'seed'."""
     for k in range(tries):
-        cave = plan(gd, seed + 7 * k)
+        cave = plan(gd, seed + 7 * k, size=size, fill=fill)
         if cave is None:
             continue
         lk = leaks(gd, cave)
         if progress:
-            progress('dungeon seed %d: %d leaking rays' % (seed + 7 * k, len(lk)))
+            progress('cave %dx%d seed %d: %d leaking rays' % (size[0], size[1], seed + 7 * k, len(lk)))
         if not lk:
             cave['leaks'], cave['seed'] = 0, seed + 7 * k
             return cave
     return None
+
+
+def refresh_comb(gd, pr):
+    """For a mod that already has the Vespids: the comb's model and pictures written afresh among the mod's own files
+    (hiveset.comb, comb_desc) and the ops that bring its STAT's bounds in line ([] if they already are). Nothing else
+    changes."""
+    import copy
+    import hiveset
+    import library
+    import recordio
+    root = library.assets_dir(pr)
+    made = comb_model()
+    library._put(root, made['mesh'], made['nif'])
+    files = [made['mesh']]
+    for path, data in hiveset.texture_files().items():
+        if 'comb' in path.lower():
+            library._put(root, path, data)
+            files.append(path)
+    key = next((k for k, r in pr.records.items() if r.get('type') == 'STAT' and recordio.field(r, 'EDID') == 'FOLabVespidComb'), None)
+    ops = []
+    if key:
+        rec = copy.deepcopy(pr.records[key])
+        for sub in rec['subs']:
+            if sub['tag'] == 'OBND':
+                vals = [int(v) for v in made['box']]
+                if [f['value'] for f in sub['fields']] != vals:
+                    for f, v in zip(sub['fields'], vals):
+                        f['value'] = v
+                    ops.append({'op': 'record', 'key': key, 'record': rec})
+    return ops, files

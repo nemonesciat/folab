@@ -1,34 +1,36 @@
-"""The Vespids' hives in a world (docs/waikiki-pacing-plan.md section 6; the user, 23 Nov 2026): a few big nests on the
-Ko'olau's ridges and high valleys, the Vespids only round them, the hives burnt to end them, looted, antidotes easy to get.
+"""The Vespids' hives in a world (docs/waikiki-pacing-plan.md section 6; the user, 23 Nov 2026): nests on the Ko'olau's
+ridges and high valleys, the Vespids only round them, every hive a place to go into (the user: "all the hives were to be
+dungeons ... one big big dungeon and the other small, but they should all be locations"), ended by killing its queen,
+looted, antidotes easy to get.
 
-Records (all the mod's own; `RECORDS` order):
-    Vespid, Vespid Queen      vespid.creature: the cazador's record, the body painted as a yellowjacket. The Vespid respawns
-                              as the game's cazadores do (ACBS respawn flag) while its hive stands; the queen doesn't
+Records (all the mod's own):
+    Vespid, Vespid Queen, Vespid Brood Queen   vespid.creature: the cazador's record, the body painted as a yellowjacket.
+                              The Vespid respawns as the game's cazadores do (ACBS respawn flag) while its hive stands;
+                              the queens (the great hive's, a small hive's) don't, and their death ends their hive
+                              (`QUEEN_SCRIPT`: her enable parent is the hive's life marker, switched off)
     Vespid Poison Gland       the cazador's gland renamed; the Vespid's death item gives it a third of the time, as the game's
     Rad Honey                 the hives' common find: food (the cazador egg's effects, more), some trade value
-    Glowing Royal Jelly       the great hive's rare find (worth 250), for Royal Jelly Tonic (a Buffout of the
+    Glowing Royal Jelly       the great hive's rare find (worth 250, only there), for Royal Jelly Tonic (a Buffout of the
                               island's own), Hive Fire (a Rocket: jelly and a Vespid's gland) and Rad Honey Cake
     Antivenom (island herbs)  a campfire recipe of the game's Antivenom (which dispels the cazador's poison the Vespid keeps)
                               from a Xander root and a broc flower, both growing wild on the island
     antivenom kit             the game's first aid kit with two Antivenom more: one at each ridge place's campfire
-    hive cache                the game's military footlocker the hive grew round: Rad Jelly and Antivenom put in, locked
-                              until the hive burns
-    the hive's heart          an activator (hiveset.heart: comb lit from within) in each hive's mouth: activated, the hive
-                              burns (`HEART_SCRIPT`)
-    hive models               STATs: each kind alive and burnt (hiveset)
-    quest FOLabVespidHives    its script watches the hives: a heart gone (its hive's life marker off) means the hive burns,
-                              fire for half a day, the cache unlocked, and once the player is out of sight the hive's
-                              Vespids are gone for good (their pool marker off: they no longer respawn)
+    hive cache                the game's military footlocker the hive grew round, outside: Rad Honey and Antivenom, locked
+                              until the hive dies; the queens' own caches inside (royal jelly only in the great one's)
+    hive models               STATs: each kind alive and burnt (hiveset: ruin, cliff, hill, great)
+    quest FOLabVespidHives    its script watches the hives: a hive's life marker off means it burns, fire for half a day,
+                              the cache unlocked, and once the player is out of sight its Vespids are gone for good
     the doctor's chest        FOLabWaikikiDoctorChest gets four Antivenom (the Waikiki doctor sells them)
 
-Each hive (`sites`) stands where the land is high (`HIGH`) and level enough for its foot (`LEVEL_ROOM`), far from any map
-marker (`CLEAR`, `WIDE`), any door that leads somewhere, what marks a walked way (`keep_off`), roads, and the other hives
-(`APART`); on a peak or ridge top a 'hill' hive, in a high valley a
-'ruin' one; the 'great' one (whose door leads to the dungeon, vespidcave.py) on the best spot of all. Its mouth faces
-downhill. Three persistent markers a hive: life (the hive alive and its heart; the burnt hive opposite), pool (its
-Vespids) and fire (off until it burns).
+Each hive (`sites`) stands where the land is high (`HIGH`), far from any map marker (`CLEAR`, `WIDE`), any door that
+leads somewhere and its arrival, what marks a walked way, named refs (`keep_off`), roads, and the other hives (`APART`):
+on a mountain top a 'hill' hive, in a high valley over a ruin a 'ruin' one, set into a steep hillside a 'cliff' one
+(`CLIFF_ROOM`), the 'great' one on the best spot of all. Its mouth faces downhill, a salvaged door in it into the hive's
+own inside (vespidcave: the great one's big, the rest small, every one walked and closed as a solid), a map marker in
+front found when you come near. Markers a hive: life (the hive alive; the burnt hive opposite; the queen's parent), pool
+(its Vespids) and fire (off until it burns).
 
-    ops(gd, pr, world)  (ops, report): one Undo; files are put by `put_files`
+    build(server)       sites, insides, files, one Undo
 """
 import json
 import math
@@ -36,7 +38,6 @@ import random
 
 QUEST = 'FOLabVespidHives'
 QUEST_SCRIPT = 'FOLabVespidHivesScript'
-HEART_SCRIPT = 'FOLabVespidHeartScript'
 QUEEN_SCRIPT = 'FOLabVespidQueenScript'
 LIFE, POOL, FIRE, CACHE = 'FOLabHiveLife%02d', 'FOLabHivePool%02d', 'FOLabHiveFire%02d', 'FOLabHiveCache%02d'
 MARKER = 'XMarker'
@@ -60,8 +61,11 @@ CREST_GAP = 22000.0         # (two crest signposts further apart than this aren'
 ROAD_CLEAR = 1200.0
 APART = 11000.0
 LEVEL_ROOM = 360.0          # (the most the ground may rise across a hive's foot: more is buried in the hill)
-COUNT = {'great': 1, 'ruin': 3, 'hill': 3}
-POOL_SIZE = {'great': 6, 'ruin': 4, 'hill': 4}
+COUNT = {'great': 1, 'ruin': 2, 'cliff': 2, 'hill': 2}
+POOL_SIZE = {'great': 6, 'ruin': 4, 'cliff': 4, 'hill': 4}
+CLIFF_ROOM = 1100.0         # (a hillside steep enough to set a hive into: the ground rises this much at most across its foot)
+MARKER_TYPE = 5             # (a cave's map marker, as Pele's Pipe's)
+MARKER_FOUND = 2            # (shown once found, when you come near)
 POOL_RING = (650.0, 1100.0)
 SEED = 23
 
@@ -271,42 +275,19 @@ def cache(gd, jelly_key):
     return _add_items(rec, [(jelly_key, CACHE_JELLY), (gd.key(_game(gd, 'ALCH', 'NVAntivenom')), CACHE_ANTIVENOM)])
 
 
-def heart_record(model, box, script_key):
-    return {'type': 'ACTI', 'flags': 0, 'src': '', 'subs': [
-        {'tag': 'EDID', 'label': 'Editor ID', 'kind': 'z', 'value': 'FOLabVespidHeart'},
-        {'tag': 'OBND', 'label': 'Bounds', 'kind': 'struct', 'fields': [{'name': n, 'code': 'h', 'value': int(v)} for n, v in zip(('X1', 'Y1', 'Z1', 'X2', 'Y2', 'Z2'), box)]},
-        {'tag': 'FULL', 'label': 'Name', 'kind': 'z', 'value': 'Hive Heart'},
-        {'tag': 'MODL', 'label': 'Model', 'kind': 'z', 'value': model},
-        {'tag': 'SCRI', 'label': 'Script', 'kind': 'F', 'value': script_key},
-        {'tag': 'XATO', 'label': 'Activation prompt', 'kind': 'z', 'value': 'Burn'}]}
-
-
-def heart_script(msg_edid):
-    return '\r\n'.join([
-        'scn %s' % HEART_SCRIPT,
-        '; FOLab: a Vespid hive\'s heart. Set alight, its hive burns: the quest (vespidhives.py) sees the life marker off.',
-        'ref rLife',
-        '',
-        'Begin OnActivate',
-        '\tif IsActionRef Player',
-        '\t\tset rLife to GetParentRef',
-        '\t\tShowMessage %s' % msg_edid,
-        '\t\tif rLife',
-        '\t\t\trLife.Disable',
-        '\t\telse',
-        '\t\t\tDisable',
-        '\t\tendif',
-        '\tendif',
-        'End', ''])
-
-
-def queen_script():
+def queen_script(msg_edid):
     return '\r\n'.join([
         'scn %s' % QUEEN_SCRIPT,
-        '; FOLab: the Vespid queen, at the great hive\'s heart. Her death ends the great hive (vespidhives.py).',
+        '; FOLab: a Vespid hive\'s queen (vespidhives.py). Her death ends her hive: her enable parent is its life marker, which',
+        '; the hives\' quest watches (fire, the cache unlocked, its Vespids gone once you are away).',
+        'ref rLife',
         '',
         'Begin OnDeath',
-        '\tset %s.bQueenDead to 1' % QUEST,
+        '\tset rLife to GetParentRef',
+        '\tif rLife',
+        '\t\tShowMessage %s' % msg_edid,
+        '\t\trLife.Disable',
+        '\tendif',
         'End', ''])
 
 
@@ -490,7 +471,7 @@ def sites(gd, pr, world, seed=SEED, step=1000.0, avoid=()):
         peak = g.at(x, y) >= max(far) - 60          # (nothing round it higher: a top)
         return lo, hi, (dx, dy), peak
     out, taken = [], []
-    for kind in ('great', 'ruin', 'hill'):
+    for kind in ('great', 'ruin', 'cliff', 'hill'):
         r0 = hiveset.KINDS[kind][2]
         scored = []
         for x, y, h in cands:
@@ -500,14 +481,17 @@ def sites(gd, pr, world, seed=SEED, step=1000.0, avoid=()):
             if not m:
                 continue
             lo, hi, down, peak = m
-            if hi - lo > LEVEL_ROOM:
+            if kind == 'cliff':
+                if not (LEVEL_ROOM < hi - lo <= CLIFF_ROOM) or peak:
+                    continue
+            elif hi - lo > LEVEL_ROOM:
                 continue
             if kind == 'hill' and not peak:
                 continue
             if kind == 'ruin' and peak:
                 continue
             # (the great one: the highest level ground; the rest: high, level, spread)
-            score = h - 2.0 * (hi - lo)
+            score = h - (0.5 if kind == 'cliff' else 2.0) * (hi - lo)
             scored.append((score, x, y, lo, down))
         scored.sort(reverse=True)
         n = 0
@@ -566,39 +550,39 @@ def ridge_campfires(gd, pr, world):
 
 # ---------- the ops ----------
 
-def ops(gd, pr, world, seed=SEED, slug=None, info=None, cave=None, avoid=()):
-    """(ops, report). One Undo; nothing is changed here. info: hiveset.all_files' second answer (the models' paths and
-    sizes); files go in by `put_files`."""
+def ops(gd, pr, world, where, caves, info, seed=SEED, slug=None):
+    """(ops, report). One Undo; nothing is changed here. where: `sites`; caves {hive number (1-based): vespidcave plan};
+    info: `put_files`' second answer (the models' paths and sizes). Every hive is a place: a door in its mouth into its
+    own inside (the great one's big, the rest small), a map marker found when near, a queen whose death ends it."""
     import api_quests as aq
     import api_scripts
-    import birds
     import hiveset
     import library
     import newgame
     import questrec as qr
     import recordio
+    import roadgen
+    import townbuild
     import vespid
+    import vespidcave as VC
+    import worldrec
     if any(r.get('type') == 'QUST' and recordio.field(r, 'EDID') == QUEST for r in pr.records.values()):
         raise ValueError('the mod already has %s' % QUEST)
     slug = slug or library.slug(pr.name)
-    if info is None:
-        info = {k: {'mesh': hiveset.MESH % hiveset.KINDS[k][1], 'burnt': (hiveset.MESH % hiveset.KINDS[k][1])[:-4] + '_burnt.nif',
-                    'box': hiveset.build(k)['box'], 'mouth': hiveset.mouth_spot(k)} for k in hiveset.KINDS}
-        info['heart'] = {'mesh': hiveset.MESH % hiveset.HEART[1], 'box': hiveset.heart()['box']}
     doctor = next((k for k, r in pr.records.items() if r.get('type') == 'CONT' and recordio.field(r, 'EDID') == DOCTOR_CHEST), None)
-    where = sites(gd, pr, world, seed, avoid=avoid)
     camps = ridge_campfires(gd, pr, world)
     n = len(where)
-    great = next((i + 1 for i, s in enumerate(where) if s[0] == 'great'), 0)
     rnd = random.Random(seed)
     kinds = list(hiveset.KINDS)
-    # keys in the order the ops make them
-    names = ['gland', 'death', 'jelly', 'royal', 'tonic', 'hivefire', 'cake', 'r_tonic', 'r_fire', 'r_cake', 'recipe', 'kit', 'cache', 'msg', 'heart_s', 'heart', 'queen_s', 'vespid', 'queen',
-             'quest_s', 'quest'] + ['stat_%s' % k for k in kinds] + ['burnt_%s' % k for k in kinds]
-    pool_n = sum(POOL_SIZE[s[0]] for s in where)
-    per_hive = 4 + 1 + 1 + 1 + 1      # life, pool, fire markers, cache; hive, burnt, heart, fire
-    keys = aq._reserve(pr, len(names) + n * per_hive + pool_n + len(camps))
+    # keys in the order the ops make them: these records, then each hive's PER_HIVE refs (the quest script names some)
+    names = ['gland', 'death', 'jelly', 'royal', 'tonic', 'hivefire', 'cake', 'r_tonic', 'r_fire', 'r_cake', 'recipe', 'kit', 'cache',
+             'chamber', 'brood_chamber', 'msg', 'queen_s', 'vespid', 'queen', 'brood', 'quest_s', 'quest'] + \
+        ['stat_%s' % k for k in kinds] + ['burnt_%s' % k for k in kinds]
+    per_hive = ('life', 'pool', 'fire', 'cache', 'hive', 'burnt', 'door', 'flame', 'mapmarker')
+    keys = aq._reserve(pr, len(names) + n * len(per_hive))
     K = dict(zip(names, keys))
+    hive_refs = [dict(zip(per_hive, keys[len(names) + i * len(per_hive):len(names) + (i + 1) * len(per_hive)])) for i in range(n)]
+    antivenom = gd.key(_game(gd, 'ALCH', 'NVAntivenom'))
     sc = api_scripts.scripts()
     out = []
     out.append({'op': 'record_new', 'record': gland(gd)})
@@ -619,23 +603,25 @@ def ops(gd, pr, world, seed=SEED, slug=None, info=None, cave=None, avoid=()):
     out.append({'op': 'record_new', 'record': recipe(gd)})
     out.append({'op': 'record_new', 'record': antivenom_kit(gd)})
     out.append({'op': 'record_new', 'record': cache(gd, K['jelly'])})
-    msg = _message('FOLabVespidHiveBurnMsg', 'The comb catches. The hive burns.')
+    chamber = cache(gd, K['jelly'])                      # (the great queen's: royal jelly, only here)
+    _set(chamber, 'EDID', 'FOLabVespidQueenChamber')
+    _add_items(chamber, [(K['jelly'], 4), (K['royal'], 3)])
+    out.append({'op': 'record_new', 'record': chamber})
+    brood_chamber = cache(gd, K['jelly'])                # (a small hive's queen's: honey and antivenom)
+    _set(brood_chamber, 'EDID', 'FOLabVespidBroodChamber')
+    _add_items(brood_chamber, [(K['jelly'], 3), (antivenom, 1)])
+    out.append({'op': 'record_new', 'record': brood_chamber})
+    msg = _message('FOLabVespidHiveDiesMsg', 'The hive dies with its queen.')
     out.append({'op': 'record_new', 'record': msg})
-    c = sc.compile(heart_script('FOLabVespidHiveBurnMsg'), K['heart_s'], 'object', {K['msg']: msg})
-    if not hasattr(c, 'subrecords'):
-        raise ValueError('the heart script does not compile: %s' % (c,))
-    out.append({'op': 'record_new', 'record': sc._record_of(c, HEART_SCRIPT)})
-    out.append({'op': 'record_new', 'record': heart_record(info['heart']['mesh'][7:], info['heart']['box'], K['heart_s'])})
-    # quest first in the compiler's eyes (the queen's script names its variable): compiled after the quest script below
+    cqq = sc.compile(queen_script('FOLabVespidHiveDiesMsg'), K['queen_s'], 'object', {K['msg']: msg})
+    if not hasattr(cqq, 'subrecords'):
+        raise ValueError('the queen script does not compile: %s' % (cqq,))
+    out.append({'op': 'record_new', 'record': sc._record_of(cqq, QUEEN_SCRIPT)})
     vespid_rec = vespid.creature(gd, 'vespid', slug, K['death'])
-    _field(vespid_rec, 'ACBS', 'Flags', next(f['value'] for s in vespid_rec['subs'] if s['tag'] == 'ACBS' for f in s['fields'] if f.get('name') == 'Flags') | RESPAWN)
-    queen_rec = vespid.creature(gd, 'queen', slug, K['death'], K['queen_s'])
-    # refs the quest script names: persistent, with editor IDs (the compiler finds them in `extra`)
-    ref_keys = keys[len(names):len(names) + n * per_hive]
-    hive_refs = []
-    for i in range(n):
-        ks = ref_keys[i * per_hive:(i + 1) * per_hive]
-        hive_refs.append(dict(zip(('life', 'pool', 'fire', 'cache', 'hive', 'burnt', 'heart', 'flame'), ks)))
+    _field(vespid_rec, 'ACBS', 'Flags', next(f['value'] for s_ in vespid_rec['subs'] if s_['tag'] == 'ACBS' for f in s_['fields'] if f.get('name') == 'Flags') | RESPAWN)
+    out.append({'op': 'record_new', 'record': vespid_rec})
+    out.append({'op': 'record_new', 'record': vespid.creature(gd, 'queen', slug, K['death'], K['queen_s'])})
+    out.append({'op': 'record_new', 'record': vespid.creature(gd, 'brood', slug, K['death'], K['queen_s'])})
     extra = {}
     for i, hr in enumerate(hive_refs):
         for what, edid in (('life', LIFE), ('pool', POOL), ('fire', FIRE), ('cache', CACHE)):
@@ -643,35 +629,29 @@ def ops(gd, pr, world, seed=SEED, slug=None, info=None, cave=None, avoid=()):
     quest = qr.quest_record({'edid': QUEST, 'script': K['quest_s'], 'name': '', 'flags': {'start_enabled': True},
                              'priority': 50, 'delay': 2.0, 'stages': [], 'objectives': []})
     extra[K['quest']] = quest
-    cq = sc.compile(quest_script(n, great), K['quest_s'], 'quest', extra)
+    cq = sc.compile(quest_script(n, 0), K['quest_s'], 'quest', extra)
     if not hasattr(cq, 'subrecords'):
         raise ValueError('the hives script does not compile: %s' % (cq,))
-    qs_rec = sc._record_of(cq, QUEST_SCRIPT)
-    cqq = sc.compile(queen_script(), K['queen_s'], 'object', dict(extra, **{K['quest_s']: qs_rec}))
-    if not hasattr(cqq, 'subrecords'):
-        raise ValueError('the queen script does not compile: %s' % (cqq,))
-    out.append({'op': 'record_new', 'record': sc._record_of(cqq, QUEEN_SCRIPT)})
-    out.append({'op': 'record_new', 'record': vespid_rec})
-    out.append({'op': 'record_new', 'record': queen_rec})
-    out.append({'op': 'record_new', 'record': qs_rec})
+    out.append({'op': 'record_new', 'record': sc._record_of(cq, QUEST_SCRIPT)})
     out.append({'op': 'record_new', 'record': quest})
     for k in kinds:
-        edid = hiveset.KINDS[k][0]
-        out.append({'op': 'record_new', 'record': _stat(edid, info[k]['mesh'][7:], info[k]['box'], far=True)})
+        out.append({'op': 'record_new', 'record': _stat(hiveset.KINDS[k][0], info[k]['mesh'][7:], info[k]['box'], far=True)})
     for k in kinds:
-        edid = hiveset.KINDS[k][0] + 'Burnt'
-        out.append({'op': 'record_new', 'record': _stat(edid, info[k]['burnt'][7:], info[k]['box'], far=True)})
-    # the hives
+        out.append({'op': 'record_new', 'record': _stat(hiveset.KINDS[k][0] + 'Burnt', info[k]['burnt'][7:], info[k]['box'], far=True)})
+    # each hive outside
     marker = gd.key(_game(gd, 'STAT', MARKER))
     fire = gd.key(_game(gd, 'MSTT', GAME_FIRE))          # (the game's fire: a moving static)
-    import roadgen
+    door = gd.key(_game(gd, 'DOOR', VC.DOOR))
+    ob = townbuild.obnd(gd, door) or [-60, -8, 0, 60, 8, 220]
+    door_turn = 0.0 if (ob[4] - ob[1]) <= (ob[3] - ob[0]) else math.pi / 2     # (the door's thin way along the hive's y)
     g = roadgen.Ground(gd, pr, world)
-    pool_adds, report = [], {'hives': [], 'vespids': 0, 'kits': []}
+    pool_adds, inside, report = [], [], {'hives': [], 'vespids': 0, 'kits': []}
     for i, ((kind, x, y, z, rz), hr) in enumerate(zip(where, hive_refs)):
         cell = cell_at(gd, world, x, y)
         P = lambda lx, ly, lz=0.0, turn=0.0: [round(world_of(lx, ly, x, y, rz)[0], 1), round(world_of(lx, ly, x, y, rz)[1], 1), round(z + lz, 1), 0.0, 0.0, round((rz + turn) % math.tau, 4)]
         mx, my, _mz = info[kind]['mouth']
         r0 = hiveset.KINDS[kind][2]
+        name = VC.NAME if kind == 'great' else VC.SMALL_NAME
         pers = lambda edid: {'persistent': True, 'edid': edid}
         out.append({'op': 'add', 'cell': cell, 'base': marker, 'p': P(0, 0, 200), 's': 1.0, 'extra': pers(LIFE % (i + 1))})
         out.append({'op': 'add', 'cell': cell, 'base': marker, 'p': P(0, 0, 260), 's': 1.0, 'extra': pers(POOL % (i + 1))})
@@ -685,75 +665,95 @@ def ops(gd, pr, world, seed=SEED, slug=None, info=None, cave=None, avoid=()):
         out.append({'op': 'add', 'cell': cell, 'base': K['stat_%s' % kind], 'p': P(0, 0), 's': 1.0, 'extra': {'props': {'parent': life}}})
         out.append({'op': 'add', 'cell': cell, 'base': K['burnt_%s' % kind], 'p': P(0, 0), 's': 1.0,
                     'extra': {'props': {'parent': dict(life, opposite=True)}}})
-        if kind == 'great':
-            # (the great hive's heart is its queen, down in the dungeon: no heart outside; a stand-in marker keeps the keys in step)
-            out.append({'op': 'add', 'cell': cell, 'base': marker, 'p': P(mx, my - 40, 40), 's': 1.0, 'extra': {'props': {'parent': life}}})
-        else:
-            out.append({'op': 'add', 'cell': cell, 'base': K['heart'], 'p': P(mx, my - 30, 0), 's': 1.0, 'extra': {'props': {'parent': life}}})
+        # the salvaged door in its mouth
+        dx, dy = world_of(mx, my - 12.0, x, y, rz)
+        dz = g.at(dx, dy)
+        dtag = 'vhd%d' % (i + 1)
+        dcell = cell_at(gd, world, dx, dy) or cell          # (a new thing is filed under the cell it stands in: its link must name that one)
+        out.append({'op': 'add', 'cell': dcell, 'base': door, 'p': [round(dx, 1), round(dy, 1), round((dz if dz is not None else z) + 2.0, 1), 0.0, 0.0,
+                                                                   round((rz + door_turn) % math.tau, 4)], 's': 1.0, 'name': dtag, 'extra': {'persistent': True}})
         out.append({'op': 'add', 'cell': cell, 'base': fire, 'p': P(0, my * 0.5, 40), 's': FIRE_SCALE,
                     'extra': {'props': {'parent': {'ref': hr['fire'], 'opposite': False, 'popin': False}}}})
+        # its map marker, found when you come near, out in front of the mouth
+        fx, fy = world_of(mx, my - 300.0, x, y, rz)
+        fz = g.at(fx, fy)
+        mo = worldrec.marker_op(gd, world, [round(fx, 1), round(fy, 1), round((fz if fz is not None else z) + 60.0, 1)], name, MARKER_TYPE, flags=MARKER_FOUND)
+        out.append(mo)
         # its Vespids, round it on the ground, the pool marker their parent
         for k in range(POOL_SIZE[kind]):
             for _try in range(20):
-                a = rnd.uniform(0, math.tau)
+                a_ = rnd.uniform(0, math.tau)
                 d = rnd.uniform(*POOL_RING) * r0 / 470.0
-                vx, vy = x + d * math.cos(a), y + d * math.sin(a)
+                vx, vy = x + d * math.cos(a_), y + d * math.sin(a_)
                 vz = g.at(vx, vy)
                 if vz is not None:
                     break
             vcell = cell_at(gd, world, vx, vy) or cell
             pool_adds.append({'op': 'add', 'cell': vcell, 'base': K['vespid'], 'p': [round(vx, 1), round(vy, 1), round(vz + 20, 1), 0.0, 0.0, round(rnd.uniform(0, math.tau), 4)],
                               's': 1.0, 'extra': {'props': {'parent': {'ref': hr['pool'], 'opposite': False, 'popin': False}}}})
-        report['hives'].append({'kind': kind, 'x': x, 'y': y, 'z': z, 'turn': rz, 'cell': cell, 'vespids': POOL_SIZE[kind], 'life': hr['life']})
-        report['vespids'] += POOL_SIZE[kind]
-    out += pool_adds
-    # antivenom kits at the ridge camps' campfires
-    for name, (ck, fx, fy, fz, frz) in sorted(camps.items()):
-        kx, ky = world_of(140.0, 40.0, fx, fy, frz)
-        kz = g.at(kx, ky)
-        out.append({'op': 'add', 'cell': ck, 'base': K['kit'], 'p': [round(kx, 1), round(ky, 1), round((kz if kz is not None else fz) + 1.0, 1), 0.0, 0.0, round(frz, 4)], 's': 1.0})
-        report['kits'].append(name)
-    # the great hive's door, and the dungeon behind it (vespidcave)
-    if cave is not None and great:
-        import townbuild
-        import vespidcave as VC
-        kind, x, y, z, rz = where[great - 1]
-        cell = cell_at(gd, world, x, y)
-        mx, my, _mz = info['great']['mouth']
-        chamber = cache(gd, K['jelly'])
-        _set(chamber, 'EDID', 'FOLabVespidQueenChamber')
-        _add_items(chamber, [(K['jelly'], 4), (K['royal'], 3)])
-        out.append({'op': 'record_new', 'record': chamber, 'name': 'vhchamber'})
-        rops, names, _files = VC.records(gd, cave, info['comb']['mesh'], info['comb']['box'])
-        out += rops
-        door = gd.key(_game(gd, 'DOOR', VC.DOOR))
-        ob = townbuild.obnd(gd, door) or [-60, -8, 0, 60, 8, 220]
-        turn = 0.0 if (ob[4] - ob[1]) <= (ob[3] - ob[0]) else math.pi / 2     # (the door's thin way along the hive's y)
-        dx, dy = world_of(mx, my - 12.0, x, y, rz)
-        dz = g.at(dx, dy)
-        out.append({'op': 'add', 'cell': cell, 'base': door, 'p': [round(dx, 1), round(dy, 1), round((dz if dz is not None else z) + 2.0, 1), 0.0, 0.0, round((rz + turn) % math.tau, 4)],
-                    's': 1.0, 'name': 'vhcaveo', 'extra': {'persistent': True}})
         ax, ay = world_of(mx, my - 170.0, x, y, rz)
         az = g.at(ax, ay)
         arrive_out = [round(ax, 1), round(ay, 1), round((az if az is not None else z) + 8.0, 1), 0.0, 0.0, round((rz + math.pi) % math.tau, 4)]
-        tops, links = VC.things(gd, cave, names, K['queen'], K['vespid'], '$vhchamber', door, (cell, '$vhcaveo'), arrive_out,
-                                finds=(K['jelly'], K['royal']))
-        out += tops + links
-        report['cave'] = {'seed': cave.get('seed'), 'leaking rays': cave.get('leaks'), 'pieces': len(cave['made']), 'kinds of piece': len(names), 'combs': len(cave['combs']), 'lights': len(cave['lights']),
-                          'vespids': len(cave['vespids']), 'queen': bool(cave['queen']), 'things': len(cave['items'])}
+        row = {'kind': kind, 'name': name, 'x': x, 'y': y, 'z': z, 'turn': rz, 'cell': cell, 'vespids': POOL_SIZE[kind], 'life': hr['life'],
+               'door': [round(dx, 1), round(dy, 1)], 'marker': mo['p'][:2], 'inside': None}
+        cave = caves.get(i + 1)
+        if cave is not None:
+            great = kind == 'great'
+            inside.append((cave, dict(tag='vhc%d' % (i + 1), edid='FOLabVespid%s%02d' % ('GreatHive' if great else 'Nest', i + 1), full=name,
+                                      queen_key=K['queen' if great else 'brood'], queen_parent=hr['life'], vespid_key=K['vespid'],
+                                      chamber_key=K['chamber' if great else 'brood_chamber'], outside_door=(dcell, '$' + dtag),
+                                      outside_arrival=arrive_out, finds=(K['jelly'], K['royal'] if great else None))))
+            row['inside'] = {'seed': cave.get('seed'), 'size': cave.get('size'), 'leaking rays': cave.get('leaks'), 'pieces': len(cave['made']),
+                             'combs': len(cave['combs']), 'lights': len(cave['lights']), 'vespids': len(cave['vespids']), 'queen': bool(cave['queen'])}
+        report['hives'].append(row)
+        report['vespids'] += POOL_SIZE[kind]
+    out += pool_adds
+    # antivenom kits at the ridge camps' campfires
+    for cname, (ck, fx, fy, fz, frz) in sorted(camps.items()):
+        kx, ky = world_of(140.0, 40.0, fx, fy, frz)
+        kz = g.at(kx, ky)
+        out.append({'op': 'add', 'cell': ck, 'base': K['kit'], 'p': [round(kx, 1), round(ky, 1), round((kz if kz is not None else fz) + 1.0, 1), 0.0, 0.0, round(frz, 4)], 's': 1.0})
+        report['kits'].append(cname)
+    # the insides: every piece re-dressed once, then each hive's place
+    if inside:
+        rops, pnames = VC.piece_records(gd, [c for c, _a in inside], info['comb']['mesh'], info['comb']['box'])
+        out += rops
+        for cave, a_ in inside:
+            out += VC.place_ops(gd, cave, a_['tag'], a_['edid'], a_['full'], pnames, a_['queen_key'], a_['queen_parent'], a_['vespid_key'],
+                                a_['chamber_key'], a_['outside_door'], a_['outside_arrival'], finds=a_['finds'])
     # the doctor sells antivenom
     if doctor:
         rec = json.loads(json.dumps(pr.records[doctor]))
-        _add_items(rec, [(gd.key(_game(gd, 'ALCH', 'NVAntivenom')), DOCTOR_ANTIVENOM)])
+        _add_items(rec, [(antivenom, DOCTOR_ANTIVENOM)])
         out.append({'op': 'record', 'key': doctor, 'record': rec})
     keys = aq._reserve(pr, sum(1 for o in out if o['op'] in ('record_new', 'add')))
-    report.update({'keys': keys, 'records': K, 'great': great, 'doctor': bool(doctor), 'camps_missing': [c for c in RIDGE_CAMPS if c not in camps]})
+    report.update({'keys': keys, 'records': K, 'doctor': bool(doctor), 'camps_missing': [c for c in RIDGE_CAMPS if c not in camps]})
     return out, report
 
 
-def put_files(gd, pr, progress=print, cave=None):
-    """The Vespids', the hives' (and the dungeon's: cave, vespidcave.plan) files among the mod's own. Returns (paths,
-    hiveset info)."""
+def plan_insides(gd, where, progress=print):
+    """{hive number: a walked, closed cave} for every hive: the great one's big, the rest small (vespidcave.SMALL_SIZES,
+    each its own seed). A hive whose cave won't walk closed is left out (the report says so)."""
+    import vespidcave as VC
+    caves, k = {}, 0
+    for i, (kind, *_r) in enumerate(where):
+        if kind == 'great':
+            size, fill, seed = VC.SIZE, VC.GREAT, VC.SEED
+        else:
+            size, fill, seed = VC.SMALL_SIZES[k % len(VC.SMALL_SIZES)], VC.SMALL, VC.SEED + 13 * (i + 1)
+            k += 1
+        progress('hive %d (%s): planning its inside, %dx%d' % (i + 1, kind, size[0], size[1]))
+        cave = VC.closed_plan(gd, seed, progress=progress, size=size, fill=fill)
+        if cave is not None:
+            cave['size'] = list(size)
+            caves[i + 1] = cave
+        else:
+            progress('hive %d: no cave walked closed' % (i + 1))
+    return caves
+
+
+def put_files(gd, pr, caves, progress=print):
+    """The Vespids', the hives' and their insides' files among the mod's own. Returns (paths, info)."""
     import hiveset
     import library
     import vespid
@@ -765,25 +765,23 @@ def put_files(gd, pr, progress=print, cave=None):
     comb = VC.comb_model()
     made[comb['mesh']] = comb['nif']
     info['comb'] = {'mesh': comb['mesh'], 'box': comb['box']}
-    if cave is not None:
+    if caves:
         made.update(VC.pictures())
-        made.update(VC.piece_files(gd, [m.key for m in cave['made']])[0])
+        made.update(VC.piece_files(gd, [m.key for c in caves.values() for m in c['made']])[0])
     for rel, data in made.items():
         library._put(root, rel, data)
     return sorted(made), info
 
 
-def build(server, progress=print, avoid=()):
-    """Into the open mod: files, then one Undo. Returns the report. avoid: more [(x, y, how far)] for the hives to keep off."""
+def build(server, progress=print, avoid=(), seed=SEED):
+    """Into the open mod: sites, each hive's inside, files, then one Undo. Returns the report. avoid: more [(x, y, how
+    far)] for the hives to keep off."""
     gd, pr = server.GD, server.PR
     world = next(w for w in gd.worlds() if gd.edid(w) == 'FOLabWaikiki')
-    import vespidcave as VC
-    progress('the dungeon of the great hive: planning')
-    cave = VC.closed_plan(gd, progress=progress)
-    if cave is None:
-        progress('no cave walked closed: the great hive gets no dungeon')
-    paths, info = put_files(gd, pr, progress, cave)
-    o, rep = ops(gd, pr, world, info=info, cave=cave, avoid=avoid)
+    where = sites(gd, pr, world, seed, avoid=avoid)
+    caves = plan_insides(gd, where, progress)
+    paths, info = put_files(gd, pr, caves, progress)
+    o, rep = ops(gd, pr, world, where, caves, info, seed)
     rep['files'] = paths
     made = server.edit("Vespids and their hives", o)['made']
     assert made == rep['keys'], ('keys not as reserved', made[:5], rep['keys'][:5])
