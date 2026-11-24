@@ -70,15 +70,10 @@ def world_water_op(gd, pr, world, wkey):
     key = gd.key(world)
     rec = pr.records.get(key) or recordio.load(gd, world)
     rec = dict(rec, subs=[dict(s) for s in rec['subs']])
-    sea = None
-    for s in rec['subs']:
-        if s['tag'] == 'DNAM':
-            raw = bytes.fromhex(s['value']) if s.get('kind') == 'raw' else None
-            if raw and len(raw) >= 8:
-                sea = struct.unpack_from('<f', raw, 4)[0]
+    sea = worldrec.world_water_of(rec)['water']      # (DNAM decoded by schema now; a kept record's may be raw)
     put = {'NAM2': {'kind': 'F', 'value': wkey}, 'NAM3': {'kind': 'F', 'value': wkey}}
     if sea is not None:
-        put['NAM4'] = {'kind': 'raw', 'value': struct.pack('<f', sea).hex()}
+        put['NAM4'] = {'kind': 'struct', 'fields': [{'name': 'Height', 'code': 'f', 'value': float(sea)}]}
     for tag, v in put.items():
         s = next((s for s in rec['subs'] if s['tag'] == tag), None)
         if s is None:

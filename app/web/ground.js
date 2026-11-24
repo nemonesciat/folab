@@ -57,7 +57,8 @@ function gbDraw(){
     ${GB.tool === 'fill' || GB.tool === 'scatter' ? '' : `<label class="gb-row"><input type="checkbox" data-gb="follow" ${GB.follow ? 'checked' : ''}> Things on the ground move with it</label>`}
     <div class="note" style="padding:2px 0">[ and ] size · each stroke is one Undo</div>
     ${hmHtml()}
-    ${wtHtml()}`;
+    ${wtHtml()}
+    ${wwHtml()}`;
   if ($('[data-gb="find"]') && GB.q) $('[data-gb="find"]').value = GB.q;
 }
 document.addEventListener('click', e => {
@@ -73,6 +74,8 @@ document.addEventListener('click', e => {
   if (e.target.dataset.gb === 'wtset') wtSet(+$('[data-gb="wth"]').value);
   if (e.target.dataset.gb === 'wtoff') wtSet(null);
   if (e.target.dataset.gb === 'wtgame') wtSet(undefined);
+  if (e.target.dataset.gb === 'wwset') wwSet(+$('[data-gb="wwh"]').value);
+  if (e.target.dataset.gb === 'wwgame' && WW.d && WW.d.game) wwSet(WW.d.game.water, WW.d.game.far);
 });
 document.addEventListener('input', e => {
   if (!e.target.closest('#gb')) return;
@@ -467,7 +470,7 @@ function wtHtml(){
   return `<div class="h" style="padding-left:0;margin-top:8px">Water · cell ${c.x}, ${c.y}</div>
     <div class="note" style="padding:0 0 4px">${shows ? `Water stands at ${Math.round(h)} here.` : 'No water shows here.'} The ground's lowest point is ${low}. The game has one water level a cell: everything in the cell lower than it is under water.</div>
     <label class="gb-row">Level <input type="number" data-gb="wth" value="${Math.round(shows ? h : low + 200)}" style="width:90px"> <button class="btn" data-gb="wtset">Set</button></label>
-    <div class="gb-tools" style="grid-template-columns:1fr 1fr"><button class="btn" data-gb="wtoff" title="Back to the world's own level, below all the land">No water</button>
+    <div class="gb-tools" style="grid-template-columns:1fr 1fr"><button class="btn" data-gb="wtoff" title="Back to the world's own level (below: the whole world), which is under the land unless that's raised">No water</button>
       ${c.data.changed_water ? '<button class="btn" data-gb="wtgame">As the game has it</button>' : ''}</div>`;
 }
 async function wtSet(h){
@@ -478,6 +481,51 @@ async function wtSet(h){
   (OUT.touched = OUT.touched || new Set()).add(c);
   await outsideResync(); gbDraw();
 }
+// ---------- Water: the whole world's own level ----------
+// Every cell whose water is "the world's level" (most of the game's) stands at it; cells with a level of their own keep
+// theirs. The far water (drawn past the loaded cells) goes to the same height.
+const WW = {key: null, d: null, loading: false, seen: ''};
+async function wwLoad(){
+  if (!OUT.world || WW.loading) return;
+  WW.loading = true; const key = OUT.world;
+  try { WW.d = await api('/api/w/water?world=' + encodeURIComponent(key)); WW.key = key; }
+  catch (err){ WW.d = {error: err.message || String(err)}; WW.key = key; }
+  finally { WW.loading = false; }
+  const sig = JSON.stringify(WW.d);
+  if (GB.on && sig !== WW.seen){ WW.seen = sig; gbDraw(); }
+}
+function wwHtml(){
+  if (!OUT.world) return '';
+  if (WW.key !== OUT.world || !WW.d){ wwLoad(); return ''; }
+  const d = WW.d, r = v => v === null || v === undefined ? '–' : Math.round(v);
+  if (d.error) return `<div class="note">The world's water: ${esc(d.error)}</div>`;
+  if (d.water === null) return '';
+  const follow = d.cells - d.own_level;
+  return `<div class="h" style="padding-left:0;margin-top:8px">Water · the whole world</div>
+    <div class="note" style="padding:0 0 4px">The world's water stands at ${r(d.water)}${d.far !== null && Math.round(d.far) !== Math.round(d.water) ? `, the far water at ${r(d.far)}` : ''}${d.changed && d.game ? ` (the game has ${r(d.game.water)})` : ''}.
+      ${d.cells ? `${follow} of its ${d.cells} cells follow it; ${d.own_level} have a level of their own and keep it.` : ''} ${d.far !== null && Math.round(d.far) === Math.round(d.water) ? 'The far water, past the loaded cells, goes to the same height.' : 'The far water stays where it is.'}</div>
+    <label class="gb-row">Level <input type="number" data-gb="wwh" value="${r(d.water)}" style="width:90px"> <button class="btn" data-gb="wwset">Set for the world</button></label>
+    ${d.changed && d.game ? '<div class="gb-tools"><button class="btn" data-gb="wwgame">As the game has it</button></div>' : ''}`;
+}
+async function wwSet(h, far){
+  if (!A.state.project) return toast('Start a mod first.', true);
+  if (!isFinite(h)) return toast('Type a height first.', true);
+  const label = 'World water at ' + Math.round(h);
+  busyStart(label);
+  try {
+    // (the far water goes with the level where it stood at it; one the game put elsewhere, as Zion's at 0, stays)
+    const same = WW.d && WW.d.far !== null && Math.round(WW.d.far) === Math.round(WW.d.water);
+    const d = await post('/api/w/water/set', {world: OUT.world, water: h, far: far === undefined ? (same ? true : null) : far});
+    busyEnd(label, true);
+    setState(d.state);
+    WW.d = null; await wwLoad();
+    if (typeof mapLandChanged === 'function') mapLandChanged();
+    OUT.touched = OUT.touched || new Set(); OUT.cells.forEach(c => OUT.touched.add(c));
+    await outsideResync(); gbDraw();
+  } catch (err){ busyEnd(label, false); fail(err); }
+}
+// (undo and redo may change it: look again after any change of state)
+{ const before = setState; setState = function(s){ const r = before.apply(this, arguments); if (WW.d && !WW.loading){ WW.key = null; if (GB.on) wwLoad(); } return r; }; }
 // (the Water section follows the cell you're over)
 setInterval(() => {
   if (!GB.on || !OUT.world) return;

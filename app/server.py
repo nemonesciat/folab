@@ -376,6 +376,7 @@ def map_painter():
     global _painter
     if _painter is None or _painter.gd is not GD:
         _painter = maptiles.Painter(GD)
+        _painter.mod = lambda: PR
         _tiles.clear()
     return _painter
 
@@ -388,10 +389,12 @@ def map_tile(wkey, tx, ty):
     w = GD.from_key(wkey)
     if _painter is None or _painter.gd is not GD:
         _painter = maptiles.Painter(GD)
+        _painter.mod = lambda: PR
         _tiles.clear()
     mine = _mine_in_tile(w, tx, ty)
     water = _water_in_tile(w, tx, ty)
-    if not mine and not water:
+    level = _painter.mod_level(w)          # (a world level the mod set: every tile is the mod's own then)
+    if not mine and not water and level is None:
         path = _tile_path(wkey, tx, ty)
         if os.path.isfile(path):
             with open(path, 'rb') as f:
@@ -400,12 +403,12 @@ def map_tile(wkey, tx, ty):
         _tile_save(path, data)
         _tiles_ahead(wkey, tx, ty)
         return data
-    sig = hashlib.md5(json.dumps([mine, water], sort_keys=True).encode()).hexdigest()
+    sig = hashlib.md5(json.dumps([mine, water, level], sort_keys=True).encode()).hexdigest()
     k = (wkey, tx, ty, sig)
     if k not in _tiles:
         if len(_tiles) > 200:
             _tiles.clear()
-        _tiles[k] = _painter.tile(w, tx, ty, mine, water)
+        _tiles[k] = _painter.tile(w, tx, ty, mine or {}, water or {})
     return _tiles[k]
 
 

@@ -62,8 +62,8 @@ check('every cell is in it, with the water and the music', all(regions[0] in i.g
 import struct, recordio  # noqa: E402
 wr = pr.records.get(gd.key(world)) or {'subs': []}
 ws = {s['tag']: s for s in wr['subs']}
-dn = bytes.fromhex(ws['DNAM']['value']) if 'DNAM' in ws and ws['DNAM']['kind'] == 'raw' else b''
 wbytes = dict(recordio.to_bytes(wr, lambda k: gd.from_key(k))) if wr['subs'] else {}
+dn = wbytes.get('DNAM', b'')      # (decoded by schema since the world water layout, 23 Nov 2026)
 check("the world's own and far water are the cells' water, the far water at the sea's level (it lay under the ground)",
       all(ws.get(t, {}).get('value') and gd.edid(gd.from_key(ws[t]['value'])) == 'NVDLC02Water' for t in ('NAM2', 'NAM3'))
       and len(dn) >= 8 and wbytes.get('NAM4') == dn[4:8] and len(wbytes.get('NAM3', b'')) == 4, {t: ws.get(t) for t in ('NAM2', 'NAM3', 'NAM4')})

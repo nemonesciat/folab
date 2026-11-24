@@ -115,6 +115,8 @@ def get(path, q, gd, pr, ctx):
         return {'markers': R.markers_list(gd, pr, gd.from_key(q['world'])), 'types': R.MARKER_TYPES}
     if path == '/api/w/cell':
         return R.cell_details(gd, pr, q['cell'])
+    if path == '/api/w/water':
+        return R.world_water(gd, pr, q['world'])
     if path == '/api/w/cell/at':
         return {'cell': R.ckey_of(gd, gd.from_key(q['world']), (int(q['x']), int(q['y'])))}
     if path == '/api/w/encounter/choices':
@@ -169,6 +171,10 @@ def post(path, body, gd, pr, ctx):
         return {'state': ctx['apply'](pr, 'Remove map marker', [{'op': 'remove', 'cell': body['cell'], 'ref': body['ref']}])}
     if path == '/api/w/cell/set':
         return {'state': ctx['apply'](pr, 'Place details', [R.cell_ops(gd, pr, body['cell'], body['set'])])}
+    if path == '/api/w/water/set':
+        label = 'World water at %d' % round(float(body['water']))
+        return {'state': ctx['apply'](pr, label, [R.world_water_op(gd, pr, body['world'], float(body['water']),
+                                                                   body.get('far', True))])}
     if path == '/api/w/cell/revert':
         return {'state': ctx['apply'](pr, 'Place details as the game has them', [{'op': 'cellinfo_revert', 'cell': body['cell']}])}
     if path == '/api/w/road/make':

@@ -31,6 +31,7 @@ class Painter:
         self.gd = gd
         self.tex = {}          # LTEX -> picture path (land.py's cache)
         self.colour = {}       # picture path -> (r, g, b)
+        self.mod = None        # () -> the open mod, whose world records may set a world's water level
 
     def colour_of(self, path):
         if path not in self.colour:
@@ -42,12 +43,12 @@ class Painter:
             self.colour[path] = c or (128, 116, 96)
         return self.colour[path]
 
-    def water(self, world, cell, mine=None):
+    def water(self, world, cell, mine=None, mod=True):
         """The water's height in a cell, or None where it has none. mine: {CELL key: height or None} as a mod sets
-        it (None: the world's own level)."""
+        it (None: the world's own level). mod False: the game's world level, never the mod's."""
         k = self.gd.key(cell)
         if mine is not None and k in mine:
-            return self.world_water(world) if mine[k] is None else mine[k]
+            return self.world_water(world, mod) if mine[k] is None else mine[k]
         f = self.gd.fields(cell)
         flags = f.get('DATA', b'\0')[0]
         if not flags & 2:
@@ -56,15 +57,29 @@ class Painter:
             v = struct.unpack_from('<f', f['XCLW'])[0]
             if abs(v) < 1e7:
                 return v
-        return self.world_water(world)
+        return self.world_water(world, mod)
 
-    def world_water(self, world):
+    def mod_level(self, world):
+        """The world's water level as the open mod sets it in its own copy of the world's record, or None."""
+        pr = self.mod() if self.mod else None
+        rec = pr.records.get(self.gd.key(world)) if pr is not None else None
+        if not rec:
+            return None
+        import worldrec
+        return worldrec.world_water_of(rec)['water']
+
+    def world_water(self, world, mod=True):
+        v = self.mod_level(world) if mod else None
+        if v is not None:
+            return v
         wd = self.gd.fields(world).get('DNAM')
         return struct.unpack_from('<f', wd, 4)[0] if wd and len(wd) >= 8 else None
 
     def tile(self, world, tx, ty, mine=None, water=None):
         """PNG bytes for tile (tx, ty): cells tx*16 .. +15 across, ty*16 .. +15 up. mine: {CELL key: land} as the
-        mod has it, over the game's."""
+        mod has it, over the game's. With neither given it is the game's own tile (kept on disk): the game's world
+        water level, not the mod's."""
+        mod = mine is not None or water is not None
         gd, size = self.gd, TILE * PX
         img = bytearray(size * size * 4)
         grid = gd.grid(world)
@@ -80,7 +95,7 @@ class Painter:
                     L = land.decode(gd, e, self.tex)
                 if not L.get('h'):
                     continue
-                wl = self.water(world, cell, water) if cell is not None else None
+                wl = self.water(world, cell, water, mod) if cell is not None else None
                 self._cell(img, size, i, TILE - 1 - j, L, wl)
         return png(size, size, [img[r * size * 4:(r + 1) * size * 4] for r in range(size)])
 

@@ -25,6 +25,11 @@ Press **⛰ Ground** in the toolbar, then drag on the ground.
 
 The game keeps **one water level a cell**; everything in the cell lower than it is under water. The Ground panel's **Water** section sets the level of the cell you're over, takes it away, or puts it back as the game has it.
 
+Below it, **Water · the whole world** sets the worldspace's own level (the GECK's *Default Water Height*). Every cell
+that takes its water from the world follows it; cells with a level of their own keep theirs, and the panel says how many
+there are. Where the far water (the sea drawn past the loaded cells) stood at the same height, it moves too; where the
+game put it elsewhere, it stays. One Undo; **As the game has it** puts both back.
+
 ## Shaping many cells (the flat map)
 
 Press **🗺⛰ Shape land**. Draw shapes on the map: **Ridge**, **Valley**, **Plateau**, **Flatten**, **Hill**, **Crater**, **Mesa**, **Lake**, **River**. Each marks the cells it reaches (towns and busy places are left out unless you say so; **✚ Mark** adds or takes away cells). The map shows the result half a second after any change; nothing changes until **Shape the land**, which is one Undo.

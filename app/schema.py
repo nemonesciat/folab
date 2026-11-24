@@ -171,7 +171,9 @@ TYPES = {
                         'XCMO': ('Music', 'F'), 'XNAM': ('Water noise texture', 'z')}),
     'QUST': ('Quests', {'DATA': [('Data', [('B', 'Flags'), ('B', 'Priority'), ('2x', ''), ('f', 'Delay')]),
                                  ('Data', [('B', 'Flags'), ('B', 'Priority')])]}),
-    'WRLD': ('Worldspaces', {}),
+    'WRLD': ('Worldspaces', {'NAM2': ('Water', 'F'), 'NAM3': ('Far water', 'F'), 'NAM4': ('Far water height', [('f', 'Height')]),
+                             'DNAM': ('Land data', [('f', 'Default land height'), ('f', 'Default water height')]),
+                             'CNAM': ('Climate', 'F'), 'INAM': ('Image space', 'F'), 'ZNAM': ('Music', 'F')}),
     'SPEL': ('Spells and abilities', {'SPIT': ('Data', [('I', 'Type'), ('I', 'Cost'), ('I', 'Level'), ('B', 'Flags'), ('3x', '')])}),
 }
 

@@ -708,3 +708,86 @@ def encounter_ops(gd, pr, body):
             extra['zone'] = body['zone']
         ops.append({'op': 'add', 'cell': ck, 'base': base, 'p': [x, y, z, 0, 0, a], 's': 1, 'extra': extra})
     return ops
+
+
+# --- a worldspace's own water ---
+# DNAM: default land height, default water height (the level of every cell whose XCLW is the greatest float, as most
+# of the game's are); NAM4: the height the far water is drawn at past the loaded cells (one sheet, of NAM3's water).
+
+def _floats(s, n):
+    """A subrecord's floats whether it came decoded (schema's struct) or raw (a record kept before the layout)."""
+    if s is None:
+        return None
+    if s.get('kind') == 'struct':
+        vals = [f['value'] for f in s['fields'] if f.get('code') == 'f']
+    elif s.get('kind') == 'raw':
+        raw = bytes.fromhex(s['value'])
+        if len(raw) < 4 * n:
+            return None
+        vals = list(struct.unpack_from('<%df' % n, raw))
+    else:
+        return None
+    return vals if len(vals) >= n else None
+
+
+def world_record(gd, pr, wkey):
+    return (pr.records.get(wkey) if pr else None) or recordio.load(gd, gd.from_key(wkey))
+
+
+def world_water_of(rec):
+    """{'land', 'water', 'far'} of a WRLD record as a mod keeps it (None where it has no such subrecord)."""
+    d = _floats(_field(rec, 'DNAM'), 2)
+    f = _floats(_field(rec, 'NAM4'), 1)
+    return {'land': d[0] if d else None, 'water': d[1] if d else None, 'far': f[0] if f else None}
+
+
+def _own_level(f):
+    """A cell whose water stands at a level of its own (not its world's)."""
+    if not f.get('DATA', b'\0')[0] & 2:
+        return False
+    x = f.get('XCLW')
+    return bool(x) and len(x) >= 4 and abs(struct.unpack_from('<f', x)[0]) < 1e7
+
+
+def world_water(gd, pr, wkey):
+    """What the Ground panel shows of a world's water: its level, the far water's, the game's, and how many of the
+    world's cells keep a level of their own (those don't follow it)."""
+    now = world_water_of(world_record(gd, pr, wkey))
+    try:
+        w = gd.from_key(wkey)
+        game = world_water_of(recordio.load(gd, w))
+    except (KeyError, ValueError, TypeError):
+        return dict(now, game=None, changed=False, cells=0, own_level=0)
+    k = (id(gd), wkey)
+    if k not in _OWN_LEVELS:            # (game data only: counted once a world)
+        grid = gd.grid(w)
+        _OWN_LEVELS[k] = (len(grid), sum(1 for c in grid.values() if _own_level(gd.fields(c))))
+    cells, own = _OWN_LEVELS[k]
+    return dict(now, game=game, changed=(now['water'], now['far']) != (game['water'], game['far']),
+                cells=cells, own_level=own)
+
+
+_OWN_LEVELS = {}
+
+
+def world_water_op(gd, pr, wkey, water, far=True):
+    """The op that sets a world's water level (DNAM's second float); far True puts the far water (NAM4) there too,
+    a number puts it at that height, None leaves it."""
+    rec = world_record(gd, pr, wkey)
+    rec = dict(rec, subs=[dict(s) for s in rec['subs']])
+    old = world_water_of(rec)
+    land = old['land'] if old['land'] is not None else -2048.0
+    put = {'DNAM': {'tag': 'DNAM', 'label': 'Land data', 'kind': 'struct',
+                    'fields': [{'name': 'Default land height', 'code': 'f', 'value': float(land)},
+                               {'name': 'Default water height', 'code': 'f', 'value': float(water)}]}}
+    if far is not None:
+        h = float(water) if far is True else float(far)
+        put['NAM4'] = {'tag': 'NAM4', 'label': 'Far water height', 'kind': 'struct',
+                       'fields': [{'name': 'Height', 'code': 'f', 'value': h}]}
+    for tag, s in put.items():
+        n = next((n for n, o in enumerate(rec['subs']) if o['tag'] == tag), None)
+        if n is None:
+            rec['subs'].append(s)
+        else:
+            rec['subs'][n] = s
+    return {'op': 'record', 'key': wkey, 'record': rec}

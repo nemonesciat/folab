@@ -122,6 +122,10 @@ the model for style, UI and approach. Python, standard library first, code in `a
   `/api/goto` (Ctrl+K): places, every world's map markers, 'x, y' cells, 'x y z' spots.
 - Water: `project.water` {outside CELL key: height or None (the world's level, XCLW = FLT_MAX)}; the writer sets
   XCLW and the has-water flag on the cell's record. Lakes and rivers in `landshape.py` give each cell one level.
+  A world's own level (a Nexus user's ask, 23 Nov 2026; `tests/test_worldwater.py`): the Ground panel's "Water · the whole
+  world", `/api/w/water`, `worldrec.world_water_op` sets DNAM's default water and NAM4's far water (only when it stood at
+  the level: Zion's is 0 under 5000); WRLD's DNAM, NAM2-4, CNAM, INAM, ZNAM are schema fields now (read both ways by
+  `world_water_of`). `maptiles.Painter.mod_level` gives the editor the mod's level; the game's tiles on disk never.
 - New worldspace (`/api/world/new`, `worldgen.py`): the mod is saved with every game file as a master, the world
   added to that plugin, then the plugin opened as the mod (undo starts afresh) so the world is game data to edit. Its `trim_masters`
   lets the writer leave out masters neither the plugin nor the mod's changes use (`masterlist.used_by_file`, `grow(dropped=True)`).
