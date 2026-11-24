@@ -16,6 +16,7 @@ out from its door along the door's outward face STEP at a time (a little to eith
 passes everything, facing out. `py -3 app/arrivalcheck.py [mod]` prints the counts and exits 1 if any door puts you in
 something (`errors_of`): an install script runs it last and stops on 1."""
 import math
+import os
 import struct
 
 import hkshape
@@ -80,6 +81,7 @@ class World:
                      if not r.get('removed') and r.get('p') and r.get('base') and r['p'][2] > -20000}
         self._recordio = recordio
         self.models, self.tris, self.groups = {}, {}, {}
+        self.unread = set()          # (models that couldn't be read: they stand as nothing)
         self.grid = {}
         for rk, (ck, r) in self.refs.items():
             self.grid.setdefault((self.group(ck), int(r['p'][0] // 1024), int(r['p'][1] // 1024)), []).append(rk)
@@ -116,17 +118,30 @@ class World:
         except Exception:
             return None
 
+    def read(self, path):
+        """A model's bytes: the mod's own files first, as FOLab sees them, whether or not a server has the mod open (run
+        on its own this module read none of them: every FOLab piece stood as nothing, 23 Nov 2026)."""
+        try:
+            import library
+            own = os.path.join(library.assets_dir(self.pr), path)
+            if os.path.isfile(own):
+                with open(own, 'rb') as f:
+                    return f.read()
+        except Exception:
+            pass
+        return self.gd.read_file(path)
+
     def solid(self, base):
         if base not in self.models:
             out = []
             path = self.model_path(base)
             if path:
                 try:
-                    for s in hkshape.collision_shapes(self.gd.read_file(path)):
+                    for s in hkshape.collision_shapes(self.read(path)):
                         if s['i'] and s['layer'] in hkshape.LAYERS_SOLID:
                             out.append((s['v'], s['i']))
                 except Exception:
-                    pass
+                    self.unread.add(path)
             self.models[base] = out
         return self.models[base]
 
@@ -330,7 +345,11 @@ if __name__ == '__main__':
     server.BR = None
     p = project.Project.open(sys.argv[1] if len(sys.argv) > 1 else 'Waikiki')
     server.load_game(p)
-    res = check(server.GD, p, progress=lambda n: print(n, 'links', flush=True))
+    server.PR = p
+    W = World(server.GD, p)
+    res = check(server.GD, p, W, progress=lambda n: print(n, 'links', flush=True))
+    if W.unread:
+        print('models that could not be read (they stood as nothing):', len(W.unread), sorted(W.unread)[:20])
     errors = errors_of(res)
     print('links', res['links'], 'flagged', len(res['bad']), res['counts'], '| errors (in something):', len(errors))
     for row in errors[:40]:
