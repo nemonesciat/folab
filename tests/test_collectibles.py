@@ -14,7 +14,6 @@ import espwrite  # noqa: E402
 import gamedata  # noqa: E402
 import health  # noqa: E402
 import lootplace  # noqa: E402
-import modelmake  # noqa: E402
 import nifmake  # noqa: E402
 import project  # noqa: E402
 import questrec as qr  # noqa: E402
@@ -31,8 +30,13 @@ def check(what, ok, detail=''):
 C.ISLAND_WORLD = 'WastelandNV'        # (the test's stand-in for the island's world)
 M = C.models()
 check('twenty models', len(M) == 20)
-opened = [(k, modelmake.open_edges(d), nifmake.open_edges(m['shapes'])) for k, (d, m) in M.items()]
-check('every one a closed solid', all(not a and not b for _k, a, b in opened), [o for o in opened if o[1] or o[2]][:2])
+opened = [(k, nifmake.open_edges(__import__('nif').mesh_from_nif(m['nif']), tol=0.005)) for k, (d, m) in M.items()]   # (as written; small: a fine weld)
+check('every one a closed solid', all(not a for _k, a in opened), [o for o in opened if o[1]][:2])
+check("sculpted: smooth and fine, each within the first ones' room", all(1500 < m['triangles'] < 9000 for _d, m in M.values())
+      and all(all(m['box'][a] >= (C.doll_box() if k[0] == 'hula' else C.charm_box())[a] - (2 if a < 2 else 1) for a in range(3)) and
+              all(m['box'][a] <= (C.doll_box() if k[0] == 'hula' else C.charm_box())[a] + (2 if a < 5 else 1) for a in range(3, 6))
+              for k, (_d, m) in M.items()),          # (arms held out reach past the first dolls' box: in the air over a table)
+      [(k, m['triangles'], m['box']) for k, (_d, m) in M.items()][:3])
 db, cb = C.doll_box(), C.charm_box()
 check('a doll about a hand tall, a charm a few units', 9 <= db[5] - db[2] <= 16 and max(cb[3] - cb[0], cb[4] - cb[1]) <= 10, (db, cb))
 

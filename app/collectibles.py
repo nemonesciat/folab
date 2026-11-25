@@ -210,15 +210,41 @@ def _build(desc, key):
     return made
 
 
+def sculpted(kind, stat):
+    """One item as collectsculpt makes it (smooth, painted, relief, shade baked): made {'nif', 'mesh', 'files', 'shapes',
+    'box', 'triangles'}. The look of the game's bobbleheads or better (the user, 25 Nov 2026)."""
+    import collectsculpt as CS
+    import nifmake
+    import shade
+    if kind == 'hula':
+        arms, lean, skirt, top, flower = DOLLS[stat]
+        shapes, pics = CS.doll_shapes(stat, (arms, lean), SKIRTS[skirt], TOPS[top], TOPS[flower])
+    else:
+        carving, jade = CHARMS[stat]
+        shapes, pics = CS.charm_shapes(stat, carving, JADES[jade])
+    key = '%s_%s' % (kind, stat.lower())
+    shade.bake(shapes, seed=sum(key.encode()), ground=True)
+    made = {'shapes': shapes, 'mesh': 'meshes\\folab\\%s\\%s.nif' % (SET, key)}
+    made['nif'] = nifmake.build_dropped(_edid(kind, stat), shapes, mass=0.3, material='glass')
+    made['files'] = {made['mesh']: made['nif']}
+    for tex, (col, nor) in pics.items():
+        made['files'][tex] = col
+        made['files'][tex[:-4] + '_n.dds'] = nor
+    lo = [math.floor(min(min(s['p'][a::3]) for s in shapes)) for a in range(3)]
+    hi = [math.ceil(max(max(s['p'][a::3]) for s in shapes)) for a in range(3)]
+    made['box'] = lo + hi
+    made['triangles'] = sum(len(s['i']) // 3 for s in shapes)
+    return made
+
+
 def models():
-    """{(set, name): (description, made)} of all twenty."""
+    """{(set, name): (description or None, made)} of all twenty: the sculpted ones (`sculpted`); the first, simple
+    ones (`doll`, `charm`, built by modelmake) are kept for their boxes, which placement measured by."""
     out = {}
     for s in SPECIAL:
-        d = doll(s)
-        out[('hula', s)] = (d, _build(d, 'hula_' + s.lower()))
+        out[('hula', s)] = (None, sculpted('hula', s))
     for s in SKILLS:
-        d = charm(s)
-        out[('jade', s)] = (d, _build(d, 'jade_' + s.lower()))
+        out[('jade', s)] = (None, sculpted('jade', s))
     return out
 
 
