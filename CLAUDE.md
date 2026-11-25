@@ -675,3 +675,16 @@ launcher or GOG wrote it was installed. Nowhere: `server.NO_GAME`, and only `web
 the folder, `/api/game/folder`) until the game loads. It used to crash on any PC with Steam off C: (a tester, test 10).
 Test with `gamedata._registry` and `_STEAM_USUAL` replaced (`tests/test_findgame.py`).
 Never read from `steamapps\downloading`: open files there make Steam's install fail with "disk write error".
+- The Kilauea's arcade (`arcadeset.py`, `tests/test_arcadeset.py`; the user, 25 Nov 2026: "turn them into arcade and pachinko
+  machines"; pictures `docs/kilauea-arcade-*.png`): the casino in FOLabKilaueaWorld was the Tops' slot floor (22
+  SlotMachineTableCluster06 banks back to back in pairs 87 apart, 33 singles on their end slots, all statics). FOLab's own
+  pieces in the cluster's frame (`SLOTS`, `COUNTER_H`, nothing past `SPINE`): upright cabinets (`GAMES`: Surf Rider, Shark
+  Attack, Volcano Run; the side shaped as a cabinet's, side art one picture over the side's parts, `side_regions`) and
+  pachinko machines (`BOARDS`; playfield, pins, rail drawn, tulips, centre piece, windmills, balls, trays, handle in the
+  model, blended glass), banks of each. Each piece one sheet drawn in numpy (`Sheet`: colour, heights, gloss per pixel as
+  the material, a glow picture lit only where light comes from); DEV_ONLY. Playable: every swapped ref's base is an ACTI
+  (`acti`, as vTopsSlot01) whose script opens ShowSlotMachineMenuParams on FOLab's CSNO (`casino`: the Tops' odds, FOLab's
+  reel symbols, token and minigame machine `menu_files`, the money Caps001, which the island's kālā overrides in place). CSNO DATA is a schema layout now (Currency, Winnings quest are links). `plan`: islands alternate pachinko and
+  arcade, a cluster with no left single becomes a bank of three, singles stood exactly on their slot (`move`, <= 2.2).
+  The closed Kilauea's ring seen through its glass (`hotelinside.slot_row`) paints cabinets now. Step
+  `arcade_into_waikiki.py` in the shared notes; in Waikiki since 25 Nov 2026 (build 64c90c39, nv-rs-newest); not yet seen in game.

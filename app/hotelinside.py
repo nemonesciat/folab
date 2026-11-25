@@ -241,26 +241,31 @@ def far_front(wall, inside=(250, 196, 120), bays=9, arched=True, w=256, h=64, se
 
 
 def slot_row(size=256, seed=1390):
-    """A slot machine seen across the casino (one to a picture, the ring repeats it): its cabinet, a lit screen and
-    reels, the coin tray; see-through round it."""
-    pic = Picture(size, size, clear=(40, 30, 24), gloss=60)
+    """An arcade cabinet seen across the casino (one to a picture, the ring repeats it; the casino is the Kilauea's
+    arcade since 25 Nov 2026, arcadeset): its dark cabinet, a lit marquee, a glowing screen, the control panel; see-through
+    round it. Was a slot machine (the Tops' casino it had been furnished as)."""
+    pic = Picture(size, size, clear=(30, 26, 30), gloss=60)
     f = Field(size, size, seed, cells=4, octaves=3)
+    marquee = [(250, 200, 90), (120, 220, 240), (250, 130, 60)]
     for y in range(size):
         v = y / float(size)
         for x in range(size):
             u = x / float(size)
             p = y * size + x
-            if not (0.22 < u < 0.78 and 0.06 < v):
+            if not (0.3 < u < 0.7 and 0.04 < v):
                 continue
-            col, a = mul((150, 34, 30), 0.8 + 0.3 * f.v[p]), 1.0          # (red lacquer, worn)
-            if 0.3 < u < 0.7 and 0.1 < v < 0.34:
-                col = (250, 214, 120)                                      # (the lit top glass)
-            elif 0.3 < u < 0.7 and 0.4 < v < 0.58:
-                k = int((u - 0.3) / 0.4 * 3)
-                col = (238, 232, 210) if (u - 0.3) / 0.4 * 3 - k > 0.08 else (40, 30, 24)      # (three reels)
-            elif 0.66 < v < 0.7 or (0.26 < u < 0.74 and 0.84 < v < 0.9):
-                col = (196, 160, 82)                                       # (gold trim, the tray)
-            pic.rgb[p], pic.a[p] = grade(col, sat=0.85), a
+            col = mul((34, 30, 36), 0.8 + 0.3 * f.v[p])                    # (the cabinet, dark)
+            if 0.32 < u < 0.68 and 0.07 < v < 0.17:
+                col = mix(marquee[int(x * 7 // size) % 3], (255, 244, 210), 0.5 if 0.11 < v < 0.13 else 0.0)   # (the lit marquee)
+            elif 0.35 < u < 0.65 and 0.21 < v < 0.43:
+                col = mix((60, 150, 200), (250, 190, 90), max(0.0, min(1.0, (v - 0.21) / 0.22)))   # (the screen)
+            elif 0.3 < u < 0.7 and 0.47 < v < 0.53:
+                col = (200, 60, 50) if 0.45 < u < 0.48 else (70, 60, 50)     # (the control panel, a button lit)
+            elif 0.44 < u < 0.56 and 0.62 < v < 0.72:
+                col = (240, 100, 40) if 0.65 < v < 0.69 and 0.47 < u < 0.53 else (24, 22, 24)   # (the coin door's light)
+            elif u < 0.315 or u > 0.685:
+                col = (230, 190, 80)                                       # (the side panels' moulding)
+            pic.rgb[p], pic.a[p] = grade(col, sat=0.9), 1.0
     return pic
 
 

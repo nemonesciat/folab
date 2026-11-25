@@ -37,7 +37,7 @@ DLL_SKIP = re.compile(r'^(_test|xxlimited|_tkinter|_ctypes_test|tcl|tk)', re.I)
 APP_SKIP = {'__pycache__'}
 # modules run only from the developer's Python (they need numpy/PIL/scipy, which FOLab.exe's Python hasn't): copied, not
 # import-checked; FOLab.exe never imports them at start
-DEV_ONLY = {'garmentprint', 'armourset'}
+DEV_ONLY = {'garmentprint', 'armourset', 'arcadeset'}
 # modules that need the voice pack's numpy (each imported only when lines or radio are voiced): checked with the pack
 VOICE_ONLY = {'voicefx', 'voicealign', 'radiofx', 'radiojingle'}
 # the voice maker's packages (numpy, onnxruntime, soundfile and what they need), every one under a permissive licence:

@@ -466,7 +466,11 @@ _MORE = {
     'RCCT': ('Recipe categories', {'DATA': ('Flags', [('B', 'Flags')])}),
     'CHIP': ('Casino chips', {}),
     'CSNO': ('Casinos', {'MOD2': ('Slot machine model', 'z'), 'MOD3': ('Blackjack table model', 'z'), 'MOD4': ('Roulette table model', 'z'),
-                         'ICO2': ('Deck texture', 'z')}),
+                         'ICO2': ('Deck texture', 'z'),
+                         # (fnv_decomp TESCasino: 56 bytes; the slot menu takes its stake from the player's count of
+                         # 'Currency', any item; 'Max winnings' is where the casino bans you)
+                         'DATA': ('Data', [('f', 'Shuffle at'), ('f', 'Blackjack pays')] + [('I', 'Reel stops %d' % k) for k in range(1, 8)] +
+                                  [('I', 'Decks'), ('I', 'Max winnings'), ('F', 'Currency'), ('F', 'Winnings quest'), ('I', 'Flags')])}),
     'LSCT': ('Load screen types', {}),
 }
 for _t, _d in _MORE.items():
