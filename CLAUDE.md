@@ -688,3 +688,8 @@ Never read from `steamapps\downloading`: open files there make Steam's install f
   arcade, a cluster with no left single becomes a bank of three, singles stood exactly on their slot (`move`, <= 2.2).
   The closed Kilauea's ring seen through its glass (`hotelinside.slot_row`) paints cabinets now. Step
   `arcade_into_waikiki.py` in the shared notes; in Waikiki since 25 Nov 2026 (build 64c90c39, nv-rs-newest); not yet seen in game.
+  Repair there (`arcaderepair.py`, `tests/test_arcaderepair.py`, K2): the same script, compiled again in place, keeps each
+  machine's state (broken `BROKEN` in 100 when first used, fixed at Repair `FIX` with a Scrap Electronics or Tinkerer, rigged
+  at `RIG`: a session ahead pays `BONUS`% more until a steward notices, `NOTICE` in 100: court -`CAUGHT`, infamy, fair
+  again); message boxes, nothing voiced. A win is a session that ended ahead (the menu shows no win by itself). Step
+  `arcaderepair_into_waikiki.py` in the Workshop's notes; rehearsed, not yet in Waikiki.
