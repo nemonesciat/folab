@@ -28,6 +28,7 @@ def check(what, ok, detail=''):
     print(('PASS ' if ok else 'FAIL ') + what + (' (%s)' % (detail,) if detail != '' else ''))
 
 
+C.ISLAND_WORLD = 'WastelandNV'        # (the test's stand-in for the island's world)
 M = C.models()
 check('twenty models', len(M) == 20)
 opened = [(k, modelmake.open_edges(d), nifmake.open_edges(m['shapes'])) for k, (d, m) in M.items()]
@@ -83,3 +84,7 @@ check('the models among the mod\'s own files', os.path.isfile(os.path.join(__imp
 h = health.check_file(g, out)
 bad = [(x['kind'], x['count']) for x in h['groups'] if x['sev'] == 'error' and x['kind'] != 'mesh']    # (the models are the mod's own files: checked above)
 check('the plugin passes health', not bad, bad)
+efids = [struct.unpack('<I', v)[0] for t, v in tes4.iter_subrecords(g.plugins[i].data(g.forms[mine['FOLabIslandTime']][1])) if t == 'EFID']
+conds = [v for t, v in tes4.iter_subrecords(g.plugins[i].data(g.forms[mine['FOLabIslandTime']][1])) if t == 'CTDA']
+check('Island Time: +10% speed too, only in the island\'s world', len(efids) == 2 and len(conds) == 1
+      and struct.unpack('<H', conds[0][8:10])[0] == C.GETINWORLDSPACE)

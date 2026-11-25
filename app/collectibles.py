@@ -12,7 +12,7 @@ bobbleheads. Collecting a whole set gives a hidden reward of its own ("a hidden 
   picking it up again gives nothing).
 - **Set rewards** (abilities, added by the last find's script, `REWARDS`): all seven dolls, "Island Time" (+10 Action
   Points); all thirteen charms, "Jade Heart" (+3 Damage Threshold, and +10 Huang face, once).
-  - **[proposal]** The rewards' names and effects (decisions.md: still to be proposed to the user).
+  - Decided (the user, 25 Nov 2026: "Yes, as proposed"): Island Time is also +10% speed outdoors in the island's world.
 - **Where** (`SPOTS`): places worth reaching for the dolls; Huang and hard places for the charms. Each rests on a
   real surface there (a table, desk, shelf, console, crate, a car's roof: lootplace.Seat on the placed things' own
   collision), the one farthest from the way in, `DOOR_CLEAR` from every door and arrival, `PEOPLE_CLEAR` from anyone
@@ -55,10 +55,12 @@ CARVINGS = ['bi', 'gourd', 'fish', 'cicada', 'coin']
 JADES = {'imperial': (40, 140, 80), 'celadon': (150, 190, 150), 'mutton': (220, 222, 200), 'spinach': (36, 90, 52)}
 CHARMS = {s: (CARVINGS[i % len(CARVINGS)], list(JADES)[i % len(JADES)]) for i, s in enumerate(SKILLS)}
 REWARDS = {'hula': ('FOLabIslandTime', 'Island Time', 'IncreaseActionPoints', 10,
-                    "Every hula doll on the island is yours. You move on island time now: +10 Action Points."),
+                    "Every hula doll on the island is yours. The island's pace is yours now: +10 Action Points, and you move a little faster outdoors on the island."),
            'jade': ('FOLabJadeHeart', 'Jade Heart', 'IncreaseDamageThreshold', 3,
                     "Every jade charm is yours. The elders would call it a sign: +3 Damage Threshold, and the Huang think better of you.")}
 JADE_FACE = 10
+ISLAND_WORLD, ISLAND_SPEED = 'FOLabWaikiki', 10       # (Island Time's second effect: speed, only in the island's world)
+GETINWORLDSPACE = 310
 # where each goes: (place editor ID or ('near', map marker, radius), what to rest on: editor ID words)
 SURFACE = r'Table|Desk|Counter|Shelf|Shelves|Dresser|Cabinet|Altar|Console|Crate|Bench|Footlocker|Locker|Trunk|Chest|Workbench|Bar\b|Stand'
 SPOTS = {
@@ -269,7 +271,9 @@ def item_source(kind, stat, n, total, reward_spell, msg, reward_msg):
     return '\n'.join(L)
 
 
-def reward_spell(gd, key):
+def reward_spell(gd, key, world=None):
+    """The set's ability. Island Time ('hula') gets a second effect, +`ISLAND_SPEED`% speed, conditioned on being in the
+    island's world (`world`, its key: outdoors there, as interiors are no worldspace)."""
     edid, name, effect, mag, _words = REWARDS[key]
     f = next(f for f, (_i, r) in gd.forms.items() if r.tag == 'SPEL' and gd.edid(f) == 'RexBloodLegion')
     rec = recordio.load(gd, f)
@@ -286,6 +290,18 @@ def reward_spell(gd, key):
             for q in s['fields']:
                 if q.get('name') == 'Magnitude':
                     q['value'] = mag
+    if key == 'hula' and world:
+        import questrec as qr
+        efid = next(s for s in rec['subs'] if s['tag'] == 'EFID')
+        efit = next(s for s in rec['subs'] if s['tag'] == 'EFIT')
+        speed = gd.key(next(f for f, (_i, r) in gd.forms.items() if r.tag == 'MGEF' and gd.edid(f) == 'IncreaseSpeedMult'))
+        e2 = json.loads(json.dumps(efit))
+        for q in e2['fields']:
+            if q.get('name') == 'Magnitude':
+                q['value'] = ISLAND_SPEED
+        rec['subs'] += [dict(json.loads(json.dumps(efid)), value=speed), e2,
+                        qr.condition_sub({'or': False, 'use_target': False, 'op': '=', 'fn': GETINWORLDSPACE, 'p1': world, 'p2': 0,
+                                          'run': 0, 'ref': '', 'value': 1.0})]
     return rec
 
 
@@ -520,8 +536,10 @@ def ops(gd, pr, P=None):
     record(QSCRIPT, sc._record_of(c, QSCRIPT), qsk)
     record(QUEST, quest, qk)
     rewards = {}
+    world = _key(pr, ISLAND_WORLD, 'WRLD') or next((gd.key(f) for f, (_i, r) in gd.forms.items()
+                                                     if r.tag == 'WRLD' and gd.edid(f) == ISLAND_WORLD), None)
     for key, (edid, name, _e, _m, words) in REWARDS.items():
-        rewards[key] = (record(edid, reward_spell(gd, key)), record(edid + 'Msg', newgame._message_record(edid + 'Msg', words)))
+        rewards[key] = (record(edid, reward_spell(gd, key, world)), record(edid + 'Msg', newgame._message_record(edid + 'Msg', words)))
     placed = {(r['kind'], r['stat']): r for r in rows}
     for kind, stats in (('hula', SPECIAL), ('jade', SKILLS)):
         for n, stat in enumerate(stats, 1):
@@ -548,5 +566,5 @@ def ops(gd, pr, P=None):
                 rep['placed'].append({'item': _name(kind, stat), 'where': r['where'], 'on': r['on'], 'door': r['door'],
                                       'people': r['people']})
     rep['items'] = len(SPECIAL) + len(SKILLS)
-    rep['missing'] = [('not placed', s) for s in skipped]      # (the step's CHECKS fail on any: every one has its spot)
+    rep['missing'] = [('not placed', s) for s in skipped] + ([] if world else [('Island Time', 'no world %s for its speed' % ISLAND_WORLD)])      # (the step's CHECKS fail on any: every one has its spot)
     return out, rep
