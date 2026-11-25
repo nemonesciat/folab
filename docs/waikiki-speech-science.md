@@ -562,6 +562,96 @@ then the rest. About 40 perks in all if every skill gets three: that's a lot, so
 3. Which Survival perks (my picks: Reef Fisher, Wild Medicine, Wrack Reader).
 4. Milestone perks: free at 50/75/100, a choice at 100, or only at 50 and 100? Every skill, or the non-combat ones first?
 
+#### K5. The complete system (the user, 25 Nov 2026: "let's design a complete system and then build it. no more what if")
+
+All of K2-K4 is built against this. K1, the guns, is the quests session's and plugs in where marked.
+
+**1. Tiers.**
+- The same six as Speech: 25, 40, 55, 70, 85, 95.
+- Every check is made one of two ways:
+  - with people: `skillcheck.check_lines` (the game's "[Repair 55]" tag, a pass line and a fail line);
+  - at things (a machine, a boat, a rubble pile): its activator's script, which reads GetActorValue and shows a message.
+- **Retries:** a fail never locks the check, so it can be tried again with more skill. The exception is haggling, which
+  is one try per reward.
+- **Real locks:** the game's lock levels, by tier: 25 Very Easy, 40 Easy, 55 Average, 70 Hard, 85 and 95 Very Hard.
+
+**2. What a use costs.**
+- **Repair:** parts by tier.
+  - 25-40: Scrap Metal.
+  - 55-70: Scrap Electronics and Scrap Metal.
+  - 85-95: a Sensor Module or Fission Battery, and Scrap Electronics.
+- **Medicine:** supplies. A Doctor's Bag or Stimpak; Antivenom for stings; Healing Powder for the Huáng.
+- **Explosives:** the charge is spent, from the player's Frag Grenades, Dynamite or C-4.
+- **Survival:** game hours. Guiding takes the walk, foraging takes an hour.
+- **Barter:** nothing but the risk: a failed haggle costs face, and a caught smuggler loses the goods.
+
+**3. What a use pays, by tier, in kala.**
+- 25 pays 10-20, 40 pays 25-40, 55 pays 50-80, 70 pays 100-150, 85 pays 200-300, 95 pays a unique thing.
+- The Huáng pay the same worth in tongbao (a tenth of it), the pirates in Energy Cells (a quarter).
+- Each side pays in its own money (money.py).
+
+**4. Reputation** (repstanding's two axes).
+- **Work for a side:** +1 fame with it and +3 on its Name on the Water score. A tier 5 or 6 job gives +2 fame and +5.
+- **Work against a side** (caught smuggling, a rigged arcade machine found out, a lock picked in front of its people): +1
+  infamy with it and -5 on its score.
+- **Who offers what:**
+  - trade contracts and repair jobs come from a side at band 2 or more ("hardly knows you" or better);
+  - smuggling routes come from the pirates at band 2 or more;
+  - nobody offers you work at band 0.
+- **The soft-touch axis** (the pirates' score, bands 0-1: prey, an easy mark):
+  - pirate prices are a quarter worse;
+  - haggling with pirates is a tier harder;
+  - passage on a pirate boat costs double.
+- **Feared** (pirates' band 4): pirate contracts pay a quarter more, and the toll is waved off (parley, already).
+- **The court's favour** (band 3-4) and **the Huáng's face** (band 3-4): a tier off their own jobs' checks (a 70 is
+  asked at 55).
+
+**5. The uses** (K2), each a small job of one shape (sidequests' "ask, do, come back, reward"), or a standing service:
+
+| Skill | Uses | Who / where |
+|---|---|---|
+| Barter | haggled pay (every reward line of the mod's quests: +25% at 40, +50% at 70); trade contracts (three: Linda Moreno, Shangren, the Kāhala trader: a delivery every 3 days, the cut set by Barter); exchange rates (the changer 50, pirate traders 55: cells at 5, a court treasurer 40); smuggling (tongbao and cells between sides: three runs); passage (ferry fares by Barter) | traders, the changer, the ferry |
+| Repair | fixing jobs (the Shouwei's gate guns 55, a Waikiki pier winch 25, the Tanks' water pump 70, a court radio 40, a Flotilla boat engine 85); the Kilauea's arcade machines (55 to fix: pays now and then; 85 to rig: pays well until the court finds out); boats (70: a wreck at a stop joins the ferry; 85: a boat of your own at the Waikiki pier); weapons for people (40: a guard's or a pirate's gun mended for pay or a favour) | settlements, the Kilauea, the stops |
+| Lockpick | the court's strongrooms (70, the Royal Hawaiian), the tribute cages (55, heldwatch's), Huáng storehouses (40), the Vault's back door (85), safes by tier; picked in sight of a side's people: infamy | the court, Waimānalo, the Vault |
+| Medicine | a fever in a valley (55: cure it, or sell the cure); the Bishop Museum's ghoul curator (70); the Flotilla surgeon's stimpak trade (40); patching the condemned on tribute night (40, a mercy) | the Holdouts, Kalihi, the Flotilla, the Natatorium |
+| Survival | guide work on the Koʻolau trails (55: a family or a runaway over the ridge); foraging and cooking recipes (25, 55); tracking (heldwatch's runaways, the other way: find them before the catchers); the cliff trail's hidden turnings (70) | the ridges, campfires |
+| Explosives | blocked ways cleared (55: rubble in a tunnel, a fallen freeway span: a short cut or a cache); the Missouri's flooded magazines (85, for K1); sabotage of the Flotilla's boats (70) | the freeway, the Missouri, the anchorage |
+
+**6. The perks and what they boost** (K3 and K4). A milestone perk is given free when a skill first reaches 50 or 75. At
+100 you choose one of two. Each boosts one or more of the uses above:
+
+| Skill | 50 | 75 | 100: one of |
+|---|---|---|---|
+| Barter | Market Day: island traders' prices better (an entry point, or a script) | Contract Hand: contracts' cut +25% | Tongbao Baron (the changer's best rate both ways) / Smuggler's Purse (smuggling never caught) |
+| Repair | Salt and Rust: weapons and armour wear slower in the island's world | Shipwright: boats mended with one part fewer; ferry free | Gunner's Mate (K1's last stage needs one part fewer) / Tinker's Pay (every repair job pays double) |
+| Medicine | Noni Cure: healing powder heals more | Island Doctor: fevers cured by talking to the sick | Kahuna Lāʻau (once a day, a full heal at any campfire) / Field Surgeon (stimpaks heal a quarter more) |
+| Survival | Trailwise: no fall damage on the Koʻolau trails | Sea Legs: swim faster | Child of the Island (hunger and thirst slower on the island) / Castaway (wild food and water heal more) |
+| Science | Tinkerer: one part fewer at generators, panels and fixing jobs | Signal Man: radio numbers decoded without the dome | Vault-Tec Mind (the Vault's terminals a tier easier) / Salvage King (robots always leave a Sensor Module) |
+| Speech | Talk Story: one more rumour | Word on the Water: every side's score moves half again | Silver Tongue (one 95 check a game at 85) / Kahuna's Voice (the court's checks a tier easier) |
+| Lockpick | Quiet Hands: picking in sight costs no infamy | Cage Breaker: the tribute cages open without a check | Master Key (one Very Hard lock a day opens) / Strongroom Ghost (the court's strongrooms' alarms don't sound) |
+| Explosives | Fisherman's Charge: a charge in the water brings up fish | Sapper: clearing a blocked way is safe | Big Bang (K1's salvos hit harder) / Demolition Pay (blasting jobs pay double) |
+| Sneak | Night Walker: the Huáng's watch sees less at night | Shadow Trader: smuggling runs are never stopped | Ghost of Waikiki (court guards never hail you) / Tide Walker (sneaking in water is silent) |
+| Guns | Pirate's Eye: +10% damage with the island's rifles (the Chinese and Japanese guns) | Steady Deck: less sway on boats and decks | Sharpshooter of the Reef / Gunsmith's Friend (the island guns wear half as fast) |
+| Energy Weapons | Cell Saver: one cell in ten not spent | Vault Charge: drained cells charge one for one at any generator | Overcharge / Cell Merchant (cells trade at 5) |
+| Melee Weapons | Koa Hand: +10% damage with the island's clubs and blades | Lua Stance: power attacks cost less AP | Kahuna's Champion / Leiomano Master |
+| Unarmed | Lua Fist: +10% unarmed damage | Riptide: a knockdown in the water | Big Kahuna / Bone Breaker |
+| Survival (K3, chosen, not milestones) | Reef Fisher (40), Wild Medicine (55), Wrack Reader (50), Koʻolau Legs (70), Shark Sense (60), Castaway (85: also a milestone choice above) | | |
+
+**7. How it's put together.**
+- **One quest, FOLabMilestones**, watches the thirteen skills. It gives each perk once, shows a message for it, and
+  offers the choice at 100 as a message with two buttons.
+- **The perks are PERK records of the mod's own.** Not playable: they're given, so they aren't in the level-up list.
+  Each takes one of three shapes:
+  - an ability (an actor-value change with conditions, such as GetInWorldspace for the island-only ones);
+  - an entry point, once proven in nv-rs (Barter's price first);
+  - a HasPerk condition in the use's own lines or script.
+- **The jobs:** one quest per family (FOLabWorkBarter, FOLabWorkRepair, FOLabWorkLockpick, FOLabWorkMedicine,
+  FOLabWorkSurvival, FOLabWorkExplosives). Each job's ways through and endings are listed in its hand-over (the standing
+  rule).
+- **Build order:** the milestone quest; K3; K4's perks (the hooks into uses that don't exist yet land with those uses);
+  then K2: Barter, Repair, then the rest.
+- **Names, pay figures and places are proposals** (this session's), inside what's decided.
+
 ---
 
 ## By place (where both skills meet)
