@@ -10,7 +10,7 @@ Every line of the given quests is spoken by peopletalk.voice, the way Waikiki's 
 `missing` lists every response still without its .ogg or .lip; a step's check fails on any.
 
     plan_for(gd, pr, quests)           [{'line', 'number', 'unit', 'keys'}] for every response of the quests' lines
-    voice(gd, pr, quests, progress)    {'voiced', 'copied', 'problems', 'missing', 'voices': {speaker: voice}}
+    voice(gd, pr, quests, progress, zh, only)    {'voiced', 'copied', 'problems', 'missing', 'voices': {speaker: voice}}
 """
 import re
 
@@ -76,12 +76,13 @@ def _voice_zh(gd, pr, plan, zh):
     return rest, done
 
 
-def voice(gd, pr, quests, progress=None, zh=None):
+def voice(gd, pr, quests, progress=None, zh=None, only=None):
     """zh: {a response's shown words: the pinyin said} for lines spoken in Mandarin (huangland's way: Kokoro's Chinese
-    voices, kept in voices.json with lang 'zh' and 'say'); every other line as peopletalk speaks it."""
+    voices, kept in voices.json with lang 'zh' and 'say'); every other line as peopletalk speaks it. only: these line keys
+    of the quests and no others (a step that rewords a few lines of a quest already voiced)."""
     import api_voices as av
     import peopletalk
-    whole = plan = plan_for(gd, pr, quests)
+    whole = plan = [p for p in plan_for(gd, pr, quests) if only is None or p['line'] in only]
     in_zh = []
     if zh:
         plan, in_zh = _voice_zh(gd, pr, plan, zh)
