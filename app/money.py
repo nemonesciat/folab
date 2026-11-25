@@ -48,8 +48,8 @@ CELL, CELL_MF = 'AmmoSmallEnergyCell', 'AmmoMicroFusionCell'
 TONGBAO = ('FOLabTongbao', 'An Tongbao', 8, 0.02)          # (editor ID, name, value in kala, weight)
 BANGO = ('FOLabBangoTag', 'Bango Tag', 0, 0.02)
 # what a trader takes a coin at (kala), in the trading modes: 1 tongbao, 2 cells, 3 bango
-RATES = {'tongbao': 10, 'cells': 4, 'bango': 5}
-MODES = {'tongbao': 1, 'cells': 2, 'bango': 3}
+RATES = {'tongbao': 10, 'cells': 4, 'bango': 5, 'cells5': 5}       # (cells5: a pirate trader to Cell Merchant's perk, milestonehooks)
+MODES = {'tongbao': 1, 'cells': 2, 'bango': 3, 'cells5': 4}
 CHANGER_BUYS, CHANGER_BETTER, CHANGER_SELLS, CHANGER_BARTER = 8, 9, 12, 50
 EXCHANGE = {'energy': (CELL, 10, 30), 'microfusion': (CELL_MF, 10, 50)}     # (what, how many, kala)
 HUANG_TRADERS = ('FOLabHuangTraderKailua', 'FOLabHuangHerbalistKaneohe')
@@ -391,7 +391,7 @@ def quest_source():
          '\tset n to player.GetItemCount Caps001', '\tset n to n - before', '\tset back to 0']
     for kind, mode in MODES.items():
         rate = RATES[kind]
-        item = {'tongbao': TONGBAO[0], 'cells': CELL, 'bango': BANGO[0]}[kind]
+        item = {'tongbao': TONGBAO[0], 'cells': CELL, 'cells5': CELL, 'bango': BANGO[0]}[kind]
         L += ['\tif mode == %d && n >= %d' % (mode, rate), '\t\tset back to n / %d' % rate,
               '\t\tif back * %d > n' % rate, '\t\t\tset back to back - 1', '\t\tendif',
               '\t\tif back > 0', '\t\t\tset k to back * %d' % rate, '\t\t\tplayer.RemoveItem Caps001 k 1', '\t\t\tplayer.AddItem %s back 1' % item,
@@ -403,7 +403,7 @@ def quest_source():
 
 def trade_in(kind):
     """A line's end script: every coin of that kind into kala at the trader's rate, then the barter window."""
-    item = {'tongbao': TONGBAO[0], 'cells': CELL, 'bango': BANGO[0]}[kind]
+    item = {'tongbao': TONGBAO[0], 'cells': CELL, 'cells5': CELL, 'bango': BANGO[0]}[kind]
     q = QUEST
     return '\n'.join(['set %s.before to player.GetItemCount Caps001' % q, 'set %s.n to player.GetItemCount %s' % (q, item),
                       'if %s.n > 0' % q, 'player.RemoveItem %s %s.n 1' % (item, q), 'set %s.k to %s.n * %d' % (q, q, RATES[kind]),
