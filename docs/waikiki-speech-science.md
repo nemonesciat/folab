@@ -412,6 +412,156 @@ step goes further.
 - **The Huang:** say you have no face; think little of you; have no opinion of you; say you keep your word; give you face.
 
 
+### K. More for the other skills: the guns, non-combat uses, perks (for later; the user, 25 Nov 2026)
+
+The user: "There should be a way to fix the guns of the ship with high repair. And other uses for other skills. Maybe uses
+for high barter and repair and others that aren't combat oriented. More perks to survival. And skill perks in general.
+Perks you get for hitting skill milestones." Written down for later, **not built**. Everything below is a proposal; ★
+marks my picks.
+
+#### K1. The Missouri's guns, fixed (a proposal touching decided lore)
+
+The story plan's "Captain's bluff" is agreed: the 16-inch guns are dead, one 5-inch mount works, and whoever finds out
+changes the balance. Fixing them turns that over, so the user decides whether it can happen at all.
+
+**The way** (one quest, its stages by skill):
+1. **Repair 50** in Turret Two: you see the guns can't fire (the bluff found out, as now).
+2. **Repair 75:** what it would take: a breech block, recoil cylinder seals, and dry powder bags (the forward magazines
+   are flooded). Science 70 at the fire control terminal works out that one turret could fire.
+3. **The parts,** each a trip:
+   - a breech block from a wreck at Pearl Harbor, through the Kalihi lord's scouts past the wall;
+   - seals made at a workbench (Repair 60);
+   - dry charges from the Vault's stores, or bought from the Flotilla, which would rather not see the guns work.
+4. **Repair 95:** Turret Two fires. ★ **Three salvos only**: there are only three dry charges, so it stays a card to play,
+   not a new power.
+
+**What it changes:**
+- **The Captain:** his power is real again. He can thank you, make you his gunner, or decide he no longer needs the
+  Kahuna. That's the user's to decide.
+- **The court:** the Kahuna's threat stops being a bluff, or becomes the Captain's alone, depending on whom you tell first.
+- **The pirates:** the Flotilla finds out once the guns are being fixed. ★ They try to sink or board her before the
+  last part comes: a raid on the ship, a story moment of its own.
+- **The Kalihi lord:** his leverage (knowing the guns can't fire) is gone. He may slow the parts down, or bargain for
+  telling no one.
+- **The Vault:** Kaʻau Crater is in the guns' range. The Vault's bargaining (power for people) changes, and an ending
+  could turn on a shell aimed at the crater. That's the user's to decide.
+
+**Story moments it opens:**
+- one salvo at the Flotilla's anchorage;
+- a shot over the Kāhala as a warning;
+- the guns turned on the court;
+- the secret sold (Barter);
+- the guns left as they are, the secret kept.
+
+★ Build it, if at all, as an ending-sized choice on the Waikiki path.
+
+#### K2. Non-combat uses for every skill
+
+Tiers as for Speech: 25 / 40 / 55 / 70 / 85 / 95.
+
+**Barter** ★ (the first of these to build):
+- ★ **Haggled pay:** at a quest's reward, "[Barter 40/70] I was promised more." gets +25% or +50% kala. A fail keeps the
+  pay but costs a little face.
+- ★ **Trade contracts:** a standing order with Linda Moreno, Kailua's Shangren or the Kāhala trader: deliver goods every
+  few days for a cut. Barter sets the cut (brokering's shape, with money).
+- **Exchange rates:** already in at the Makapuʻu changer (Barter 50: 9 kala a coin). More could come at the pirate traders
+  (cells at 5) and a court treasurer (tongbao to kala).
+- **Smuggling routes** (Barter 70): carry tongbao or cells between sides that don't trade, for the margin. Caught by a
+  patrol: infamy and the goods taken.
+- **Passage and information:** cheaper boat trips (boatferry's prices once they're in money), and a rumour's price.
+
+**Repair** ★:
+- ★ **Fixing things for people,** a short job each:
+  - the Shouwei's gate guns (Huáng face);
+  - a Waikiki pier winch (a fisher's family eats);
+  - the Tanks' water pump (the valley stops paying, from the other side).
+- ★ **The Kilauea's arcade machines** (Repair 55; 85 to rig one): a repaired token machine pays out kala now and then, and
+  a rigged one pays better until the court notices.
+- **Boats** (Repair 70): mend a wrecked boat at a stop and it joins the ferry. At 85, your own boat at the Waikiki pier.
+- **Weapons for people** (Repair 40): mend a guard's or a pirate's gun for pay, or for a favour in a talk later.
+- **The Missouri:** the searchlight (40) and the 5-inch mount (75) on the way to K1.
+
+**Lockpick:**
+- the court's strongrooms in the Royal Hawaiian (70);
+- the tribute cages, to free people (55: already a way through in heldwatch's);
+- Huáng storehouses (40);
+- the Vault's back door (85);
+- safes by tier.
+
+**Medicine:**
+- ★ a fever in a valley (55): cure it, or sell the cure;
+- the Bishop Museum's ghoul curator (70);
+- the Flotilla's surgeon's trade in stimpaks;
+- patching the condemned on tribute night (40, a mercy).
+
+**Survival:**
+- ★ guide work on the Koʻolau trails (55: lead a family or a runaway over the ridge);
+- foraging and cooking recipes at campfires (25 / 55);
+- tracking (heldwatch's runaways, the other way round);
+- finding the cliff trail's hidden turnings (70).
+
+**Explosives:**
+- ★ clearing blocked ways (55: rubble in a tunnel, a fallen freeway span), which opens a short cut or a cache;
+- the Missouri's flooded magazines (85, dangerous);
+- the Flotilla's boats (70, sabotage).
+
+Already in: **Science** (section J) and **Speech** (everywhere). Sneak, Unarmed and the gun skills stay mostly combat.
+
+#### K3. More Survival perks (beside Storm-Wise and Reef Diver)
+
+| Perk | Needs | What it does | How |
+|---|---|---|---|
+| ★ **Reef Fisher** | Survival 40 | twice the fish from FOLab's fishing spots | the spots' scripts ask HasPerk |
+| ★ **Wild Medicine** | Survival 55 | healing poultices at a campfire from island plants (taro leaf, ti, noni) | a recipe gated by HasPerk |
+| ★ **Wrack Reader** | Survival 50 | after a storm, the best of the wrack (stormafter's finds) shows on the map | the wrack's finds get map markers with the perk |
+| **Koʻolau Legs** | Survival 70 | +10% speed outdoors in the island's world | an ability with a GetInWorldspace condition (as Island Time) |
+| **Shark Sense** | Survival 60 | a message when a sharklurk is near in the water | a quest's GetDistance, with the perk |
+| **Castaway** | Survival 85 | food and water you find in the wild heal more | an entry point (below) |
+
+#### K4. Skill-milestone perks
+
+**How it would work:**
+- The game doesn't give perks for reaching a skill. Its level-up menu only lists perks whose conditions pass, and each
+  costs a pick.
+- So a milestone perk is free and given by script, which works without an extender: a quest checks each skill
+  (GetPermanentActorValue) every few seconds. When one passes 50, 75 or 100 for the first time, it runs AddPerk and shows
+  a message with the perk's name and words. Its own variables keep each milestone to once.
+- ★ At 100, a choice instead: a message with two buttons picks one of two perks (GetButtonPressed), as generators' menu
+  does.
+
+**What nv-rs allows** (read from its source, 25 Nov 2026, commit cad5b671):
+- It ports the game's perk code: `BGSEntryPoint::HandleEntryPoint` (`bgsentrypoint.rs`), called at the game's own sites
+  (barter prices, terminals, action points, VATS, damage, health and AP regeneration), and ability and quest perk
+  entries (`bgsperk.rs`).
+- It also ports the player's perk list (`playercharacter_p3.rs`) and the level-up menu (`levelupmenu.rs`).
+- So entry-point perks (prices, Repair's effect on condition, chems' duration) should run there as they do in the game,
+  but none of FOLab's has been tried yet. perks.py's five avoided entry points for that reason. A first build should
+  prove one (Barter's price) in nv-rs before relying on them.
+
+**One island perk a skill a milestone** (names and effects are proposals; ★ the non-combat ones to build first):
+
+| Skill | 50 | 75 | 100 |
+|---|---|---|---|
+| ★ Barter | Market Day (better prices at stalls and island traders: entry point) | Contract Hand (trade contracts' cut +25%) | Tongbao Baron (the changer's rate at its best both ways, and a trader's barter gold doubled) |
+| ★ Repair | Salt and Rust (weapons and armour wear slower in the island's sea air) | Shipwright (boats mended with fewer parts; the ferry costs nothing) | Gunner's Mate (K1's last stage needs one part less) |
+| ★ Medicine | Noni Cure (healing powder heals more) | Island Doctor (fever and poison cured by talking to the sick) | Kahuna Lāʻau (a once-a-day full heal at any campfire) |
+| ★ Survival | Trailwise (no fall damage on the Koʻolau trails) | Sea Legs (swim faster) | Child of the Island (hunger and thirst slower in the island's world) |
+| ★ Science | Tinkerer (one part fewer at generators and panels) | Signal Man (radio numbers decoded without the dome) | Vault-Tec Mind (the Vault's terminals open a tier easier) |
+| ★ Speech | Talk Story (one more answer in rumours) | Word on the Water (fame with every side counts half again) | Silver Tongue (one 95 check a game passes at 85) |
+| Lockpick | Quiet Hands (no noise picking) | Cage Breaker (tribute cages open without a check) | Master Key (one lock a day opens) |
+| Explosives | Fisherman's Charge (blast fish from the water) | Sapper (clearing blocked ways is safe) | Big Bang (the Missouri's salvos hit harder) |
+| Sneak | Night Walker (the Huáng's watch sees less at night) | Shadow Trader (smuggling never caught at 75) | Ghost of Waikiki (court guards don't hail you) |
+| Guns, Energy, Melee, Unarmed | one each at 50, 75, 100 | (combat: a damage or speed edge with the island's own weapons) | |
+
+★ The order to build: the milestone quest itself (one script, the 13 skills), then Barter, Repair, Medicine, Survival,
+then the rest. About 40 perks in all if every skill gets three: that's a lot, so the user may prefer 50 and 100 only (26).
+
+**For the user to choose, when ready:**
+1. May the Missouri's guns be fixed at all? If so, how many salvos, and who learns first?
+2. Which K2 uses to build first (my picks: haggled pay, trade contracts, fixing things for people, the arcade machines).
+3. Which Survival perks (my picks: Reef Fisher, Wild Medicine, Wrack Reader).
+4. Milestone perks: free at 50/75/100, a choice at 100, or only at 50 and 100? Every skill, or the non-combat ones first?
+
 ---
 
 ## By place (where both skills meet)
@@ -519,4 +669,4 @@ All of section J's systems are built.
 
 ## Questions still open
 
-1. **Bribes and prices** need money: what does Waikiki use? Until then, goods.
+1. ~~**Bribes and prices** need money~~ **Settled** (the user, 25 Nov 2026): kala, tongbao and power cells (`money.py`); tolls, bribes and brokering pay in money now.
