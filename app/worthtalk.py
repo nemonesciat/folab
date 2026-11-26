@@ -677,10 +677,12 @@ def library_dir(pr):
     return library.assets_dir(pr)
 
 
-def reuse(gd, pr, home):
-    """Copies the rehearsal's voice files and voices.json entries onto this mod's lines of QUEST, matched by the words of
-    each response (every line's words are its own: the test checks), renamed to this mod's INFO IDs in every voice folder.
-    {'files', 'entries', 'lines', 'missing': [line keys with any response not taken]}."""
+def reuse(gd, pr, home, quests=None, only=None):
+    """Copies the rehearsal's voice files and voices.json entries onto this mod's lines of `quests` (default QUEST; `only`:
+    these line keys), matched by the words of each response, renamed to this mod's INFO IDs in every voice folder. Where
+    the rehearsal has several lines with the same words (a pool's line copied to other speakers: firstbearings' refugees),
+    every one's files are taken, so each folder finds its own take; the voices.json entry is the one whose folder is the
+    line's own. Files already there are left. {'files', 'entries', 'lines', 'missing': [line keys with a response not taken]}."""
     import os
     import shutil
     import api_voices as av
@@ -695,38 +697,42 @@ def reuse(gd, pr, home):
     for lk, rs in old.get('lines', {}).items():
         for num, e in rs.items():
             if e.get('path') and e.get('text'):
-                by_text[(e['text'], num)] = (lk, e)
-    voice_dir = os.path.join(src_root, 'sound', 'voice')
+                by_text.setdefault((e['text'], num), []).append((lk, e))
     files = {}
-    for root, _dirs, names in os.walk(voice_dir):
+    for root, _dirs, names in os.walk(os.path.join(src_root, 'sound', 'voice')):
         for n in names:
             files.setdefault(n.lower(), []).append(root)
     voices = av.load(pr)
     dst_root = library.assets_dir(pr)
-    plan = voicelines.plan_for(gd, pr, VOICE)
+    plan = [p for p in voicelines.plan_for(gd, pr, quests or VOICE) if only is None or p['line'] in only]
     nfiles = nentries = 0
     lines_done = set()
     for p in plan:
         lk, num = p['line'], str(p['number'])
         info = av.line_info(gd, pr, lk, voices)
         r = next((x for x in info.get('responses', ()) if str(x['number']) == num), None)
-        hit = by_text.get((r['text'], num)) if r else None
-        if not hit:
-            continue
-        olk, e = hit
-        old_id, new_id = '_%08x_%s' % (int(olk[1:], 16) & 0xFFFFFF, num), '_%08x_%s' % (int(lk[1:], 16) & 0xFFFFFF, num)
-        stem = os.path.basename(e['path']).lower()               # (the rehearsal's own name: its INFO ID in it)
-        if old_id not in stem:
-            continue
-        for ext in ('.ogg', '.lip'):
-            for folder in files.get(stem + ext, ()):
-                rel = os.path.relpath(folder, src_root)
-                os.makedirs(os.path.join(dst_root, rel), exist_ok=True)
-                shutil.copyfile(os.path.join(folder, stem + ext), os.path.join(dst_root, rel, stem.replace(old_id, new_id) + ext))
-                nfiles += 1
-        voices['lines'].setdefault(lk, {})[num] = dict(e, path=r['path'])
-        nentries += 1
-        lines_done.add(lk)
+        hits = by_text.get((r['text'], num), []) if r else []
+        own = None
+        for olk, e in hits:
+            old_id, new_id = '_%08x_%s' % (int(olk[1:], 16) & 0xFFFFFF, num), '_%08x_%s' % (int(lk[1:], 16) & 0xFFFFFF, num)
+            stem = os.path.basename(e['path']).lower()           # (the rehearsal's own name: its INFO ID in it)
+            if old_id not in stem or stem.split('_')[:2] != os.path.basename(r['path']).lower().split('_')[:2]:
+                continue                                         # (another quest's or topic's line with the same words)
+            for ext in ('.ogg', '.lip'):
+                for folder in files.get(stem + ext, ()):
+                    rel = os.path.relpath(folder, src_root)
+                    dst = os.path.join(dst_root, rel, stem.replace(old_id, new_id) + ext)
+                    if os.path.isfile(dst):
+                        continue
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copyfile(os.path.join(folder, stem + ext), dst)
+                    nfiles += 1
+            if own is None or os.path.dirname(e['path']).lower() == os.path.dirname(r['path']).lower():
+                own = e
+        if own:
+            voices['lines'].setdefault(lk, {})[num] = dict(own, path=r['path'])
+            nentries += 1
+            lines_done.add(lk)
     av.save(pr, voices)
     library.publish(pr)
     missing = sorted({lk for lk, _p in peopletalk.unvoiced(gd, pr, plan)})
