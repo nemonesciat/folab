@@ -2,7 +2,7 @@
 
 Eighteen PERK records of the mod's own laid out as the game's traits (DATA: trait 1, level 1, one rank, playable), picked
 two at the new game's trait screen (newgame's ShowTraitMenu, as the game's own VCG04 revision opens it). The game's
-traits are overridden as not playable, all but Wild Wasteland.
+traits are overridden as not playable, Wild Wasteland too (26 Nov 2026).
 
 How each works (`TRAITS`):
 - **ab**: an ability (a SPEL of the mod's own, game effects at a magnitude with conditions: swimming, night by the night
@@ -52,7 +52,8 @@ SPELL, MASKS = 'VMS15WaterBreathingActual', ('VMS15Rebreather', 'FOLabRebreather
 PIRATE_CAMPS = 'FiendsFactionNV'
 VANILLA = ('BuiltToDestroy', 'FastShot', 'FourEyes', 'GoodNatured', 'HeavyHanded', 'Kamikaze', 'LooseCannon', 'SmallFrame',
            'TriggerDiscipline', 'NVDLC03TraitClaustrophobia', 'NVDLC03TraitEarlyBird', 'NVDLC03TraitHoarder',
-           'NVDLC03TraitHotBlooded', 'NVDLC03TraitLogansLoophole', 'NVDLC03TraitSkilled')     # (Wild Wasteland stays)
+           'NVDLC03TraitHotBlooded', 'NVDLC03TraitLogansLoophole', 'NVDLC03TraitSkilled',
+           'WildWasteland')     # (off too since 26 Nov 2026, the user: "we're not ready for it yet"; maybe an island trait later)
 TALK_TOPICS = ('FOLabParleyPersuade', 'FOLabParleyPlead', 'FOLabParleyYieldJoin')
 THREAT_TOPICS = ('FOLabParleyIntimidate',)
 SOFT_TOPICS = ('FOLabParleyPlead', 'FOLabParleyYieldGo', 'FOLabParleyYieldPart')
@@ -542,7 +543,7 @@ def ops(gd, pr, P=None):
                 how.append('script %s' % eff[1])
         perks[tail] = record(perk_edid(tail), perk_record(tail, name, words, icon_of(tail), entries))
         ways[name] = how
-    # the game's traits, not playable (Wild Wasteland stays)
+    # the game's traits, not playable
     for v in P['vanilla']:
         f = _game(gd, 'PERK', v)
         rec = copy.deepcopy(recordio.load(gd, f))
