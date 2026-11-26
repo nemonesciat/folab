@@ -12,9 +12,9 @@ calendar) and the Huang keep the cliff trail to the Vault's back door secret; th
 What is invented (lean; each in docs/waikiki-decisions.md, "built 26 Nov, user may change"):
 - **Hal Brennan**, the court's signalman at the Ala Wai Boat Harbor, and **Keoni Palakiko**, keeper of the Pacific Heights
   beacon, whom the pirates pay in cells to let it go dark on the nights their boats run in.
-- **Leilani Kamakau** of the Palolo refugee camp, whose son **Makana** the catchers took before the last tribute day, and
+- **Kalena Kamakau** of the Palolo refugee camp, whose son **Makana** the catchers took before the last tribute day, and
   **Amos Tanabe**, the watcher (the stop's man, named).
-- **Fang Jun**, an apprentice of the navigator's house at Waimanalo (Mandarin), who left the house's surveying glass and
+- **Qiao Wenbo**, an apprentice of the navigator's house at Waimanalo (Mandarin), who left the house's surveying glass and
   logbook at the old survey mark up the valley, running from the Vespids.
 - Four leads: Dr. Helen Kaimana's arboretum cold store up Manoa; Grandpa Kenji's still up Palolo; a Kalihi scout's kit up
   Kalihi valley; the Olomana ranch cellar above Kailua.
@@ -26,11 +26,11 @@ What is invented (lean; each in docs/waikiki-decisions.md, "built 26 Nov, user m
    - Take the pirates' cells (`KB_BRIBE`) and tell Hal it's beyond fixing (Speech `KB_LIE`; Captain's Kin is believed): it
      stays dark, pirate fame. Fail the lie and Hal sends men up: the court takes him as if reported, and remembers you.
    - Kill Keoni: Hal sends a man up; the beacon burns again; no pay.
-2. **The Count** (`QUESTS['count']`): Leilani's son was taken before tribute day. Up St. Louis Heights, Amos counts who goes
+2. **The Count** (`QUESTS['count']`): Kalena's son was taken before tribute day. Up St. Louis Heights, Amos counts who goes
    up the crater road. Buy it (`AM_PRICE` kala, Barter `AM_HAGGLE` for half), ask it as a kindness (Speech `AM_TALK`), frighten
    it out of him (Dread Name or Intimidate `AM_THREAT`), or open his footlocker (Lockpick, `AM_LOCK`) and take his tally.
-   Back to Leilani: the truth (good karma), a kind lie (Speech `AM_LIE`), or the tally in her hands.
-3. **The Navigator's Glass** (`QUESTS['glass']`): Fang Jun (Mandarin) left the house's glass and logbook at the old survey
+   Back to Kalena: the truth (good karma), a kind lie (Speech `AM_LIE`), or the tally in her hands.
+3. **The Navigator's Glass** (`QUESTS['glass']`): Qiao Wenbo (Mandarin) left the house's glass and logbook at the old survey
    mark up Waimanalo's valley. Fetch them. Give both back (the Huang's face), the glass only and keep the book (less), or
    sell the glass to Linda Moreno. Reading the logbook with Science `GL_READ` shows the Vault's service door on your map.
 4. **Leads up the valleys** (`LEADS`, one quest `QUESTS['leads']`): a lead's first step is an entry on a lore terminal
@@ -42,7 +42,7 @@ The world at rest (docs/waikiki-weak-spots-1126.md): nothing starts until you as
 hut, the satchels and caches wait. Every placement clear of doors, markers, roads and the other finds (`CLEAR`).
 
     plan(gd, pr)       {'rows', 'skipped', 'spots'}
-    apply(pr, gd, P)   one Undo (VOICE: the quests' lines; ZH: Fang Jun's Mandarin)
+    apply(pr, gd, P)   one Undo (VOICE: the quests' lines; ZH: Qiao Wenbo's Mandarin)
 """
 import json
 import math
@@ -63,9 +63,9 @@ PEOPLE = {
     'hal': ('FOLabUVSignalmanHal', 'Hal Brennan', 'M', ('Caucasian', 'AfricanAmerican', 'Hispanic'), 'court'),
     'keoni': ('FOLabUVBeaconKeoni', 'Keoni Palakiko', 'M', ('Hispanic', 'Asian', 'AfricanAmerican', 'Caucasian'), 'keeper'),
     'court_keeper': ('FOLabUVBeaconCourtman', 'Court Beacon Keeper', 'M', ('Caucasian', 'Hispanic', 'AfricanAmerican'), 'court'),
-    'leilani': ('FOLabUVLeilaniKamakau', 'Leilani Kamakau', 'F', ('Hispanic', 'Asian', 'AfricanAmerican', 'Caucasian'), 'camp'),
+    'leilani': ('FOLabUVLeilaniKamakau', 'Kalena Kamakau', 'F', ('Hispanic', 'Asian', 'AfricanAmerican', 'Caucasian'), 'camp'),
     'amos': ('FOLabUVWatcherAmos', 'Amos Tanabe', 'M', ('Asian', 'AsianOld', 'Caucasian'), 'watcher'),
-    'fang': ('FOLabUVFangJun', 'Fang Jun', 'M', ('Asian',), 'huang'),
+    'fang': ('FOLabUVFangJun', 'Qiao Wenbo', 'M', ('Asian',), 'huang'),
 }
 REF = {k: v[0] + 'REF' for k, v in PEOPLE.items()}
 REF.update({'fire': 'FOLabUVBeaconFireREF', 'locker': 'FOLabUVWatcherLockerREF', 'case': 'FOLabUVSurveyCaseREF'})
@@ -143,7 +143,7 @@ W = {
     'k_deal_r': "Twenty cells, now. Tell the signalman it's broken beyond fixing, and there's more where those came from.",
     'k_gone': "Get off my ridge.",
     'ck_hi': "Court's beacon. Court's man. Move along.",
-    # ----- The Count: Leilani Kamakau and Amos Tanabe -----
+    # ----- The Count: Kalena Kamakau and Amos Tanabe -----
     'l_hi': "Have you come down the valley? Did you see a boy? Seventeen, tall, a burn on his left hand.",
     'l_back': "Did he tell you? The man on the hill?",
     'l_help': "Who are you looking for?",
@@ -175,7 +175,7 @@ W = {
     'a_threat_no': "[FAILED] I've watched worse than you walk up that road. Forty kala.",
     'a_told': "Makana Kamakau. Tall, burn on his hand. Roped, three nights after the new moon, up the crater road with six others. "
               "Pirates walking them. Nobody comes back down that road.",
-    # ----- The Navigator's Glass: Fang Jun (Mandarin), Linda Moreno -----
+    # ----- The Navigator's Glass: Qiao Wenbo (Mandarin), Linda Moreno -----
     'f_help': "What did you lose?",
     'f_glass': "Here's your glass.",
     'f_book': "And your logbook.",
@@ -183,10 +183,10 @@ W = {
     'lm_glass_r': "Brass, glass, and it still turns. The court's builders would kill for this. Seventy kala.",
 }
 
-# Fang Jun's lines in Mandarin: key: (English, toned pinyin) (shown as pinyin with the English in brackets: huangland.shown)
+# Qiao Wenbo's lines in Mandarin: key: (English, toned pinyin) (shown as pinyin with the English in brackets: huangland.shown)
 M = {
-    'f_hi': ("You're a stranger. I'm Fang Jun, of the navigator's house. I've lost something. My master will have my hide.",
-             "Nǐ shì wàirén. Wǒ jiào Fāng Jùn, dǎohángjiā de rén. Wǒ diū le dōngxi. Shīfu huì dǎ sǐ wǒ."),
+    'f_hi': ("You're a stranger. I'm Qiao Wenbo, of the navigator's house. I've lost something. My master will have my hide.",
+             "Nǐ shì wàirén. Wǒ jiào Qiáo Wénbó, dǎohángjiā de rén. Wǒ diū le dōngxi. Shīfu huì dǎ sǐ wǒ."),
     'f_back': ("Did you find it? The glass?", "Nǐ zhǎodào le ma? Nà gè jìng?"),
     'f_help_r': ("The house's surveying glass, and its logbook. I took them up the valley to the old survey mark, to take the stars. "
                  "The wasps came. I ran. I left them in the case by the mark. Please bring them back.",
@@ -212,9 +212,36 @@ def words(k):
     return shown(k) if k in M else W[k]
 
 
+def zh_parts(k):
+    """A Mandarin line as the game's responses: [(shown words, toned pinyin said)], sentence by sentence (English and
+    pinyin paired), joined while the shown words stay within a subtitle's 150. One piece if the sentences don't pair.
+    The whole line in one response was cut by split_responses into pinyin and English pieces, voiced in English."""
+    import re
+    import huangland
+    english, pinyin = M[k]
+    cut = lambda t: [x for x in re.split(r'(?<=[.!?])\s+', t.strip()) if x]
+    en, zh = cut(english), cut(pinyin)
+    if len(en) != len(zh):
+        return [(huangland.shown(english, pinyin), pinyin)]
+    out, now = [], None
+    for e, z in zip(en, zh):
+        if now and len(huangland.shown(now[0] + ' ' + e, now[1] + ' ' + z)) > 150:
+            out.append(now)
+            now = None
+        now = (now[0] + ' ' + e, now[1] + ' ' + z) if now else (e, z)
+    out.append(now)
+    return [(huangland.shown(e, z), z) for e, z in out]
+
+
+def zh_responses(k):
+    return [{'emotion': 0, 'strength': 50, 'number': n + 1, 'sound': '', 'anim': 0, 'text': t}
+            for n, (t, _z) in enumerate(zh_parts(k))]
+
+
 def _zh():
     for k in ZH_SAID:
-        ZH[shown(k)] = M[k][1]
+        for t, z in zh_parts(k):
+            ZH[t] = z
 
 
 try:
@@ -495,17 +522,17 @@ STAGES = {
                (120, "I took the pirates' cells and told Hal the beacon is beyond fixing. It stays dark.", 'kb_dark', True),
                (125, "Hal saw through my lie about the beacon. The court took Keoni, and doesn't trust me.", 'kb_caught', True),
                (130, "Keoni is dead. The court put its own man on the beacon.", 'kb_dead', True)],
-    'count': [(10, "Leilani Kamakau's son Makana was taken by catchers before tribute day. A man on St. Louis Heights counts everyone "
+    'count': [(10, "Kalena Kamakau's son Makana was taken by catchers before tribute day. A man on St. Louis Heights counts everyone "
                    "marched up the crater road. She wants to know if Makana went up.", None, False),
               (20, "Makana was roped and marched up the crater road with six others, three nights after the new moon.", None, False),
-              (100, "I told Leilani the truth. She gave me her husband's rifle.", 'am_truth', True),
-              (110, "I told Leilani her son is working the Manoa farms. She'll wait for him.", 'am_lie', True),
-              (120, "I gave Leilani the watcher's tally. She read her son's name in it.", 'am_tally', True)],
-    'glass': [(10, "Fang Jun of the Huang's navigator's house left the house's surveying glass and logbook at the old survey mark up "
+              (100, "I told Kalena the truth. She gave me her husband's rifle.", 'am_truth', True),
+              (110, "I told Kalena her son is working the Manoa farms. She'll wait for him.", 'am_lie', True),
+              (120, "I gave Kalena the watcher's tally. She read her son's name in it.", 'am_tally', True)],
+    'glass': [(10, "Qiao Wenbo of the Huang's navigator's house left the house's surveying glass and logbook at the old survey mark up "
                    "Waimanalo's valley, running from the wasps. He wants them back.", None, False),
               (20, "I have the navigator's house's surveying glass.", None, False),
-              (100, "I gave Fang Jun the glass and the logbook. The house owes me face.", 'gl_both', True),
-              (110, "I gave Fang Jun the glass, and kept the logbook.", 'gl_glass', True),
+              (100, "I gave Qiao Wenbo the glass and the logbook. The house owes me face.", 'gl_both', True),
+              (110, "I gave Qiao Wenbo the glass, and kept the logbook.", 'gl_glass', True),
               (120, "I sold the navigator's house's glass to Linda Moreno for the court.", 'gl_sold', True)],
     'leads': [(10, "I found the arboretum's cold store at the head of Manoa valley.", None, False),
               (20, "I found Grandpa Kenji's still up Palolo valley.", None, False),
@@ -515,8 +542,8 @@ STAGES = {
 }
 OBJECTIVES = {
     'beacon': [(10, "Find out why the Pacific Heights beacon is dark", 'keoni'), (20, "Go back to Hal Brennan", 'hal')],
-    'count': [(10, "Ask the watcher on St. Louis Heights about Makana", 'amos'), (20, "Go back to Leilani", 'leilani')],
-    'glass': [(10, "Find the navigator's glass at the old survey mark", 'case'), (20, "Bring the glass to Fang Jun", 'fang')],
+    'count': [(10, "Ask the watcher on St. Louis Heights about Makana", 'amos'), (20, "Go back to Kalena", 'leilani')],
+    'glass': [(10, "Find the navigator's glass at the old survey mark", 'case'), (20, "Bring the glass to Qiao Wenbo", 'fang')],
     'leads': [(n * 10 + k, t, '%s%d' % ('clue' if k == 0 else 'cache', n))
               for n, (t0, t1) in enumerate([("Find Dr. Kaimana's field notes at the upper Manoa ranger post", "Find the arboretum's cold store up Manoa"),
                                             ("Find Kenji's tin at the bend above the Palolo squatters", "Find Kenji's still up Palolo"),
@@ -1051,6 +1078,8 @@ def apply(pr, gd, P=None):
         for nm, (e, _n) in ITEMS.items():
             end = re.sub(r'\b%s\b' % nm, e, end)
         l = aq.new_line_plain(gd, pr, tp, keys[quest], who_key[who], words(w), goodbye=bye, conditions=conds(cs))
+        if w in M:
+            l['responses'] = zh_responses(w)
         if skill:
             import skillcheck
             l['skill'] = skillcheck.skill_key(gd, skill)

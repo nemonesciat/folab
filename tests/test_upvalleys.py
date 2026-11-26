@@ -66,8 +66,20 @@ def test_mandarin():
     for k, (en, py) in U.M.items():
         assert en and py and not re.search(r'[一-鿿]', py), k
 
+def test_mandarin_pieces():
+    # every Mandarin piece is a sentence pair (shown and said), each within a subtitle unless one sentence is longer;
+    # nobody of ours has a name taken by another speaker of the mod (the story session's gate)
+    U._zh()
+    for k in U.M:
+        parts = U.zh_parts(k)
+        assert len(parts) >= 1 and all(t in U.ZH and U.ZH[t] == z for t, z in parts), k
+        assert ' '.join(t for t, _z in parts) != U.shown(k) or len(parts) == 1, k
+        assert all(len(t) <= 150 for t, _z in parts) or len(parts) == 1, k
+    names = [v[1] for v in U.PEOPLE.values()]
+    assert 'Fang Jun' not in names and not any(n.split()[0] == 'Leilani' for n in names)
+
 
 if __name__ == '__main__':
-    for f in (test_lines, test_every_topic_has_a_line, test_ways_through, test_scripts_shape, test_leads, test_mandarin):
+    for f in (test_lines, test_every_topic_has_a_line, test_ways_through, test_scripts_shape, test_leads, test_mandarin, test_mandarin_pieces):
         f()
     print('ok')
