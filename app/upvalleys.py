@@ -50,7 +50,7 @@ import re
 
 import recordio
 
-LABEL = 'Up the valleys: the dark beacon, the count, the navigator\'s glass, and leads up four valleys'
+LABEL = 'Valley quests: the dark beacon, the count, the navigator\'s glass, and leads up four valleys'
 QUESTS = {'beacon': 'FOLabUVDarkBeacon', 'count': 'FOLabUVTheCount', 'glass': 'FOLabUVNavigatorsGlass', 'leads': 'FOLabUVLeads'}
 NAMES = {'beacon': 'The Dark Beacon', 'count': 'The Count', 'glass': "The Navigator's Glass", 'leads': 'Up the Valleys'}
 VOICE = [QUESTS[k] for k in ('beacon', 'count', 'glass')]
