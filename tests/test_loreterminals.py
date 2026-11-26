@@ -11,7 +11,7 @@ import terminals            # noqa: E402
 def test_texts_read():
     edids = set()
     for key, S in L.SITES.items():
-        spec = terminals.plan(S['text'].replace('{cache}', 'XREF'))
+        spec = terminals.plan(L.text_of(key).replace('{cache}', 'XREF'))
         assert spec['edid'].startswith('FOLabLore'), key
         assert spec['edid'] not in edids, key
         edids.add(spec['edid'])

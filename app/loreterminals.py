@@ -580,6 +580,72 @@ Says:
 """)
 
 
+# ---------- pointers to waikiki-loot-and-rewards' bonus finds (FOLabBonus*, outside; its plan D:\FOLab-bonus\bonus_plan.json) ----------
+# site: (entry title, words, (x, y) of the find it points to, its kind). The words name a landmark and a direction, so they
+# hold if the find moves a little; `bonus_check` says how far each find stands from where it was when these were written.
+BONUS = {
+    'manoa_ranger': ("(typed long after) The teacher's box", """
+  The teacher from the old school down the valley carried her lockbox out
+  when the school was stripped.
+  She never got further than the slope below the university.
+  Books in it, she said. Locked, she said.
+  It's still down there, a long walk south-west of the camp by the university.""",
+  (-79266, 6900), 'book'),
+    'kaimuki_collector': ('Note on the harbour watch', """
+  The watch on the tower by the Ala Wai Boat Harbor keeps a lockbox up top
+  and forgets to lock the ladder.
+  Remind them. Or don't, and see what's in it first.""", (-85100, -15060), 'lookout'),
+    'coral_home': ('(typed long after) The Aquarium box', """
+  Somebody robbed the Aquarium's offices and ran inland with a lockbox.
+  Dropped it, too heavy. It's up the slope toward Kaimuki,
+  a long walk south-west of the Kaimuki squatters' camp.""", (-68506, -27407), 'book'),
+    'waikiki_shell': ('(typed long after) The park lookout', """
+  There's a lookout over the park by the old Ferris wheel.
+  Whoever sits up there keeps a lockbox.""", (-81108, -35348), 'lookout'),
+    'kamiloiki_home': ('(typed long after) The scout', """
+  A scout watched this valley from the ridge for a season.
+  He left a lockbox up there when he went.
+  High on the ridge, a short walk south-west of the Kamiloiki squatters' camp.""",
+  (112328, 14428), 'book'),
+    'hsuyun': ('A note left on the altar', """
+  A family from the Heights stopped here on their way down from the crater road.
+  They asked for a blessing and left without their lockbox. It was too heavy, they said.
+  They left it up the hill, a long walk north-east of the Pacific Heights lookout.""",
+  (-137244, 56511), 'book'),
+    'pali_checkpoint': ('(typed long after) The tower', """
+  There's a tower a short walk south-west of this post. Climb it.
+  The lockbox at the top isn't anybody's any more.""", (-45269, 110077), 'lookout'),
+    'kailua_post': ('Undelivered: to whoever finds this', """
+  "Took the box from Kaneohe and hid it on the shore, east of the old Marine base,
+  before the patrols got to me.
+  If you're reading this, I didn't come back for it." (No stamp. No return address.)""",
+  (26564, 210437), 'book'),
+}
+
+
+def text_of(key):
+    """A site's text with its pointer to a bonus find put in as an entry before the cache's own item (or last)."""
+    text = SITES[key]['text']
+    if key not in BONUS:
+        return text
+    title, words, _p, _k = BONUS[key]
+    entry = '== %s\nSays:\n%s\n' % (title, words.strip('\n'))
+    m = re.search(r'^== .*\nUnlocks:', text, re.M)
+    return text[:m.start()] + entry + text[m.start():] if m else text + entry
+
+
+def bonus_check(plan_path=r'D:\FOLab-bonus\bonus_plan.json', far=1500.0):
+    """[(site, kind, distance to the nearest find of that kind)]: each pointer against the bonus plan; a distance over `far`
+    means the find moved too far for the words."""
+    import json
+    rows = json.load(open(plan_path, encoding='utf-8'))['rows']
+    out = []
+    for key, (_t, _w, (x, y), kind) in BONUS.items():
+        d = min((math.hypot(r['p'][0] - x, r['p'][1] - y) for r in rows if r['kind'] == kind), default=1e9)
+        out.append((key, kind, round(d), d <= far))
+    return out
+
+
 # ---------- planning ----------
 def _ed(gd, pr, b):
     from secretcaches import _ed as e
@@ -763,7 +829,7 @@ def ops(gd, pr, P=None):
                                 'props': {'lock': dict(SAFE_LOCK)}}})
             forms.own[cache_ref.lower()] = (rk, {'type': 'REFR', 'flags': 0x400, 'subs': [{'tag': 'EDID', 'label': 'Editor ID', 'kind': 'z', 'value': cache_ref}]})
             cache_rep = {'name': name, 'items': got, 'from terminal': round(math.dist(row['cache_p'][:2], row['p'][:2]))}
-        spec = terminals.plan(S['text'].replace('{cache}', cache_ref).replace('{HEAD}', HEAD))
+        spec = terminals.plan(text_of(row['key']).replace('{cache}', cache_ref).replace('{HEAD}', HEAD))
         t_ops, t_keys = terminals.ops(gd, pr, spec, forms)
         for o in t_ops:
             k = _new_key(pr)
@@ -779,6 +845,10 @@ def ops(gd, pr, P=None):
                                  'near': row['near'], 'cache': cache_rep})
     for pl in places:
         pl['key'] = _new_key(pr)
+    try:
+        rep['bonus'] = bonus_check()            # (each pointer against the loot step's plan: found within 1,500?)
+    except OSError:
+        rep['bonus'] = 'no bonus plan to check against'
     return out + places, rep
 
 
