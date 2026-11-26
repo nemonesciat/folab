@@ -872,3 +872,80 @@ INVENTED = [
     "Pre-war martial-law checkpoints at the H-3, Likelike and Pali tunnels held the roads from the city on the morning of "
     "the bombs (h3_checkpoint, likelike_checkpoint, pali_checkpoint)",
 ]
+
+
+# ---------- the pointers added to terminals already in the mod (the first lore step went in before them) ----------
+BONUS_LABEL = "Lore terminals: pointers to the bonus lockboxes"
+
+
+def _term_key(pr, edid):
+    return next((k for k, r in pr.records.items() if r.get('type') == 'TERM' and recordio.field(r, 'EDID') == edid), None)
+
+
+def bonus_plan(gd, pr):
+    rows, skipped = [], []
+    for key in BONUS:
+        edid = terminals_edid(key)
+        k = _term_key(pr, edid)
+        if not k:
+            skipped.append((key, edid + ' is not in the mod'))
+            continue
+        title = BONUS[key][0]
+        if any(s['tag'] == 'ITXT' and s.get('value') == title for s in pr.records[k]['subs']):
+            skipped.append((key, 'has its pointer already'))
+            continue
+        rows.append({'key': key, 'edid': edid, 'record': k, 'entry': title})
+    return {'rows': rows, 'skipped': skipped}
+
+
+def terminals_edid(key):
+    return re.search(r'^Terminal:\s*(\S+)', SITES[key]['text'], re.M).group(1)
+
+
+def bonus_ops(gd, pr, P=None):
+    """Each terminal's record made again from its text with the pointer in (a 'record' op on its own key). The record made
+    from the text without the pointer must be the record the mod has, byte for byte as data: else it was changed since, and
+    is left alone."""
+    import json
+    import terminals
+    P = P or bonus_plan(gd, pr)
+    forms = terminals.mod_forms(gd, pr)
+    out, rep = [], {'made': [], 'skipped': list(P['skipped'])}
+    for row in P['rows']:
+        S = SITES[row['key']]
+        cache_ref = (S['cache'][0] + 'REF') if S['cache'] else ''
+        have = pr.records[row['record']]
+
+        def made(text):
+            spec = terminals.plan(text.replace('{cache}', cache_ref).replace('{HEAD}', HEAD))
+            return terminals.records(gd, forms, spec, {})['terminal']
+        same = json.dumps(made(S['text'])['subs'], sort_keys=True) == json.dumps(have['subs'], sort_keys=True)
+        if not same:
+            rep['skipped'].append((row['key'], 'the terminal differs from what its text makes: left alone'))
+            continue
+        new = made(text_of(row['key']))
+        new = dict(have, subs=new['subs'])
+        out.append({'op': 'record', 'key': row['record'], 'record': new})
+        rep['made'].append(row['edid'])
+    try:
+        rep['bonus'] = bonus_check()
+    except OSError:
+        rep['bonus'] = 'no bonus plan to check against'
+    return out, rep
+
+
+def step(name):
+    """skillsteps_into_waikiki.py's 'module:name' form: 'bonus' is the pointers step."""
+    assert name == 'bonus'
+
+    class _Step:
+        LABEL = BONUS_LABEL
+
+        @staticmethod
+        def plan(gd, pr):
+            return bonus_plan(gd, pr)
+
+        @staticmethod
+        def ops(gd, pr, P=None):
+            return bonus_ops(gd, pr, P)
+    return _Step
