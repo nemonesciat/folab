@@ -609,9 +609,10 @@ BONUS = {
   (112328, 14428), 'book'),
     'hsuyun': ('A note left on the altar', """
   A family from the Heights stopped here on their way down from the crater road.
-  They asked for a blessing and left without their lockbox. It was too heavy, they said.
-  They left it up the hill, a long walk north-east of the Pacific Heights lookout.""",
-  (-137244, 56511), 'book'),
+  They asked for a blessing, then went on over the mountain to the windward side.
+  Their lockbox was too heavy, they said. They left it in the hills,
+  a long walk south-west of Kaneohe.""",
+  (-75878, 179290), 'book'),
     'pali_checkpoint': ('(typed long after) The tower', """
   There's a tower a short walk south-west of this post. Climb it.
   The lockbox at the top isn't anybody's any more.""", (-45269, 110077), 'lookout'),
@@ -936,16 +937,69 @@ def bonus_ops(gd, pr, P=None):
 
 def step(name):
     """skillsteps_into_waikiki.py's 'module:name' form: 'bonus' is the pointers step."""
-    assert name == 'bonus'
+    assert name in ('bonus', 'reword')
 
     class _Step:
-        LABEL = BONUS_LABEL
+        LABEL = BONUS_LABEL if name == 'bonus' else 'Lore terminals: a pointer reworded'
 
         @staticmethod
         def plan(gd, pr):
-            return bonus_plan(gd, pr)
+            return bonus_plan(gd, pr) if name == 'bonus' else reword_plan(gd, pr)
 
         @staticmethod
         def ops(gd, pr, P=None):
-            return bonus_ops(gd, pr, P)
+            return bonus_ops(gd, pr, P) if name == 'bonus' else reword_ops(gd, pr, P)
     return _Step
+
+
+# ---------- entries reworded after their install (the old words, so a record is changed only if it is as they made it) ----------
+WAS = {
+    'hsuyun': ('A note left on the altar', """
+  A family from the Heights stopped here on their way down from the crater road.
+  They asked for a blessing and left without their lockbox. It was too heavy, they said.
+  They left it up the hill, a long walk north-east of the Pacific Heights lookout."""),
+}
+
+
+def reword_plan(gd, pr):
+    rows, skipped = [], []
+    for key in WAS:
+        edid = terminals_edid(key)
+        k = _term_key(pr, edid)
+        (rows.append({'key': key, 'edid': edid, 'record': k}) if k else skipped.append((key, edid + ' is not in the mod')))
+    return {'rows': rows, 'skipped': skipped}
+
+
+def reword_ops(gd, pr, P=None):
+    """Each entry in WAS put in its new words: the record is remade only if it is exactly what the old words made."""
+    import json
+    import terminals
+    P = P or reword_plan(gd, pr)
+    forms = terminals.mod_forms(gd, pr)
+    out, rep = [], {'made': [], 'skipped': list(P['skipped'])}
+    for row in P['rows']:
+        S = SITES[row['key']]
+        cache_ref = (S['cache'][0] + 'REF') if S['cache'] else ''
+        have = pr.records[row['record']]
+
+        def made(bonus):
+            keep = BONUS[row['key']]
+            BONUS[row['key']] = bonus
+            try:
+                text = text_of(row['key'])
+            finally:
+                BONUS[row['key']] = keep
+            spec = terminals.plan(text.replace('{cache}', cache_ref).replace('{HEAD}', HEAD))
+            return terminals.records(gd, forms, spec, {})['terminal']
+        title, words = WAS[row['key']]
+        before = made((title, words) + BONUS[row['key']][2:])
+        if json.dumps(before['subs'], sort_keys=True) != json.dumps(have['subs'], sort_keys=True):
+            rep['skipped'].append((row['key'], 'not as the old words made it: left alone'))
+            continue
+        out.append({'op': 'record', 'key': row['record'], 'record': dict(have, subs=made(BONUS[row['key']])['subs'])})
+        rep['made'].append(row['edid'])
+    try:
+        rep['bonus'] = bonus_check()
+    except OSError:
+        rep['bonus'] = 'no bonus plan to check against'
+    return out, rep
