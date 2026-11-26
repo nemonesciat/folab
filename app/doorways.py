@@ -292,6 +292,15 @@ class Audit:
             import floatfit
             import indoors
             cat = self.catalogue_slots()
+            if base.startswith('+') and base not in cat:
+                # (a closed copy of a game building, closedswap's FOLabClosed<its editor ID>, same frame: its doorways)
+                e = recordio.field(self.pr.records.get(base) or {'subs': []}, 'EDID') or ''
+                if e.startswith('FOLabClosed'):
+                    orig = next((k for k, (ed, _w) in cat.items() if ed == e[len('FOLabClosed'):]), None)
+                    if orig:
+                        edid, ways = cat[orig]
+                        self.cache[base] = (e, list(ways) + list(EXTRA_SLOTS.get(edid, ())))
+                        return self.cache[base]
             if base in cat:
                 edid, ways = cat[base]
                 self.cache[base] = (edid, list(ways) + list(EXTRA_SLOTS.get(edid, ())))
@@ -310,9 +319,14 @@ class Audit:
         return self.cache[base]
 
     def _game_shut(self, base):
-        if base.startswith('+'):
-            return False
         import townbuild
+        if base.startswith('+'):
+            # (a closed copy of a game piece, closedswap's FOLabClosed<its editor ID>: as the game piece it copies)
+            e = recordio.field(self.pr.records.get(base) or {'subs': []}, 'EDID') or ''
+            if not e.startswith('FOLabClosed'):
+                return False
+            f = next((f for f, (_n, r) in self.gd.forms.items() if r.tag != 'DOOR' and self.gd.edid(f) == e[len('FOLabClosed'):]), None)
+            return bool(f is not None and townbuild._shuts(self.gd, f))
         try:
             f = self.gd.from_key(base)
             return self.gd.forms[f][1].tag != 'DOOR' and townbuild._shuts(self.gd, f)
