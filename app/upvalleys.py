@@ -55,6 +55,7 @@ QUESTS = {'beacon': 'FOLabUVDarkBeacon', 'count': 'FOLabUVTheCount', 'glass': 'F
 NAMES = {'beacon': 'The Dark Beacon', 'count': 'The Count', 'glass': "The Navigator's Glass", 'leads': 'Up the Valleys'}
 VOICE = [QUESTS[k] for k in ('beacon', 'count', 'glass')]
 VOICE_ONLY = None
+REUSE_FROM = r'D:\FOLab-speech\home5'      # (the rehearsal's FOLab home: its takes, by line words, onto these lines)
 ZH = {}
 
 # the people: key: (editor ID, name, sex, races, kind)
@@ -1104,6 +1105,15 @@ def apply(pr, gd, P=None):
              [{'op': 'record_new', 'record': r} for r in compiled] + term_ops, merge=True)
     global VOICE_ONLY
     VOICE_ONLY = sorted(k for k, r in pr.records.items() if r.get('type') == 'INFO' and k not in before_info) or ['+NOTHING']
+    # the rehearsal's takes, by each line's words (worthtalk.reuse): only what had none is left to voice
+    import os
+    import worthtalk
+    here = os.path.normcase(os.path.abspath(os.path.dirname(os.path.dirname(worthtalk.library_dir(pr)))))
+    if REUSE_FROM and os.path.isdir(REUSE_FROM) and os.path.normcase(os.path.abspath(REUSE_FROM)) != here:
+        got = worthtalk.reuse(gd, pr, REUSE_FROM, VOICE, only=set(VOICE_ONLY))
+        rep['reused'] = {k: v for k, v in got.items() if k != 'missing'}
+        VOICE_ONLY = got['missing'] or ['+NOTHING']
+        rep['voice_still'] = len(got['missing'])
     rep.update({'lines': len(compiled), 'people': {k: recordio.field(pr.records[v], 'EDID') for k, v in people.items()},
                 'faces': sorted(used), 'at': {k: (v.get('world') or v.get('p'))[:3] for k, v in S.items() if isinstance(v, dict) and ('world' in v or 'p' in v)}})
     return rep
