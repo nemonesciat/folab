@@ -617,10 +617,10 @@ BONUS = {
   There's a tower a short walk south-west of this post. Climb it.
   The lockbox at the top isn't anybody's any more.""", (-45269, 110077), 'lookout'),
     'kailua_post': ('Undelivered: to whoever finds this', """
-  "Took the box from Kaneohe and hid it on the shore, east of the old Marine base,
-  before the patrols got to me.
+  "Took the box out of Kaneohe and got as far as the hills east of the Windward Mall
+  before the patrols got close. Hid it up there.
   If you're reading this, I didn't come back for it." (No stamp. No return address.)""",
-  (26564, 210437), 'book'),
+  (-48652, 195829), 'book'),
 }
 
 
@@ -958,6 +958,10 @@ WAS = {
   A family from the Heights stopped here on their way down from the crater road.
   They asked for a blessing and left without their lockbox. It was too heavy, they said.
   They left it up the hill, a long walk north-east of the Pacific Heights lookout."""),
+    'kailua_post': ('Undelivered: to whoever finds this', """
+  "Took the box from Kaneohe and hid it on the shore, east of the old Marine base,
+  before the patrols got to me.
+  If you're reading this, I didn't come back for it." (No stamp. No return address.)"""),
 }
 
 
