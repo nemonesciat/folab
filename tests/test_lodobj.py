@@ -75,8 +75,15 @@ folder = os.path.join(out, 'meshes', 'landscape', 'lod', edid, 'blocks')
 made = sorted(os.listdir(folder))
 check('blocks are counted from the world\'s south-west cell', made == sorted('%s.level4.x%d.y%d.nif' % (edid, sw[0], sw[1] + 4 * k) for k in (0, 1)), made)
 b = lodobj.read_block_nif(open(os.path.join(folder, '%s.level4.x%d.y%d.nif' % (edid, sw[0], sw[1])), 'rb').read())
-one = st.of(with_far)
+raw = st.of(with_far)
+one = [lodobj._weld(s) for s in raw]
 nv, nt = sum(len(s['p']) // 3 for s in one), sum(len(s['i']) // 3 for s in one)
+
+
+def corners(shapes):
+    return [tuple(round(v, 2) for v in s['p'][3 * i:3 * i + 3] + s['uv'][2 * i:2 * i + 2]) for s in shapes for i in s['i']]
+check('welding draws the same triangles with fewer corners (exact copies made one)', corners(one) == corners(raw) and
+      nv < sum(len(s['p']) // 3 for s in raw), (nv, sum(len(s['p']) // 3 for s in raw)))
 check('the first block holds both houses\' corners and triangles', len(b['verts']) == 2 * nv and sum(len(s) for s in b['segments']) == 2 * nt, (len(b['verts']), nv))
 check('in the segment of the cell they stand in (1, 2 of the block: number 6)', len(b['segments'][6]) == 2 * nt and not any(b['segments'][k] for k in range(16) if k != 6))
 check('counted from the block\'s corner, where the houses stand', all(4096 <= v[0] <= 3 * 4096 and 2 * 4096 <= v[1] <= 4 * 4096 for v in b['verts']) and

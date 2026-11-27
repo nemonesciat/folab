@@ -43,6 +43,7 @@ TILE = 256                  # each texture's square on the sheet, in pixels (at 
 OWN_BIG = 500.0             # a thing of the mod's own this big with no far model of its own is shown far off as it is
 MAX_REPEAT = 4              # a texture a stand-in repeats more than this many times across is shown this many
 TREE_WORDS = ('tree', 'palm', 'bush', 'shrub', 'cactus', 'joshua', 'yucca')
+FAR_DIR = 'meshes\\folab\\far\\'     # (far models FOLab made for game models that have none: farmake.far_path)
 
 
 class LodError(ValueError):
@@ -136,20 +137,31 @@ class StandIns:
         self.pr = pr                # (a base that is one of the mod's own records comes as its key, '+...')
         self.by_model = {}
         self.models = {}
+        self.paths = {}
 
     def of_model(self, model):
         low = (model or '').lower().replace('/', '\\')
         if low not in self.by_model:
             shapes = None
             if low.endswith('.nif'):
-                path = 'meshes\\' + low[:-4] + '_lod.nif'
-                try:
-                    data = self.gd.read_file(path)
-                    shapes = [s for s in nif.mesh_from_nif(data) if s['uv'] and s['i']] if data else None
-                except Exception:
-                    shapes = None
+                # (beside the model, as the game keeps its own; else one FOLab made for a game model, farmake.far_path,
+                # kept apart from the game's own paths)
+                for path in ('meshes\\' + low[:-4] + '_lod.nif', FAR_DIR + low[:-4] + '_lod.nif'):
+                    try:
+                        data = self.gd.read_file(path)
+                        shapes = [s for s in nif.mesh_from_nif(data) if s['uv'] and s['i']] if data else None
+                    except Exception:
+                        shapes = None
+                    if shapes:
+                        self.paths[low] = path
+                        break
             self.by_model[low] = shapes or None
         return self.by_model[low]
+
+    def path_of(self, model):
+        """The far model's file for a model, or None."""
+        low = (model or '').lower().replace('/', '\\')
+        return self.paths.get(low) if self.of_model(model) else None
 
     def of(self, base_fid):
         if base_fid not in self.models:
@@ -264,6 +276,34 @@ def _normals(pos, idx):
     for x, y, z in n:
         L = math.sqrt(x * x + y * y + z * z) or 1.0
         out.append((x / L, y / L, z / L))
+    return out
+
+
+_WELDED = {}
+
+
+def _weld(sh):
+    """A shape with corners that are exact copies of each other (same spot, same place on the picture, same facing) made one:
+    what's drawn is the same, with fewer corners. A block holds MAX_VERTS corners in all, and on 27 Nov 2026 Waikiki's busiest
+    block, (-37, 8), had 65,947 for what's built alone (far versions laid out a corner a triangle), so six of the new lava wall
+    pieces were left out of the far view; welded, it has 62,288."""
+    got = _WELDED.get(id(sh))
+    if got is not None and got[0] is sh:
+        return got[1]
+    p, uv, idx = sh['p'], sh['uv'], sh['i']
+    nn = _normals(p, idx)
+    at, np_, nuv, remap = {}, [], [], []
+    for k in range(len(p) // 3):
+        key = (round(p[3 * k], 2), round(p[3 * k + 1], 2), round(p[3 * k + 2], 2), round(uv[2 * k], 4), round(uv[2 * k + 1], 4),
+               round(nn[k][0], 2), round(nn[k][1], 2), round(nn[k][2], 2))
+        j = at.get(key)
+        if j is None:
+            j = at[key] = len(np_) // 3
+            np_ += p[3 * k:3 * k + 3]
+            nuv += uv[2 * k:2 * k + 2]
+        remap.append(j)
+    out = dict(sh, p=np_, uv=nuv, i=[remap[i] for i in idx])
+    _WELDED[id(sh)] = (sh, out)
     return out
 
 
@@ -383,6 +423,7 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
     put(os.path.join(tex_dir, edid + '.Buildings.dds'), lodgen.dds_dxt1(px, size))
     put(os.path.join(tex_dir, edid + '.Buildings_n.dds'), lodgen.dds_dxt1([(128, 128, 255)] * (64 * 64), 64))
     dropped = 0
+    dropped_built = 0
     for n, ((bx, by), items) in enumerate(sorted(blocks.items())):
         if progress:
             progress(n, len(blocks))
@@ -395,8 +436,10 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
         # lengths, its 6 screens and the freighter were left out, 23 Nov 2026)
         items.sort(key=lambda q: (q[7], -_size(q[0]) * q[5]))
         for shapes, x, y, z, rz, s, seg, _grows in items:
+            shapes = [_weld(sh) for sh in shapes]
             if len(verts) + sum(len(sh['p']) // 3 for sh in shapes) > MAX_VERTS or                     ntri + sum(len(sh['i']) // 3 for sh in shapes) > MAX_TRIS:
                 dropped += 1
+                dropped_built += not _grows
                 continue
             ntri += sum(len(sh['i']) // 3 for sh in shapes)
             c, sn = math.cos(rz), math.sin(rz)
@@ -418,7 +461,7 @@ def generate(gd, pr, world, out, progress=None, trees=False, like=None, plants=F
         tangents = b''.join(struct.pack('<3f', 1.0, 0.0, 0.0) for _ in verts) + b''.join(struct.pack('<3f', 0.0, 1.0, 0.0) for _ in verts)
         put(os.path.join('meshes', 'landscape', 'lod', edid, 'blocks', '%s.level4.x%d.y%d.nif' % (edid, bx, by)),
             block_nif(edid, bx, by, verts, normals, tangents, uvs, segments))
-    return {'blocks': len(blocks), 'things': shown, 'skipped': skipped, 'left_out': left_out, 'dropped': dropped, 'kinds': len(kinds), 'textures': len(sheet.repeat),
+    return {'blocks': len(blocks), 'things': shown, 'skipped': skipped, 'left_out': left_out, 'dropped': dropped, 'dropped_built': dropped_built, 'kinds': len(kinds), 'textures': len(sheet.repeat),
             'sheet': size, 'files': len(files), 'folder': out}
 
 
@@ -441,7 +484,7 @@ class Far:
         if base not in self.paths:
             got = None
             if base in self.gd.forms and self.st.of(base):
-                got = 'meshes\\' + self.st.models[base].lower().replace('/', '\\')[:-4] + '_lod.nif'
+                got = self.st.path_of(self.st.models[base])
             self.paths[base] = got
         return self.paths[base]
 
@@ -454,7 +497,7 @@ class Far:
         if not model.endswith('.nif'):
             return None
         if model not in self.paths:
-            self.paths[model] = 'meshes' + chr(92) + model[:-4] + '_lod.nif' if self.st.of_model(model) else None
+            self.paths[model] = self.st.path_of(model)
         return self.paths[model]
 
     def _cells(self, world, tx, ty):
