@@ -356,9 +356,14 @@ class ModIndex:
                 flags = f.get('DATA', b'\0')[0] if f.get('DATA') else 0
                 grid = list(struct.unpack_from('<ii', f['XCLC'], 0)) if len(f.get('XCLC', b'')) >= 8 else None
                 full = f.get('FULL')
-                self.cells[rec.formid] = {'edid': e, 'grid': grid, 'world': world, 'interior': bool(flags & 1),
+                # a world's persistent cell sits straight in its children group (not in a block), and carries
+                # an XCLC of (0, 0) when written as the game files it: by its group, not by a missing grid
+                in_block = any(gt in (4, 5) for gt, _, _ in groups)
+                persistent = world is not None and (grid is None or not in_block)
+                self.cells[rec.formid] = {'edid': e, 'grid': None if persistent else grid, 'world': world,
+                                          'interior': bool(flags & 1),
                                           'name': tes4.zstr(full) if full else None,
-                                          'persistent': world is not None and grid is None}
+                                          'persistent': persistent}
 
     # matching the running game's forms to the plugin's
 
