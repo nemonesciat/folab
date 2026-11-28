@@ -148,6 +148,12 @@ class Judge:
                 unsure.append(k)
         return t, got, unsure
 
+    def silent(self, k):
+        """A goodbye that says only "..." (the game's Generic 177392, for the voices its spoken ones leave out): it ends
+        the talk, but in silence; such a speaker gets a spoken one of the mod's own too (the Workshop, 27 Nov 2026)."""
+        l = next((l for kk, l, _q in self.lines if kk == k), None)
+        return bool(l) and all(r['text'].strip() in ('', '...') for r in l['responses'])
+
     def bases(self):
         """{NPC_ key: refs} standing in the mod's cells and its source plugin's (a levelled list's entries each)."""
         gd, pr = self.gd, self.pr
@@ -199,6 +205,7 @@ class Judge:
             t, got, unsure = g
             rows.append({'base': b, 'edid': recordio.field(self.rec(b), 'EDID'), 'refs': n, 'vt': t['vt'], 'vt_edid': t['vt_edid'],
                          'female': t['female'], 'child': t['child'], 'talks': b in says, 'goodbyes': len(got), 'unsure': len(unsure),
+                         'spoken': sum(1 for k in got if not self.silent(k)),
                          'got': got[:3], 'unsure_ex': unsure[:3]})
         return rows
 
@@ -355,7 +362,7 @@ def words(pr, base, edid, child):
 def ops(gd, pr, rows=None):
     J = Judge(gd, pr)
     rows = J.audit() if rows is None else rows
-    need = [r for r in rows if not r['goodbyes']]
+    need = [r for r in rows if not r['goodbyes'] or not r.get('spoken', 1)]
     quest = next((k for k, r in pr.records.items() if r.get('type') == 'QUST' and recordio.field(r, 'EDID') == QUEST), None)
     if quest is None:
         raise ValueError('no %s quest in the mod' % QUEST)

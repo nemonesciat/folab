@@ -58,6 +58,9 @@ check('MaleAdult09 gets GenericAdult\'s goodbye', any(k in generic for k in g[1]
 g = J.goodbyes(silent)
 check('VoiceDoNotRecordF gets none of the generic quests\' goodbyes', not any(k in generic for k in g[1]), g[1][:4])
 before = len(g[1])
+hushed = npc_of('MaleAdult06')
+g = J.goodbyes(hushed)
+check('MaleAdult06 gets only the game\'s silent "..." goodbye (an exit, not a spoken one)', g[1] and all(J.silent(k) for k in g[1]), g[1][:4])
 
 # ---------- a goodbye of the mod's own ----------
 qk = '+%06X' % pr.next_id
