@@ -203,6 +203,124 @@ class Judge:
         return rows
 
 
+def traps(gd, pr, J=None):
+    """Lines of the mod's that hand the player choices (TCLT): while choices are shown the topic list, and its goodbye, is not.
+    From each, the choices are followed (a topic's lines that can pass for the speaker, the quest's and the line's
+    conditions apart) until a line ends the talk (goodbye flag) or offers no choices (the topic list comes back).
+    [{line, who, text, status}]: 'ok' (a way out through lines that surely pass), 'maybe' (only through lines with a
+    condition not judged here: a quest's variable or stage), 'trap' (none). A line with choices and no single speaker
+    (no GetIsID) is judged for each speaker standing in the mod's cells who could say it: never assumed."""
+    J = J or Judge(gd, pr)
+    topic_lines = {}
+
+    def lines_of(t):
+        if t not in topic_lines:
+            out = []
+            for k in aq.lines_of_topic(gd, pr, t):
+                r = J.rec(k)
+                if not r:
+                    continue
+                l = qr.info_plain(json.loads(json.dumps(r)))
+                qrec = J.rec(l['quest']) if l['quest'] else None
+                q = qr.quest_plain(json.loads(json.dumps(qrec))) if qrec else None
+                out.append((k, l, q))
+            topic_lines[t] = out
+        return topic_lines[t]
+
+    def can(l, q, who, t, fac):
+        if q is None:
+            return False
+        running = True if (q['flags'].get('start_enabled')) else None
+        pq, pl = J.passes(q['conditions'], who, t, fac), J.passes(l['conditions'], who, t, fac)
+        if False in (pq, pl):
+            return False
+        return True if (pq, pl, running) == (True, True, True) else None
+
+    def out_of(start, who):
+        t, fac = J.traits(who), J.factions(who)
+        if not t:
+            return 'maybe'
+        best = 'trap'
+        seen = set()
+        todo = [(c, True) for c in start['choices']]
+        while todo:
+            topic, sure = todo.pop()
+            if (topic, sure) in seen:
+                continue
+            seen.add((topic, sure))
+            for k, l, q in lines_of(topic):
+                p = can(l, q, who, t, fac)
+                if p is False:
+                    continue
+                s = sure and p is True
+                if l['flags'].get('goodbye') or not l['choices']:
+                    if s:
+                        return 'ok'
+                    best = 'maybe'
+                else:
+                    todo += [(c, s) for c in l['choices']]
+        return best
+
+    speakers = None
+    rows = []
+    for k, r in sorted(pr.records.items()):
+        if r.get('type') != 'INFO' or not k.startswith('+'):
+            continue
+        l = qr.info_plain(json.loads(json.dumps(r)))
+        if not l['choices'] or l['flags'].get('goodbye'):
+            continue
+        who = [c['p1'] for c in l['conditions'] if c.get('fn') == 72 and c.get('op') == '=' and c.get('value') == 1 and isinstance(c.get('p1'), str)]
+        if not who:
+            if speakers is None:
+                speakers = list(J.bases())
+            q = J.rec(l['quest']) if l['quest'] else None
+            qp = qr.quest_plain(json.loads(json.dumps(q))) if q else None
+            who = [b for b in speakers if J.traits(b) and can(l, qp, b, J.traits(b), J.factions(b)) is not False]
+        text = ' '.join(x['text'] for x in l['responses'])[:80]
+        for w in who:
+            rows.append({'line': k, 'who': w, 'edid': recordio.field(J.rec(w) or {'subs': []}, 'EDID'), 'text': text, 'status': out_of(l, w)})
+    return rows
+
+
+LEAVE = 'FOLabLeave'                    # (the choice that always ends a talk)
+LEAVE_SAYS = "I'll be going."           # (the player's words on the button)
+
+
+def leave_ops(gd, pr, rows=None):
+    """(ops, report): every line of the mod's with choices whose way out isn't sure (traps' 'maybe' or 'trap') gets one more
+    choice, LEAVE: a topic of the mod's own (not top-level) whose one line, in QUEST (start game enabled, no conditions of
+    its own), has no conditions, ends the talk and says "..." (silent, as the game's own Generic "..." goodbye), so it
+    shows whatever state the quests are in. The topic and its line made once; lines already offering it are left."""
+    import activity
+    J = Judge(gd, pr)
+    rows = traps(gd, pr, J) if rows is None else rows
+    quest = next((k for k, r in pr.records.items() if r.get('type') == 'QUST' and recordio.field(r, 'EDID') == QUEST), None)
+    if quest is None:
+        raise ValueError('no %s quest in the mod' % QUEST)
+    out = []
+    topic = next((k for k, r in pr.records.items() if r.get('type') == 'DIAL' and recordio.field(r, 'EDID') == LEAVE), None)
+    if topic is None:
+        topic = activity._new_key(pr)
+        out.append({'op': 'record', 'key': topic, 'record': qr.topic_record({
+            'edid': LEAVE, 'name': LEAVE_SAYS, 'priority': 50.0, 'kind': 0, 'flags': {'top_level': False},
+            'quests': [{'quest': quest, 'links': []}]})})
+        l = {'kind': 0, 'next_speaker': 0, 'flags': {'goodbye': True}, 'quest': quest, 'topic': topic,
+             'responses': [{'emotion': 0, 'strength': 50, 'number': 1, 'sound': '', 'anim': 0, 'text': '...'}],
+             'conditions': [], 'choices': []}
+        out.append({'op': 'record_new', 'record': aq._compiled_line(gd, pr, l)})
+    need = sorted({r['line'] for r in rows if r['status'] != 'ok'})
+    changed = 0
+    for k in need:
+        rec = json.loads(json.dumps(pr.records[k]))
+        if any(s['tag'] == 'TCLT' and s.get('value') == topic for s in rec['subs']):
+            continue
+        at = max(i for i, s in enumerate(rec['subs']) if s['tag'] == 'TCLT')      # (just after the last choice: nothing else moves)
+        rec['subs'].insert(at + 1, qr._F('TCLT', topic, 'Choice'))
+        out.append({'op': 'record', 'key': k, 'record': rec})
+        changed += 1
+    return out, {'lines given the way out': changed, 'topic': topic, 'made': topic not in pr.records}
+
+
 def topic_key(gd):
     return gd.key(next(f for f, (_i, r) in gd.forms.items() if r.tag == 'DIAL' and (f >> 24) == 0 and gd.edid(f) == 'GOODBYE'))
 
