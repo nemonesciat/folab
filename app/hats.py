@@ -41,6 +41,15 @@ SIDES = 48
 # worn: where the band's middle is (head bone offsets) and how far the hat tips forward
 FIT = (0.0, 0.9, 9.0)
 TILT = math.radians(6.0)
+# a hat's own seat where it differs: (lift over FIT, tilt in degrees). The lauhala's drooping brim came over the eyes in
+# game (the user, 27 Nov 2026: "a little low"): its front edge was at z 4.7, now ~7, above the brow
+SEAT = {'lauhala': (1.5, 3.0)}
+
+
+def seat_of(name):
+    """(tilt, fit) a hat is worn at."""
+    lift, tilt = SEAT.get(name, (0.0, None))
+    return (TILT if tilt is None else math.radians(tilt)), (FIT[0], FIT[1], FIT[2] + lift)
 BAND_R, BAND_E = 6.8, 1.12              # the band: 6.8 to each side, 7.6 front and back (the head at z 9.8 reaches 5.3 across at y -2.7)
 
 
@@ -263,6 +272,9 @@ def boater():
     r_at = lambda z: BAND_R + over + (z * lean if z < 2.2 else 0)
     band.strip([(r_at(1.85) - over, 1.85), (r_at(1.85), 1.85)], uv='wrap', u_turns=10.0)
     band.strip([(r_at(1.85), 1.85), (r_at(0.05), 0.05)], uv='wrap', u_turns=10.0, v_per=0.5)
+    # (its foot and its inside against the crown: the band a closed ring, as every model of FOLab's, the user 22 Nov 2026)
+    band.strip([(r_at(0.05), 0.05), (r_at(0.05) - over, 0.05)], uv='wrap', u_turns=10.0)
+    band.strip([(r_at(0.05) - over, 0.05), (r_at(1.85) - over, 1.85)], uv='wrap', u_turns=10.0, v_per=0.5)
     return [s.shape(), band.shape()]
 
 
@@ -292,7 +304,7 @@ def lauhala():
     s.strip(dome[:3], uv='plan')
     s.strip(dome[2:], u_turns=5.0, v_per=0.12)
     out = [(BAND_R + brim * f, fall(f)) for f in (0.0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 1.0)]
-    s.strip([(BAND_R + 0.05, 0.0)] + out[1:], uv='plan')
+    s.strip([(crown(0.0), 0.0)] + out[1:], uv='plan')     # (from where the crown ends: it began 0.05 in, a slit all round)
     s.strip([out[-1], (edge + 0.05, fall(1.0) - thick / 2), (edge, fall(1.0) - thick)], u_turns=40.0, v_per=0.5)
     under = [(r, z - thick) for r, z in reversed(out)]
     s.strip(under[:-1] + [(BAND_R - thick, -thick)], uv='plan')
@@ -303,6 +315,8 @@ def lauhala():
     band = Profile('lauhala_band')
     band.strip([(crown(1.7) + 0.02, 1.7), (crown(1.7) + 0.15, 1.7)], u_turns=10.0)
     band.strip([(crown(1.7) + 0.15, 1.7), (BAND_R + 0.15, 0.05)], u_turns=10.0, v_per=0.4)
+    band.strip([(BAND_R + 0.15, 0.05), (BAND_R + 0.02, 0.05)], u_turns=10.0)          # (closed: its foot and inside)
+    band.strip([(BAND_R + 0.02, 0.05), (crown(1.7) + 0.02, 1.7)], u_turns=10.0, v_per=0.4)
     return [s.shape(), band.shape()]
 
 
@@ -352,10 +366,11 @@ def head_points(gd):
 def clearance(name, head):
     """The least room between the head and the crown's inside, the head taken into the hat's own frame (negative: the head
     comes through the hat)."""
-    c, s = math.cos(TILT), math.sin(TILT)
+    tilt, fit = seat_of(name)
+    c, s = math.cos(tilt), math.sin(tilt)
     least = None
     for x, y, z in head:
-        x, y, z = x - FIT[0], y - FIT[1], z - FIT[2]
+        x, y, z = x - fit[0], y - fit[1], z - fit[2]
         y, z = y * c - z * s, y * s + z * c                     # (undoing _moved's turn)
         if z < 0:
             continue
@@ -368,7 +383,7 @@ def clearance(name, head):
 
 def build(name, mod='waikiki'):
     shapes = SHAPES[name]()
-    worn = _moved(shapes, TILT, FIT)
+    worn = _moved(shapes, *seat_of(name))
     low = min(sh['p'][k] for sh in shapes for k in range(2, len(sh['p']), 3))
     go = _moved(shapes, 0.0, (0.0, 0.0, -low))
     worn_path, go_path = MESH % (mod, name), MESH % (mod, name + '_go')
